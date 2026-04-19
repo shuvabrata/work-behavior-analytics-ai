@@ -31,9 +31,9 @@ class TestMCPSettingsAndFeatureFlags:
         """GitHub MCP setting should be a boolean type."""
         assert isinstance(settings.GITHUB_MCP_ENABLED, bool)
 
-    def test_jira_mcp_enabled_is_boolean(self):
-        """Jira MCP setting should be a boolean type."""
-        assert isinstance(settings.JIRA_MCP_ENABLED, bool)
+    def test_atlassian_mcp_enabled_is_boolean(self):
+        """Atlassian MCP setting should be a boolean type."""
+        assert isinstance(settings.ATLASSIAN_MCP_ENABLED, bool)
 
     def test_max_mcp_iterations_is_positive_integer(self):
         """MAX_MCP_ITERATIONS should be a positive integer."""
@@ -48,6 +48,15 @@ class TestMCPSettingsAndFeatureFlags:
     def test_github_mcp_token_is_string(self):
         """GitHub MCP token should be a string type."""
         assert isinstance(settings.GITHUB_MCP_TOKEN, str)
+
+    def test_atlassian_mcp_token_is_string(self):
+        """Atlassian MCP token should be a string type."""
+        assert isinstance(settings.ATLASSIAN_MCP_TOKEN, str)
+
+    def test_atlassian_mcp_server_url_is_valid_url(self):
+        """Atlassian MCP server URL should be the cloud endpoint."""
+        assert isinstance(settings.ATLASSIAN_MCP_SERVER_URL, str)
+        assert settings.ATLASSIAN_MCP_SERVER_URL.startswith("https://")
 
     def test_mcp_settings_can_be_overridden_via_env(self, monkeypatch):
         """MCP settings should be overridable via environment variables."""

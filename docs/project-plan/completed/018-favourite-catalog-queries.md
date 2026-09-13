@@ -19,10 +19,7 @@ same queries and currently have no way to surface them. This plan adds:
 1. A **star icon** beside each catalog query to mark it as a favourite.
 2. **Favourites-first sorting** (most recently favourited on top), then the
    remaining queries alphabetically.
-3. A dynamic **"My Fav"** namespace listing all favourites, which is the
-   **default** selection when the user opens the Query Catalog (only when
-   favourites exist).
-4. A **DB-backed metadata table** (`catalog_metadata`) to persist favourite
+3. A **DB-backed metadata table** (`catalog_metadata`) to persist favourite
    state, exposed via a REST API the UI consumes.
 
 ## Discovery
@@ -57,14 +54,18 @@ All decisions reached via the grill-me process:
      validates `catalog_id` against the YAML catalog (404 if missing),
      idempotent upsert.
 4. **Naming**: endpoint `catalog-metadata`, table `catalog_metadata`.
-5. **"My Fav" namespace**: virtual namespace in the UI layer (not the YAML
-   loader), sentinel `"__favourites__"`, option at the top of the dropdown.
-6. **Default selection**: "My Fav" is default **only when favourites exist**;
-   otherwise "All namespaces".
+5. **"My Fav" namespace** (REVERTED in `959a908`): virtual namespace in the
+   UI layer (not the YAML loader), sentinel `"__favourites__"`, option at the
+   top of the dropdown. Implemented then reverted — the namespace does not
+   exist in the shipped feature.
+6. **Default selection** (REVERTED in `959a908`): "My Fav" is default **only
+   when favourites exist**; otherwise "All namespaces". Implemented then
+   reverted — no default-selection behaviour ships.
 7. **Sorting**: favourites first (sorted by `updated_at` DESC, most recent on
-   top), then non-favourites alphabetically. Applies in both "My Fav" and other
-   namespaces. Sort key: `(not is_favourite, -updated_at if favourite else 0,
-   name.lower())`. Applied client-side in the UI callback, not the YAML loader.
+   top), then non-favourites alphabetically. Sort key: `(not is_favourite,
+   -updated_at if favourite else 0, name.lower())`. Applied client-side in the
+   UI callback, not the YAML loader. **Note:** applies only on page reload
+   (`load_query_catalog`), not on namespace change.
 8. **Star icon**: top-right of each list item. Toggle = Option B: **no
    immediate re-sort**. Star flips in place; re-sort on next namespace
    change/reload.
@@ -194,45 +195,43 @@ All decisions reached via the grill-me process:
 
 ---
 
-## Phase 4 — UI: "My Fav" namespace, default selection & sorting
+## Phase 4 — Favourites-first sorting (page reload)
 
 **Status**: ✅ COMPLETE
 
-- [x] **4.1 Namespace option** — in `build_namespace_options()`, prepend
-  `{"label": "My Fav", "value": "__favourites__"}` at the top.
-- [x] **4.2 Filter logic** — in `filter_catalog_queries()`, special-case
-  `"__favourites__"`: filter to queries whose `catalog_id` is in the favourites
-  set.
-- [x] **4.3 Default selection** — in `populate_namespace_filter()` , set
-  `catalog-namespace-filter` value to `"__favourites__"` if favourites exist,
-  else `"__all__"`.
-- [x] **4.4 Sorting** — in `render_catalog_query_list()`, apply sort key
+The "My Fav" namespace and default selection were **reverted** in commit
+`959a908` and are **not** part of the shipped feature. Only the
+favourites-first **sorting** shipped, and it applies on page reload only.
+
+- [x] **4.1 Sorting** — `_sort_catalog_queries(items, metadata)` +
+  `_timestamp_ordinal` in
+  `src/app/dash_app/pages/graph/callbacks/catalog.py`, applied in
+  `load_query_catalog()` (page reload only), sort key
   `(not is_favourite, -updated_at if favourite else 0, name.lower())`.
   Favourites first (recent on top), then alphabetical.
 
 > **Notes:**
-> - New constant `FAVOURITES_NAMESPACE = "__favourites__"`.
-> - `build_namespace_options` now always prepends "My Fav" at the top (existing
->   test `test_build_namespace_options_includes_all_namespaces_first` updated
->   to reflect the new order).
 > - `_sort_catalog_queries` uses `_timestamp_ordinal` (parses ISO-8601 to epoch
 >   seconds; missing timestamps sort as oldest).
+> - Sorting is **not** applied in `render_catalog_query_list()` — toggling a
+>   star does not re-sort the list (Option B, decision #8).
 
 ### Phase 4 — Tests (must pass before Phase 5)
 
 **Automated:**
-- `tests/test_catalog_favourites_ui.py` (extended): 18 tests pass (Phase 3 + 4).
-  - "My Fav" option present at the top of the namespace dropdown.
-  - Selecting "My Fav" filters to favourited queries only.
-  - Default selection is "My Fav" when favourites exist, else "All namespaces".
-  - Sorting: favourites first (by `updated_at` DESC), then alphabetical.
+- `tests/test_catalog_favourites_ui.py`: 13 tests pass (Phase 3 + reload
+  sorting).
+  - Star renders filled for a favourited query, outline for non-favourite.
+  - Toggle callback fires `PUT` with the correct payload.
+  - Store updates after a successful toggle (star flips in place).
+  - No re-sort occurs on toggle (list order unchanged).
+  - Page-reload sorting: favourites first (by `updated_at` DESC), then
+    alphabetical.
 
 **Manual:**
-- With favourites: open Catalog → defaults to "My Fav", favourites listed
-  recent-first.
-- With no favourites: open Catalog → defaults to "All namespaces".
-- Switch to a real namespace → favourites float to the top, then alphabetical.
-- Unfavourite a query in "My Fav" → it disappears from the list.
+- Open Catalog → favourites float to the top, then alphabetical.
+- Toggle a star → it flips filled/outline; list order does **not** change.
+- Reload the page → favourites re-sort to the top (DB-backed).
 
 ---
 
@@ -244,11 +243,9 @@ All decisions reached via the grill-me process:
   `tests/test_catalog_metadata_api.py` for edge cases:
   - Empty `is_favourite` filter, malformed body, concurrent upserts.
 - [ ] **5.2 UI tests** — extend `tests/test_catalog_favourites_ui.py` for:
-  - Empty-state messaging for "My Fav" with no favourites.
   - Keyboard accessibility of the star button.
   - No regression to deep-link selection (`?catalog=`).
 - [ ] **5.3 Polish** —
-  - Empty-state message for "My Fav" with no favourites.
   - Ensure star is keyboard-accessible.
   - Confirm no regression to deep-link selection.
 
@@ -259,15 +256,15 @@ All decisions reached via the grill-me process:
 - Existing catalog tests (`test_catalog_*`) still pass (no regression).
 
 **Manual:**
-- End-to-end: favourite a query, reload, confirm persistence; unfavourite in
-  "My Fav" and confirm removal; deep-link to a query still works.
+- End-to-end: favourite a query, reload, confirm persistence; deep-link to a
+  query still works.
 
 ---
 
 ## Suggested execution order & dependencies
 
 ```
-Phase 1 (DB) → Phase 2 (API) → Phase 3 (UI stars) → Phase 4 (My Fav + sort) → Phase 5 (tests)
+Phase 1 (DB) → Phase 2 (API) → Phase 3 (UI stars) → Phase 4 (favourites-first sorting) → Phase 5 (tests)
 ```
 
 Phases 1–2 are prerequisites for 3–4. Phase 3 and 4 could be merged if
@@ -282,5 +279,6 @@ roll-up summary:
 - [x] **Phase 1 — Database layer** (model, registration, migration, verify)
 - [x] **Phase 2 — API layer** (query, service, router, verify)
 - [x] **Phase 3 — UI: favourites state & star icons**
-- [x] **Phase 4 — UI: "My Fav" namespace, default selection & sorting**
+- [x] **Phase 4 — Favourites-first sorting (page reload)** (the "My Fav"
+  namespace was reverted in `959a908`)
 - [ ] **Phase 5 — Tests & polish**

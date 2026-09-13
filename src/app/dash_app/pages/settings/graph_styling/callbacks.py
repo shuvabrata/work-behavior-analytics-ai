@@ -205,7 +205,8 @@ def reset_node_row(
     undoing any unsaved edits to the row.
     """
     node_type = callback_context.triggered_id["node_type"]
-    row = (loaded_values or {}).get(node_type) or {}
+    nodes = (loaded_values or {}).get("nodes") or {}
+    row = nodes.get(node_type) or {}
 
     return (
         row.get("color"),
@@ -217,6 +218,38 @@ def reset_node_row(
     )
 
 
+@callback(
+    Output({"type": "gs-edge-field", "base_theme": MATCH, "field": MATCH}, "value"),
+    Input({"type": "gs-edge-reset", "base_theme": MATCH, "field": MATCH}, "n_clicks"),
+    State({"type": "gs-loaded-values", "base_theme": MATCH}, "data"),
+    prevent_initial_call=True,
+)
+def reset_edge_field(
+    _n_clicks: int, loaded_values: dict[str, Any] | None
+) -> Any:
+    """Restore an Edges card field to its loaded (effective) value."""
+    field = callback_context.triggered_id["field"]
+    edges = (loaded_values or {}).get("edges") or {}
+    return edges.get(field)
+
+
+@callback(
+    Output({"type": "gs-global-field", "base_theme": MATCH, "field": MATCH}, "value"),
+    Input(
+        {"type": "gs-global-reset", "base_theme": MATCH, "field": MATCH}, "n_clicks"
+    ),
+    State({"type": "gs-loaded-values", "base_theme": MATCH}, "data"),
+    prevent_initial_call=True,
+)
+def reset_global_field(
+    _n_clicks: int, loaded_values: dict[str, Any] | None
+) -> Any:
+    """Restore a Global card field to its loaded (effective) value."""
+    field = callback_context.triggered_id["field"]
+    globals_ = (loaded_values or {}).get("global") or {}
+    return globals_.get(field)
+
+
 # ── Edge preview ───────────────────────────────────────────────────────
 
 
@@ -225,17 +258,19 @@ def build_edge_preview_stylesheet(
     width: Any,
     arrow_shape: Any,
     label_color: Any,
+    edge_label_font_size: Any = None,
 ) -> list[dict[str, Any]]:
     """Build a Cytoscape stylesheet for the two-node edge preview.
 
-    Styles the edge (line colour/width, target-arrow shape, label colour) and
-    gives the two endpoint nodes a neutral appearance so the edge reads
-    clearly, matching how edges render in the real graph.
+    Styles the edge (line colour/width, target-arrow shape, label colour and
+    font size) and gives the two endpoint nodes a neutral appearance so the
+    edge reads clearly, matching how edges render in the real graph.
     """
     color = line_color or "#C0C0C0"
     label = label_color or "#2d3748"
     stroke_w = int(_num(width, 2))
     arrow = arrow_shape or "triangle"
+    edge_font = int(_num(edge_label_font_size, 9))
 
     return [
         {
@@ -266,7 +301,7 @@ def build_edge_preview_stylesheet(
                 "arrow-scale": 1.0,
                 "curve-style": "bezier",
                 "label": "data(label)",
-                "font-size": "9px",
+                "font-size": f"{edge_font}px",
                 "color": label,
                 "text-rotation": "autorotate",
                 "text-background-color": "#ffffff",
@@ -290,15 +325,21 @@ def build_edge_preview_stylesheet(
     Input(
         {"type": "gs-edge-field", "base_theme": MATCH, "field": "label_color"}, "value"
     ),
+    Input(
+        {"type": "gs-edge-field", "base_theme": MATCH, "field": "edge_label_font_size"}, "value"
+    ),
 )
 def update_edge_glyph(
     line_color: Any,
     width: Any,
     arrow_shape: Any,
     label_color: Any,
+    edge_label_font_size: Any,
 ) -> list[dict[str, Any]]:
-    """Update the edge preview stylesheet from the four edge field values."""
-    return build_edge_preview_stylesheet(line_color, width, arrow_shape, label_color)
+    """Update the edge preview stylesheet from the five edge field values."""
+    return build_edge_preview_stylesheet(
+        line_color, width, arrow_shape, label_color, edge_label_font_size
+    )
 
 
 # ── Phase 4.4 — theme management ───────────────────────────────────────
@@ -405,7 +446,13 @@ def select_theme(
         + (" (builtin \u2014 duplicate to edit)" if theme.get("source") == "builtin" else "")
         + (" \u2605 default" if theme.get("is_default") else "")
     )
-    loaded_values = effective.get("nodes") or {}
+    # Cache the full effective doc (nodes + edges + global) so per-field reset
+    # buttons can restore any field to its loaded (effective) value.
+    loaded_values = {
+        "nodes": effective.get("nodes") or {},
+        "edges": effective.get("edges") or {},
+        "global": effective.get("global") or {},
+    }
     return body, name, name_label, loaded_values
 
 

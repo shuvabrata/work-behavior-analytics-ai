@@ -17,6 +17,7 @@ import community.community_louvain as community_louvain
 from matplotlib.colors import LinearSegmentedColormap
 
 from app.common.node_size import apply_node_size
+from app.runtime_settings import runtime_settings
 
 
 # ---------------------------------------------------------------------------
@@ -229,6 +230,19 @@ def filter_top_edges_per_node(
     return filtered
 
 
+def _compact_label(display_name: str, max_chars: int) -> str:
+    """Truncate a display name to ``max_chars`` (dropping 3 for ``...``).
+
+    Mirrors the graph page's ``_compact_node_label`` behaviour so both graph
+    and collaboration views truncate node labels consistently from the same
+    ``GRAPH_UI_MAX_NODE_LABEL_CHARS`` runtime setting.
+    """
+    max_chars = max(4, int(max_chars))
+    if len(display_name) <= max_chars:
+        return display_name
+    return display_name[: max_chars - 3].rstrip() + "\u2026"
+
+
 def to_cytoscape_elements(
     g: nx.Graph,
     partition: Dict[str, int],
@@ -276,6 +290,10 @@ def to_cytoscape_elements(
             return 1.0
         return _NODE_SIZE_MIN + (log_scores[node] - ls_min) / ls_range * (_NODE_SIZE_MAX - _NODE_SIZE_MIN)
 
+    max_label_chars = max(
+        4, int(runtime_settings.get_int("GRAPH_UI_MAX_NODE_LABEL_CHARS"))
+    )
+
     for node in g.nodes():
         node_attrs = g.nodes[node]
         display_name = node_attrs.get("display_name", node)
@@ -290,7 +308,7 @@ def to_cytoscape_elements(
                 "id": node,           # wba_id (Cytoscape element id)
                 "wba_id": node,       # explicit for spotlight compatibility
                 "label": display_name,
-                "displayLabel": display_name[:12] + "\u2026" if len(display_name) > 12 else display_name,
+                "displayLabel": _compact_label(display_name, max_label_chars),
                 "nodeType": "Person",
                 "community": community_id,
                 "hub_score": hub_scores.get(node, 0.0),

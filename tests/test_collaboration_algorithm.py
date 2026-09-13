@@ -262,7 +262,7 @@ class TestToCytoscapeElements:
         assert data["relType"] == "COLLABORATES"
         assert data["id"] == f"collab:{data['source']}:{data['target']}"
 
-    def test_display_label_truncated_at_12_chars(self):
+    def test_display_label_truncated_at_setting_max_chars(self):
         long_name_records = [
             _rec("averylongusername", "bob", 5)
         ]
@@ -271,7 +271,8 @@ class TestToCytoscapeElements:
         hub_scores = compute_hub_scores(g)
         elements = to_cytoscape_elements(g, partition, hub_scores)
         node = next(e for e in elements if e["data"].get("id") == "github::Person::averylongusername")
-        assert node["data"]["displayLabel"] == "averylonguse…"
+        # Default GRAPH_UI_MAX_NODE_LABEL_CHARS is 10 — keeps 7 chars + …
+        assert node["data"]["displayLabel"] == "averylo…"
 
     def test_display_label_not_truncated_when_short(self):
         g = build_graph(SIMPLE_RECORDS)

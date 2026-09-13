@@ -5,6 +5,7 @@ including node colors, sizes, edge styles, and selection states.
 """
 
 import re
+from typing import Any
 
 from app.common.graph_theme import merge_theme_overrides, overrides_to_cytoscape_rules
 from app.dash_app.styles import (
@@ -48,6 +49,14 @@ COMMUNITY_COLORS = [
 ]
 
 
+def _to_px(value: Any) -> str:
+    """Normalise a font-size value (int px or "Npx" string) to "Npx"."""
+    text = str(value).strip()
+    if text.lower().endswith("px"):
+        return text
+    return f"{text}px"
+
+
 def build_cytoscape_stylesheet(theme_name: str = ACTIVE_THEME, effective=None):
     """Build Cytoscape stylesheet for a specific theme.
 
@@ -69,6 +78,13 @@ def build_cytoscape_stylesheet(theme_name: str = ACTIVE_THEME, effective=None):
     edges = effective["edges"]
     globals_ = effective["global"]
 
+    # Label font sizes are theme-aware: the effective theme resolves concrete
+    # px values (base token ``graph.node.label.font.size`` / 
+    # ``graph.edge.label.font.size`` fall back to 11 / 9). We still fall back
+    # to the stylesheet constants if the resolved value is somehow absent.
+    node_font_size = globals_.get("node_label_font_size") or FONT_SIZE_TINY
+    edge_font_size = edges.get("font-size") or FONT_SIZE_XXSMALL
+
     # Theme-derived rules come from the single shared translation layer
     # (app.common.graph_theme.overrides_to_cytoscape_rules). The generic node,
     # per-nodeType, edge, and selected rules are all produced there.
@@ -85,7 +101,7 @@ def build_cytoscape_stylesheet(theme_name: str = ACTIVE_THEME, effective=None):
         'text-valign': 'center',
         'text-halign': 'center',
         'font-family': cyto_font_family,
-        'font-size': FONT_SIZE_TINY,
+        'font-size': _to_px(node_font_size),
         'font-weight': FONT_WEIGHT_MEDIUM,
         'text-wrap': 'wrap',
         'text-max-width': '56px'
@@ -123,7 +139,7 @@ def build_cytoscape_stylesheet(theme_name: str = ACTIVE_THEME, effective=None):
         'control-point-step-size': 40,
         'label': 'data(label)',
         'font-family': cyto_font_family,
-        'font-size': FONT_SIZE_XXSMALL,
+        'font-size': _to_px(edge_font_size),
         'font-weight': FONT_WEIGHT_MEDIUM,
         'text-rotation': 'autorotate',
         'text-margin-y': -10,

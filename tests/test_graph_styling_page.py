@@ -252,13 +252,15 @@ def test_reset_restores_loaded_values() -> None:
     from app.dash_app.pages.settings.graph_styling import callbacks as cb
 
     loaded = {
-        "Person": {
-            "color": "#3B82F6",
-            "border": "#2563EB",
-            "border_width": 0,
-            "shape": "octagon",
-            "width": 66,
-            "height": 56,
+        "nodes": {
+            "Person": {
+                "color": "#3B82F6",
+                "border": "#2563EB",
+                "border_width": 0,
+                "shape": "octagon",
+                "width": 66,
+                "height": 56,
+            }
         }
     }
     fake_ctx = mock.Mock()
@@ -282,6 +284,69 @@ def test_reset_missing_node_returns_none() -> None:
         result = cb.reset_node_row(1, {})
 
     assert result == (None, None, None, None, None, None)
+
+
+@pytest.mark.unit
+def test_edges_and_global_fields_have_reset_buttons() -> None:
+    """Each Edges/Global field carries its own per-field reset button."""
+    from app.dash_app.pages.settings.graph_styling.components import (
+        build_edges_card,
+        build_global_card,
+    )
+
+    edge_fields = {"line_color", "width", "arrow_shape", "label_color",
+                   "edge_label_font_size"}
+    edges_body = build_edges_card("executive-light", {})
+    edge_resets = {
+        n.id["field"]
+        for n in _collect(edges_body)
+        if isinstance(getattr(n, "id", None), dict)
+        and n.id.get("type") == "gs-edge-reset"
+    }
+    assert edge_resets == edge_fields
+
+    global_fields = {"node_label_color", "node_label_font_size",
+                     "selection_color", "edge_label_background"}
+    global_body = build_global_card("executive-light", {})
+    global_resets = {
+        n.id["field"]
+        for n in _collect(global_body)
+        if isinstance(getattr(n, "id", None), dict)
+        and n.id.get("type") == "gs-global-reset"
+    }
+    assert global_resets == global_fields
+
+
+@pytest.mark.unit
+def test_reset_edge_field_restores_loaded_value() -> None:
+    """The edge reset callback restores a field's loaded (effective) value."""
+    from unittest import mock
+
+    from app.dash_app.pages.settings.graph_styling import callbacks as cb
+
+    loaded = {"edges": {"line_color": "#999999", "edge_label_font_size": 14}}
+    fake_ctx = mock.Mock()
+    fake_ctx.triggered_id = {"type": "gs-edge-reset", "field": "line_color"}
+    with mock.patch.object(cb, "callback_context", fake_ctx):
+        assert cb.reset_edge_field(1, loaded) == "#999999"
+
+    fake_ctx.triggered_id = {"type": "gs-edge-reset", "field": "edge_label_font_size"}
+    with mock.patch.object(cb, "callback_context", fake_ctx):
+        assert cb.reset_edge_field(1, loaded) == 14
+
+
+@pytest.mark.unit
+def test_reset_global_field_restores_loaded_value() -> None:
+    """The global reset callback restores a field's loaded (effective) value."""
+    from unittest import mock
+
+    from app.dash_app.pages.settings.graph_styling import callbacks as cb
+
+    loaded = {"global": {"node_label_color": "#00FF00", "node_label_font_size": 18}}
+    fake_ctx = mock.Mock()
+    fake_ctx.triggered_id = {"type": "gs-global-reset", "field": "node_label_font_size"}
+    with mock.patch.object(cb, "callback_context", fake_ctx):
+        assert cb.reset_global_field(1, loaded) == 18
 
 
 # ── Phase 4.4 — theme management ───────────────────────────────────────

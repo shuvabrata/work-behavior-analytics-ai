@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from urllib.parse import parse_qs
 
 import dash_bootstrap_components as dbc
@@ -22,6 +23,7 @@ from app.dash_app.styles import (
 from app.runtime_settings import runtime_settings
 
 from ..utils import create_error_alert, get_graph_api_base_url
+from ..utils.cypher_substitution import substitute_catalog_query_parameters
 
 
 TIMEOUT_SECONDS = runtime_settings.get_int("HTTP_REQUEST_TIMEOUT")
@@ -32,15 +34,23 @@ ALL_VIEWS = "__all__"
 def build_namespace_options(catalog_queries: list[dict]) -> list[dict]:
     """Build namespace filter options from loaded catalog queries."""
     options = [{"label": "All namespaces", "value": ALL_NAMESPACES}]
-    seen: set[str] = set()
+    namespaces: dict[str, tuple[int, str]] = {}
     for query in catalog_queries:
         namespace = query.get("namespace") or {}
         directory = namespace.get("directory")
         name = namespace.get("name")
-        if not directory or directory in seen:
+        if not directory or directory in namespaces:
             continue
-        seen.add(directory)
-        options.append({"label": name or directory, "value": directory})
+        order = namespace.get("order")
+        namespaces[directory] = (
+            order if isinstance(order, int) else len(namespaces),
+            name or directory,
+        )
+
+    for directory, (_, label) in sorted(
+        namespaces.items(), key=lambda item: item[1][0]
+    ):
+        options.append({"label": label, "value": directory})
     return options
 
 
@@ -76,6 +86,39 @@ def filter_catalog_queries(
         ]
 
     return filtered
+
+
+def _timestamp_ordinal(timestamp: str | None) -> float:
+    """Parse an ISO timestamp into epoch seconds for deterministic sorting."""
+    if not timestamp:
+        return 0.0
+    try:
+        normalized = timestamp.replace("Z", "+00:00")
+        parsed = datetime.fromisoformat(normalized)
+    except (TypeError, ValueError):
+        return 0.0
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.timestamp()
+
+
+def _sort_catalog_queries(
+    catalog_queries: list[dict],
+    metadata_store: dict | None,
+) -> list[dict]:
+    """Sort favourites first, recent favourites before older ones, then name."""
+    metadata_store = metadata_store or {}
+
+    def sort_key(query: dict) -> tuple[bool, float, str]:
+        catalog_id = query.get("id")
+        metadata = metadata_store.get(catalog_id) or {}
+        is_favourite = bool(metadata.get("is_favourite"))
+        updated_at = (
+            _timestamp_ordinal(metadata.get("updated_at")) if is_favourite else 0.0
+        )
+        return (not is_favourite, -updated_at, (query.get("name") or "").lower())
+
+    return sorted(catalog_queries, key=sort_key)
 
 
 def parse_catalog_deep_link(search: str | None) -> tuple[str | None, str | None]:
@@ -328,12 +371,13 @@ def _build_person_picker(parameter: dict, current_value: str | dict | None) -> h
 @callback(
     Output("query-catalog-store", "data"),
     Output("query-catalog-load-status", "children"),
+    Output("catalog-metadata-store", "data"),
     Input("url", "pathname"),
 )
 def load_query_catalog(pathname: str | None):
     """Fetch catalog metadata when the Graph page is opened."""
     if pathname != "/app/graph":
-        return no_update, no_update
+        return no_update, no_update, no_update
 
     api_base = get_graph_api_base_url()
     try:
@@ -345,7 +389,6 @@ def load_query_catalog(pathname: str | None):
         payload = response.json()
         items = payload.get("items", [])
         logger.info("[GRAPH-CATALOG] loaded count=%d", len(items))
-        return items, None
     except requests.exceptions.RequestException as exc:
         logger.error("[GRAPH-CATALOG] load_failed %s", exc)
         error_display = create_error_alert(
@@ -355,7 +398,36 @@ def load_query_catalog(pathname: str | None):
             hint="The query catalog API could not be reached. The query console still works.",
             doc_link=None,
         )
-        return [], error_display
+        return [], error_display, {}
+
+    # Load favourite metadata alongside the catalog list.
+    metadata = _fetch_catalog_metadata(api_base)
+    return _sort_catalog_queries(items, metadata), None, metadata
+
+
+def _fetch_catalog_metadata(api_base: str) -> dict:
+    """Fetch favourite metadata and normalise it into a ``{catalog_id: {...}}`` map.
+
+    Returns an empty dict on any error so the UI degrades gracefully (stars
+    simply render as unfilled).
+    """
+    try:
+        response = requests.get(
+            f"{api_base}/api/v1/queries/catalog-metadata",
+            timeout=TIMEOUT_SECONDS,
+        )
+        response.raise_for_status()
+        payload = response.json()
+        metadata: dict = {}
+        for item in payload.get("items", []):
+            metadata[item["catalog_id"]] = {
+                "is_favourite": item.get("is_favourite", False),
+                "updated_at": item.get("updated_at"),
+            }
+        return metadata
+    except requests.exceptions.RequestException as exc:
+        logger.warning("[GRAPH-CATALOG] metadata_load_failed %s", exc)
+        return {}
 
 
 @callback(
@@ -407,15 +479,18 @@ def sync_selected_catalog_query(
     Input("catalog-namespace-filter", "value"),
     Input("catalog-search-input", "value"),
     Input("selected-catalog-query-store", "data"),
+    Input("catalog-metadata-store", "data"),
 )
 def render_catalog_query_list(
     catalog_queries: list[dict] | None,
     namespace_filter: str | None,
     search_text: str | None,
     selected_query: dict | None,
+    metadata_store: dict | None,
 ):
     """Render the filtered query list."""
     catalog_queries = catalog_queries or []
+    metadata_store = metadata_store or {}
     filtered = filter_catalog_queries(
         catalog_queries,
         namespace_filter,
@@ -441,19 +516,47 @@ def render_catalog_query_list(
         namespace = query.get("namespace") or {}
         subtitle = namespace.get("name", "")
         status_badge = _build_status_badge(query.get("status"))
+        catalog_id = query.get("id")
+        is_favourite = bool((metadata_store.get(catalog_id) or {}).get("is_favourite"))
         items.append(
             dbc.ListGroupItem(
                 [
                     html.Div(
                         [
-                            html.Span(query.get("name", "Untitled")),
-                            status_badge,
+                            html.Div(
+                                [
+                                    html.Span(query.get("name", "Untitled")),
+                                    status_badge,
+                                ],
+                                className="graph-catalog-list-item-title",
+                                style={"fontWeight": 600, "fontSize": "12px"},
+                            ),
+                            html.Button(
+                                html.I(
+                                    className="fas fa-star" if is_favourite else "far fa-star",
+                                ),
+                                id={"type": "catalog-favourite-toggle", "catalog_id": catalog_id},
+                                n_clicks=0,
+                                className=(
+                                    "graph-catalog-favourite-toggle is-favourite"
+                                    if is_favourite
+                                    else "graph-catalog-favourite-toggle"
+                                ),
+                                title="Mark as favourite" if not is_favourite else "Remove favourite",
+                                **{
+                                    "aria-label": (
+                                        f"Remove {query.get('name', 'query')} from favourites"
+                                        if is_favourite
+                                        else f"Add {query.get('name', 'query')} to favourites"
+                                    )
+                                },
+                            ),
                         ],
-                        style={"fontWeight": 600, "fontSize": "12px"},
+                        className="graph-catalog-list-item-title-row",
                     ),
                     html.Div(subtitle, style={"fontSize": "11px", "color": COLOR_TEXT_SECONDARY}),
                 ],
-                id={"type": "catalog-query-select", "catalog_id": query.get("id")},
+                id={"type": "catalog-query-select", "catalog_id": catalog_id},
                 action=True,
                 active=query.get("id") == selected_id,
                 n_clicks=0,
@@ -468,6 +571,68 @@ def render_catalog_query_list(
         ),
         dbc.ListGroup(items, flush=True, class_name="graph-catalog-list-group"),
     ])
+
+
+@callback(
+    Output("catalog-metadata-store", "data"),
+    Input({"type": "catalog-favourite-toggle", "catalog_id": ALL}, "n_clicks"),
+    State({"type": "catalog-favourite-toggle", "catalog_id": ALL}, "id"),
+    State("catalog-metadata-store", "data"),
+    prevent_initial_call=True,
+)
+def toggle_catalog_favourite(
+    _clicks: list[int | None],
+    toggle_ids: list[dict] | None,
+    metadata_store: dict | None,
+) -> dict:
+    """Toggle a query's favourite state and persist it via the API.
+
+    Fires ``PUT /catalog-metadata/{catalog_id}`` with the flipped value, then
+    updates the metadata store in place. The list is **not** re-sorted here
+    (Option B) — the star flips in place; re-sort happens on the next
+    namespace change/reload.
+    """
+    triggered = ctx.triggered_id
+    if not isinstance(triggered, dict):
+        raise PreventUpdate
+
+    catalog_id = triggered.get("catalog_id")
+    if not catalog_id:
+        raise PreventUpdate
+
+    triggered_clicks = next(
+        (
+            click_count
+            for click_count, toggle_id in zip(_clicks or [], toggle_ids or [])
+            if toggle_id == triggered
+        ),
+        None,
+    )
+    if not triggered_clicks:
+        raise PreventUpdate
+
+    store = dict(metadata_store or {})
+    current = store.get(catalog_id) or {}
+    new_value = not bool(current.get("is_favourite"))
+
+    api_base = get_graph_api_base_url()
+    try:
+        response = requests.put(
+            f"{api_base}/api/v1/queries/catalog-metadata/{catalog_id}",
+            json={"is_favourite": new_value},
+            timeout=TIMEOUT_SECONDS,
+        )
+        response.raise_for_status()
+        body = response.json()
+    except requests.exceptions.RequestException as exc:
+        logger.warning("[GRAPH-CATALOG] favourite_toggle_failed %s", exc)
+        raise PreventUpdate from exc
+
+    store[catalog_id] = {
+        "is_favourite": bool(body.get("is_favourite", new_value)),
+        "updated_at": body.get("updated_at"),
+    }
+    return store
 
 
 @callback(
@@ -682,6 +847,7 @@ def sync_catalog_parameter_values(
     State("selected-catalog-query-store", "data"),
     State("query-catalog-store", "data"),
     State("catalog-query-view-toggle", "value"),
+    State("catalog-parameters-store", "data"),
     prevent_initial_call=True,
 )
 def load_catalog_query_into_console(
@@ -691,8 +857,14 @@ def load_catalog_query_into_console(
     selected_query: dict | None,
     catalog_queries: list[dict] | None,
     catalog_view: str | None,
+    catalog_parameters: dict | None,
 ):
-    """Populate the query console with the selected catalog query text."""
+    """Populate the query console with the selected catalog query text.
+
+    Declared ``$param`` placeholders are substituted with the user's current
+    parameter values (or an empty string when unset) so the pasted query is
+    valid, executable Cypher.
+    """
     try:
         triggered_id = ctx.triggered_id
     except MissingCallbackContextException:
@@ -708,11 +880,12 @@ def load_catalog_query_into_console(
 
     if triggered_id == "catalog-load-console-btn":
         cypher = (query.get("queries") or {}).get(selected_view, no_update)
-        return cypher, "console"
+        return substitute_catalog_query_parameters(cypher, query, catalog_parameters), "console"
 
     deep_link_id, _ = parse_catalog_deep_link(search)
     if deep_link_id and deep_link_id == query.get("id"):
-        return (query.get("queries") or {}).get(selected_view, no_update), no_update
+        cypher = (query.get("queries") or {}).get(selected_view, no_update)
+        return substitute_catalog_query_parameters(cypher, query, catalog_parameters), no_update
 
     return no_update, no_update
 

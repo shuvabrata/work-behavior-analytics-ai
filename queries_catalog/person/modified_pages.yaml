@@ -21,9 +21,9 @@ queries:
     WHERE x:Page OR x:Blogpost
     RETURN labels(x)[0] AS type,
            x.title AS title,
-           x.updated_at AS last_modified,
+           x.last_updated_at AS last_modified,
            x.url AS url
-    ORDER BY x.updated_at DESC
+    ORDER BY x.last_updated_at DESC
     LIMIT 100
   graph: |-
     MATCH path = (p:Person {id: $person_id})-[:MODIFIED]->(x)

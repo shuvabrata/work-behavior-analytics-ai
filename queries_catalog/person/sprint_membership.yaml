@@ -23,10 +23,10 @@ queries:
   tabular: |-
     MATCH (p:Person {id: $person_id})-[:ASSIGNED_TO]-(i:Issue)-[:IN_SPRINT]->(s:Sprint)
     RETURN s.name AS sprint_name,
-           s.state AS sprint_state,
+           s.status AS sprint_state,
            count(DISTINCT i) AS assigned_issues,
            collect(DISTINCT i.key)[0..5] AS sample_issues
-    ORDER BY s.state ASC, s.name ASC
+    ORDER BY s.status ASC, s.name ASC
     LIMIT 50
 tags:
 - beta

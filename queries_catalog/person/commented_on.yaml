@@ -20,7 +20,7 @@ queries:
     MATCH (p:Person {id: $person_id})-[r:COMMENTED_ON]->(x)
     RETURN labels(x)[0] AS node_type,
            coalesce(x.key, x.title, x.name, elementId(x)) AS node_ref,
-           coalesce(x.title, x.name, x.key) AS title,
+           coalesce(x.title, x.summary, x.name, x.key) AS title,
            r.count AS comment_count,
            r.first_interaction_at AS first_comment,
            r.last_interaction_at AS last_comment

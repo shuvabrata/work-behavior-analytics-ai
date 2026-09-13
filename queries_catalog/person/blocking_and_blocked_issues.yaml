@@ -31,7 +31,7 @@ queries:
     WITH i, collect(DISTINCT blocked.key) AS blocks_keys, collect(DISTINCT blocker.key) AS blocked_by_keys
     WHERE size(blocks_keys) > 0 OR size(blocked_by_keys) > 0
     RETURN i.key AS issue_key,
-           i.title AS title,
+           i.summary AS title,
            i.status AS status,
            blocks_keys AS blocks,
            blocked_by_keys AS blocked_by

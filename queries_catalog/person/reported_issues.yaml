@@ -19,7 +19,7 @@ queries:
   tabular: |-
     MATCH (p:Person {id: $person_id})-[:REPORTED_BY]-(i:Issue)
     RETURN i.key AS key,
-           i.title AS title,
+           i.summary AS title,
            i.status AS status,
            i.priority AS priority,
            i.created_at AS reported_on

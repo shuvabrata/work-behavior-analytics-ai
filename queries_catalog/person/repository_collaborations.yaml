@@ -19,7 +19,7 @@ queries:
   tabular: |-
     MATCH (p:Person {id: $person_id})-[:COLLABORATOR]-(r:Repository)
     RETURN r.name AS repository,
-           r.full_name AS full_name,
+           r.name AS full_name,
            r.url AS url
     ORDER BY r.name ASC
     LIMIT 100

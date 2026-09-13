@@ -23,7 +23,7 @@ queries:
   tabular: |-
     MATCH (p:Person {id: $person_id})-[:ASSIGNED_TO]-(e:Epic)
     RETURN e.key AS key,
-           e.title AS title,
+           e.summary AS title,
            e.status AS status,
            e.due_date AS due_date,
            e.updated_at AS last_updated

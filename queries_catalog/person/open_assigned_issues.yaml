@@ -21,7 +21,7 @@ queries:
     WHERE i.status IS NOT NULL
       AND i.status IN ['To Do', 'In Progress', 'In Review', 'open']
     RETURN i.key AS key,
-           i.title AS title,
+           i.summary AS title,
            i.status AS status,
            i.priority AS priority,
            i.updated_at AS last_updated

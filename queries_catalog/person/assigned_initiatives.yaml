@@ -19,7 +19,7 @@ queries:
   tabular: |-
     MATCH (p:Person {id: $person_id})-[:ASSIGNED_TO]-(i:Initiative)
     RETURN i.key AS key,
-           i.title AS title,
+           i.summary AS title,
            i.status AS status,
            i.updated_at AS last_updated
     ORDER BY i.updated_at DESC

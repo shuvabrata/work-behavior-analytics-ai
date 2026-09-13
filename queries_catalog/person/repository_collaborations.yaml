@@ -17,14 +17,14 @@ parameters:
   description: "WBA canonical Person ID. Format: github::Person::<login> or jira::Person::<account_id>"
 queries:
   tabular: |-
-    MATCH (p:Person {id: $person_id})-[:COLLABORATOR]->(r:Repository)
+    MATCH (p:Person {id: $person_id})-[:COLLABORATOR]-(r:Repository)
     RETURN r.name AS repository,
            r.full_name AS full_name,
            r.url AS url
     ORDER BY r.name ASC
     LIMIT 100
   graph: |-
-    MATCH path = (p:Person {id: $person_id})-[:COLLABORATOR]->(r:Repository)
+    MATCH path = (p:Person {id: $person_id})-[:COLLABORATOR]-(r:Repository)
     RETURN path
     LIMIT 100
 tags:

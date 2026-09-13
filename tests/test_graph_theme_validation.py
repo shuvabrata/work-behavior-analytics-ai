@@ -95,8 +95,10 @@ def test_accept_valid_full_doc():
                 "default": {"color": "#CCCCCC"},
             },
             "edges": {"line_color": "#999999", "width": 3,
-                      "arrow_shape": "triangle", "label_color": "#666666"},
+                      "arrow_shape": "triangle", "label_color": "#666666",
+                      "edge_label_font_size": 14},
             "global": {"node_label_color": "#FFFFFF",
+                       "node_label_font_size": 16,
                        "selection_color": "#FFAA00",
                        "edge_label_background": "#222222"},
         }
@@ -109,6 +111,8 @@ def test_accept_valid_full_doc():
     assert parsed.nodes["default"].color == "#CCCCCC"
     assert parsed.edges.line_color == "#999999"
     assert parsed.edges.arrow_shape == "triangle"
+    assert parsed.edges.edge_label_font_size == 14
+    assert parsed.global_.node_label_font_size == 16
 
 
 def test_accept_in_use_snake_global_none():
@@ -119,3 +123,23 @@ def test_accept_in_use_snake_global_none():
     assert parsed.edges.width is None
     assert parsed.global_.node_label_color is None
     assert parsed.global_.selection_color == "#111111"
+
+
+def test_reject_node_label_font_size_too_small():
+    with pytest.raises(Exception):
+        parse_overrides({"global": {"node_label_font_size": 4}})
+
+
+def test_reject_node_label_font_size_too_large():
+    with pytest.raises(Exception):
+        parse_overrides({"global": {"node_label_font_size": 60}})
+
+
+def test_reject_edge_label_font_size_too_small():
+    with pytest.raises(Exception):
+        parse_overrides({"edges": {"edge_label_font_size": 2}})
+
+
+def test_reject_edge_label_font_size_too_large():
+    with pytest.raises(Exception):
+        parse_overrides({"edges": {"edge_label_font_size": 100}})

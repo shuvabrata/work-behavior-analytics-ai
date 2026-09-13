@@ -7,11 +7,12 @@ themes (node/edge/global styling).
 
 ## Overview
 
-Graph node/edge styling (shape, color, size) is defined by a hardcoded base
-palette (`THEME_TOKENS` in `src/app/dash_app/styles.py`). This design adds
-**named "Graph Themes"** stored in Postgres. Each theme carries per-nodeType
-overrides (color, border, border-width, shape, width, height) plus edge and
-global styling that are merged **over** the hardcoded base at render time.
+Graph node/edge styling (shape, color, size, **label font size**) is defined by
+a hardcoded base palette (`THEME_TOKENS` in `src/app/dash_app/styles.py`). This
+design adds **named "Graph Themes"** stored in Postgres. Each theme carries
+per-nodeType overrides (color, border, border-width, shape, width, height) plus
+edge and global styling — including node and edge **label font size** — that
+are merged **over** the hardcoded base at render time.
 
 A REST API serves CRUD plus a server-merged `/effective` endpoint. A "Graph
 Styling" settings page lets users create/edit themes with a live preview.
@@ -52,13 +53,24 @@ create/update/clone.
 
 Themes use **semantic keys** (`color`, `border`, `border_width`, `shape`,
 `width`, `height` for nodes; `line_color`, `width`, `arrow_shape`,
-`label_color` for edges; `node_label_color`, `selection_color`,
-`edge_label_background` for global). Translation from semantic key to
-Cytoscape property happens in **one** layer (`app/common/graph_theme.py`), so
-consumers never re-map keys.
+`label_color`, `edge_label_font_size` for edges; `node_label_color`,
+`node_label_font_size`, `selection_color`, `edge_label_background` for global).
+Translation from semantic key to Cytoscape property happens in **one** layer
+(`app/common/graph_theme.py`), so consumers never re-map keys.
 
 Dimensions are stored as **plain numeric px** (no `"px"` suffix) and rendered
-as e.g. `"80px"` strings at translation time.
+as e.g. `"80px"` strings at translation time. Label font sizes follow the same
+convention: `node_label_font_size` / `edge_label_font_size` are plain int px
+(validated `ge=8, le=48`) and are resolved to concrete values against base
+tokens (`graph.node.label.font.size`, `graph.edge.label.font.size`) in both
+`effective_semantic_theme` (editors/snapshots) and `merge_theme_overrides`
+(Cytoscape rules).
+
+> **Label truncation is NOT a theme concern.** The maximum number of characters
+> shown in a node label is owned by the runtime setting
+> `GRAPH_UI_MAX_NODE_LABEL_CHARS` (Settings → Runtime Settings), not by a
+> graph theme. A link on the Graph Styling editor's Global card points there.
+> Graph and Collaboration Network truncate using this single source.
 
 ### Base mode source
 
@@ -71,8 +83,9 @@ over.
 
 ## Non-Goals
 
-- Layout/zoom/physics theming, fonts, `curve-style`, `arrow-scale`,
-  `control-point-step-size` (additive later without schema rewrite).
+- Layout/zoom/physics theming, **font family**, `curve-style`, `arrow-scale`,
+  `control-point-step-size`, label `text-wrap` / `text-max-width` (additive
+  later without schema rewrite). Label **font size** (node + edge) is in scope.
 - Per-edge or per-node-instance styling (themes are per-nodeType).
 - Caching of the effective theme (a fresh DB query per render is cheap at
   single-user scale).
@@ -121,10 +134,12 @@ illustrative example theme (`source = builtin`). Seeding is idempotent
   },
   "edges": {
     "line_color": "#999999", "width": 3,
-    "arrow_shape": "triangle", "label_color": "#666666"
+    "arrow_shape": "triangle", "label_color": "#666666",
+    "edge_label_font_size": 11
   },
   "global": {
     "node_label_color": "#FFFFFF",
+    "node_label_font_size": 14,
     "selection_color": "#FFAA00",
     "edge_label_background": "#222222"
   }
@@ -137,6 +152,9 @@ illustrative example theme (`source = builtin`). Seeding is idempotent
   `Space`, `Page`, `Blogpost`) plus `default` for untyped nodes.
 - `border_width` accepts `0` (no border) so full-snapshot themes can explicitly
   freeze the base's borderless default.
+- `node_label_font_size` / `edge_label_font_size` are plain int px
+  (`ge=8, le=48`); when omitted they resolve to the base tokens
+  `graph.node.label.font.size` (11) / `graph.edge.label.font.size` (9).
 - Validation (hex colors, shape names, numeric bounds, node-type keys) is
   enforced by the Pydantic models in `app/common/graph_theme.py`.
 
@@ -273,6 +291,15 @@ Route `/app/settings/graph-styling` (Settings → "Graph Styling" card).
 - **Two base-mode sections** (light/dark), each with a theme selector and a
   non-collapsible grid of node-type cards (fill/border/border-width/shape/
   width/height) plus an Edges card and a Global card.
+- **Label font size** — the Global card exposes `node_label_font_size` (a
+  single global node-label size) and the Edges card exposes
+  `edge_label_font_size`, both as number inputs (8–48 px). The Edges card's
+  live Cytoscape preview reflects `edge_label_font_size`; the node glyph
+  preview renders no text and is unaffected.
+- **Max-chars link** — the Global card carries a small inline link,
+  *"Node label length (max chars) is set in Runtime Settings →"*, pointing to
+  `/app/settings/runtime`. Label truncation is owned by the runtime setting,
+  not a theme.
 - **Effective values** — selecting a theme populates every field with its
   *effective* (concrete) value, so a sparse/no-override theme still shows what
   it actually renders. Effective node values are cached in a `dcc.Store` so the
@@ -350,6 +377,17 @@ flowchart LR
 10. **Refresh-on-navigation** — no polling/websocket.
 11. **Full shape set** — the complete Cytoscape shape vocabulary, not just the
     shapes currently in use.
+12. **Label font size, single global node size** — node label font size is one
+    global value (mirroring `node_label_color`), plus one edge label font size;
+    not per-nodeType.
+13. **Label sizes are plain px** — `node_label_font_size` / `edge_label_font_size`
+    are int px (8–48) resolved to concrete values in both semantic and
+    Cytoscape spaces; base tokens `graph.node.label.font.size` /
+    `graph.edge.label.font.size` fall back to 11/9.
+14. **Truncation is a runtime setting** — `GRAPH_UI_MAX_NODE_LABEL_CHARS`
+    (Settings → Runtime Settings) owns the max chars shown in node labels, not
+    a theme; the Global card links there, and Collab truncates from the same
+    setting (no hardcoded length).
 
 ---
 
@@ -358,6 +396,7 @@ flowchart LR
 | Area | Location |
 |---|---|
 | Shared core | `src/app/common/graph_theme.py` |
+| Base tokens (font sizes) | `src/app/dash_app/styles.py` (`THEME_TOKENS`) |
 | DB model | `src/app/db/models/graph_theme.py` |
 | Migration | `src/app/alembic/versions/..._add_graph_themes.py` |
 | API | `src/app/api/graph_themes/v1/{models,query,service,router}.py` |
@@ -365,3 +404,4 @@ flowchart LR
 | Shared fetch helper | `src/app/dash_app/pages/graph/utils/graph_operations.py` |
 | Consumers | Graph `callbacks/display.py`, Collab `callbacks/display.py`, `search.py` |
 | Editor page | `src/app/dash_app/pages/settings/graph_styling/` |
+| Collab truncation | `src/app/analytics/collaboration/algorithm.py` |

@@ -225,17 +225,19 @@ def build_edge_preview_stylesheet(
     width: Any,
     arrow_shape: Any,
     label_color: Any,
+    edge_label_font_size: Any = None,
 ) -> list[dict[str, Any]]:
     """Build a Cytoscape stylesheet for the two-node edge preview.
 
-    Styles the edge (line colour/width, target-arrow shape, label colour) and
-    gives the two endpoint nodes a neutral appearance so the edge reads
-    clearly, matching how edges render in the real graph.
+    Styles the edge (line colour/width, target-arrow shape, label colour and
+    font size) and gives the two endpoint nodes a neutral appearance so the
+    edge reads clearly, matching how edges render in the real graph.
     """
     color = line_color or "#C0C0C0"
     label = label_color or "#2d3748"
     stroke_w = int(_num(width, 2))
     arrow = arrow_shape or "triangle"
+    edge_font = int(_num(edge_label_font_size, 9))
 
     return [
         {
@@ -266,7 +268,7 @@ def build_edge_preview_stylesheet(
                 "arrow-scale": 1.0,
                 "curve-style": "bezier",
                 "label": "data(label)",
-                "font-size": "9px",
+                "font-size": f"{edge_font}px",
                 "color": label,
                 "text-rotation": "autorotate",
                 "text-background-color": "#ffffff",
@@ -290,15 +292,21 @@ def build_edge_preview_stylesheet(
     Input(
         {"type": "gs-edge-field", "base_theme": MATCH, "field": "label_color"}, "value"
     ),
+    Input(
+        {"type": "gs-edge-field", "base_theme": MATCH, "field": "edge_label_font_size"}, "value"
+    ),
 )
 def update_edge_glyph(
     line_color: Any,
     width: Any,
     arrow_shape: Any,
     label_color: Any,
+    edge_label_font_size: Any,
 ) -> list[dict[str, Any]]:
-    """Update the edge preview stylesheet from the four edge field values."""
-    return build_edge_preview_stylesheet(line_color, width, arrow_shape, label_color)
+    """Update the edge preview stylesheet from the five edge field values."""
+    return build_edge_preview_stylesheet(
+        line_color, width, arrow_shape, label_color, edge_label_font_size
+    )
 
 
 # ── Phase 4.4 — theme management ───────────────────────────────────────

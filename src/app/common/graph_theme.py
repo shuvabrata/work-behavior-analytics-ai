@@ -166,12 +166,14 @@ class EdgeOverride(BaseModel):
     width: int | None = Field(default=None, gt=0, le=20)
     arrow_shape: str | None = None
     label_color: str | None = Field(default=None, pattern=HEX_COLOR)
+    edge_label_font_size: int | None = Field(default=None, ge=8, le=48)
 
 
 class GlobalOverride(BaseModel):
     """Global (across node/edge) visual overrides."""
 
     node_label_color: str | None = Field(default=None, pattern=HEX_COLOR)
+    node_label_font_size: int | None = Field(default=None, ge=8, le=48)
     selection_color: str | None = Field(default=None, pattern=HEX_COLOR)
     edge_label_background: str | None = Field(default=None, pattern=HEX_COLOR)
 
@@ -294,7 +296,7 @@ def _base_node_properties(
     }
 
 
-def merge_theme_overrides(
+def merge_theme_overrides(  # pylint: disable=too-many-branches
     base_tokens: dict[str, str], overrides: ThemeOverrides | dict[str, Any]
 ) -> dict[str, Any]:
     """Return an "effective theme" document from base tokens ⊕ overrides.
@@ -344,6 +346,7 @@ def merge_theme_overrides(
         "width": base_tokens.get("graph.edge.width", 2),
         "target-arrow-shape": base_tokens.get("graph.edge.arrow", "triangle"),
         "color": base_tokens.get("text.secondary", "#2d3748"),
+        "font-size": base_tokens.get("graph.edge.label.font.size", 9),
     }
     e = overrides.edges
     if e.line_color is not None:
@@ -354,15 +357,22 @@ def merge_theme_overrides(
         edges["target-arrow-shape"] = e.arrow_shape
     if e.label_color is not None:
         edges["color"] = e.label_color
+    if e.edge_label_font_size is not None:
+        edges["font-size"] = e.edge_label_font_size
 
     g = overrides.global_
     global_ = {
         "node_label_color": base_tokens.get("graph.node.label", "#f4f7fb"),
+        "node_label_font_size": base_tokens.get(
+            "graph.node.label.font.size", 11
+        ),
         "selection_color": base_tokens.get("graph.selection", "#424242"),
         "edge_label_background": base_tokens.get("surface.base", "#ffffff"),
     }
     if g.node_label_color is not None:
         global_["node_label_color"] = g.node_label_color
+    if g.node_label_font_size is not None:
+        global_["node_label_font_size"] = g.node_label_font_size
     if g.selection_color is not None:
         global_["selection_color"] = g.selection_color
     if g.edge_label_background is not None:
@@ -443,6 +453,11 @@ def effective_semantic_theme(
             if e.label_color is not None
             else base_tokens.get("text.secondary", "#2d3748")
         ),
+        "edge_label_font_size": (
+            e.edge_label_font_size
+            if e.edge_label_font_size is not None
+            else _px_to_int(base_tokens.get("graph.edge.label.font.size", 9), 9)
+        ),
     }
 
     g = overrides.global_
@@ -451,6 +466,11 @@ def effective_semantic_theme(
             g.node_label_color
             if g.node_label_color is not None
             else base_tokens.get("graph.node.label", "#f4f7fb")
+        ),
+        "node_label_font_size": (
+            g.node_label_font_size
+            if g.node_label_font_size is not None
+            else _px_to_int(base_tokens.get("graph.node.label.font.size", 11), 11)
         ),
         "selection_color": (
             g.selection_color

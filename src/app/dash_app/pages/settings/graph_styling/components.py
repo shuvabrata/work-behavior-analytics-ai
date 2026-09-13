@@ -119,13 +119,14 @@ def _color_input(input_id: dict[str, Any], value: Any = None) -> dcc.Input:
 
 
 def _number_input(
-    input_id: dict[str, Any], value: Any = None, min_value: int = 1
+    input_id: dict[str, Any], value: Any = None, min_value: int = 1, max_value: int | None = None
 ) -> dbc.Input:
     """Small numeric input."""
     return dbc.Input(
         id=input_id,
         type="number",
         min=min_value,
+        max=max_value,
         step=1,
         value=value,
         style={
@@ -329,6 +330,25 @@ def build_edges_card(base_theme: str, overrides: dict[str, Any] | None = None) -
         html.Div([_field_label("Label Color"), _color_input(label_color_id, overrides.get("label_color"))])
     )
 
+    label_font_size_id = {
+        "type": "gs-edge-field",
+        "base_theme": base_theme,
+        "field": "edge_label_font_size",
+    }
+    fields.append(
+        html.Div(
+            [
+                _field_label("Label Font Size"),
+                _number_input(
+                    label_font_size_id,
+                    overrides.get("edge_label_font_size"),
+                    min_value=8,
+                    max_value=48,
+                ),
+            ]
+        )
+    )
+
     return _card_wrapper(
         [
             _card_title("Edges"),
@@ -409,6 +429,25 @@ def build_global_card(base_theme: str, overrides: dict[str, Any] | None = None) 
         html.Div([_field_label("Node Label Color"), _color_input(label_color_id, overrides.get("node_label_color"))])
     )
 
+    label_font_size_id = {
+        "type": "gs-global-field",
+        "base_theme": base_theme,
+        "field": "node_label_font_size",
+    }
+    fields.append(
+        html.Div(
+            [
+                _field_label("Node Label Font Size"),
+                _number_input(
+                    label_font_size_id,
+                    overrides.get("node_label_font_size"),
+                    min_value=8,
+                    max_value=48,
+                ),
+            ]
+        )
+    )
+
     selection_id = {
         "type": "gs-global-field",
         "base_theme": base_theme,
@@ -427,8 +466,21 @@ def build_global_card(base_theme: str, overrides: dict[str, Any] | None = None) 
         html.Div([_field_label("Edge Label Background"), _color_input(edge_bg_id, overrides.get("edge_label_background"))])
     )
 
+    max_chars_link = html.A(
+        "Node label length (max chars) is set in Runtime Settings \u2192",
+        href="/app/settings/runtime",
+        style={
+            "fontFamily": FONT_SANS,
+            "fontSize": FONT_SIZE_XTINY,
+            "color": COLOR_GRAY_MEDIUM,
+            "textDecoration": "underline",
+            "marginTop": SPACING_XSMALL,
+            "display": "inline-block",
+        },
+    )
+
     return _card_wrapper(
-        [_card_title("Global"), html.Div(fields)],
+        [_card_title("Global"), html.Div(fields), max_chars_link],
         {"type": "gs-global-card", "base_theme": base_theme},
     )
 

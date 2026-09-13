@@ -149,6 +149,20 @@ def test_merge_edges_and_global():
     # Unoverridden edge/global values fall through.
     assert merged["edges"]["color"] == "#2d3748"
     assert merged["global"]["node_label_color"] == "#f4f7fb"
+    # Label font sizes resolve to base-token fallbacks when unset.
+    assert merged["edges"]["font-size"] == 9
+    assert merged["global"]["node_label_font_size"] == 11
+
+
+def test_merge_label_font_size_overrides():
+    """node/edge label font size overrides win over base tokens."""
+    overrides = ThemeOverrides(
+        edges=EdgeOverride(edge_label_font_size=14),
+        global_=GlobalOverride(node_label_font_size=16),
+    )
+    merged = merge_theme_overrides(BASE_LIGHT, overrides)
+    assert merged["edges"]["font-size"] == 14
+    assert merged["global"]["node_label_font_size"] == 16
 
 
 def test_merge_accepts_raw_dict():
@@ -468,14 +482,17 @@ def test_effective_semantic_empty_is_full_base():
     # Edges + global concrete.
     assert eff["edges"]["line_color"] == "#C0C0C0"
     assert eff["global"]["node_label_color"] == "#f4f7fb"
+    # Label font sizes resolve to base-token fallbacks.
+    assert eff["edges"]["edge_label_font_size"] == 9
+    assert eff["global"]["node_label_font_size"] == 11
 
 
 def test_effective_semantic_applies_override():
     """Overrides win and are reflected in semantic space."""
     overrides = ThemeOverrides(
         nodes={"Person": NodeOverride(color="#00FF00", shape="diamond", width=80)},
-        edges=EdgeOverride(line_color="#888888"),
-        global_=GlobalOverride(selection_color="#FFAA00"),
+        edges=EdgeOverride(line_color="#888888", edge_label_font_size=14),
+        global_=GlobalOverride(selection_color="#FFAA00", node_label_font_size=16),
     )
     eff = effective_semantic_theme(BASE_LIGHT, overrides)
     person = eff["nodes"]["Person"]
@@ -484,6 +501,9 @@ def test_effective_semantic_applies_override():
     assert person["width"] == 80
     assert eff["edges"]["line_color"] == "#888888"
     assert eff["global"]["selection_color"] == "#FFAA00"
+    # Font-size overrides surface in semantic space.
+    assert eff["edges"]["edge_label_font_size"] == 14
+    assert eff["global"]["node_label_font_size"] == 16
 
 
 def test_effective_semantic_includes_all_node_types():

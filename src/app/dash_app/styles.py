@@ -102,6 +102,7 @@ THEME_TOKENS = {
         "graph.node.default": "#B8B8B8",
         "graph.node.default.border": "#9E9E9E",
         "graph.node.label": "#f4f7fb",  # white — readable on all vivid fills
+        "graph.node.label.font.size": "11",  # node label font size (px)
         "graph.node.project": "#F59E0B",
         "graph.node.project.border": "#D97706",
         "graph.node.person": "#3B82F6",
@@ -135,6 +136,7 @@ THEME_TOKENS = {
         "graph.node.blogpost": "#A855F7",
         "graph.node.blogpost.border": "#9333EA",
         "graph.edge.default": "#C0C0C0",
+        "graph.edge.label.font.size": "9",  # edge label font size (px)
         "graph.selection": "#424242",
     },
     "executive-dark": {
@@ -190,6 +192,7 @@ THEME_TOKENS = {
         "graph.node.default": "#7f8fa3",
         "graph.node.default.border": "#96a4b6",
         "graph.node.label": "#f4f7fb",  # white — readable on all vivid fills
+        "graph.node.label.font.size": "11",  # node label font size (px)
         "graph.node.project": "#F59E0B",
         "graph.node.project.border": "#D97706",
         "graph.node.person": "#3B82F6",
@@ -223,6 +226,7 @@ THEME_TOKENS = {
         "graph.node.blogpost": "#A855F7",
         "graph.node.blogpost.border": "#9333EA",
         "graph.edge.default": "#8c9aab",
+        "graph.edge.label.font.size": "9",  # edge label font size (px)
         "graph.selection": "#d5deea",
     }
 }

@@ -21,8 +21,8 @@ queries:
     RETURN path
     LIMIT 20
   tabular: |-
-    MATCH (p:Person {id: $person_id})-[:REPORTS_TO*1..5]->(manager:Person)
-    WITH p, manager, length((p)-[:REPORTS_TO*]->(manager)) AS level
+    MATCH path = (p:Person {id: $person_id})-[:REPORTS_TO*1..5]->(manager:Person)
+    WITH p, manager, length(path) AS level
     RETURN level AS reporting_level,
            manager.name AS manager_name,
            manager.id AS manager_id

@@ -485,7 +485,7 @@ def overrides_to_cytoscape_rules(merged_tokens: dict[str, Any]) -> list[dict[str
 
     # Generic node rule (untyped) carries the default node's properties.
     base_node_style: dict[str, str] = {}
-    for cyto_key in ("background-color", "border-color", "width", "height", "shape"):
+    for cyto_key in ("background-color", "border-color", "border-width", "width", "height", "shape"):
         if cyto_key in default_props:
             base_node_style[cyto_key] = str(default_props[cyto_key])
     base_node_style.setdefault("color", str(global_.get("node_label_color", "#f4f7fb")))
@@ -500,6 +500,8 @@ def overrides_to_cytoscape_rules(merged_tokens: dict[str, Any]) -> list[dict[str
             style["background-color"] = str(props["background-color"])
         if "border-color" in props:
             style["border-color"] = str(props["border-color"])
+        if "border-width" in props:
+            style["border-width"] = str(props["border-width"])
         if "shape" in props:
             style["shape"] = str(props["shape"])
         if "width" in props:

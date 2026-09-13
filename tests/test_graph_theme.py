@@ -206,6 +206,34 @@ def test_rules_shape_passes_through():
     assert rules['node[nodeType = "Person"]']["shape"] == "diamond"
 
 
+def test_rules_border_width_propagates():
+    """A border override reaches the per-nodeType Cytoscape rule.
+
+    Regression: ``border-width`` was merged into the effective theme but
+    dropped when translating to Cytoscape rules, so setting a border on a node
+    type had no visible effect (base nodes are borderless at 0px).
+    """
+    overrides = ThemeOverrides(
+        nodes={"Person": NodeOverride(border="#FFFFFF", border_width=2)}
+    )
+    merged = merge_theme_overrides(BASE_LIGHT, overrides)
+    rules = _rules_for(merged)
+    person_rule = rules['node[nodeType = "Person"]']
+    assert person_rule["border-color"] == "#FFFFFF"
+    assert person_rule["border-width"] == "2px"
+
+
+def test_rules_default_node_border_propagates():
+    """A border override on the untyped ``default`` node reaches the generic rule."""
+    overrides = ThemeOverrides(
+        nodes={"default": NodeOverride(border="#FFFFFF", border_width=3)}
+    )
+    merged = merge_theme_overrides(BASE_LIGHT, overrides)
+    rules = _rules_for(merged)
+    assert rules["node"]["border-color"] == "#FFFFFF"
+    assert rules["node"]["border-width"] == "3px"
+
+
 def test_rules_include_generic_edge_selected():
     """Rules contain the generic node, edge, and selected selectors."""
     merged = merge_theme_overrides(BASE_LIGHT, ThemeOverrides())

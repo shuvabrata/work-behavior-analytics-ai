@@ -87,10 +87,15 @@ def build_cytoscape_stylesheet(theme_name: str = ACTIVE_THEME, effective=None):
         'font-family': cyto_font_family,
         'font-size': FONT_SIZE_TINY,
         'font-weight': FONT_WEIGHT_MEDIUM,
-        'border-width': '0px',
         'text-wrap': 'wrap',
         'text-max-width': '56px'
     })
+    # Base nodes are borderless, so default the generic rule to 0px — unless
+    # the effective theme sets a border-width on the untyped ``default`` node,
+    # in which case honour it (the shared translation layer already emitted it).
+    default_border_width = effective["nodes"]["default"].get("border-width")
+    if default_border_width is None:
+        generic_node_rule["style"]["border-width"] = "0px"
     # The shared function sets the generic node's ``color`` from the theme's
     # node_label_color. The merged doc always carries node_label_color (the
     # base graph.node.label value when unset), so compare against the base

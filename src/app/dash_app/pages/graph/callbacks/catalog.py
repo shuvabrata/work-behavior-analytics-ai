@@ -48,7 +48,7 @@ def build_namespace_options(catalog_queries: list[dict]) -> list[dict]:
         )
 
     for directory, (_, label) in sorted(
-        namespaces.items(), key=lambda item: (item[1][0], item[1][1])
+        namespaces.items(), key=lambda item: item[1][0]
     ):
         options.append({"label": label, "value": directory})
     return options

@@ -32,8 +32,6 @@ BASE_URL = "http://localhost:8000"
 
 # A real catalog query id (namespace/slug) used for create/update tests.
 VALID_CATALOG_ID = "schema/view_all_node_types"
-# A second real id used to test filtering with multiple rows.
-VALID_CATALOG_ID_2 = "schema/view_all_relationship_types"
 # A deliberately unknown id used to exercise the 404 path.
 UNKNOWN_CATALOG_ID = "nonexistent/does_not_exist"
 

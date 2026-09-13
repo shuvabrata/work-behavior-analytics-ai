@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from urllib.parse import parse_qs
 
 import dash_bootstrap_components as dbc
@@ -33,15 +34,23 @@ ALL_VIEWS = "__all__"
 def build_namespace_options(catalog_queries: list[dict]) -> list[dict]:
     """Build namespace filter options from loaded catalog queries."""
     options = [{"label": "All namespaces", "value": ALL_NAMESPACES}]
-    seen: set[str] = set()
+    namespaces: dict[str, tuple[int, str]] = {}
     for query in catalog_queries:
         namespace = query.get("namespace") or {}
         directory = namespace.get("directory")
         name = namespace.get("name")
-        if not directory or directory in seen:
+        if not directory or directory in namespaces:
             continue
-        seen.add(directory)
-        options.append({"label": name or directory, "value": directory})
+        order = namespace.get("order")
+        namespaces[directory] = (
+            order if isinstance(order, int) else len(namespaces),
+            name or directory,
+        )
+
+    for directory, (_, label) in sorted(
+        namespaces.items(), key=lambda item: (item[1][0], item[1][1])
+    ):
+        options.append({"label": label, "value": directory})
     return options
 
 
@@ -77,6 +86,39 @@ def filter_catalog_queries(
         ]
 
     return filtered
+
+
+def _timestamp_ordinal(timestamp: str | None) -> float:
+    """Parse an ISO timestamp into epoch seconds for deterministic sorting."""
+    if not timestamp:
+        return 0.0
+    try:
+        normalized = timestamp.replace("Z", "+00:00")
+        parsed = datetime.fromisoformat(normalized)
+    except (TypeError, ValueError):
+        return 0.0
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.timestamp()
+
+
+def _sort_catalog_queries(
+    catalog_queries: list[dict],
+    metadata_store: dict | None,
+) -> list[dict]:
+    """Sort favourites first, recent favourites before older ones, then name."""
+    metadata_store = metadata_store or {}
+
+    def sort_key(query: dict) -> tuple[bool, float, str]:
+        catalog_id = query.get("id")
+        metadata = metadata_store.get(catalog_id) or {}
+        is_favourite = bool(metadata.get("is_favourite"))
+        updated_at = (
+            _timestamp_ordinal(metadata.get("updated_at")) if is_favourite else 0.0
+        )
+        return (not is_favourite, -updated_at, (query.get("name") or "").lower())
+
+    return sorted(catalog_queries, key=sort_key)
 
 
 def parse_catalog_deep_link(search: str | None) -> tuple[str | None, str | None]:
@@ -360,7 +402,7 @@ def load_query_catalog(pathname: str | None):
 
     # Load favourite metadata alongside the catalog list.
     metadata = _fetch_catalog_metadata(api_base)
-    return items, None, metadata
+    return _sort_catalog_queries(items, metadata), None, metadata
 
 
 def _fetch_catalog_metadata(api_base: str) -> dict:
@@ -534,11 +576,13 @@ def render_catalog_query_list(
 @callback(
     Output("catalog-metadata-store", "data"),
     Input({"type": "catalog-favourite-toggle", "catalog_id": ALL}, "n_clicks"),
+    State({"type": "catalog-favourite-toggle", "catalog_id": ALL}, "id"),
     State("catalog-metadata-store", "data"),
     prevent_initial_call=True,
 )
 def toggle_catalog_favourite(
     _clicks: list[int | None],
+    toggle_ids: list[dict] | None,
     metadata_store: dict | None,
 ) -> dict:
     """Toggle a query's favourite state and persist it via the API.
@@ -554,6 +598,17 @@ def toggle_catalog_favourite(
 
     catalog_id = triggered.get("catalog_id")
     if not catalog_id:
+        raise PreventUpdate
+
+    triggered_clicks = next(
+        (
+            click_count
+            for click_count, toggle_id in zip(_clicks or [], toggle_ids or [])
+            if toggle_id == triggered
+        ),
+        None,
+    )
+    if not triggered_clicks:
         raise PreventUpdate
 
     store = dict(metadata_store or {})

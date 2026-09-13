@@ -14,9 +14,11 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from dash import html
+from dash.exceptions import PreventUpdate
 
 from app.dash_app.pages.graph.callbacks import catalog as catalog_cb
 from app.dash_app.pages.graph.callbacks.catalog import (
+    load_query_catalog,
     render_catalog_query_list,
     toggle_catalog_favourite,
 )
@@ -77,6 +79,14 @@ def _star_icon_class(button) -> str:
     return ""
 
 
+def _patch_ctx(triggered_id, triggered_prop_ids=None):
+    """Patch the catalog module's ``ctx`` singleton with a mock."""
+    fake_ctx = MagicMock()
+    fake_ctx.triggered_id = triggered_id
+    fake_ctx.triggered_prop_ids = triggered_prop_ids or {}
+    return patch.object(catalog_cb, "ctx", fake_ctx)
+
+
 class TestStarRendering:
     def test_favourited_query_renders_filled_star(self) -> None:
         """A favourited query renders a filled (fas) star."""
@@ -113,13 +123,74 @@ class TestStarRendering:
         buttons = _collect_star_buttons(result)
         assert buttons[0].id == {"type": "catalog-favourite-toggle", "catalog_id": "schema/a"}
 
+    def test_namespace_change_does_not_re_sort_favourites(self) -> None:
+        """Changing namespace preserves catalog order until the next page reload."""
+        queries = [
+            _query("schema/a", "Alpha"),
+            _query("schema/b", "Beta"),
+        ]
+        metadata = {"schema/b": {"is_favourite": True, "updated_at": "2026-09-03T00:00:00Z"}}
+
+        with _patch_ctx(
+            "catalog-namespace-filter",
+            {"catalog-namespace-filter.value": "catalog-namespace-filter.value"},
+        ):
+            result = render_catalog_query_list(queries, "schema", None, None, metadata)
+
+        text = _flatten_text(result)
+        assert text.index("Alpha") < text.index("Beta")
+
+
+class TestCatalogLoadSorting:
+    def test_page_load_sorts_favourites_first_by_recent_update_then_name(self) -> None:
+        """Page reload stores queries in favourite-first display order."""
+        queries = [
+            _query("schema/a", "Alpha"),
+            _query("schema/b", "Beta"),
+            _query("schema/c", "Gamma"),
+            _query("schema/d", "Delta"),
+        ]
+        catalog_response = MagicMock()
+        catalog_response.json.return_value = {"items": queries}
+        metadata_response = MagicMock()
+        metadata_response.json.return_value = {
+            "items": [
+                {
+                    "catalog_id": "schema/b",
+                    "is_favourite": True,
+                    "updated_at": "2026-09-03T00:00:00Z",
+                },
+                {
+                    "catalog_id": "schema/c",
+                    "is_favourite": True,
+                    "updated_at": "2026-09-04T00:00:00Z",
+                },
+            ]
+        }
+
+        with patch(
+            "app.dash_app.pages.graph.callbacks.catalog.get_graph_api_base_url",
+            return_value="http://testserver",
+        ), patch(
+            "app.dash_app.pages.graph.callbacks.catalog.requests.get",
+            side_effect=[catalog_response, metadata_response],
+        ):
+            sorted_queries, load_status, metadata = load_query_catalog("/app/graph")
+
+        assert [query["name"] for query in sorted_queries] == [
+            "Gamma",
+            "Beta",
+            "Alpha",
+            "Delta",
+        ]
+        assert load_status is None
+        assert metadata["schema/c"]["is_favourite"] is True
+
 
 class TestToggleCallback:
-    def _patch_ctx(self, triggered_id):
+    def _patch_ctx(self, triggered_id, triggered_prop_ids=None):
         """Patch the catalog module's ``ctx`` singleton with a mock."""
-        fake_ctx = MagicMock()
-        fake_ctx.triggered_id = triggered_id
-        return patch.object(catalog_cb, "ctx", fake_ctx)
+        return _patch_ctx(triggered_id, triggered_prop_ids)
 
     def test_toggle_fires_put_with_flipped_payload(self) -> None:
         """Toggling a non-favourite fires PUT with is_favourite=true."""
@@ -135,7 +206,11 @@ class TestToggleCallback:
             "app.dash_app.pages.graph.callbacks.catalog.requests.put",
             return_value=mock_response,
         ) as mock_put:
-            result = toggle_catalog_favourite([1], {})
+            result = toggle_catalog_favourite(
+                [1],
+                [{"type": "catalog-favourite-toggle", "catalog_id": "schema/a"}],
+                {},
+            )
 
         mock_put.assert_called_once()
         args, kwargs = mock_put.call_args
@@ -158,7 +233,9 @@ class TestToggleCallback:
             return_value=mock_response,
         ) as mock_put:
             result = toggle_catalog_favourite(
-                [1], {"schema/a": {"is_favourite": True, "updated_at": "2026-09-03T00:00:00Z"}}
+                [1],
+                [{"type": "catalog-favourite-toggle", "catalog_id": "schema/a"}],
+                {"schema/a": {"is_favourite": True, "updated_at": "2026-09-03T00:00:00Z"}},
             )
 
         _, kwargs = mock_put.call_args
@@ -179,7 +256,11 @@ class TestToggleCallback:
             "app.dash_app.pages.graph.callbacks.catalog.requests.put",
             return_value=mock_response,
         ):
-            result = toggle_catalog_favourite([1], {})
+            result = toggle_catalog_favourite(
+                [1],
+                [{"type": "catalog-favourite-toggle", "catalog_id": "schema/a"}],
+                {},
+            )
 
         assert result["schema/a"]["is_favourite"] is True
         assert result["schema/a"]["updated_at"] == "2026-09-03T00:00:00Z"
@@ -190,8 +271,14 @@ class TestToggleCallback:
             _query("schema/a", "Alpha"),
             _query("schema/b", "Beta"),
         ]
-        metadata = {"schema/a": {"is_favourite": True, "updated_at": "2026-09-03T00:00:00Z"}}
-        result = render_catalog_query_list(queries, "__all__", None, None, metadata)
+        metadata = {"schema/b": {"is_favourite": True, "updated_at": "2026-09-03T00:00:00Z"}}
+
+        with self._patch_ctx(
+            "catalog-metadata-store",
+            {"catalog-metadata-store.data": "catalog-metadata-store.data"},
+        ):
+            result = render_catalog_query_list(queries, "__all__", None, None, metadata)
+
         text = _flatten_text(result)
         # Order preserved: Alpha before Beta (no re-sort on toggle).
         assert text.index("Alpha") < text.index("Beta")
@@ -211,8 +298,46 @@ class TestToggleCallback:
             return_value=mock_response,
         ):
             result = toggle_catalog_favourite(
-                [1], {"schema/b": {"is_favourite": True, "updated_at": "2026-09-03T00:00:00Z"}}
+                [1],
+                [{"type": "catalog-favourite-toggle", "catalog_id": "schema/a"}],
+                {"schema/b": {"is_favourite": True, "updated_at": "2026-09-03T00:00:00Z"}},
             )
 
         assert result["schema/b"]["is_favourite"] is True
         assert result["schema/a"]["is_favourite"] is True
+
+    @pytest.mark.parametrize("clicks", ([0], [None], []))
+    def test_toggle_ignores_rendered_buttons_without_clicks(self, clicks) -> None:
+        """Dynamically rendered star buttons must not persist favourites."""
+        with self._patch_ctx(
+            {"type": "catalog-favourite-toggle", "catalog_id": "schema/a"}
+        ), patch(
+            "app.dash_app.pages.graph.callbacks.catalog.requests.put",
+        ) as mock_put:
+            with pytest.raises(PreventUpdate):
+                toggle_catalog_favourite(
+                    clicks,
+                    [{"type": "catalog-favourite-toggle", "catalog_id": "schema/a"}],
+                    {},
+                )
+
+        mock_put.assert_not_called()
+
+    def test_toggle_uses_click_count_for_triggered_star_only(self) -> None:
+        """Only the triggered star's positive click count should allow a toggle."""
+        with self._patch_ctx(
+            {"type": "catalog-favourite-toggle", "catalog_id": "schema/a"}
+        ), patch(
+            "app.dash_app.pages.graph.callbacks.catalog.requests.put",
+        ) as mock_put:
+            with pytest.raises(PreventUpdate):
+                toggle_catalog_favourite(
+                    [0, 1],
+                    [
+                        {"type": "catalog-favourite-toggle", "catalog_id": "schema/a"},
+                        {"type": "catalog-favourite-toggle", "catalog_id": "schema/b"},
+                    ],
+                    {},
+                )
+
+        mock_put.assert_not_called()

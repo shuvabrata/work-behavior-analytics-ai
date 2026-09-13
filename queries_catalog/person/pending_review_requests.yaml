@@ -1,0 +1,37 @@
+name: Pending Review Requests
+description: |-
+  **What it is:** Lists all open Pull Requests where this person has been explicitly requested as a reviewer but has not yet completed their review.
+
+  **How it helps:** Pending review requests are an often-invisible queue of work. This query makes that queue explicit, enabling workload balancing and helping identify when a person is the bottleneck holding up merges.
+
+  **What-If Impact:** A person with 20 pending review requests is a delivery bottleneck for 20 other engineers' work, but this typically goes unnoticed unless the review queue is explicitly surfaced. Unreviewed PRs stall velocity and generate merge conflicts over time.
+summary: All open pull requests where this person has been requested as a reviewer.
+default_view: tabular
+parameters:
+- name: person_id
+  env_var: PERSON1_ID
+  required: true
+  label: Person
+  type: person_id
+  placeholder: "e.g. github::Person::alice or jira::Person::557058:abc"
+  description: "WBA canonical Person ID. Format: github::Person::<login> or jira::Person::<account_id>"
+queries:
+  tabular: |-
+    MATCH (pr:PullRequest)-[:REQUESTED_REVIEWER]->(p:Person {id: $person_id})
+    WHERE pr.state = 'open'
+    RETURN pr.number AS pr_number,
+           pr.title AS title,
+           pr.created_at AS opened_on
+    ORDER BY pr.created_at ASC
+    LIMIT 100
+  graph: |-
+    MATCH path = (pr:PullRequest)-[:REQUESTED_REVIEWER]->(p:Person {id: $person_id})
+    WHERE pr.state = 'open'
+    RETURN path
+    LIMIT 100
+tags:
+- beta
+- table
+- graph
+owner: graph-team
+status: active

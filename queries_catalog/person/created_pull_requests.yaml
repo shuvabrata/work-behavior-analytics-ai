@@ -1,0 +1,37 @@
+name: Pull Requests Created
+description: |-
+  **What it is:** Lists all Pull Requests opened by this person, with state and merge timestamps.
+
+  **How it helps:** PRs are the primary unit of code contribution review. This query reveals a developer's shipping cadence, the proportion of open vs. merged PRs, and any PRs stuck without merge — a potential bottleneck signal.
+
+  **What-If Impact:** A developer with many open, unmerged PRs may be creating work in parallel without completing it, contributing to integration debt and blocking downstream teams who depend on those changes landing.
+summary: All pull requests created by this person.
+default_view: tabular
+parameters:
+- name: person_id
+  env_var: PERSON1_ID
+  required: true
+  label: Person
+  type: person_id
+  placeholder: "e.g. github::Person::alice or jira::Person::557058:abc"
+  description: "WBA canonical Person ID. Format: github::Person::<login> or jira::Person::<account_id>"
+queries:
+  tabular: |-
+    MATCH (p:Person {id: $person_id})-[:CREATED]->(pr:PullRequest)
+    RETURN pr.number AS pr_number,
+           pr.title AS title,
+           pr.state AS state,
+           pr.created_at AS created_at,
+           pr.merged_at AS merged_at
+    ORDER BY pr.created_at DESC
+    LIMIT 100
+  graph: |-
+    MATCH path = (p:Person {id: $person_id})-[:CREATED]->(pr:PullRequest)
+    RETURN path
+    LIMIT 100
+tags:
+- beta
+- table
+- graph
+owner: graph-team
+status: active

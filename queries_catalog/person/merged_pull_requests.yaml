@@ -1,0 +1,36 @@
+name: Pull Requests Merged
+description: |-
+  **What it is:** Lists all Pull Requests this person has merged into a target branch.
+
+  **How it helps:** The merger of a PR is typically a gatekeeping action requiring authority or trust. This reveals who holds merge authority in practice — which may differ from who holds it in theory.
+
+  **What-If Impact:** In teams without branch protection, the person who merges most PRs is the de facto integration gatekeeper. Identifying this person is critical for bus-factor analysis and succession planning.
+summary: All pull requests merged by this person.
+default_view: tabular
+parameters:
+- name: person_id
+  env_var: PERSON1_ID
+  required: true
+  label: Person
+  type: person_id
+  placeholder: "e.g. github::Person::alice or jira::Person::557058:abc"
+  description: "WBA canonical Person ID. Format: github::Person::<login> or jira::Person::<account_id>"
+queries:
+  tabular: |-
+    MATCH (p:Person {id: $person_id})-[:MERGED]->(pr:PullRequest)
+    RETURN pr.number AS pr_number,
+           pr.title AS title,
+           pr.state AS state,
+           pr.merged_at AS merged_at
+    ORDER BY pr.merged_at DESC
+    LIMIT 100
+  graph: |-
+    MATCH path = (p:Person {id: $person_id})-[:MERGED]->(pr:PullRequest)
+    RETURN path
+    LIMIT 100
+tags:
+- beta
+- table
+- graph
+owner: graph-team
+status: active

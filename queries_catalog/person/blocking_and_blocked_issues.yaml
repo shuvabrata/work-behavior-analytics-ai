@@ -1,0 +1,44 @@
+name: Blocking & Blocked Issues
+description: |-
+  **What it is:** Finds Issues assigned to this person that are either blocking other issues or are themselves being blocked by other issues.
+
+  **How it helps:** Blocking relationships are the most direct indicator of delivery impediments. Issues this person owns that block others represent an elevated urgency priority. Issues blocking this person's work reveal external dependencies that may need escalation.
+
+  **What-If Impact:** Allowing blocking relationships to go unmonitored leads to cascading delivery delays that are difficult to trace back to their root cause. This query makes the dependency chain visible before the downstream impact is felt.
+summary: Issues this person is assigned to that are blocking others or are being blocked.
+default_view: graph
+parameters:
+- name: person_id
+  env_var: PERSON1_ID
+  required: true
+  label: Person
+  type: person_id
+  placeholder: "e.g. github::Person::alice or jira::Person::557058:abc"
+  description: "WBA canonical Person ID. Format: github::Person::<login> or jira::Person::<account_id>"
+queries:
+  graph: |-
+    MATCH (p:Person {id: $person_id})-[:ASSIGNED_TO]-(i:Issue)
+    OPTIONAL MATCH blocker_path = (i)-[:BLOCKS]->(blocked:Issue)
+    OPTIONAL MATCH blocked_path = (i)<-[:BLOCKS]-(blocker:Issue)
+    WITH p, i, blocker_path, blocked_path
+    WHERE blocker_path IS NOT NULL OR blocked_path IS NOT NULL
+    RETURN blocker_path, blocked_path
+    LIMIT 100
+  tabular: |-
+    MATCH (p:Person {id: $person_id})-[:ASSIGNED_TO]-(i:Issue)
+    OPTIONAL MATCH (i)-[:BLOCKS]->(blocked:Issue)
+    OPTIONAL MATCH (i)<-[:BLOCKS]-(blocker:Issue)
+    WITH i, collect(DISTINCT blocked.key) AS blocks_keys, collect(DISTINCT blocker.key) AS blocked_by_keys
+    WHERE size(blocks_keys) > 0 OR size(blocked_by_keys) > 0
+    RETURN i.key AS issue_key,
+           i.title AS title,
+           i.status AS status,
+           blocks_keys AS blocks,
+           blocked_by_keys AS blocked_by
+    LIMIT 100
+tags:
+- beta
+- table
+- graph
+owner: graph-team
+status: active

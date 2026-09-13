@@ -1,0 +1,37 @@
+name: Mentioned In
+description: |-
+  **What it is:** Finds all Issues, Epics, Confluence Pages, and Blogposts where this person has been @-mentioned.
+
+  **How it helps:** Mentions map informal influence and dependency — who relies on this person's attention or expertise. A person frequently mentioned in issues they don't own is a likely hidden bottleneck or subject-matter expert.
+
+  **What-If Impact:** Failing to track mentions misses a critical class of invisible work: the untracked consultation and review load on senior engineers and leads who are constantly @-tagged but never formally assigned.
+summary: All work items and pages where this person was @-mentioned.
+default_view: tabular
+parameters:
+- name: person_id
+  env_var: PERSON1_ID
+  required: true
+  label: Person
+  type: person_id
+  placeholder: "e.g. github::Person::alice or jira::Person::557058:abc"
+  description: "WBA canonical Person ID. Format: github::Person::<login> or jira::Person::<account_id>"
+queries:
+  tabular: |-
+    MATCH (p:Person {id: $person_id})<-[:MENTIONS]-(x)
+    RETURN labels(x)[0] AS node_type,
+           coalesce(x.key, x.title, x.name, elementId(x)) AS node_ref,
+           coalesce(x.title, x.name, x.key) AS title,
+           x.status AS status,
+           x.updated_at AS last_updated
+    ORDER BY x.updated_at DESC
+    LIMIT 100
+  graph: |-
+    MATCH path = (p:Person {id: $person_id})<-[:MENTIONS]-(x)
+    RETURN path
+    LIMIT 100
+tags:
+- beta
+- table
+- graph
+owner: graph-team
+status: active

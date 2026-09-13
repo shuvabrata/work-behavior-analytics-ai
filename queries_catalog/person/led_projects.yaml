@@ -1,0 +1,35 @@
+name: Projects Led
+description: |-
+  **What it is:** Finds all Projects that this person formally leads via the LEADS relationship.
+
+  **How it helps:** Project leadership is a formal ownership signal. This query surfaces which high-level Projects a person is accountable for at the organisational level — distinct from being assigned individual issues or epics within a project.
+
+  **What-If Impact:** Project leads who are not clearly identified in the system create accountability gaps. When a project goes off-track, the absence of a clearly identified lead means there is no single person responsible for course correction.
+summary: All projects this person formally leads.
+default_view: graph
+parameters:
+- name: person_id
+  env_var: PERSON1_ID
+  required: true
+  label: Person
+  type: person_id
+  placeholder: "e.g. github::Person::alice or jira::Person::557058:abc"
+  description: "WBA canonical Person ID. Format: github::Person::<login> or jira::Person::<account_id>"
+queries:
+  graph: |-
+    MATCH path = (p:Person {id: $person_id})-[:LEADS]->(proj:Project)
+    RETURN path
+    LIMIT 50
+  tabular: |-
+    MATCH (p:Person {id: $person_id})-[:LEADS]->(proj:Project)
+    RETURN proj.name AS project_name,
+           proj.key AS project_key,
+           proj.id AS project_id
+    ORDER BY proj.name ASC
+    LIMIT 50
+tags:
+- beta
+- table
+- graph
+owner: graph-team
+status: active

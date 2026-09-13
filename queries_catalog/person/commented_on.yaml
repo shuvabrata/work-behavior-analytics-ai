@@ -1,0 +1,38 @@
+name: Nodes Commented On
+description: |-
+  **What it is:** Finds all work items and pages this person has commented on — Issues, Pull Requests, Epics, Confluence Pages, and Blogposts.
+
+  **How it helps:** Gives a direct signal of where this person is actively engaged, beyond formal assignments. High comment volume on items they don't own indicates cross-team influence and review culture participation.
+
+  **What-If Impact:** Ignoring comment activity means overlooking a significant portion of a knowledge worker's contribution — especially for tech leads and architects who guide work through comments rather than direct ownership.
+summary: All nodes this person has commented on, with comment counts and timestamps.
+default_view: tabular
+parameters:
+- name: person_id
+  env_var: PERSON1_ID
+  required: true
+  label: Person
+  type: person_id
+  placeholder: "e.g. github::Person::alice or jira::Person::557058:abc"
+  description: "WBA canonical Person ID. Format: github::Person::<login> or jira::Person::<account_id>"
+queries:
+  tabular: |-
+    MATCH (p:Person {id: $person_id})-[r:COMMENTED_ON]->(x)
+    RETURN labels(x)[0] AS node_type,
+           coalesce(x.key, x.title, x.name, elementId(x)) AS node_ref,
+           coalesce(x.title, x.name, x.key) AS title,
+           r.count AS comment_count,
+           r.first_interaction_at AS first_comment,
+           r.last_interaction_at AS last_comment
+    ORDER BY r.last_interaction_at DESC
+    LIMIT 100
+  graph: |-
+    MATCH path = (p:Person {id: $person_id})-[:COMMENTED_ON]->(x)
+    RETURN path
+    LIMIT 100
+tags:
+- beta
+- table
+- graph
+owner: graph-team
+status: active

@@ -1,0 +1,41 @@
+name: Open Assigned Issues
+description: |-
+  **What it is:** Lists all Issues currently assigned to this person that are in an active (non-done) state.
+
+  **How it helps:** Gives an instant view of this person's active in-flight workload in Jira. Combined with priority, it helps managers assess whether someone is overloaded or has capacity.
+
+  **What-If Impact:** Overlooking the concentration of open issues on one person is a primary cause of undetected bottlenecks. One person holding 30 open issues while others hold 3 is a risk that's invisible without this query.
+summary: All open Jira issues currently assigned to this person, ordered by priority.
+default_view: tabular
+parameters:
+- name: person_id
+  env_var: PERSON1_ID
+  required: true
+  label: Person
+  type: person_id
+  placeholder: "e.g. github::Person::alice or jira::Person::557058:abc"
+  description: "WBA canonical Person ID. Format: github::Person::<login> or jira::Person::<account_id>"
+queries:
+  tabular: |-
+    MATCH (p:Person {id: $person_id})-[:ASSIGNED_TO]-(i:Issue)
+    WHERE i.status IS NOT NULL
+      AND i.status IN ['To Do', 'In Progress', 'In Review', 'open']
+    RETURN i.key AS key,
+           i.title AS title,
+           i.status AS status,
+           i.priority AS priority,
+           i.updated_at AS last_updated
+    ORDER BY i.priority ASC, i.updated_at DESC
+    LIMIT 100
+  graph: |-
+    MATCH path = (p:Person {id: $person_id})-[:ASSIGNED_TO]-(i:Issue)
+    WHERE i.status IS NOT NULL
+      AND i.status IN ['To Do', 'In Progress', 'In Review', 'open']
+    RETURN path
+    LIMIT 100
+tags:
+- beta
+- table
+- graph
+owner: graph-team
+status: active

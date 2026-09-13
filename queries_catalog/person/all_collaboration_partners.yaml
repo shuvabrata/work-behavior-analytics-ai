@@ -1,0 +1,43 @@
+name: All Collaboration Partners
+description: |-
+  **What it is:** Finds everyone this person has collaborated with across all interaction types — co-assignment on issues, co-authorship on commits, code reviews, merges, and issue reporting. Ranked by the breadth of shared work artifacts.
+
+  **How it helps:** This is the broadest possible collaboration signal for a single person. It answers the question "who does this person actually work with?" across every dimension the graph captures, making it the ideal starting point for understanding their collaboration network.
+
+  **What-If Impact:** Limiting collaboration analysis to a single signal (e.g., only co-assignment) gives a narrow and misleading picture. A developer may never be co-assigned with their closest technical collaborators, but they may co-author commits, review each other's PRs, and co-appear in dozens of issues. Only a multi-signal query like this one reveals the true relationship.
+summary: Everyone this person has collaborated with across all work interaction types, ranked by artifact breadth.
+default_view: tabular
+parameters:
+- name: person_id
+  env_var: PERSON1_ID
+  required: true
+  label: Person
+  type: person_id
+  placeholder: "e.g. github::Person::alice or jira::Person::557058:abc"
+  description: "WBA canonical Person ID. Format: github::Person::<login> or jira::Person::<account_id>"
+queries:
+  tabular: |-
+    MATCH (p:Person {id: $person_id})-[:COMMENTED_ON|AUTHORED_BY|REVIEWED|MERGED|ASSIGNED_TO|REPORTED_BY]-(x)-[:COMMENTED_ON|AUTHORED_BY|REVIEWED|MERGED|ASSIGNED_TO|REPORTED_BY]-(other:Person)
+    WHERE other <> p
+    WITH other, count(DISTINCT x) AS shared_artifacts, collect(DISTINCT labels(x)[0]) AS artifact_types
+    RETURN other.name AS collaborator,
+           other.id AS collaborator_id,
+           shared_artifacts,
+           artifact_types[0..5] AS artifact_types
+    ORDER BY shared_artifacts DESC
+    LIMIT 50
+  graph: |-
+    MATCH (p:Person {id: $person_id})-[:COMMENTED_ON|AUTHORED_BY|REVIEWED|MERGED|ASSIGNED_TO|REPORTED_BY]-(x)-[:COMMENTED_ON|AUTHORED_BY|REVIEWED|MERGED|ASSIGNED_TO|REPORTED_BY]-(other:Person)
+    WHERE other <> p
+    WITH p, other, count(DISTINCT x) AS strength
+    ORDER BY strength DESC
+    LIMIT 20
+    MATCH path = (p)-[:COMMENTED_ON|AUTHORED_BY|REVIEWED|MERGED|ASSIGNED_TO|REPORTED_BY*..2]-(other)
+    RETURN path
+    LIMIT 100
+tags:
+- beta
+- table
+- graph
+owner: graph-team
+status: active

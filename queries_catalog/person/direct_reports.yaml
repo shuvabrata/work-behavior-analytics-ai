@@ -1,0 +1,34 @@
+name: Direct Reports
+description: |-
+  **What it is:** Finds all people who directly report to this person in the formal organisational hierarchy.
+
+  **How it helps:** Gives a manager's direct span of control at a glance. This is the starting point for any manager effectiveness analysis, capacity planning for their team, and identifying unbalanced spans where one manager has too many or too few direct reports.
+
+  **What-If Impact:** A manager with 15 direct reports cannot provide meaningful 1:1 coaching, performance feedback, or career development support to each person. This query makes outsized spans of control immediately visible.
+summary: All people who directly report to this person.
+default_view: graph
+parameters:
+- name: person_id
+  env_var: PERSON1_ID
+  required: true
+  label: Person
+  type: person_id
+  placeholder: "e.g. github::Person::alice or jira::Person::557058:abc"
+  description: "WBA canonical Person ID. Format: github::Person::<login> or jira::Person::<account_id>"
+queries:
+  graph: |-
+    MATCH path = (p:Person {id: $person_id})<-[:REPORTS_TO]-(report:Person)
+    RETURN path
+    LIMIT 100
+  tabular: |-
+    MATCH (p:Person {id: $person_id})<-[:REPORTS_TO]-(report:Person)
+    RETURN report.name AS direct_report,
+           report.id AS direct_report_id
+    ORDER BY report.name ASC
+    LIMIT 100
+tags:
+- beta
+- table
+- graph
+owner: graph-team
+status: active

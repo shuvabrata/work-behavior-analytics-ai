@@ -1,0 +1,36 @@
+name: Sprints Involved In
+description: |-
+  **What it is:** Finds all Sprints that contain Issues assigned to this person, showing the sprint-to-issue relationship as a graph.
+
+  **How it helps:** Reveals the sprint cadence this person operates in, whether they are active in a single sprint or spread across multiple sprints simultaneously. Cross-sprint assignment is often a sign of planning debt or ad-hoc work creeping in.
+
+  **What-If Impact:** A person whose assigned issues span 5 different active sprints is likely context-switching excessively. This query makes that sprint fragmentation visible, enabling better sprint planning and focus assignment.
+summary: All sprints containing issues assigned to this person.
+default_view: graph
+parameters:
+- name: person_id
+  env_var: PERSON1_ID
+  required: true
+  label: Person
+  type: person_id
+  placeholder: "e.g. github::Person::alice or jira::Person::557058:abc"
+  description: "WBA canonical Person ID. Format: github::Person::<login> or jira::Person::<account_id>"
+queries:
+  graph: |-
+    MATCH path = (p:Person {id: $person_id})-[:ASSIGNED_TO]-(i:Issue)-[:IN_SPRINT]->(s:Sprint)
+    RETURN path
+    LIMIT 100
+  tabular: |-
+    MATCH (p:Person {id: $person_id})-[:ASSIGNED_TO]-(i:Issue)-[:IN_SPRINT]->(s:Sprint)
+    RETURN s.name AS sprint_name,
+           s.state AS sprint_state,
+           count(DISTINCT i) AS assigned_issues,
+           collect(DISTINCT i.key)[0..5] AS sample_issues
+    ORDER BY s.state ASC, s.name ASC
+    LIMIT 50
+tags:
+- beta
+- table
+- graph
+owner: graph-team
+status: active

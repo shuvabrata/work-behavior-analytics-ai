@@ -1,0 +1,37 @@
+name: Pull Requests Reviewed
+description: |-
+  **What it is:** Lists all Pull Requests this person has submitted a review on.
+
+  **How it helps:** Code review is a high-value, often invisible contribution. This query surfaces the person's gatekeeping and mentorship role — reviewers are frequently the quality gate for the team's output.
+
+  **What-If Impact:** A developer who reviews many PRs but writes few commits is often a senior engineer or tech lead whose value is misrepresented by pure commit-count metrics. Ignoring review activity dramatically underestimates their impact.
+summary: All pull requests this person has reviewed.
+default_view: tabular
+parameters:
+- name: person_id
+  env_var: PERSON1_ID
+  required: true
+  label: Person
+  type: person_id
+  placeholder: "e.g. github::Person::alice or jira::Person::557058:abc"
+  description: "WBA canonical Person ID. Format: github::Person::<login> or jira::Person::<account_id>"
+queries:
+  tabular: |-
+    MATCH (p:Person {id: $person_id})-[:REVIEWED]->(pr:PullRequest)
+    RETURN pr.number AS pr_number,
+           pr.title AS title,
+           pr.state AS state,
+           pr.created_at AS created_at,
+           pr.merged_at AS merged_at
+    ORDER BY pr.created_at DESC
+    LIMIT 100
+  graph: |-
+    MATCH path = (p:Person {id: $person_id})-[:REVIEWED]->(pr:PullRequest)
+    RETURN path
+    LIMIT 100
+tags:
+- beta
+- table
+- graph
+owner: graph-team
+status: active

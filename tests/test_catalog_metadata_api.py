@@ -74,17 +74,21 @@ def metadata_snapshot() -> set[str]:
     yield snapshot
 
     # --- teardown ---
+    # Delete any row created during the run, irrespective of pass/fail.
+    # The API has no DELETE endpoint, so removal goes through psycopg2. The
+    # PUT flip is best-effort (a failed test may leave the server degraded);
+    # a PUT failure must not prevent the direct DB deletion.
     with httpx.Client(base_url=BASE_URL, timeout=10) as client:
         current = client.get("/api/v1/queries/catalog-metadata").json()
         for item in current["items"]:
             if item["catalog_id"] not in snapshot:
-                # Flip to false so the row is no longer a favourite, then
-                # delete it directly from the DB to restore the pre-test state
-                # exactly (the API has no DELETE endpoint).
-                client.put(
-                    f"/api/v1/queries/catalog-metadata/{item['catalog_id']}",
-                    json={"is_favourite": False},
-                )
+                try:
+                    client.put(
+                        f"/api/v1/queries/catalog-metadata/{item['catalog_id']}",
+                        json={"is_favourite": False},
+                    )
+                except httpx.HTTPError:
+                    pass
                 _delete_metadata_row(item["catalog_id"])
 
 
@@ -103,11 +107,21 @@ async def _list_metadata(
 
 class TestList:
     @pytest.mark.asyncio
-    async def test_returns_empty_list_initially(self) -> None:
-        """GET /catalog-metadata returns an empty list when no rows exist."""
+    async def test_returns_empty_list_initially(
+        self, metadata_snapshot: set[str]
+    ) -> None:
+        """GET /catalog-metadata returns no rows beyond those that pre-existed.
+
+        The table may already contain rows from real app usage, so this test
+        asserts the endpoint returns a valid list and that the run created no
+        new rows — not that the table is globally empty.
+        """
         async with httpx.AsyncClient(base_url=BASE_URL) as client:
             items = await _list_metadata(client)
-        assert items == []
+        assert isinstance(items, list)
+        assert all(
+            item["catalog_id"] in metadata_snapshot for item in items
+        )
 
     @pytest.mark.asyncio
     async def test_filter_is_favourite_true(self) -> None:

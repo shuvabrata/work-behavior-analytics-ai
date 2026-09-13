@@ -291,33 +291,50 @@ def build_edges_card(base_theme: str, overrides: dict[str, Any] | None = None) -
     fields: list[html.Div] = []
 
     color_id = {"type": "gs-edge-field", "base_theme": base_theme, "field": "line_color"}
-    fields.append(html.Div([_field_label("Line Color"), _color_input(color_id, overrides.get("line_color"))]))
+    fields.append(
+        _field_row(
+            "Line Color",
+            _color_input(color_id, overrides.get("line_color")),
+            "edge",
+            base_theme,
+            "line_color",
+        )
+    )
 
     width_id = {"type": "gs-edge-field", "base_theme": base_theme, "field": "width"}
-    fields.append(html.Div([_field_label("Width"), _number_input(width_id, overrides.get("width"))]))
+    fields.append(
+        _field_row(
+            "Width",
+            _number_input(width_id, overrides.get("width")),
+            "edge",
+            base_theme,
+            "width",
+        )
+    )
 
     arrow_id = {"type": "gs-edge-field", "base_theme": base_theme, "field": "arrow_shape"}
     fields.append(
-        html.Div(
-            [
-                _field_label("Arrow Shape"),
-                dbc.Select(
-                    id=arrow_id,
-                    options=[
-                        {"label": shape, "value": shape} for shape in ARROW_SHAPES
-                    ],
-                    value=overrides.get("arrow_shape") or ARROW_SHAPES[0],
-                    style={
-                        "fontFamily": FONT_SANS,
-                        "fontSize": FONT_SIZE_SMALL,
-                        "height": "34px",
-                        "padding": f"0 {SPACING_XSMALL}",
-                        "border": f"1px solid {COLOR_BORDER}",
-                        "borderRadius": "2px",
-                        "width": "100%",
-                    },
-                ),
-            ]
+        _field_row(
+            "Arrow Shape",
+            dbc.Select(
+                id=arrow_id,
+                options=[
+                    {"label": shape, "value": shape} for shape in ARROW_SHAPES
+                ],
+                value=overrides.get("arrow_shape") or ARROW_SHAPES[0],
+                style={
+                    "fontFamily": FONT_SANS,
+                    "fontSize": FONT_SIZE_SMALL,
+                    "height": "34px",
+                    "padding": f"0 {SPACING_XSMALL}",
+                    "border": f"1px solid {COLOR_BORDER}",
+                    "borderRadius": "2px",
+                    "width": "100%",
+                },
+            ),
+            "edge",
+            base_theme,
+            "arrow_shape",
         )
     )
 
@@ -327,7 +344,13 @@ def build_edges_card(base_theme: str, overrides: dict[str, Any] | None = None) -
         "field": "label_color",
     }
     fields.append(
-        html.Div([_field_label("Label Color"), _color_input(label_color_id, overrides.get("label_color"))])
+        _field_row(
+            "Label Color",
+            _color_input(label_color_id, overrides.get("label_color")),
+            "edge",
+            base_theme,
+            "label_color",
+        )
     )
 
     label_font_size_id = {
@@ -336,16 +359,17 @@ def build_edges_card(base_theme: str, overrides: dict[str, Any] | None = None) -
         "field": "edge_label_font_size",
     }
     fields.append(
-        html.Div(
-            [
-                _field_label("Label Font Size"),
-                _number_input(
-                    label_font_size_id,
-                    overrides.get("edge_label_font_size"),
-                    min_value=8,
-                    max_value=48,
-                ),
-            ]
+        _field_row(
+            "Label Font Size",
+            _number_input(
+                label_font_size_id,
+                overrides.get("edge_label_font_size"),
+                min_value=8,
+                max_value=48,
+            ),
+            "edge",
+            base_theme,
+            "edge_label_font_size",
         )
     )
 
@@ -426,7 +450,13 @@ def build_global_card(base_theme: str, overrides: dict[str, Any] | None = None) 
         "field": "node_label_color",
     }
     fields.append(
-        html.Div([_field_label("Node Label Color"), _color_input(label_color_id, overrides.get("node_label_color"))])
+        _field_row(
+            "Node Label Color",
+            _color_input(label_color_id, overrides.get("node_label_color")),
+            "global",
+            base_theme,
+            "node_label_color",
+        )
     )
 
     label_font_size_id = {
@@ -435,16 +465,17 @@ def build_global_card(base_theme: str, overrides: dict[str, Any] | None = None) 
         "field": "node_label_font_size",
     }
     fields.append(
-        html.Div(
-            [
-                _field_label("Node Label Font Size"),
-                _number_input(
-                    label_font_size_id,
-                    overrides.get("node_label_font_size"),
-                    min_value=8,
-                    max_value=48,
-                ),
-            ]
+        _field_row(
+            "Node Label Font Size",
+            _number_input(
+                label_font_size_id,
+                overrides.get("node_label_font_size"),
+                min_value=8,
+                max_value=48,
+            ),
+            "global",
+            base_theme,
+            "node_label_font_size",
         )
     )
 
@@ -454,7 +485,13 @@ def build_global_card(base_theme: str, overrides: dict[str, Any] | None = None) 
         "field": "selection_color",
     }
     fields.append(
-        html.Div([_field_label("Selection Color"), _color_input(selection_id, overrides.get("selection_color"))])
+        _field_row(
+            "Selection Color",
+            _color_input(selection_id, overrides.get("selection_color")),
+            "global",
+            base_theme,
+            "selection_color",
+        )
     )
 
     edge_bg_id = {
@@ -463,7 +500,13 @@ def build_global_card(base_theme: str, overrides: dict[str, Any] | None = None) 
         "field": "edge_label_background",
     }
     fields.append(
-        html.Div([_field_label("Edge Label Background"), _color_input(edge_bg_id, overrides.get("edge_label_background"))])
+        _field_row(
+            "Edge Label Background",
+            _color_input(edge_bg_id, overrides.get("edge_label_background")),
+            "global",
+            base_theme,
+            "edge_label_background",
+        )
     )
 
     max_chars_link = html.A(
@@ -746,4 +789,76 @@ def build_node_reset(base_theme: str, node_type: str) -> html.Button:
             "padding": SPACING_XXSMALL,
             "fontSize": FONT_SIZE_SMALL,
         },
+    )
+
+
+def _field_reset_button(
+    group: str, base_theme: str, field: str, title: str
+) -> html.Button:
+    """Build a per-field reset button for the Edges / Global cards.
+
+    ``group`` is ``"edge"`` or ``"global"`` and drives the pattern-matching id
+    suffix so the reset callback can target the matching field input.
+    """
+    return html.Button(
+        html.I(className="fa-solid fa-rotate-left"),
+        id={
+            "type": f"gs-{group}-reset",
+            "base_theme": base_theme,
+            "field": field,
+        },
+        title=title,
+        n_clicks=0,
+        style={
+            "background": "none",
+            "border": "none",
+            "color": COLOR_GRAY_MEDIUM,
+            "cursor": "pointer",
+            "padding": f"0 0 0 {SPACING_XXSMALL}",
+            "fontSize": FONT_SIZE_SMALL,
+        },
+    )
+
+
+def _field_row(
+    label_text: str,
+    input_widget: Any,
+    group: str,
+    base_theme: str,
+    field: str,
+) -> html.Div:
+    """Build a label + input + reset-button row for an Edges/Global field.
+
+    The label sits on its own line; the reset button is aligned inline with
+    the input control (below the label), so both sit at the value-selection
+    height rather than at the label height.
+    """
+    return html.Div(
+        [
+            _field_label(label_text),
+            html.Div(
+                [
+                    html.Div(
+                        input_widget,
+                        style={"flex": "1 1 auto", "minWidth": "0"},
+                    ),
+                    html.Div(
+                        _field_reset_button(
+                            group, base_theme, field, f"Reset {label_text}"
+                        ),
+                        style={
+                            "display": "flex",
+                            "alignItems": "center",
+                            "flexShrink": "0",
+                        },
+                    ),
+                ],
+                style={
+                    "display": "flex",
+                    "alignItems": "center",
+                    "gap": SPACING_XXSMALL,
+                },
+            ),
+        ],
+        style={"marginBottom": SPACING_XSMALL},
     )

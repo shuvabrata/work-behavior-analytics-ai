@@ -205,7 +205,8 @@ def reset_node_row(
     undoing any unsaved edits to the row.
     """
     node_type = callback_context.triggered_id["node_type"]
-    row = (loaded_values or {}).get(node_type) or {}
+    nodes = (loaded_values or {}).get("nodes") or {}
+    row = nodes.get(node_type) or {}
 
     return (
         row.get("color"),
@@ -215,6 +216,38 @@ def reset_node_row(
         row.get("width"),
         row.get("height"),
     )
+
+
+@callback(
+    Output({"type": "gs-edge-field", "base_theme": MATCH, "field": MATCH}, "value"),
+    Input({"type": "gs-edge-reset", "base_theme": MATCH, "field": MATCH}, "n_clicks"),
+    State({"type": "gs-loaded-values", "base_theme": MATCH}, "data"),
+    prevent_initial_call=True,
+)
+def reset_edge_field(
+    _n_clicks: int, loaded_values: dict[str, Any] | None
+) -> Any:
+    """Restore an Edges card field to its loaded (effective) value."""
+    field = callback_context.triggered_id["field"]
+    edges = (loaded_values or {}).get("edges") or {}
+    return edges.get(field)
+
+
+@callback(
+    Output({"type": "gs-global-field", "base_theme": MATCH, "field": MATCH}, "value"),
+    Input(
+        {"type": "gs-global-reset", "base_theme": MATCH, "field": MATCH}, "n_clicks"
+    ),
+    State({"type": "gs-loaded-values", "base_theme": MATCH}, "data"),
+    prevent_initial_call=True,
+)
+def reset_global_field(
+    _n_clicks: int, loaded_values: dict[str, Any] | None
+) -> Any:
+    """Restore a Global card field to its loaded (effective) value."""
+    field = callback_context.triggered_id["field"]
+    globals_ = (loaded_values or {}).get("global") or {}
+    return globals_.get(field)
 
 
 # ── Edge preview ───────────────────────────────────────────────────────
@@ -413,7 +446,13 @@ def select_theme(
         + (" (builtin \u2014 duplicate to edit)" if theme.get("source") == "builtin" else "")
         + (" \u2605 default" if theme.get("is_default") else "")
     )
-    loaded_values = effective.get("nodes") or {}
+    # Cache the full effective doc (nodes + edges + global) so per-field reset
+    # buttons can restore any field to its loaded (effective) value.
+    loaded_values = {
+        "nodes": effective.get("nodes") or {},
+        "edges": effective.get("edges") or {},
+        "global": effective.get("global") or {},
+    }
     return body, name, name_label, loaded_values
 
 

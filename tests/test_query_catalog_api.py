@@ -13,8 +13,8 @@ async def test_list_catalog_queries():
     response = await router.list_catalog_queries(namespace=None, tag=None, q=None, view=None)
     data = response.model_dump()
 
-    assert data["count"] == 100
-    assert len(data["items"]) == 100
+    assert data["count"] == 127
+    assert len(data["items"]) == 127
     assert data["items"][0]["id"] == "schema/view_all_node_types"
     assert set(data["items"][0]["queries"]) == {"tabular", "graph"}
     assert data["items"][0]["summary"] == "Count all nodes by type."
@@ -42,7 +42,7 @@ async def test_filter_catalog_by_view():
     response = await router.list_catalog_queries(namespace=None, tag=None, q=None, view="graph")
     data = response.model_dump()
 
-    assert data["count"] == 100
+    assert data["count"] == 126
     assert all("graph" in item["available_views"] for item in data["items"])
 
 
@@ -71,7 +71,7 @@ async def test_search_catalog_queries_by_owner_and_status_metadata():
     )
     data = response.model_dump()
 
-    assert data["count"] == 11
+    assert data["count"] == 38
     assert all(item["owner"] == "graph-team" for item in data["items"])
     assert all(item["status"] == "active" for item in data["items"])
 
@@ -115,7 +115,7 @@ async def test_list_catalog_namespaces():
     response = await router.list_catalog_namespaces()
     data = response.model_dump()
 
-    assert data["count"] == 7
+    assert data["count"] == 8
     assert [item["directory"] for item in data["items"]] == [
         "schema",
         "cross_domain",
@@ -123,5 +123,6 @@ async def test_list_catalog_namespaces():
         "github",
         "jira",
         "people_and_identity",
+        "person",
         "person_to_person",
     ]

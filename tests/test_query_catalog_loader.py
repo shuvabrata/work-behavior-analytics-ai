@@ -24,6 +24,7 @@ def test_load_namespaces_from_master_catalog():
         "github",
         "jira",
         "people_and_identity",
+        "person",
         "person_to_person",
     ]
     assert namespaces[0].name == "Schema"
@@ -33,7 +34,7 @@ def test_load_namespaces_from_master_catalog():
 def test_load_catalog_normalizes_all_existing_entries():
     queries = load_catalog(CATALOG_DIR)
 
-    assert len(queries) == 100
+    assert len(queries) == 127
     assert len({query.id for query in queries}) == len(queries)
     assert all(query.available_views for query in queries)
     assert all(query.namespace.name for query in queries)
@@ -58,7 +59,7 @@ def test_parameterized_queries_are_detected():
     queries = load_catalog(CATALOG_DIR)
     parameterized = [query for query in queries if query.parameters]
 
-    assert len(parameterized) == 11
+    assert len(parameterized) == 38
     direct_reviews = get_catalog_query("person_to_person/direct_code_reviews", CATALOG_DIR)
     assert [parameter.name for parameter in direct_reviews.parameters] == ["person1_id", "person2_id"]
     assert all(parameter.required for parameter in direct_reviews.parameters)

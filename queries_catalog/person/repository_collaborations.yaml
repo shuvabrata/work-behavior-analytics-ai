@@ -1,0 +1,35 @@
+name: Repository Collaborations
+description: |-
+  **What it is:** Lists all GitHub Repositories this person is a collaborator on, showing their access breadth across the codebase.
+
+  **How it helps:** Repository access defines the scope of a developer's potential code contribution. Broad collaborator access can indicate a platform engineer or tech lead; narrow access suggests a focused individual contributor.
+
+  **What-If Impact:** A developer with collaborator access to repositories they never commit to may represent unnecessary access sprawl — a security risk. Conversely, a developer frequently committing to a repo they aren't listed as a collaborator on suggests a mapping gap in the data.
+summary: All repositories this person is a collaborator on.
+default_view: tabular
+parameters:
+- name: person_id
+  env_var: PERSON1_ID
+  required: true
+  label: Person
+  type: person_id
+  placeholder: "e.g. github::Person::alice or jira::Person::557058:abc"
+  description: "WBA canonical Person ID. Format: github::Person::<login> or jira::Person::<account_id>"
+queries:
+  tabular: |-
+    MATCH (p:Person {id: $person_id})-[:COLLABORATOR]-(r:Repository)
+    RETURN r.name AS repository,
+           r.name AS full_name,
+           r.url AS url
+    ORDER BY r.name ASC
+    LIMIT 100
+  graph: |-
+    MATCH path = (p:Person {id: $person_id})-[:COLLABORATOR]-(r:Repository)
+    RETURN path
+    LIMIT 100
+tags:
+- beta
+- table
+- graph
+owner: graph-team
+status: active

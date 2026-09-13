@@ -14,5 +14,7 @@ namespaces:
   directory: jira
 - name: People & Identity
   directory: people_and_identity
+- name: Person
+  directory: person
 - name: Person-to-Person
   directory: person_to_person

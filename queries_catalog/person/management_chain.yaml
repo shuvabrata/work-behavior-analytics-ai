@@ -1,0 +1,36 @@
+name: Management Chain (Reports To)
+description: |-
+  **What it is:** Traces the formal management reporting chain above this person — who they report to, who their manager reports to, and so on up to 5 levels.
+
+  **How it helps:** Surfaces the formal power structure above an individual. This is essential for escalation planning, understanding the organisational context of a person's work, and tracing accountability chains during incidents or compliance reviews.
+
+  **What-If Impact:** Without a clear view of the reporting chain, organisations misroute escalations, create unclear accountability in cross-functional projects, and fail to involve the right managers in high-stakes decisions.
+summary: Reporting hierarchy above this person, up to 5 levels.
+default_view: graph
+parameters:
+- name: person_id
+  env_var: PERSON1_ID
+  required: true
+  label: Person
+  type: person_id
+  placeholder: "e.g. github::Person::alice or jira::Person::557058:abc"
+  description: "WBA canonical Person ID. Format: github::Person::<login> or jira::Person::<account_id>"
+queries:
+  graph: |-
+    MATCH path = (p:Person {id: $person_id})-[:REPORTS_TO*1..5]->(manager:Person)
+    RETURN path
+    LIMIT 20
+  tabular: |-
+    MATCH path = (p:Person {id: $person_id})-[:REPORTS_TO*1..5]->(manager:Person)
+    WITH p, manager, length(path) AS level
+    RETURN level AS reporting_level,
+           manager.name AS manager_name,
+           manager.id AS manager_id
+    ORDER BY level ASC
+    LIMIT 10
+tags:
+- beta
+- table
+- graph
+owner: graph-team
+status: active

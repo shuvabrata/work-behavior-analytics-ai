@@ -1,0 +1,29 @@
+name: Reactions Breakdown by Target Type
+description: |-
+  **What it is:** Aggregates this person's emoji reactions by the type of node they reacted to (Page vs Blogpost), showing reaction target count and total reaction volume.
+
+  **How it helps:** Helps distinguish where a person focuses their passive engagement — internal documentation (Pages) vs. broadcast communication (Blogposts). This informs how they consume and endorse information in the organisation.
+
+  **What-If Impact:** A person who reacts heavily to Blogposts but never to Pages may be an engaged reader of announcements but disconnected from the operational wiki — useful context for onboarding and knowledge-transfer planning.
+summary: This person's reactions aggregated by target node type.
+default_view: tabular
+parameters:
+- name: person_id
+  env_var: PERSON1_ID
+  required: true
+  label: Person
+  type: person_id
+  placeholder: "e.g. github::Person::alice or jira::Person::557058:abc"
+  description: "WBA canonical Person ID. Format: github::Person::<login> or jira::Person::<account_id>"
+queries:
+  tabular: |-
+    MATCH (p:Person {id: $person_id})-[r:REACTED_TO]->(x)
+    RETURN labels(x)[0] AS target_type,
+           count(DISTINCT x) AS unique_targets,
+           sum(r.count) AS total_reactions
+    ORDER BY total_reactions DESC
+tags:
+- beta
+- table
+owner: graph-team
+status: active

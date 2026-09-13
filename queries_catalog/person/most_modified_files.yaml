@@ -1,0 +1,39 @@
+name: Most Modified Files
+description: |-
+  **What it is:** Lists the files most frequently modified by this person across all their commits, ranked by commit count touching each file.
+
+  **How it helps:** File-level modification frequency reveals code ownership in practice — which parts of the codebase this person is the de facto custodian of. This is the strongest empirical signal for identifying who should review changes to a given file.
+
+  **What-If Impact:** Without file-level ownership data, teams make poor decisions about who to ask for code reviews and who to involve in architecture discussions. The "right person" for a file is often not the formal owner but whoever has committed to it most recently and most frequently.
+summary: Files most frequently modified by this person, ranked by commit count.
+default_view: tabular
+parameters:
+- name: person_id
+  env_var: PERSON1_ID
+  required: true
+  label: Person
+  type: person_id
+  placeholder: "e.g. github::Person::alice or jira::Person::557058:abc"
+  description: "WBA canonical Person ID. Format: github::Person::<login> or jira::Person::<account_id>"
+queries:
+  tabular: |-
+    MATCH (p:Person {id: $person_id})-[:AUTHORED_BY]-(c:Commit)-[:MODIFIES]->(f:File)
+    RETURN f.path AS file_path,
+           count(DISTINCT c) AS commit_count,
+           max(c.created_at) AS last_modified
+    ORDER BY commit_count DESC
+    LIMIT 50
+  graph: |-
+    MATCH (p:Person {id: $person_id})-[:AUTHORED_BY]-(c:Commit)-[:MODIFIES]->(f:File)
+    WITH p, f, count(c) AS commit_count
+    ORDER BY commit_count DESC
+    LIMIT 20
+    MATCH path1 = (p)-[:AUTHORED_BY]-(c:Commit)-[:MODIFIES]->(f)
+    RETURN path1
+    LIMIT 100
+tags:
+- beta
+- table
+- graph
+owner: graph-team
+status: active

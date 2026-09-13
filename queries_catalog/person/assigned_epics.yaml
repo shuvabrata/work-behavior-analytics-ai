@@ -1,0 +1,37 @@
+name: Assigned Epics
+description: |-
+  **What it is:** Finds all Epics assigned to this person, displaying them in both graph and tabular form.
+
+  **How it helps:** Epics represent medium-to-large bodies of work. Knowing which Epics are owned by a person — including their status and due dates — is essential for capacity planning and milestone risk assessment.
+
+  **What-If Impact:** A person assigned to many simultaneous Epics is spread thin across strategic initiatives, which can slow delivery on all of them. This query makes that spread visible before it becomes a delivery problem.
+summary: All Epics assigned to this person, with status and due dates.
+default_view: graph
+parameters:
+- name: person_id
+  env_var: PERSON1_ID
+  required: true
+  label: Person
+  type: person_id
+  placeholder: "e.g. github::Person::alice or jira::Person::557058:abc"
+  description: "WBA canonical Person ID. Format: github::Person::<login> or jira::Person::<account_id>"
+queries:
+  graph: |-
+    MATCH path = (p:Person {id: $person_id})-[:ASSIGNED_TO]-(e:Epic)
+    RETURN path
+    LIMIT 50
+  tabular: |-
+    MATCH (p:Person {id: $person_id})-[:ASSIGNED_TO]-(e:Epic)
+    RETURN e.key AS key,
+           e.summary AS title,
+           e.status AS status,
+           e.due_date AS due_date,
+           e.updated_at AS last_updated
+    ORDER BY e.due_date ASC
+    LIMIT 50
+tags:
+- beta
+- table
+- graph
+owner: graph-team
+status: active

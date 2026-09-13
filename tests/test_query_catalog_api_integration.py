@@ -25,8 +25,8 @@ async def test_catalog_list_endpoint_returns_normalized_catalog():
     assert response.status_code == 200
     data = response.json()
 
-    assert data["count"] == 100
-    assert len(data["items"]) == 100
+    assert data["count"] == 127
+    assert len(data["items"]) == 127
 
     first_item = data["items"][0]
     assert first_item["id"] == "schema/view_all_node_types"
@@ -50,7 +50,7 @@ async def test_catalog_namespaces_endpoint_returns_display_order():
     assert response.status_code == 200
     data = response.json()
 
-    assert data["count"] == 7
+    assert data["count"] == 8
     assert [item["directory"] for item in data["items"]] == [
         "schema",
         "cross_domain",
@@ -58,9 +58,10 @@ async def test_catalog_namespaces_endpoint_returns_display_order():
         "github",
         "jira",
         "people_and_identity",
+        "person",
         "person_to_person",
     ]
-    assert [item["order"] for item in data["items"]] == list(range(7))
+    assert [item["order"] for item in data["items"]] == list(range(8))
 
 
 @pytest.mark.parametrize("namespace", ["github", "GitHub"])
@@ -108,7 +109,7 @@ async def test_catalog_list_endpoint_searches_owner_and_status_metadata():
     assert response.status_code == 200
     data = response.json()
 
-    assert data["count"] == 11
+    assert data["count"] == 38
     assert all(item["owner"] == "graph-team" for item in data["items"])
     assert all(item["status"] == "active" for item in data["items"])
 
@@ -130,7 +131,7 @@ async def test_catalog_list_endpoint_filters_by_view():
     assert response.status_code == 200
     data = response.json()
 
-    assert data["count"] == 100
+    assert data["count"] == 126
     assert all("graph" in item["available_views"] for item in data["items"])
 
 

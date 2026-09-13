@@ -1,0 +1,41 @@
+name: Work Item Hierarchy
+description: |-
+  **What it is:** Traverses the full work item hierarchy — from Issues assigned to this person up through their parent Epics and grandparent Initiatives — to show the strategic context of their day-to-day work.
+
+  **How it helps:** Makes visible the strategic alignment (or misalignment) between a person's assigned tasks and the company's top-level initiatives. An engineer working on issues that trace back to no Initiative may be doing unplanned or misaligned work.
+
+  **What-If Impact:** Without this vertical view, teams can spend entire sprints on work that is disconnected from any strategic initiative. This query makes that disconnection undeniable and actionable.
+summary: Full hierarchy from Initiatives → Epics → Issues assigned to this person.
+default_view: graph
+parameters:
+- name: person_id
+  env_var: PERSON1_ID
+  required: true
+  label: Person
+  type: person_id
+  placeholder: "e.g. github::Person::alice or jira::Person::557058:abc"
+  description: "WBA canonical Person ID. Format: github::Person::<login> or jira::Person::<account_id>"
+queries:
+  graph: |-
+    MATCH (p:Person {id: $person_id})-[:ASSIGNED_TO]-(i:Issue)
+    OPTIONAL MATCH epic_path = (i)-[:PART_OF*1..2]->(e:Epic)
+    OPTIONAL MATCH initiative_path = (e)-[:PART_OF]->(init:Initiative)
+    RETURN i, epic_path, initiative_path
+    LIMIT 100
+  tabular: |-
+    MATCH (p:Person {id: $person_id})-[:ASSIGNED_TO]-(i:Issue)
+    OPTIONAL MATCH (i)-[:PART_OF*1..2]->(e:Epic)
+    OPTIONAL MATCH (e)-[:PART_OF]->(init:Initiative)
+    RETURN coalesce(init.summary, '(No Initiative)') AS initiative,
+           coalesce(e.summary, '(No Epic)') AS epic,
+           i.key AS issue_key,
+           i.summary AS issue_title,
+           i.status AS status
+    ORDER BY initiative, epic, i.key
+    LIMIT 100
+tags:
+- beta
+- table
+- graph
+owner: graph-team
+status: active

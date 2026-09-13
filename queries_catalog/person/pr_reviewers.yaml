@@ -1,0 +1,42 @@
+name: Who Reviews My PRs
+description: |-
+  **What it is:** Finds all people who have reviewed Pull Requests created by this person, ranked by the number of reviews they have contributed.
+
+  **How it helps:** Reveals the informal review network around a developer. The reviewers of a person's PRs are the people most familiar with their code quality and contribution style — often more so than their formal manager. This is key for understanding code ownership culture and review bottlenecks.
+
+  **What-If Impact:** If one person reviews 80% of another person's PRs, there is a single point of failure in that developer's review pipeline. If that reviewer leaves, all their PRs may stall. This query makes that dependency visible and measurable.
+summary: People who review this person's pull requests, ranked by review count.
+default_view: tabular
+parameters:
+- name: person_id
+  env_var: PERSON1_ID
+  required: true
+  label: Person
+  type: person_id
+  placeholder: "e.g. github::Person::alice or jira::Person::557058:abc"
+  description: "WBA canonical Person ID. Format: github::Person::<login> or jira::Person::<account_id>"
+queries:
+  tabular: |-
+    MATCH (p:Person {id: $person_id})-[:CREATED]->(pr:PullRequest)-[:REVIEWED_BY]->(reviewer:Person)
+    WHERE reviewer <> p
+    RETURN reviewer.name AS reviewer,
+           reviewer.id AS reviewer_id,
+           count(DISTINCT pr) AS reviews_given,
+           collect(DISTINCT pr.number)[0..5] AS sample_prs
+    ORDER BY reviews_given DESC
+    LIMIT 50
+  graph: |-
+    MATCH (p:Person {id: $person_id})-[:CREATED]->(pr:PullRequest)-[:REVIEWED_BY]->(reviewer:Person)
+    WHERE reviewer <> p
+    WITH p, pr, reviewer
+    ORDER BY pr.created_at DESC
+    LIMIT 50
+    MATCH path1 = (p)-[:CREATED]->(pr)
+    MATCH path2 = (pr)-[:REVIEWED_BY]->(reviewer)
+    RETURN path1, path2
+tags:
+- beta
+- table
+- graph
+owner: graph-team
+status: active

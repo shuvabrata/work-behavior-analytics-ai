@@ -1,0 +1,36 @@
+name: Assigned Initiatives
+description: |-
+  **What it is:** Finds all Initiatives (top-level strategic themes) assigned to this person.
+
+  **How it helps:** Initiatives sit above Epics in the work hierarchy and represent company-level strategic bets. Knowing which Initiatives a person is accountable for reveals their strategic remit and ownership at the executive-planning level.
+
+  **What-If Impact:** If a person leaves or is reassigned without successor planning, their Initiative ownership becomes orphaned. This query makes those single points of strategic ownership visible and actionable.
+summary: All Initiatives assigned to this person.
+default_view: tabular
+parameters:
+- name: person_id
+  env_var: PERSON1_ID
+  required: true
+  label: Person
+  type: person_id
+  placeholder: "e.g. github::Person::alice or jira::Person::557058:abc"
+  description: "WBA canonical Person ID. Format: github::Person::<login> or jira::Person::<account_id>"
+queries:
+  tabular: |-
+    MATCH (p:Person {id: $person_id})-[:ASSIGNED_TO]-(i:Initiative)
+    RETURN i.key AS key,
+           i.summary AS title,
+           i.status AS status,
+           i.updated_at AS last_updated
+    ORDER BY i.updated_at DESC
+    LIMIT 50
+  graph: |-
+    MATCH path = (p:Person {id: $person_id})-[:ASSIGNED_TO]-(i:Initiative)
+    RETURN path
+    LIMIT 50
+tags:
+- beta
+- table
+- graph
+owner: graph-team
+status: active

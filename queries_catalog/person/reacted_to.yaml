@@ -1,0 +1,37 @@
+name: Nodes Reacted To
+description: |-
+  **What it is:** Finds all Confluence Pages and Blogposts this person has reacted to (emoji reactions).
+
+  **How it helps:** Reactions are a lightweight signal of engagement and alignment with content. High reaction volume on specific pages or authors indicates passive collaboration and content endorsement patterns.
+
+  **What-If Impact:** Reaction data is often undervalued as a signal. A person who consistently reacts to a team's posts without formally collaborating may still be an important informal information consumer or stakeholder.
+summary: All pages and blogposts this person has reacted to, with reaction counts.
+default_view: tabular
+parameters:
+- name: person_id
+  env_var: PERSON1_ID
+  required: true
+  label: Person
+  type: person_id
+  placeholder: "e.g. github::Person::alice or jira::Person::557058:abc"
+  description: "WBA canonical Person ID. Format: github::Person::<login> or jira::Person::<account_id>"
+queries:
+  tabular: |-
+    MATCH (p:Person {id: $person_id})-[r:REACTED_TO]->(x)
+    RETURN labels(x)[0] AS node_type,
+           coalesce(x.title, x.name, elementId(x)) AS node_ref,
+           r.count AS reaction_count,
+           r.first_interaction_at AS first_reaction,
+           r.last_interaction_at AS last_reaction
+    ORDER BY r.last_interaction_at DESC
+    LIMIT 100
+  graph: |-
+    MATCH path = (p:Person {id: $person_id})-[:REACTED_TO]->(x)
+    RETURN path
+    LIMIT 100
+tags:
+- beta
+- table
+- graph
+owner: graph-team
+status: active

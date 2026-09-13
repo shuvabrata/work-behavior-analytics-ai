@@ -1,0 +1,38 @@
+name: Commits Authored
+description: |-
+  **What it is:** Lists all commits authored by this person, with the number of files changed per commit and timestamps.
+
+  **How it helps:** Provides a direct measure of hands-on code contribution. Commit frequency, recency, and file-change volume reveal the person's active engineering output beyond ticket assignments.
+
+  **What-If Impact:** Relying solely on Jira assignments to measure developer output can be badly misleading — a high-volume committer with few ticket assignments is contributing significantly to the codebase but appears idle in project tracking tools.
+summary: All commits authored by this person, with file change counts.
+default_view: tabular
+parameters:
+- name: person_id
+  env_var: PERSON1_ID
+  required: true
+  label: Person
+  type: person_id
+  placeholder: "e.g. github::Person::alice or jira::Person::557058:abc"
+  description: "WBA canonical Person ID. Format: github::Person::<login> or jira::Person::<account_id>"
+queries:
+  tabular: |-
+    MATCH (p:Person {id: $person_id})-[:AUTHORED_BY]-(c:Commit)
+    OPTIONAL MATCH (c)-[:MODIFIES]->(f:File)
+    WITH c, count(f) AS files_changed
+    RETURN c.sha AS sha,
+           left(c.message, 80) AS message,
+           c.created_at AS committed_date,
+           files_changed
+    ORDER BY c.created_at DESC
+    LIMIT 100
+  graph: |-
+    MATCH path = (p:Person {id: $person_id})-[:AUTHORED_BY]-(c:Commit)
+    RETURN path
+    LIMIT 100
+tags:
+- beta
+- table
+- graph
+owner: graph-team
+status: active

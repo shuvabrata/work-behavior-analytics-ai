@@ -1,0 +1,37 @@
+name: Issues Reported
+description: |-
+  **What it is:** Lists all Jira Issues that were reported (raised) by this person, regardless of who is assigned to fix them.
+
+  **How it helps:** Reporters are often internal customers, QA engineers, or stakeholders who translate business problems into tickets. This query reveals a person's role as a demand-generator or quality gatekeeper in the issue lifecycle.
+
+  **What-If Impact:** A product manager or QA engineer who reports many issues may appear idle in assignment-based metrics. This query surfaces their actual contribution as the primary driver of the team's backlog, which is a critical planning input.
+summary: All Jira issues reported by this person.
+default_view: tabular
+parameters:
+- name: person_id
+  env_var: PERSON1_ID
+  required: true
+  label: Person
+  type: person_id
+  placeholder: "e.g. github::Person::alice or jira::Person::557058:abc"
+  description: "WBA canonical Person ID. Format: github::Person::<login> or jira::Person::<account_id>"
+queries:
+  tabular: |-
+    MATCH (p:Person {id: $person_id})-[:REPORTED_BY]-(i:Issue)
+    RETURN i.key AS key,
+           i.summary AS title,
+           i.status AS status,
+           i.priority AS priority,
+           i.created_at AS reported_on
+    ORDER BY i.created_at DESC
+    LIMIT 100
+  graph: |-
+    MATCH path = (p:Person {id: $person_id})-[:REPORTED_BY]-(i:Issue)
+    RETURN path
+    LIMIT 100
+tags:
+- beta
+- table
+- graph
+owner: graph-team
+status: active

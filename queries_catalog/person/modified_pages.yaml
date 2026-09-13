@@ -1,0 +1,38 @@
+name: Pages & Blogposts Modified
+description: |-
+  **What it is:** Finds all Confluence Pages and Blogposts this person has modified, ordered by most recently updated.
+
+  **How it helps:** Confluence modifications signal knowledge-management activity — documentation authorship, wiki maintenance, and knowledge sharing. This is especially valuable for identifying knowledge owners and documenting institutional knowledge contributors.
+
+  **What-If Impact:** Teams that ignore documentation contributions systematically undervalue technical writers, engineering managers, and senior engineers who maintain the knowledge base that the whole team relies on.
+summary: All Confluence pages and blogposts last modified by this person.
+default_view: tabular
+parameters:
+- name: person_id
+  env_var: PERSON1_ID
+  required: true
+  label: Person
+  type: person_id
+  placeholder: "e.g. github::Person::alice or jira::Person::557058:abc"
+  description: "WBA canonical Person ID. Format: github::Person::<login> or jira::Person::<account_id>"
+queries:
+  tabular: |-
+    MATCH (p:Person {id: $person_id})-[:MODIFIED]->(x)
+    WHERE x:Page OR x:Blogpost
+    RETURN labels(x)[0] AS type,
+           x.title AS title,
+           x.last_updated_at AS last_modified,
+           x.url AS url
+    ORDER BY x.last_updated_at DESC
+    LIMIT 100
+  graph: |-
+    MATCH path = (p:Person {id: $person_id})-[:MODIFIED]->(x)
+    WHERE x:Page OR x:Blogpost
+    RETURN path
+    LIMIT 100
+tags:
+- beta
+- table
+- graph
+owner: graph-team
+status: active

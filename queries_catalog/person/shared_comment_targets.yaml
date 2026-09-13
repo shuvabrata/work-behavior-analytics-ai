@@ -1,0 +1,42 @@
+name: Shared Comment Targets (Co-Commenters)
+description: |-
+  **What it is:** Finds other people who have commented on the same Issues, Pull Requests, Epics, Pages, or Blogposts as this person — ranking collaborators by the number of nodes they share comments on.
+
+  **How it helps:** Co-commenting is one of the strongest signals of informal collaboration. Two people who comment on the same threads are likely engaged in the same conversations, making joint decisions, or working in the same problem space — even if they are not formally co-assigned.
+
+  **What-If Impact:** Formal assignments capture planned collaboration, but co-commenting captures emergent collaboration. Ignoring co-comment data systematically underestimates the actual working relationships in a team — particularly for senior engineers who collaborate via comments far more than via tickets.
+summary: People who commented on the same nodes as this person, ranked by shared node count.
+default_view: tabular
+parameters:
+- name: person_id
+  env_var: PERSON1_ID
+  required: true
+  label: Person
+  type: person_id
+  placeholder: "e.g. github::Person::alice or jira::Person::557058:abc"
+  description: "WBA canonical Person ID. Format: github::Person::<login> or jira::Person::<account_id>"
+queries:
+  tabular: |-
+    MATCH (p:Person {id: $person_id})-[:COMMENTED_ON]->(x)<-[:COMMENTED_ON]-(other:Person)
+    WHERE other <> p
+    RETURN other.name AS collaborator,
+           other.id AS collaborator_id,
+           count(DISTINCT x) AS shared_nodes,
+           collect(DISTINCT coalesce(x.key, x.title, elementId(x)))[0..5] AS sample_shared_nodes
+    ORDER BY shared_nodes DESC
+    LIMIT 50
+  graph: |-
+    MATCH (p:Person {id: $person_id})-[:COMMENTED_ON]->(x)<-[:COMMENTED_ON]-(other:Person)
+    WHERE other <> p
+    WITH p, x, other, count(*) AS strength
+    ORDER BY strength DESC
+    LIMIT 50
+    MATCH path1 = (p)-[:COMMENTED_ON]->(x)
+    MATCH path2 = (other)-[:COMMENTED_ON]->(x)
+    RETURN path1, path2
+tags:
+- beta
+- table
+- graph
+owner: graph-team
+status: active

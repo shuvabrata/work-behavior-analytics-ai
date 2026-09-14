@@ -104,18 +104,29 @@ async def test_catalog_list_endpoint_filters_by_namespace_directory_or_display_n
 
 
 async def test_catalog_list_endpoint_searches_owner_and_status_metadata():
-    response = await _get("/api/v1/queries/catalog", params={"q": "graph-team draft"})
+    owner_response = await _get("/api/v1/queries/catalog", params={"q": "graph-team"})
 
-    assert response.status_code == 200
-    data = response.json()
+    assert owner_response.status_code == 200
+    owner_data = owner_response.json()
 
-    assert data["count"] == 38
-    assert all(item["owner"] == "graph-team" for item in data["items"])
-    assert all(item["status"] in {"active", "draft", "deprecated"} for item in data["items"])
+    assert owner_data["count"] == 38
+    assert all(item["owner"] == "graph-team" for item in owner_data["items"])
+
+    draft_response = await _get("/api/v1/queries/catalog", params={"q": "graph-team draft"})
+    assert draft_response.status_code == 200
+    draft_data = draft_response.json()
+    assert all(item["owner"] == "graph-team" and item["status"] == "draft" for item in draft_data["items"])
+
+    active_response = await _get("/api/v1/queries/catalog", params={"q": "graph-team active"})
+    assert active_response.status_code == 200
+    active_data = active_response.json()
+    assert all(item["owner"] == "graph-team" and item["status"] == "active" for item in active_data["items"])
+
+    assert draft_data["count"] + active_data["count"] == owner_data["count"]
 
 
 async def test_catalog_list_endpoint_searches_namespace_owner_and_status_metadata():
-    response = await _get("/api/v1/queries/catalog", params={"q": "github-analytics draft"})
+    response = await _get("/api/v1/queries/catalog", params={"q": "github-analytics"})
 
     assert response.status_code == 200
     data = response.json()

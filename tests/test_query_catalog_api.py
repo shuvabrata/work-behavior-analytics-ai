@@ -63,17 +63,35 @@ async def test_search_catalog_queries():
 
 
 async def test_search_catalog_queries_by_owner_and_status_metadata():
-    response = await router.list_catalog_queries(
+    owner_response = await router.list_catalog_queries(
+        namespace=None,
+        tag=None,
+        q="graph-team",
+        view=None,
+    )
+    owner_data = owner_response.model_dump()
+    assert owner_data["count"] == 38
+    assert all(item["owner"] == "graph-team" for item in owner_data["items"])
+
+    draft_response = await router.list_catalog_queries(
         namespace=None,
         tag=None,
         q="graph-team draft",
         view=None,
     )
-    data = response.model_dump()
+    draft_data = draft_response.model_dump()
+    assert all(item["owner"] == "graph-team" and item["status"] == "draft" for item in draft_data["items"])
 
-    assert data["count"] == 38
-    assert all(item["owner"] == "graph-team" for item in data["items"])
-    assert all(item["status"] in {"active", "draft", "deprecated"} for item in data["items"])
+    active_response = await router.list_catalog_queries(
+        namespace=None,
+        tag=None,
+        q="graph-team active",
+        view=None,
+    )
+    active_data = active_response.model_dump()
+    assert all(item["owner"] == "graph-team" and item["status"] == "active" for item in active_data["items"])
+
+    assert draft_data["count"] + active_data["count"] == owner_data["count"]
 
 
 async def test_get_catalog_query_detail():

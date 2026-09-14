@@ -1416,3 +1416,62 @@ input::placeholder {
     background-color: var(--color-background-light);
     border-color: var(--color-border-light) var(--color-border-light) transparent;
 }
+
+/* ── Modal dark theme ──────────────────────────────────────────────────────
+   Bootstrap modals render in a portal outside #app-shell, so the theme class
+   is mirrored onto document.body by a clientside callback and these rules
+   scope off that body class instead of the #app-shell wrapper.
+   ────────────────────────────────────────────────────────────────────────── */
+
+.theme-executive-dark .modal-content {
+    background-color: var(--color-background-white);
+    border-color: var(--color-border);
+    color: var(--color-text-dark);
+}
+
+.theme-executive-dark .modal-header {
+    background-color: var(--color-background-light);
+    border-bottom-color: var(--color-border);
+    color: var(--color-text-dark);
+}
+
+.theme-executive-dark .modal-title {
+    color: var(--color-text-dark);
+}
+
+.theme-executive-dark .modal-body {
+    background-color: var(--color-background-white);
+    color: var(--color-text-dark);
+}
+
+.theme-executive-dark .modal-footer {
+    background-color: var(--color-background-light);
+    border-top-color: var(--color-border);
+}
+
+/* Form controls inside modals */
+.theme-executive-dark .modal .form-control,
+.theme-executive-dark .modal .form-select {
+    background-color: var(--color-background-light) !important;
+    color: var(--color-text-dark) !important;
+    border-color: var(--color-border) !important;
+}
+
+.theme-executive-dark .modal .form-control:focus,
+.theme-executive-dark .modal .form-select:focus {
+    background-color: var(--color-background-light) !important;
+    color: var(--color-text-dark) !important;
+    border-color: var(--color-navy) !important;
+    box-shadow: 0 0 0 0.2rem rgba(44, 82, 130, 0.25);
+}
+
+.theme-executive-dark .modal .form-control::placeholder {
+    color: var(--color-gray-medium) !important;
+    opacity: 0.8;
+}
+
+/* Close (×) button */
+.theme-executive-dark .modal .btn-close {
+    filter: invert(1) grayscale(100%) brightness(200%);
+}
+

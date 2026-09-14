@@ -507,12 +507,12 @@ def _collect_overrides(
     return {"nodes": nodes, "edges": edges, "global": global_}
 
 
-def _refresh_after_action(base_theme: str) -> tuple[Any, Any, Any, Any]:
+def _refresh_after_action(base_theme: str) -> tuple[Any, Any]:
     """Re-fetch themes and rebuild the selector options/store after a mutation."""
     themes = _list_themes(base_theme)
     options = _theme_options(themes)
     by_id = {str(t["id"]): t for t in themes}
-    return options, by_id, no_update, no_update
+    return options, by_id
 
 
 
@@ -567,7 +567,7 @@ def save_theme(
     except requests.RequestException as exc:
         return _feedback_alert(f"Save failed: {exc}", "danger"), no_update
 
-    _, by_id, _, _ = _refresh_after_action(base_theme)
+    _, by_id = _refresh_after_action(base_theme)
     return _feedback_alert(f"Saved \u201c{updated['name']}\u201d.", "success"), by_id
 
 
@@ -644,7 +644,7 @@ def save_as_theme(
     except requests.RequestException as exc:
         return True, f"Save failed: {exc}", no_update, no_update, no_update, no_update
 
-    options, by_id, _, _ = _refresh_after_action(base_theme)
+    options, by_id = _refresh_after_action(base_theme)
     return (
         False,
         "",

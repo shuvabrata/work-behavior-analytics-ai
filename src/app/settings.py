@@ -87,6 +87,11 @@ class Settings(BaseSettings):
     # Max recent action rows to display in the connector UI
     RECENT_ACTIONS_LIMIT: int = Field(default=5, ge=1, le=50)
 
+    # Scheduler configuration
+    # How often (in minutes) the scheduler wakes up to check for due connector scans.
+    # Lower values reduce jitter but are still negligible overhead (one small DB query).
+    SCHEDULER_TICK_MINUTES: int = Field(default=10, ge=1)
+
     # Retry-with-backoff configuration for producer API calls (in seconds)
     RETRY_BUDGET_SECONDS: int = Field(default=3600, ge=1)
     RETRY_BACKOFF_CAP_SECONDS: int = Field(default=30, ge=1)

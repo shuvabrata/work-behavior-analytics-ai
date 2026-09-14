@@ -8,7 +8,7 @@ description: |-
 summary: "How much documentation, work, and code a team touches."
 default_view: tabular
 owner: cross-domain-analytics
-status: active
+status: draft
 queries:
   tabular: |-
     MATCH (t:Team)-[:MEMBER_OF]-(p:Person)
@@ -54,6 +54,5 @@ queries:
     RETURN p1
     LIMIT 100
 tags:
-- beta
 - table
 - graph

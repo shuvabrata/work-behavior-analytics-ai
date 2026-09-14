@@ -8,7 +8,7 @@ description: |-
 summary: "Track open, resolved, and closed comments over time."
 default_view: tabular
 owner: confluence-analytics
-status: active
+status: draft
 queries:
   tabular: |-
     MATCH (s:Space)<-[:IN_SPACE]-(p:Page)<-[c:COMMENTED_ON]-(person:Person)
@@ -27,6 +27,5 @@ queries:
     RETURN p1
     LIMIT 100
 tags:
-- beta
 - table
 - graph

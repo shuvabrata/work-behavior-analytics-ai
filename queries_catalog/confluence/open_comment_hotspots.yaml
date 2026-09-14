@@ -8,7 +8,7 @@ description: |-
 summary: "Pages with active comments that are not closed yet."
 default_view: tabular
 owner: confluence-analytics
-status: active
+status: draft
 queries:
   tabular: |-
     MATCH (p:Page)<-[c:COMMENTED_ON]-(commenter:Person)
@@ -26,6 +26,5 @@ queries:
     RETURN p1
     LIMIT 100
 tags:
-- beta
 - table
 - graph

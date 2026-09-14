@@ -27,8 +27,7 @@ queries:
     ORDER BY t.name ASC
     LIMIT 50
 tags:
-- beta
 - table
 - graph
 owner: graph-team
-status: active
+status: draft

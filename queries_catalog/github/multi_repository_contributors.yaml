@@ -8,7 +8,7 @@ description: |-
 summary: "People working across multiple repos."
 default_view: tabular
 owner: github-analytics
-status: active
+status: draft
 queries:
   tabular: |-
     MATCH (p:Person)-[c:COLLABORATOR]-(r:Repository)
@@ -22,6 +22,5 @@ queries:
         RETURN p1
         LIMIT 100
 tags:
-- beta
 - table
 - graph

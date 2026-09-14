@@ -8,7 +8,7 @@ description: |-
 summary: "Pull requests with high churn but weak review coverage."
 default_view: tabular
 owner: github-analytics
-status: active
+status: draft
 queries:
   tabular: |-
     MATCH (pr:PullRequest)-[:TARGETS]->(:Branch)-[:BRANCH_OF]-(r:Repository)
@@ -49,7 +49,6 @@ queries:
         LIMIT 100
         RETURN p1
 tags:
-- beta
 - table
 - graph
 

@@ -8,7 +8,7 @@ description: |-
 summary: "Composite risk score for pull requests grouped by repository."
 default_view: tabular
 owner: github-analytics
-status: active
+status: draft
 queries:
   tabular: |-
     MATCH (pr:PullRequest)-[:TARGETS]->(:Branch)-[:BRANCH_OF]-(r:Repository)
@@ -72,7 +72,6 @@ queries:
         LIMIT 100
         RETURN p1
 tags:
-- beta
 - table
 - graph
 

@@ -8,7 +8,7 @@ description: |-
 summary: "Cross-team code review collaboration."
 default_view: graph
 owner: github-analytics
-status: active
+status: draft
 queries:
   tabular: |-
     MATCH (pr:PullRequest)-[:CREATED_BY]->(author:Person)-[:MEMBER_OF]-(author_team:Team)
@@ -26,6 +26,5 @@ queries:
         RETURN p1, p2
         LIMIT 100
 tags:
-- beta
 - table
 - graph

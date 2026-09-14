@@ -8,7 +8,7 @@ description: |-
 summary: "People most frequently @mentioned in Jira."
 default_view: tabular
 owner: jira-analytics
-status: active
+status: draft
 queries:
   tabular: |-
     MATCH (entity)-[:MENTIONS]->(mentioned:Person)
@@ -26,6 +26,5 @@ queries:
     RETURN p1
     LIMIT 100
 tags:
-- beta
 - table
 - graph

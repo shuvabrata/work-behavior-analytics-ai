@@ -8,7 +8,7 @@ description: |-
 summary: "Files with most changes (additions + deletions)."
 default_view: tabular
 owner: github-analytics
-status: active
+status: draft
 queries:
   tabular: |-
     MATCH (f:File)<-[m:MODIFIES]-(c:Commit)
@@ -24,6 +24,5 @@ queries:
         RETURN p1
         LIMIT 100
 tags:
-- beta
 - table
 - graph

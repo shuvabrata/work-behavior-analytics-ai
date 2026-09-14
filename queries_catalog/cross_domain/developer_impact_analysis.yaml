@@ -8,7 +8,7 @@ description: |-
 summary: "Developer contributions across all domains."
 default_view: tabular
 owner: data-platform
-status: active
+status: draft
 queries:
   tabular: |-
     MATCH (p:Person)
@@ -42,6 +42,5 @@ queries:
         RETURN p1, p2, p3, p4
         LIMIT 100
 tags:
-- beta
 - table
 - graph

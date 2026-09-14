@@ -18,6 +18,5 @@ queries:
   graph: |-
     CALL db.schema.visualization()
 tags:
-- beta
 - table
 - graph

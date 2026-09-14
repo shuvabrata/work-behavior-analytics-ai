@@ -8,7 +8,7 @@ description: |-
 summary: "Compare comments and reactions across blogposts."
 default_view: tabular
 owner: confluence-analytics
-status: active
+status: draft
 queries:
   tabular: |-
     MATCH (b:Blogpost)
@@ -35,6 +35,5 @@ queries:
     RETURN p1
     LIMIT 100
 tags:
-- beta
 - table
 - graph

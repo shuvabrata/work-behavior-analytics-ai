@@ -8,7 +8,7 @@ description: |-
 summary: "Initiatives with assignees and reporters."
 default_view: tabular
 owner: jira-analytics
-status: active
+status: draft
 queries:
   tabular: |-
     MATCH (i:Initiative)-[:ASSIGNED_TO]-(assignee:Person),
@@ -25,6 +25,5 @@ queries:
         RETURN p1
         LIMIT 100
 tags:
-- beta
 - table
 - graph

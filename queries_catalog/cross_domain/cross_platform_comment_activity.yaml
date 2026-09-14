@@ -8,7 +8,7 @@ description: |-
 summary: "Who comments across Jira + GitHub + Confluence."
 default_view: tabular
 owner: data-platform
-status: active
+status: draft
 queries:
   tabular: |-
     MATCH (p:Person)-[:COMMENTED_ON]->(entity)
@@ -31,6 +31,5 @@ queries:
     RETURN p1
     LIMIT 100
 tags:
-- beta
 - table
 - graph

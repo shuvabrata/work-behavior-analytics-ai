@@ -35,8 +35,7 @@ queries:
     MATCH path2 = (other)-[:COMMENTED_ON]->(x)
     RETURN path1, path2
 tags:
-- beta
 - table
 - graph
 owner: graph-team
-status: active
+status: draft

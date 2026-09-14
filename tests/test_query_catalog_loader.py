@@ -42,7 +42,7 @@ def test_load_catalog_normalizes_all_existing_entries():
     assert all(query.summary for query in queries)
     assert all(query.default_view in {"tabular", "graph"} for query in queries)
     assert all(query.owner for query in queries)
-    assert all(query.status == "active" for query in queries)
+    assert all(query.status in {"active", "draft", "deprecated"} for query in queries)
 
 
 def test_get_catalog_query_by_stable_id():
@@ -66,7 +66,7 @@ def test_parameterized_queries_are_detected():
     assert direct_reviews.summary == "Compare two people by direct code review activity."
     assert direct_reviews.default_view == "tabular"
     assert direct_reviews.owner == "graph-team"
-    assert direct_reviews.status == "active"
+    assert direct_reviews.status in {"active", "draft", "deprecated"}
     assert direct_reviews.parameters[0].label == "First person"
     assert direct_reviews.parameters[0].type == "person_id"
     assert direct_reviews.parameters[0].placeholder

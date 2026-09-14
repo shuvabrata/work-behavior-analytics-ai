@@ -8,7 +8,7 @@ description: |-
 summary: "Issues not linked to any epic - Data Quality check."
 default_view: tabular
 owner: jira-analytics
-status: active
+status: draft
 queries:
   tabular: |-
     MATCH (i:Issue)
@@ -21,6 +21,5 @@ queries:
         RETURN p1
         LIMIT 100
 tags:
-- beta
 - table
 - graph

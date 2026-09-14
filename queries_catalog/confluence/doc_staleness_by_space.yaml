@@ -8,7 +8,7 @@ description: |-
 summary: "Compare document freshness and age across Confluence spaces."
 default_view: tabular
 owner: confluence-analytics
-status: active
+status: draft
 queries:
   tabular: |-
     MATCH (s:Space)<-[:IN_SPACE]-(doc)
@@ -30,6 +30,5 @@ queries:
     RETURN p1
     LIMIT 100
 tags:
-- beta
 - table
 - graph

@@ -529,3 +529,146 @@ def test_edge_preview_stylesheet_none_arrow() -> None:
     rules = build_edge_preview_stylesheet("#FF0000", 2, "none", "#000000")
     edge_rule = next(r for r in rules if r["selector"] == "edge")
     assert edge_rule["style"]["target-arrow-shape"] == "none"
+
+
+# ── Save As… modal (Plan 019) ──────────────────────────────────────────
+
+
+@pytest.mark.unit
+def test_open_save_as_modal_resets_state() -> None:
+    """Opening the Save As modal returns open=True and clears name/error."""
+    from app.dash_app.pages.settings.graph_styling.callbacks import (
+        open_save_as_modal,
+    )
+
+    assert open_save_as_modal(1) == (True, "", "")
+
+
+@pytest.mark.unit
+def test_close_save_as_modal_closes() -> None:
+    """Cancelling the Save As modal returns is_open=False."""
+    from app.dash_app.pages.settings.graph_styling.callbacks import (
+        close_save_as_modal,
+    )
+
+    assert close_save_as_modal(1) is False
+
+
+@pytest.mark.unit
+def test_save_as_theme_empty_name() -> None:
+    """Save As with an empty name keeps the modal open and shows an error."""
+    from unittest import mock
+
+    from dash import no_update
+
+    from app.dash_app.pages.settings.graph_styling import callbacks as cb
+
+    fake_ctx = mock.Mock()
+    fake_ctx.triggered_id = {"type": "gs-save-as-confirm", "base_theme": "executive-light"}
+    with mock.patch.object(cb, "callback_context", fake_ctx):
+        result = cb.save_as_theme(1, "   ", [], [], [], [], [], [])
+
+    assert result[0] is True  # modal stays open
+    assert result[1] == "Please enter a theme name."
+    assert result[2:] == (no_update, no_update, no_update, no_update)
+
+
+@pytest.mark.unit
+def test_save_as_theme_success() -> None:
+    """A successful Save As closes the modal, refreshes options, and selects the new theme."""
+    from unittest import mock
+
+    from app.dash_app.pages.settings.graph_styling import callbacks as cb
+
+    fake_ctx = mock.Mock()
+    fake_ctx.triggered_id = {"type": "gs-save-as-confirm", "base_theme": "executive-light"}
+
+    created = {"id": 42, "name": "My Theme", "base_theme": "executive-light"}
+    post_resp = mock.Mock()
+    post_resp.status_code = 201
+    post_resp.json.return_value = created
+
+    # _refresh_after_action -> _list_themes -> requests.get
+    get_resp = mock.Mock()
+    get_resp.json.return_value = [
+        {"id": 42, "name": "My Theme", "base_theme": "executive-light",
+         "is_default": False, "source": "user"},
+    ]
+
+    with mock.patch.object(cb, "callback_context", fake_ctx), \
+         mock.patch.object(cb.requests, "post", return_value=post_resp), \
+         mock.patch.object(cb.requests, "get", return_value=get_resp):
+        result = cb.save_as_theme(1, "My Theme", [], [], [], [], [], [])
+
+    is_open, error, options, by_id, feedback, select_value = result
+    assert is_open is False          # modal closes on success
+    assert error == ""
+    assert select_value == 42        # new theme selected
+    assert by_id == {"42": get_resp.json.return_value[0]}
+    assert options[0]["value"] == 42
+
+
+@pytest.mark.unit
+def test_save_as_theme_conflict() -> None:
+    """A 409 (duplicate name) keeps the modal open and surfaces the API detail."""
+    from unittest import mock
+
+    from dash import no_update
+
+    from app.dash_app.pages.settings.graph_styling import callbacks as cb
+
+    fake_ctx = mock.Mock()
+    fake_ctx.triggered_id = {"type": "gs-save-as-confirm", "base_theme": "executive-light"}
+
+    post_resp = mock.Mock()
+    post_resp.status_code = 409
+    post_resp.json.return_value = {"detail": "A theme with this name already exists for this base mode."}
+
+    with mock.patch.object(cb, "callback_context", fake_ctx), \
+         mock.patch.object(cb.requests, "post", return_value=post_resp):
+        result = cb.save_as_theme(1, "Dup", [], [], [], [], [], [])
+
+    assert result[0] is True
+    assert "already exists" in result[1]
+    assert result[2:] == (no_update, no_update, no_update, no_update)
+
+
+@pytest.mark.unit
+def test_save_as_theme_request_exception() -> None:
+    """A network failure keeps the modal open and shows a Save failed error."""
+    from unittest import mock
+
+    import requests as requests_lib
+    from dash import no_update
+
+    from app.dash_app.pages.settings.graph_styling import callbacks as cb
+
+    fake_ctx = mock.Mock()
+    fake_ctx.triggered_id = {"type": "gs-save-as-confirm", "base_theme": "executive-light"}
+
+    with mock.patch.object(cb, "callback_context", fake_ctx), \
+         mock.patch.object(cb.requests, "post", side_effect=requests_lib.RequestException("boom")):
+        result = cb.save_as_theme(1, "X", [], [], [], [], [], [])
+
+    assert result[0] is True
+    assert result[1].startswith("Save failed:")
+    assert result[2:] == (no_update, no_update, no_update, no_update)
+
+
+@pytest.mark.unit
+def test_save_as_modal_has_expected_ids() -> None:
+    """The Save As modal exposes name/error/cancel/confirm and starts closed."""
+    from app.dash_app.pages.settings.graph_styling.components import (
+        build_save_as_modal,
+    )
+
+    modal = build_save_as_modal("executive-light")
+    assert modal.is_open is False
+
+    ids = {
+        n.id["type"]
+        for n in _collect(modal)
+        if isinstance(getattr(n, "id", None), dict)
+    }
+    assert {"gs-save-as-name", "gs-save-as-error",
+            "gs-save-as-cancel", "gs-save-as-confirm"} <= ids

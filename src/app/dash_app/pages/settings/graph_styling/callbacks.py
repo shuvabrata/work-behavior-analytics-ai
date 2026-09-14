@@ -387,14 +387,24 @@ def _feedback_alert(content: str, color: str) -> list[Any]:
 @callback(
     Output({"type": "gs-theme-select", "base_theme": MATCH}, "options"),
     Output({"type": "gs-theme-store", "base_theme": MATCH}, "data"),
+    Output(
+        {"type": "gs-theme-select", "base_theme": MATCH},
+        "value",
+        allow_duplicate=True,
+    ),
     Input("url", "pathname"),
     State({"type": "gs-theme-select", "base_theme": MATCH}, "id"),
+    prevent_initial_call="initial_duplicate",
 )
 def load_themes(pathname: str, select_id: dict[str, str]) -> tuple:
     """Load themes for a base mode when the page is visited.
 
     Fires on navigation and on first render of the matched select components.
     The ``pathname`` guard ensures it only loads for the Graph Styling page.
+
+    The default theme is pre-selected so the editor is always populated and
+    "Save As\u2026" always has a concrete reference. The empty "Select a
+    theme\u2026" option is intentionally omitted so a theme is always chosen.
     """
     base_theme = select_id["base_theme"]
     if pathname not in ("/app/settings/graph-styling", "/app/settings/graph-styling/"):
@@ -403,16 +413,19 @@ def load_themes(pathname: str, select_id: dict[str, str]) -> tuple:
     try:
         themes = _list_themes(base_theme)
     except requests.RequestException:
-        return [], {}
+        return [], {}, None
 
-    options = [{"label": "Select a theme\u2026", "value": ""}] + _theme_options(themes)
+    options = _theme_options(themes)
     by_id = {str(t["id"]): t for t in themes}
-    return options, by_id
+    default_id = next(
+        (t["id"] for t in themes if t.get("is_default")),
+        (themes[0]["id"] if themes else None),
+    )
+    return options, by_id, default_id
 
 
 @callback(
     Output({"type": "gs-editor-body", "base_theme": MATCH}, "children"),
-    Output({"type": "gs-theme-name-input", "base_theme": MATCH}, "value"),
     Output({"type": "gs-theme-name", "base_theme": MATCH}, "children"),
     Output({"type": "gs-loaded-values", "base_theme": MATCH}, "data"),
     Input({"type": "gs-theme-select", "base_theme": MATCH}, "value"),
@@ -421,7 +434,7 @@ def load_themes(pathname: str, select_id: dict[str, str]) -> tuple:
 )
 def select_theme(
     theme_id: Any, store: dict[str, Any]
-) -> tuple[Any, str | None, str, dict[str, Any]]:
+) -> tuple[Any, str, dict[str, Any]]:
     """Render the editor body for the selected theme.
 
     Populates every field with its **effective** (concrete) value, so a theme
@@ -443,7 +456,7 @@ def select_theme(
     name = theme.get("name", "")
     name_label = (
         f"Editing: {name}"
-        + (" (builtin \u2014 duplicate to edit)" if theme.get("source") == "builtin" else "")
+        + (" (builtin \u2014 use Save As\u2026 to create an editable copy)" if theme.get("source") == "builtin" else "")
         + (" \u2605 default" if theme.get("is_default") else "")
     )
     # Cache the full effective doc (nodes + edges + global) so per-field reset
@@ -453,7 +466,7 @@ def select_theme(
         "edges": effective.get("edges") or {},
         "global": effective.get("global") or {},
     }
-    return body, name, name_label, loaded_values
+    return body, name_label, loaded_values
 
 
 # Collect a theme's current field values into an overrides document.
@@ -508,75 +521,14 @@ def _collect_overrides(
     return {"nodes": nodes, "edges": edges, "global": global_}
 
 
-def _refresh_after_action(base_theme: str) -> tuple[Any, Any, Any, Any]:
+def _refresh_after_action(base_theme: str) -> tuple[Any, Any]:
     """Re-fetch themes and rebuild the selector options/store after a mutation."""
     themes = _list_themes(base_theme)
     options = _theme_options(themes)
     by_id = {str(t["id"]): t for t in themes}
-    return options, by_id, no_update, no_update
+    return options, by_id
 
 
-@callback(
-    Output({"type": "gs-theme-select", "base_theme": MATCH}, "options", allow_duplicate=True),
-    Output({"type": "gs-theme-store", "base_theme": MATCH}, "data", allow_duplicate=True),
-    Output("gs-page-feedback", "children"),
-    Output({"type": "gs-theme-select", "base_theme": MATCH}, "value"),
-    Input({"type": "gs-theme-new", "base_theme": MATCH}, "n_clicks"),
-    State({"type": "gs-theme-name-input", "base_theme": MATCH}, "value"),
-    prevent_initial_call=True,
-)
-def new_theme(n_clicks: int | None, name: str | None) -> tuple:
-    """Create a new empty user theme."""
-    base_theme = callback_context.triggered_id["base_theme"]
-    if not n_clicks:
-        raise PreventUpdate
-    if not name:
-        return no_update, no_update, _feedback_alert("Enter a theme name first.", "warning"), no_update
-
-    try:
-        resp = requests.post(
-            THEMES_API,
-            json={"name": name, "base_theme": base_theme, "overrides": {}},
-            timeout=10,
-        )
-        if resp.status_code in (409, 422):
-            detail = resp.json().get("detail", "Invalid request")
-            return no_update, no_update, _feedback_alert(f"Create failed: {detail}", "danger"), no_update
-        resp.raise_for_status()
-        created = resp.json()
-    except requests.RequestException as exc:
-        return no_update, no_update, _feedback_alert(f"Create failed: {exc}", "danger"), no_update
-
-    options, by_id, _, _ = _refresh_after_action(base_theme)
-    return options, by_id, _feedback_alert(f"Created \u201c{created['name']}\u201d.", "success"), created["id"]
-
-
-@callback(
-    Output({"type": "gs-theme-select", "base_theme": MATCH}, "options", allow_duplicate=True),
-    Output({"type": "gs-theme-store", "base_theme": MATCH}, "data", allow_duplicate=True),
-    Output("gs-page-feedback", "children", allow_duplicate=True),
-    Output({"type": "gs-theme-select", "base_theme": MATCH}, "value", allow_duplicate=True),
-    Input({"type": "gs-theme-duplicate", "base_theme": MATCH}, "n_clicks"),
-    State({"type": "gs-theme-select", "base_theme": MATCH}, "value"),
-    prevent_initial_call=True,
-)
-def duplicate_theme(n_clicks: int | None, theme_id: Any) -> tuple:
-    """Clone the selected theme (copy-on-write)."""
-    base_theme = callback_context.triggered_id["base_theme"]
-    if not n_clicks or theme_id is None:
-        raise PreventUpdate
-
-    try:
-        resp = requests.post(f"{THEMES_API}{theme_id}/clone", timeout=10)
-        if resp.status_code == 409:
-            return no_update, no_update, _feedback_alert("Clone failed: name conflict.", "danger"), no_update
-        resp.raise_for_status()
-        cloned = resp.json()
-    except requests.RequestException as exc:
-        return no_update, no_update, _feedback_alert(f"Clone failed: {exc}", "danger"), no_update
-
-    options, by_id, _, _ = _refresh_after_action(base_theme)
-    return options, by_id, _feedback_alert(f"Duplicated to \u201c{cloned['name']}\u201d.", "success"), cloned["id"]
 
 
 @callback(
@@ -584,7 +536,6 @@ def duplicate_theme(n_clicks: int | None, theme_id: Any) -> tuple:
     Output({"type": "gs-theme-store", "base_theme": MATCH}, "data", allow_duplicate=True),
     Input({"type": "gs-theme-save", "base_theme": MATCH}, "n_clicks"),
     State({"type": "gs-theme-select", "base_theme": MATCH}, "value"),
-    State({"type": "gs-theme-name-input", "base_theme": MATCH}, "value"),
     State({"type": "gs-node-field", "base_theme": MATCH, "node_type": ALL, "field": ALL}, "value"),
     State({"type": "gs-node-field", "base_theme": MATCH, "node_type": ALL, "field": ALL}, "id"),
     State({"type": "gs-edge-field", "base_theme": MATCH, "field": ALL}, "value"),
@@ -596,7 +547,6 @@ def duplicate_theme(n_clicks: int | None, theme_id: Any) -> tuple:
 def save_theme(
     n_clicks: int | None,
     theme_id: Any,
-    name: str | None,
     node_values: list[Any],
     node_ids: list[dict[str, str]],
     edge_values: list[Any],
@@ -604,7 +554,13 @@ def save_theme(
     global_values: list[Any],
     global_ids: list[dict[str, str]],
 ) -> tuple:
-    """Save the current editor values via a full-document PATCH."""
+    """Save the current editor values via a full-document PATCH (pure overwrite).
+
+    The theme name is never changed by Save; rename is not supported in-place.
+    Use Save As\u2026 to create a renamed copy. The backend returns 409 for
+    builtin themes, which surfaces as a danger alert.
+    """
+    base_theme = callback_context.triggered_id["base_theme"]
     if not n_clicks or theme_id is None:
         raise PreventUpdate
 
@@ -612,8 +568,6 @@ def save_theme(
         node_values, node_ids, edge_values, edge_ids, global_values, global_ids
     )
     payload: dict[str, Any] = {"overrides": overrides}
-    if name:
-        payload["name"] = name
 
     try:
         resp = requests.patch(f"{THEMES_API}{theme_id}", json=payload, timeout=10)
@@ -627,7 +581,102 @@ def save_theme(
     except requests.RequestException as exc:
         return _feedback_alert(f"Save failed: {exc}", "danger"), no_update
 
-    return _feedback_alert(f"Saved \u201c{updated['name']}\u201d.", "success"), no_update
+    _, by_id = _refresh_after_action(base_theme)
+    return _feedback_alert(f"Saved \u201c{updated['name']}\u201d.", "success"), by_id
+
+
+# \u2500\u2500 Save As\u2026 modal callbacks \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+
+
+@callback(
+    Output({"type": "gs-save-as-modal", "base_theme": MATCH}, "is_open"),
+    Output({"type": "gs-save-as-name", "base_theme": MATCH}, "value"),
+    Output({"type": "gs-save-as-error", "base_theme": MATCH}, "children"),
+    Input({"type": "gs-theme-save-as", "base_theme": MATCH}, "n_clicks"),
+    prevent_initial_call=True,
+)
+def open_save_as_modal(_n_clicks: int | None) -> tuple[bool, str, str]:
+    """Open the Save As\u2026 modal and reset its input and error state."""
+    return True, "", ""
+
+
+@callback(
+    Output({"type": "gs-save-as-modal", "base_theme": MATCH}, "is_open", allow_duplicate=True),
+    Output({"type": "gs-save-as-error", "base_theme": MATCH}, "children", allow_duplicate=True),
+    Output({"type": "gs-theme-select", "base_theme": MATCH}, "options", allow_duplicate=True),
+    Output({"type": "gs-theme-store", "base_theme": MATCH}, "data", allow_duplicate=True),
+    Output("gs-page-feedback", "children", allow_duplicate=True),
+    Output({"type": "gs-theme-select", "base_theme": MATCH}, "value", allow_duplicate=True),
+    Input({"type": "gs-save-as-confirm", "base_theme": MATCH}, "n_clicks"),
+    State({"type": "gs-save-as-name", "base_theme": MATCH}, "value"),
+    State({"type": "gs-node-field", "base_theme": MATCH, "node_type": ALL, "field": ALL}, "value"),
+    State({"type": "gs-node-field", "base_theme": MATCH, "node_type": ALL, "field": ALL}, "id"),
+    State({"type": "gs-edge-field", "base_theme": MATCH, "field": ALL}, "value"),
+    State({"type": "gs-edge-field", "base_theme": MATCH, "field": ALL}, "id"),
+    State({"type": "gs-global-field", "base_theme": MATCH, "field": ALL}, "value"),
+    State({"type": "gs-global-field", "base_theme": MATCH, "field": ALL}, "id"),
+    prevent_initial_call=True,
+)
+def save_as_theme(
+    n_clicks: int | None,
+    name: str | None,
+    node_values: list[Any],
+    node_ids: list[dict[str, str]],
+    edge_values: list[Any],
+    edge_ids: list[dict[str, str]],
+    global_values: list[Any],
+    global_ids: list[dict[str, str]],
+) -> tuple:
+    """Create a new theme from the current editor state under the given name.
+
+    Collects the current field values as the overrides document, then POSTs to
+    the API. Inline validation feedback is shown for empty names and API errors;
+    the modal stays open on failure and closes only on success.
+    """
+    base_theme = callback_context.triggered_id["base_theme"]
+    if not n_clicks:
+        raise PreventUpdate
+
+    if not name or not name.strip():
+        return True, "Please enter a theme name.", no_update, no_update, no_update, no_update
+
+    overrides = _collect_overrides(
+        node_values, node_ids, edge_values, edge_ids, global_values, global_ids
+    )
+
+    try:
+        resp = requests.post(
+            THEMES_API,
+            json={"name": name.strip(), "base_theme": base_theme, "overrides": overrides},
+            timeout=10,
+        )
+        if resp.status_code in (409, 422):
+            detail = resp.json().get("detail", "Invalid request.")
+            return True, detail, no_update, no_update, no_update, no_update
+        resp.raise_for_status()
+        created = resp.json()
+    except requests.RequestException as exc:
+        return True, f"Save failed: {exc}", no_update, no_update, no_update, no_update
+
+    options, by_id = _refresh_after_action(base_theme)
+    return (
+        False,
+        "",
+        options,
+        by_id,
+        _feedback_alert(f"Saved as \u201c{created['name']}\u201d.", "success"),
+        created["id"],
+    )
+
+
+@callback(
+    Output({"type": "gs-save-as-modal", "base_theme": MATCH}, "is_open", allow_duplicate=True),
+    Input({"type": "gs-save-as-cancel", "base_theme": MATCH}, "n_clicks"),
+    prevent_initial_call=True,
+)
+def close_save_as_modal(_n_clicks: int | None) -> bool:
+    """Close the Save As\u2026 modal when the user cancels."""
+    return False
 
 
 @callback(

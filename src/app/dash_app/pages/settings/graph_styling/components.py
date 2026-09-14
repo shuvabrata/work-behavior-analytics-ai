@@ -534,7 +534,16 @@ def _base_theme_label(base_theme: str) -> str:
 
 
 def build_theme_toolbar(base_theme: str) -> html.Div:
-    """Build the per-tab theme management bar (selector + actions)."""
+    """Build the per-tab theme management bar (selector + actions).
+
+    The toolbar contains:
+    - A theme selector dropdown (widened now that the textbox is gone).
+    - Save — pure in-place overwrite of the selected theme's overrides.
+    - Save As\u2026 — opens a modal to name and create a copy from the current
+      editor state (works on both user themes and builtins).
+    - Set as default — unchanged.
+    - Delete — unchanged.
+    """
     return html.Div(
         [
             dbc.Row(
@@ -556,49 +565,10 @@ def build_theme_toolbar(base_theme: str) -> html.Div:
                                 "borderRadius": "2px",
                             },
                         ),
-                        width=3,
-                    ),
-                    dbc.Col(
-                        dbc.Input(
-                            id={
-                                "type": "gs-theme-name-input",
-                                "base_theme": base_theme,
-                            },
-                            type="text",
-                            placeholder="Theme name",
-                            maxLength=100,
-                            style={
-                                "fontFamily": FONT_SANS,
-                                "fontSize": FONT_SIZE_SMALL,
-                                "padding": SPACING_XXSMALL,
-                                "border": f"1px solid {COLOR_BORDER}",
-                                "borderRadius": "2px",
-                            },
-                        ),
-                        width=3,
+                        width=4,
                     ),
                     dbc.Col(
                         [
-                            dbc.Button(
-                                "New",
-                                id={
-                                    "type": "gs-theme-new",
-                                    "base_theme": base_theme,
-                                },
-                                color="outline-primary",
-                                size="sm",
-                                className="me-2",
-                            ),
-                            dbc.Button(
-                                "Duplicate",
-                                id={
-                                    "type": "gs-theme-duplicate",
-                                    "base_theme": base_theme,
-                                },
-                                color="outline-secondary",
-                                size="sm",
-                                className="me-2",
-                            ),
                             dbc.Button(
                                 "Save",
                                 id={
@@ -606,6 +576,16 @@ def build_theme_toolbar(base_theme: str) -> html.Div:
                                     "base_theme": base_theme,
                                 },
                                 color="primary",
+                                size="sm",
+                                className="me-2",
+                            ),
+                            dbc.Button(
+                                "Save As\u2026",
+                                id={
+                                    "type": "gs-theme-save-as",
+                                    "base_theme": base_theme,
+                                },
+                                color="outline-primary",
                                 size="sm",
                                 className="me-2",
                             ),
@@ -629,7 +609,7 @@ def build_theme_toolbar(base_theme: str) -> html.Div:
                                 size="sm",
                             ),
                         ],
-                        width=6,
+                        width=8,
                     ),
                 ],
                 className="g-2 align-items-center",
@@ -656,11 +636,88 @@ def build_theme_toolbar(base_theme: str) -> html.Div:
     )
 
 
+def build_save_as_modal(base_theme: str) -> dbc.Modal:
+    """Build the \u201cSave As\u2026\u201d modal dialog for the given base theme.
+
+    The modal presents a single name-input field. Inline validation feedback
+    is shown below the input for empty-name and API-conflict errors; the modal
+    stays open until the user either confirms successfully or cancels.
+    """
+    return dbc.Modal(
+        [
+            dbc.ModalHeader(dbc.ModalTitle("Save As\u2026")),
+            dbc.ModalBody(
+                [
+                    dbc.Input(
+                        id={
+                            "type": "gs-save-as-name",
+                            "base_theme": base_theme,
+                        },
+                        type="text",
+                        placeholder="New theme name",
+                        maxLength=100,
+                        debounce=False,
+                        style={
+                            "fontFamily": FONT_SANS,
+                            "fontSize": FONT_SIZE_SMALL,
+                            "border": f"1px solid {COLOR_BORDER}",
+                            "borderRadius": "2px",
+                        },
+                    ),
+                    html.Div(
+                        id={
+                            "type": "gs-save-as-error",
+                            "base_theme": base_theme,
+                        },
+                        style={
+                            "fontFamily": FONT_SANS,
+                            "fontSize": FONT_SIZE_XSMALL,
+                            "color": "var(--bs-danger)",
+                            "marginTop": SPACING_XXSMALL,
+                        },
+                    ),
+                ]
+            ),
+            dbc.ModalFooter(
+                [
+                    dbc.Button(
+                        "Cancel",
+                        id={
+                            "type": "gs-save-as-cancel",
+                            "base_theme": base_theme,
+                        },
+                        color="secondary",
+                        outline=True,
+                        size="sm",
+                        className="me-2",
+                        n_clicks=0,
+                    ),
+                    dbc.Button(
+                        "Save As",
+                        id={
+                            "type": "gs-save-as-confirm",
+                            "base_theme": base_theme,
+                        },
+                        color="primary",
+                        size="sm",
+                        n_clicks=0,
+                    ),
+                ]
+            ),
+        ],
+        id={"type": "gs-save-as-modal", "base_theme": base_theme},
+        is_open=False,
+        backdrop="static",  # Prevent accidental dismissal by clicking outside
+        size="md",
+    )
+
+
 def build_base_mode_section(base_theme: str) -> html.Div:
     """Build a full base-mode section (theme toolbar + editor body)."""
     return html.Div(
         [
             build_theme_toolbar(base_theme),
+            build_save_as_modal(base_theme),
             dcc.Store(
                 id={"type": "gs-theme-store", "base_theme": base_theme},
                 data={},

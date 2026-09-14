@@ -260,6 +260,23 @@ def create_dash_app():
         icon = "fas fa-sun" if active_theme == "executive-dark" else "fas fa-moon"
         return f"app-shell theme-{active_theme}", icon
 
+    # Sync the active theme class onto document.body so that Bootstrap modal
+    # portals (rendered outside #app-shell) also inherit the theme's CSS
+    # custom properties and dark-mode overrides.
+    clientside_callback(
+        """
+        function(theme_name) {
+            var active = theme_name || 'executive-light';
+            document.body.classList.remove('theme-executive-light', 'theme-executive-dark');
+            document.body.classList.add('theme-' + active);
+            return window.dash_clientside.no_update;
+        }
+        """,
+        Output("theme-store", "data", allow_duplicate=True),
+        Input("theme-store", "data"),
+        prevent_initial_call="initial_duplicate",
+    )
+
     # Clientside callback to expose UI format strings to JavaScript
     clientside_callback(
         """

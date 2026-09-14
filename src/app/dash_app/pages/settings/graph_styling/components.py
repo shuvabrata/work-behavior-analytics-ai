@@ -549,23 +549,36 @@ def build_theme_toolbar(base_theme: str) -> html.Div:
             dbc.Row(
                 [
                     dbc.Col(
-                        dbc.Select(
-                            id={
-                                "type": "gs-theme-select",
-                                "base_theme": base_theme,
-                            },
-                            options=[],
-                            placeholder="Select a theme\u2026",
-                            style={
-                                "fontFamily": FONT_SANS,
-                                "fontSize": FONT_SIZE_SMALL,
-                                "height": "34px",
-                                "padding": f"0 {SPACING_XSMALL}",
-                                "border": f"1px solid {COLOR_BORDER}",
-                                "borderRadius": "2px",
-                            },
-                        ),
+                        [
+                            html.Span(
+                                "Theme:",
+                                style={
+                                    "fontFamily": FONT_SANS,
+                                    "fontSize": FONT_SIZE_SMALL,
+                                    "color": COLOR_GRAY_MEDIUM,
+                                    "marginRight": SPACING_XSMALL,
+                                    "whiteSpace": "nowrap",
+                                },
+                            ),
+                            dbc.Select(
+                                id={
+                                    "type": "gs-theme-select",
+                                    "base_theme": base_theme,
+                                },
+                                options=[],
+                                placeholder="Select a theme\u2026",
+                                style={
+                                    "fontFamily": FONT_SANS,
+                                    "fontSize": FONT_SIZE_SMALL,
+                                    "height": "34px",
+                                    "padding": f"0 {SPACING_XSMALL}",
+                                    "border": f"1px solid {COLOR_BORDER}",
+                                    "borderRadius": "2px",
+                                },
+                            ),
+                        ],
                         width=4,
+                        className="d-flex align-items-center",
                     ),
                     dbc.Col(
                         [

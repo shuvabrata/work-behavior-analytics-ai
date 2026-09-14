@@ -8,7 +8,7 @@ description: |-
 summary: "Map epics to repositories via commits."
 default_view: tabular
 owner: data-platform
-status: active
+status: draft
 queries:
   tabular: |-
     MATCH (e:Epic)<-[:PART_OF]-(i:Issue)<-[:REFERENCES]-(c:Commit)
@@ -24,6 +24,5 @@ queries:
         RETURN p1, p2
         LIMIT 100
 tags:
-- beta
 - table
 - graph

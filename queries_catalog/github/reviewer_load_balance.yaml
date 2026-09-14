@@ -8,7 +8,7 @@ description: |-
 summary: "Requested vs completed review load for reviewers."
 default_view: tabular
 owner: github-analytics
-status: active
+status: draft
 queries:
   tabular: |-
     MATCH (p:Person)
@@ -37,7 +37,6 @@ queries:
         RETURN p1
         LIMIT 100
 tags:
-- beta
 - table
 - graph
 

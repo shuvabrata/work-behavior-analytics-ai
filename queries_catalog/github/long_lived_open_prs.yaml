@@ -8,7 +8,7 @@ description: |-
 summary: "Open pull requests that have been waiting the longest."
 default_view: tabular
 owner: github-analytics
-status: active
+status: draft
 queries:
   tabular: |-
     MATCH (pr:PullRequest)-[:TARGETS]->(:Branch)-[:BRANCH_OF]-(r:Repository)
@@ -35,7 +35,6 @@ queries:
         ORDER BY age_days DESC
         LIMIT 100
 tags:
-- beta
 - table
 - graph
 

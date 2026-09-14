@@ -8,7 +8,7 @@ description: |-
 summary: "Average time to merge PRs."
 default_view: tabular
 owner: github-analytics
-status: active
+status: draft
 queries:
   tabular: |-
     MATCH (pr:PullRequest)
@@ -24,6 +24,5 @@ queries:
         RETURN p1
         LIMIT 100
 tags:
-- beta
 - table
 - graph

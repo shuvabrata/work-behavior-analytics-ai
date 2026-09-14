@@ -8,7 +8,7 @@ description: |-
 summary: "PRs linked to Jira issues via commits."
 default_view: tabular
 owner: data-platform
-status: active
+status: draft
 queries:
   tabular: |-
     MATCH (pr:PullRequest)-[:INCLUDES]->(c:Commit)-[:REFERENCES]->(i:Issue)
@@ -22,6 +22,5 @@ queries:
         RETURN p1
         LIMIT 100
 tags:
-- beta
 - table
 - graph

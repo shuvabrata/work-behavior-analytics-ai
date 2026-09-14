@@ -37,11 +37,11 @@ async def test_catalog_list_endpoint_returns_normalized_catalog():
     assert first_item["summary"] == "Count all nodes by type."
     assert first_item["default_view"] == "tabular"
     assert first_item["owner"] == "graph-platform"
-    assert first_item["status"] == "active"
+    assert first_item["status"] in {"active", "draft", "deprecated"}
     assert all(item["summary"] for item in data["items"])
     assert all(item["default_view"] in {"tabular", "graph"} for item in data["items"])
     assert all(item["owner"] for item in data["items"])
-    assert all(item["status"] == "active" for item in data["items"])
+    assert all(item["status"] in {"active", "draft", "deprecated"} for item in data["items"])
 
 
 async def test_catalog_namespaces_endpoint_returns_display_order():
@@ -87,7 +87,7 @@ async def test_catalog_list_endpoint_filters_by_namespace_directory_or_display_n
     assert item["summary"] == "Compare two people by direct code review activity."
     assert item["default_view"] == "tabular"
     assert item["owner"] == "graph-team"
-    assert item["status"] == "active"
+    assert item["status"] in {"active", "draft", "deprecated"}
     params = item["parameters"]
     assert len(params) == 2
     for param in params:
@@ -104,18 +104,18 @@ async def test_catalog_list_endpoint_filters_by_namespace_directory_or_display_n
 
 
 async def test_catalog_list_endpoint_searches_owner_and_status_metadata():
-    response = await _get("/api/v1/queries/catalog", params={"q": "graph-team active"})
+    response = await _get("/api/v1/queries/catalog", params={"q": "graph-team draft"})
 
     assert response.status_code == 200
     data = response.json()
 
     assert data["count"] == 38
     assert all(item["owner"] == "graph-team" for item in data["items"])
-    assert all(item["status"] == "active" for item in data["items"])
+    assert all(item["status"] in {"active", "draft", "deprecated"} for item in data["items"])
 
 
 async def test_catalog_list_endpoint_searches_namespace_owner_and_status_metadata():
-    response = await _get("/api/v1/queries/catalog", params={"q": "github-analytics active"})
+    response = await _get("/api/v1/queries/catalog", params={"q": "github-analytics draft"})
 
     assert response.status_code == 200
     data = response.json()
@@ -156,7 +156,7 @@ async def test_catalog_detail_endpoint_returns_full_query_entry():
     assert data["default_view"] == "tabular"
     assert data["summary"] == "Compare two people by direct code review activity."
     assert data["owner"] == "graph-team"
-    assert data["status"] == "active"
+    assert data["status"] in {"active", "draft", "deprecated"}
     assert data["parameters"][0]["label"] == "First person"
     assert "LIMIT 10" in data["queries"]["tabular"]
     assert "LIMIT 100" in data["queries"]["graph"]

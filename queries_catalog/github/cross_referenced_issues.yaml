@@ -8,7 +8,7 @@ description: |-
 summary: "GitHub issues that reference Jira issues."
 default_view: tabular
 owner: github-analytics
-status: active
+status: draft
 queries:
   tabular: |-
     MATCH (i:Issue)-[r:REFERENCES]->(jira_issue:Issue)
@@ -26,6 +26,5 @@ queries:
         RETURN p1
         LIMIT 100
 tags:
-- beta
 - table
 - graph

@@ -30,8 +30,7 @@ queries:
     ORDER BY e.due_date ASC
     LIMIT 50
 tags:
-- beta
 - table
 - graph
 owner: graph-team
-status: active
+status: draft

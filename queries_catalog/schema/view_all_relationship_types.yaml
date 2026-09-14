@@ -8,7 +8,7 @@ description: |-
 summary: "Count all relationships by type."
 default_view: graph
 owner: graph-platform
-status: active
+status: draft
 queries:
   tabular: |-
     MATCH ()-[r]->()
@@ -18,6 +18,5 @@ queries:
   graph: |-
     CALL db.schema.visualization()
 tags:
-- beta
 - table
 - graph

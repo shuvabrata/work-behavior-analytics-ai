@@ -8,7 +8,7 @@ description: |-
 summary: "Bugs linked to specific stories."
 default_view: tabular
 owner: jira-analytics
-status: active
+status: draft
 queries:
   tabular: |-
     MATCH (bug:Issue {type: 'Bug'})-[:RELATES_TO]-(story:Issue {type: 'Story'})
@@ -19,6 +19,5 @@ queries:
         RETURN p1
         LIMIT 100
 tags:
-- beta
 - table
 - graph

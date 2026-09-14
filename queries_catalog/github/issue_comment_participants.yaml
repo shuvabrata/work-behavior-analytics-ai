@@ -8,7 +8,7 @@ description: |-
 summary: "People who commented on GitHub issues per repository."
 default_view: tabular
 owner: github-analytics
-status: active
+status: draft
 queries:
   tabular: |-
     MATCH (p:Person)-[c:COMMENTED_ON]->(i:Issue)-[:PART_OF]->(r:Repository)
@@ -31,6 +31,5 @@ queries:
         RETURN p1
         LIMIT 100
 tags:
-- beta
 - table
 - graph

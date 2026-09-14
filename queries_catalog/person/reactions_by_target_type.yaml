@@ -23,7 +23,6 @@ queries:
            sum(r.count) AS total_reactions
     ORDER BY total_reactions DESC
 tags:
-- beta
 - table
 owner: graph-team
-status: active
+status: draft

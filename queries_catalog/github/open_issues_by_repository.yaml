@@ -8,7 +8,7 @@ description: |-
 summary: "Count of open GitHub issues by repository."
 default_view: tabular
 owner: github-analytics
-status: active
+status: draft
 queries:
   tabular: |-
     MATCH (i:Issue)-[:PART_OF]->(r:Repository)
@@ -23,6 +23,5 @@ queries:
         RETURN p1
         LIMIT 100
 tags:
-- beta
 - table
 - graph

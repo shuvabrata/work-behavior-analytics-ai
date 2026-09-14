@@ -8,7 +8,7 @@ description: |-
 summary: "Documentation that links to work and follow-on code delivery."
 default_view: tabular
 owner: cross-domain-analytics
-status: active
+status: draft
 queries:
   tabular: |-
     MATCH (doc)
@@ -30,6 +30,5 @@ queries:
     RETURN p1
     LIMIT 100
 tags:
-- beta
 - table
 - graph

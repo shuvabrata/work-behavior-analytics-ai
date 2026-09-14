@@ -8,7 +8,7 @@ description: |-
 summary: "Issues linked to actual code commits."
 default_view: tabular
 owner: data-platform
-status: active
+status: draft
 queries:
   tabular: |-
     MATCH (i:Issue)<-[:REFERENCES]-(c:Commit)
@@ -21,6 +21,5 @@ queries:
         RETURN p1
         LIMIT 100
 tags:
-- beta
 - table
 - graph

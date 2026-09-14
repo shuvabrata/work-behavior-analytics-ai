@@ -8,7 +8,7 @@ description: |-
 summary: "Pages edited or discussed by the widest set of people."
 default_view: tabular
 owner: confluence-analytics
-status: active
+status: draft
 queries:
   tabular: |-
     MATCH (p:Page)<-[:CREATED|MODIFIED|COMMENTED_ON|REACTED_TO]-(person:Person)
@@ -24,6 +24,5 @@ queries:
     RETURN p1
     LIMIT 100
 tags:
-- beta
 - table
 - graph

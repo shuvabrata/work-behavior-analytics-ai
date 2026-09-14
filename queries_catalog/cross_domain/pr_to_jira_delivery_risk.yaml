@@ -8,7 +8,7 @@ description: |-
 summary: "Pull requests linked to Jira issues with an aggregated delivery risk score."
 default_view: tabular
 owner: data-platform
-status: active
+status: draft
 queries:
   tabular: |-
     MATCH (pr:PullRequest)-[:INCLUDES]->(c:Commit)-[:REFERENCES]->(issue:Issue)
@@ -44,7 +44,6 @@ queries:
         RETURN p1
         LIMIT 100
 tags:
-- beta
 - table
 - graph
 

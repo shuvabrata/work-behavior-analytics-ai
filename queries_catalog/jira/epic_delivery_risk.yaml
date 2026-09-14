@@ -8,7 +8,7 @@ description: |-
 summary: "Epics with overdue work, blockers, and incomplete scope."
 default_view: tabular
 owner: jira-analytics
-status: active
+status: draft
 queries:
   tabular: |-
     MATCH (e:Epic)<-[:PART_OF]-(i:Issue)
@@ -43,6 +43,5 @@ queries:
         RETURN p1
         LIMIT 100
 tags:
-- beta
 - table
 - graph

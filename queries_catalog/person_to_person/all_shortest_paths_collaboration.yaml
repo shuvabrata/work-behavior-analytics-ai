@@ -42,8 +42,7 @@ queries:
     RETURN path
     LIMIT 10
 tags:
-- beta
 - table
 - graph
 owner: graph-team
-status: active
+status: draft

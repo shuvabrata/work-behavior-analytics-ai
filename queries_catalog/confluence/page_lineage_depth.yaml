@@ -8,7 +8,7 @@ description: |-
 summary: "Measure how deep pages sit in the Confluence tree."
 default_view: tabular
 owner: confluence-analytics
-status: active
+status: draft
 queries:
   tabular: |-
     MATCH (p:Page)
@@ -28,6 +28,5 @@ queries:
     RETURN p1
     LIMIT 100
 tags:
-- beta
 - table
 - graph

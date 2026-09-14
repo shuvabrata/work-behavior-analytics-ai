@@ -8,7 +8,7 @@ description: |-
 summary: "Count all nodes by type."
 default_view: tabular
 owner: graph-platform
-status: draft
+status: active
 queries:
   tabular: |-
     MATCH (n)

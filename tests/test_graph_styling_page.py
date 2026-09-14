@@ -466,6 +466,74 @@ def test_theme_options_default_first() -> None:
     assert values[1:] == [3, 1]  # Alpha, Zebra
 
 
+@pytest.mark.unit
+def test_load_themes_preselects_default_and_omits_placeholder() -> None:
+    """load_themes pre-selects the default theme and drops the empty option."""
+    from unittest import mock
+
+    from app.dash_app.pages.settings.graph_styling import callbacks as cb
+
+    themes = [
+        {"id": 1, "name": "Zebra", "is_default": False, "source": "user"},
+        {"id": 2, "name": "Default", "is_default": True, "source": "builtin"},
+        {"id": 3, "name": "Alpha", "is_default": False, "source": "user"},
+    ]
+    with mock.patch.object(cb, "_list_themes", return_value=themes):
+        options, by_id, value = cb.load_themes(
+            "/app/settings/graph-styling",
+            {"type": "gs-theme-select", "base_theme": "executive-light"},
+        )
+
+    # No "Select a theme…" placeholder option.
+    assert all(o["value"] != "" for o in options)
+    # Default theme is pre-selected.
+    assert value == 2
+    assert str(2) in by_id
+
+
+@pytest.mark.unit
+def test_load_themes_falls_back_to_first_theme_when_no_default() -> None:
+    """load_themes pre-selects the first theme when none is marked default."""
+    from unittest import mock
+
+    from app.dash_app.pages.settings.graph_styling import callbacks as cb
+
+    themes = [
+        {"id": 1, "name": "Zebra", "is_default": False, "source": "user"},
+        {"id": 3, "name": "Alpha", "is_default": False, "source": "user"},
+    ]
+    with mock.patch.object(cb, "_list_themes", return_value=themes):
+        options, by_id, value = cb.load_themes(
+            "/app/settings/graph-styling",
+            {"type": "gs-theme-select", "base_theme": "executive-light"},
+        )
+
+    assert value == 1  # first theme
+    assert all(o["value"] != "" for o in options)
+
+
+@pytest.mark.unit
+def test_load_themes_returns_none_value_on_request_error() -> None:
+    """load_themes returns an empty value on a network error."""
+    from unittest import mock
+
+    import requests as requests_lib
+
+    from app.dash_app.pages.settings.graph_styling import callbacks as cb
+
+    with mock.patch.object(
+        cb, "_list_themes", side_effect=requests_lib.RequestException
+    ):
+        options, by_id, value = cb.load_themes(
+            "/app/settings/graph-styling",
+            {"type": "gs-theme-select", "base_theme": "executive-light"},
+        )
+
+    assert options == []
+    assert by_id == {}
+    assert value is None
+
+
 # ── Edge preview ───────────────────────────────────────────────────────
 
 

@@ -387,14 +387,24 @@ def _feedback_alert(content: str, color: str) -> list[Any]:
 @callback(
     Output({"type": "gs-theme-select", "base_theme": MATCH}, "options"),
     Output({"type": "gs-theme-store", "base_theme": MATCH}, "data"),
+    Output(
+        {"type": "gs-theme-select", "base_theme": MATCH},
+        "value",
+        allow_duplicate=True,
+    ),
     Input("url", "pathname"),
     State({"type": "gs-theme-select", "base_theme": MATCH}, "id"),
+    prevent_initial_call="initial_duplicate",
 )
 def load_themes(pathname: str, select_id: dict[str, str]) -> tuple:
     """Load themes for a base mode when the page is visited.
 
     Fires on navigation and on first render of the matched select components.
     The ``pathname`` guard ensures it only loads for the Graph Styling page.
+
+    The default theme is pre-selected so the editor is always populated and
+    "Save As\u2026" always has a concrete reference. The empty "Select a
+    theme\u2026" option is intentionally omitted so a theme is always chosen.
     """
     base_theme = select_id["base_theme"]
     if pathname not in ("/app/settings/graph-styling", "/app/settings/graph-styling/"):
@@ -403,11 +413,15 @@ def load_themes(pathname: str, select_id: dict[str, str]) -> tuple:
     try:
         themes = _list_themes(base_theme)
     except requests.RequestException:
-        return [], {}
+        return [], {}, None
 
-    options = [{"label": "Select a theme\u2026", "value": ""}] + _theme_options(themes)
+    options = _theme_options(themes)
     by_id = {str(t["id"]): t for t in themes}
-    return options, by_id
+    default_id = next(
+        (t["id"] for t in themes if t.get("is_default")),
+        (themes[0]["id"] if themes else None),
+    )
+    return options, by_id, default_id
 
 
 @callback(

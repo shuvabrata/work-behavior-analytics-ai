@@ -546,6 +546,7 @@ def save_theme(
     Use Save As\u2026 to create a renamed copy. The backend returns 409 for
     builtin themes, which surfaces as a danger alert.
     """
+    base_theme = callback_context.triggered_id["base_theme"]
     if not n_clicks or theme_id is None:
         raise PreventUpdate
 
@@ -566,7 +567,8 @@ def save_theme(
     except requests.RequestException as exc:
         return _feedback_alert(f"Save failed: {exc}", "danger"), no_update
 
-    return _feedback_alert(f"Saved \u201c{updated['name']}\u201d.", "success"), no_update
+    _, by_id, _, _ = _refresh_after_action(base_theme)
+    return _feedback_alert(f"Saved \u201c{updated['name']}\u201d.", "success"), by_id
 
 
 # \u2500\u2500 Save As\u2026 modal callbacks \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500

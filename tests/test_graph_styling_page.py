@@ -672,3 +672,33 @@ def test_save_as_modal_has_expected_ids() -> None:
     }
     assert {"gs-save-as-name", "gs-save-as-error",
             "gs-save-as-cancel", "gs-save-as-confirm"} <= ids
+
+
+@pytest.mark.unit
+def test_save_theme_refreshes_store() -> None:
+    """A successful Save returns a refreshed theme store, not no_update."""
+    from unittest import mock
+
+    from app.dash_app.pages.settings.graph_styling import callbacks as cb
+
+    fake_ctx = mock.Mock()
+    fake_ctx.triggered_id = {"type": "gs-theme-save", "base_theme": "executive-light"}
+
+    patch_resp = mock.Mock()
+    patch_resp.status_code = 200
+    patch_resp.json.return_value = {"id": 7, "name": "My Theme"}
+
+    # _refresh_after_action -> _list_themes -> requests.get
+    get_resp = mock.Mock()
+    get_resp.json.return_value = [
+        {"id": 7, "name": "My Theme", "base_theme": "executive-light",
+         "is_default": False, "source": "user"},
+    ]
+
+    with mock.patch.object(cb, "callback_context", fake_ctx), \
+         mock.patch.object(cb.requests, "patch", return_value=patch_resp), \
+         mock.patch.object(cb.requests, "get", return_value=get_resp):
+        feedback, store = cb.save_theme(1, 7, [], [], [], [], [], [])
+
+    assert store == {"7": get_resp.json.return_value[0]}
+    assert "Saved" in feedback[0].children

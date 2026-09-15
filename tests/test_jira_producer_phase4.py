@@ -234,6 +234,17 @@ class TestBuildInitiativeSignal:
         assert sig is not None
         assert sig.relationships == []
 
+    def test_assigned_to_relationship(self) -> None:
+        sig = build_initiative_signal(
+            _initiative_data(), _BASE_URL, assignee_person_id="person_jira_acc123"
+        )
+        assert sig is not None
+        assigned = [r for r in sig.relationships if r.type == "ASSIGNED_TO"]
+        assert len(assigned) == 1
+        assert assigned[0].target.entity_type == "Person"
+        assert assigned[0].target.id == "person_jira_acc123"
+        assert assigned[0].direction is None
+
     def test_missing_id_returns_none(self) -> None:
         d = _initiative_data()
         del d["key"]
@@ -280,6 +291,17 @@ class TestBuildEpicSignal:
         sig = build_epic_signal(_epic_data(), _BASE_URL)
         assert sig is not None
         assert sig.relationships == []
+
+    def test_assigned_to_relationship(self) -> None:
+        sig = build_epic_signal(
+            _epic_data(), _BASE_URL, assignee_person_id="person_jira_acc123"
+        )
+        assert sig is not None
+        assigned = [r for r in sig.relationships if r.type == "ASSIGNED_TO"]
+        assert len(assigned) == 1
+        assert assigned[0].target.entity_type == "Person"
+        assert assigned[0].target.id == "person_jira_acc123"
+        assert assigned[0].direction is None
 
     def test_missing_id_returns_none(self) -> None:
         d = _epic_data()

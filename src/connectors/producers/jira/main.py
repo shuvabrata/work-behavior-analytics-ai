@@ -187,6 +187,7 @@ def build_initiative_signal(
     jira_base_url: str,
     project_id: Optional[str] = None,
     reporter_person_id: Optional[str] = None,
+    assignee_person_id: Optional[str] = None,
     comments_data: Optional[List[Dict[str, Any]]] = None,
     mention_account_ids: Optional[List[str]] = None,
 ) -> Optional[ActivitySignal]:
@@ -197,6 +198,7 @@ def build_initiative_signal(
         jira_base_url: Base URL of the Jira instance.
         project_id: Optional project key for PART_OF relationship.
         reporter_person_id: Optional accountId for REPORTED_BY relationship.
+        assignee_person_id: Optional accountId for ASSIGNED_TO relationship.
         comments_data: Optional list of comment dicts, each with ``accountId``
             and ``timestamp`` keys. One COMMENTED_ON edge per comment.
         mention_account_ids: Optional list of @mentioned accountId strings.
@@ -238,6 +240,20 @@ def build_initiative_signal(
                         source=_SOURCE,
                         entity_type="Person",
                         id=reporter_person_id,
+                    ),
+                )
+            )
+
+        # ASSIGNED_TO → Person
+        if assignee_person_id:
+            rels.append(
+                Relationship(
+                    type="ASSIGNED_TO",
+                    direction=None,
+                    target=RelationshipTarget(
+                        source=_SOURCE,
+                        entity_type="Person",
+                        id=assignee_person_id,
                     ),
                 )
             )
@@ -304,6 +320,7 @@ def build_epic_signal(
     initiative_id: Optional[str] = None,
     project_id: Optional[str] = None,
     reporter_person_id: Optional[str] = None,
+    assignee_person_id: Optional[str] = None,
     team_id: Optional[str] = None,
     comments_data: Optional[List[Dict[str, Any]]] = None,
     mention_account_ids: Optional[List[str]] = None,
@@ -316,6 +333,7 @@ def build_epic_signal(
         initiative_id: Optional initiative key for PART_OF relationship.
         project_id: Optional project key for PART_OF (when no initiative).
         reporter_person_id: Optional accountId for REPORTED_BY relationship.
+        assignee_person_id: Optional accountId for ASSIGNED_TO relationship.
         team_id: Optional team id for TEAM relationship.
         comments_data: Optional list of comment dicts, each with ``accountId``
             and ``timestamp`` keys. One COMMENTED_ON edge per comment.
@@ -372,6 +390,21 @@ def build_epic_signal(
                     ),
                 )
             )
+
+        # ASSIGNED_TO → Person
+        if assignee_person_id:
+            rels.append(
+                Relationship(
+                    type="ASSIGNED_TO",
+                    direction=None,
+                    target=RelationshipTarget(
+                        source=_SOURCE,
+                        entity_type="Person",
+                        id=assignee_person_id,
+                    ),
+                )
+            )
+
         if team_id:
             rels.append(
                 Relationship(
@@ -957,6 +990,18 @@ async def publish_signals(
                         seen_persons.add(reporter_person_id)
                         await _pub(build_person_signal(user_data, jira_base_url))
 
+        # Person: assignee
+        assignee_person_id: Optional[str] = None
+        assignee_raw = i_raw.get("fields", {}).get("assignee")
+        if assignee_raw and isinstance(assignee_raw, dict):
+            user_data = map_jira_user(assignee_raw)
+            assignee_person_id = user_data.get("account_id", "")
+            if assignee_person_id:
+                async with _seen_lock:
+                    if assignee_person_id not in seen_persons:
+                        seen_persons.add(assignee_person_id)
+                        await _pub(build_person_signal(user_data, jira_base_url))
+
         logger.debug(
             "Processing initiative '%s': '%s'",
             i_data.get("key"), str(i_data.get("summary", ""))[:60],
@@ -966,6 +1011,7 @@ async def publish_signals(
             "kwargs": {
                 "project_id": project_id,
                 "reporter_person_id": reporter_person_id,
+                "assignee_person_id": assignee_person_id,
             },
         })
 
@@ -1011,6 +1057,18 @@ async def publish_signals(
                         seen_persons.add(reporter_person_id)
                         await _pub(build_person_signal(user_data, jira_base_url))
 
+        # Person: assignee
+        assignee_person_id: Optional[str] = None
+        assignee_raw = e_raw.get("fields", {}).get("assignee")
+        if assignee_raw and isinstance(assignee_raw, dict):
+            user_data = map_jira_user(assignee_raw)
+            assignee_person_id = user_data.get("account_id", "")
+            if assignee_person_id:
+                async with _seen_lock:
+                    if assignee_person_id not in seen_persons:
+                        seen_persons.add(assignee_person_id)
+                        await _pub(build_person_signal(user_data, jira_base_url))
+
         team_id = f"jira_team_{e_data['team_value']}" if e_data.get("team_value") else None
 
         logger.debug(
@@ -1023,6 +1081,7 @@ async def publish_signals(
                 "initiative_id": initiative_id,
                 "project_id": project_id,
                 "reporter_person_id": reporter_person_id,
+                "assignee_person_id": assignee_person_id,
                 "team_id": team_id,
             },
         })

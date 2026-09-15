@@ -14,6 +14,7 @@ class TestConnectionResponse(BaseModel):
 
 class ConnectorConfigUpdateRequest(BaseModel):
     config: Optional[Dict[str, Any]] = None
+    scan_interval_hours: Optional[int] = Field(None, ge=1)
 
 
 class ConfigItemStatusUpdate(BaseModel):
@@ -87,6 +88,7 @@ class ConnectorStatus(BaseModel):
     config: Optional[Dict[str, Any]] = None
     last_tested_at: Optional[datetime] = None
     last_test_error: Optional[str] = None
+    scan_interval_hours: Optional[int] = None
 
     model_config = ConfigDict(from_attributes=True)
 

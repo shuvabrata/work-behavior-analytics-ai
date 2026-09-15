@@ -79,7 +79,13 @@ async def update_connector_config(
     db: AsyncSession = Depends(get_async_db),
 ):
     try:
-        return await service.update_connector_config(db, connector_type, payload.config)
+        return await service.update_connector_config(
+            db,
+            connector_type,
+            payload.config,
+            scan_interval_hours=payload.scan_interval_hours,
+            scan_interval_hours_set="scan_interval_hours" in payload.model_fields_set,
+        )
     except ValueError as exc:
         raise HTTPException(status_code=_status_for_connector_error(exc), detail=str(exc)) from exc
 

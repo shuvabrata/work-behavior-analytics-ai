@@ -95,12 +95,12 @@ Every SCHEDULER_TICK_MINUTES minutes:
 **→ Gate: Phase 2 tests must pass before starting Phase 3** ✅ PASSED (app starts cleanly, scheduler log confirmed)
 
 ### Phase 3 — API Layer
-- [ ] Add `scan_interval_hours` to `ConnectorStatus` response model
-- [ ] Add `scan_interval_hours` to `ConnectorConfigUpdateRequest`
-- [ ] Persist `scan_interval_hours` in `update_connector_config()` service
-- [ ] Return `scan_interval_hours` in connector-to-response mapping
+- [x] Add `scan_interval_hours` to `ConnectorStatus` response model
+- [x] Add `scan_interval_hours` to `ConnectorConfigUpdateRequest`
+- [x] Persist `scan_interval_hours` in `update_connector_config()` service
+- [x] Return `scan_interval_hours` in connector-to-response mapping
 
-**→ Gate: Phase 3 tests must pass before starting Phase 4**
+**→ Gate: Phase 3 tests must pass before starting Phase 4** ✅ PASSED
 
 ### Phase 4 — UI
 - [ ] Add "Auto-Scan Interval" input to Connector Settings section in `layout.py`

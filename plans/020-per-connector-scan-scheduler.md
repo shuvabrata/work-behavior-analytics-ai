@@ -21,7 +21,7 @@ when triggered manually — either via `docker compose run` or by posting to
 automatically.
 
 This plan adds a lightweight asyncio scheduler that runs inside the existing FastAPI
-app process. At configurable intervals, it checks each enabled connector and fires a
+app process. At configurable intervals, it checks each connector with a scan interval and fires a
 `scan` command via the existing `create_and_publish_command()` path — exactly as a
 manual trigger would. No new containers. No new message queues.
 
@@ -42,7 +42,7 @@ All decisions reached via the grill-me interview process (2026-09-14):
 | 7 | API surface | Extend `ConnectorStatus` GET + existing `PATCH /connectors/{type}` | No new routes; GET returns what it owns |
 | 8 | Non-schedulable connectors | No special logic | Registry lookup naturally skips them |
 | 9 | GET computed fields | Only `scan_interval_hours` returned | UI cross-references commands API for history |
-| 10 | `enabled` flag | Scheduler skips `enabled=False` connectors | Disabling stops all automated activity |
+| 10 | `enabled` flag | **Removed** — scheduler ignores `enabled`; keys only off `scan_interval_hours` | The `enabled` flag is unused in practice; all connectors default to `enabled=False` yet still need scheduled scans |
 | 11 | Multi-instance safety | `scheduler_lease` table — distributed leader election via Postgres `UPDATE` | Resilient; automatic failover when leader dies |
 
 ---
@@ -62,7 +62,7 @@ Every SCHEDULER_TICK_MINUTES minutes:
 
 2. SELECT connector_type, scan_interval_hours
      FROM connectors
-    WHERE enabled = TRUE AND scan_interval_hours IS NOT NULL
+    WHERE scan_interval_hours IS NOT NULL
 
 3. For each connector:
    a. producer_container = CONNECTOR_REGISTRY[connector_type].get("producer_container")
@@ -103,9 +103,9 @@ Every SCHEDULER_TICK_MINUTES minutes:
 **→ Gate: Phase 3 tests must pass before starting Phase 4** ✅ PASSED
 
 ### Phase 4 — UI
-- [ ] Add "Auto-Scan Interval" input to Connector Settings section in `layout.py`
-- [ ] Populate input on connector detail load (callback)
-- [ ] Include `scan_interval_hours` in save callback payload
+- [x] Add "Auto-Scan Interval" input to Connector Settings section in `layout.py`
+- [x] Populate input on connector detail load (callback)
+- [x] Include `scan_interval_hours` in save callback payload
 
 **→ Gate: Phase 4 manual verification checklist before starting Phase 5**
 
@@ -266,7 +266,6 @@ async def _get_due_connectors(
     db: AsyncSession, now: datetime
 ) -> list[tuple[str, str]]:
     stmt = select(Connector).where(
-        Connector.enabled.is_(True),
         Connector.scan_interval_hours.isnot(None),
     )
     connectors = (await db.execute(stmt)).scalars().all()
@@ -381,7 +380,7 @@ Tests to write in `tests/app/test_scheduler.py`:
 | `test_due_no_history` | No scan history → connector is due |
 | `test_due_interval_elapsed` | Last scan > interval ago → due |
 | `test_due_interval_not_elapsed` | Last scan < interval ago → not due |
-| `test_due_skips_disabled` | `enabled=False` → not due |
+| `test_disabled_connector_still_due` | `enabled=False` with interval → still due (flag ignored) |
 | `test_due_skips_no_producer` | No `producer_container` → not due |
 | `test_due_skips_null_interval` | `scan_interval_hours=NULL` → not due |
 

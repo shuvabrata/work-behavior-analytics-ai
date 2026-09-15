@@ -169,17 +169,25 @@ class TestGetDueConnectors:
         assert due == []
 
     @pytest.mark.asyncio
-    async def test_disabled_connector_skipped(self, mock_db):
-        """enabled=False connectors are filtered by the SQL WHERE clause.
+    async def test_disabled_connector_still_due(self, mock_db):
+        """enabled=False does NOT prevent a scan — the enabled flag is ignored.
 
-        We simulate this by returning an empty list from the DB query
-        (the WHERE enabled=TRUE filter would exclude disabled connectors).
+        The scheduler only keys off ``scan_interval_hours``. A disabled
+        connector with an interval and no scan history is still due.
         """
-        mock_db.execute.return_value = _execute_result(scalars=[])
+        connector = _make_connector(
+            connector_type="github",
+            scan_interval_hours=24,
+            enabled=False,
+        )
+        mock_db.execute.side_effect = [
+            _execute_result(scalars=[connector]),
+            _execute_result(scalar_one_or_none=None),  # no scan history
+        ]
         now = _utc_now()
         with patch("app.scheduler.CONNECTOR_REGISTRY", REGISTRY_WITH_PRODUCER):
             due = await _get_due_connectors(mock_db, now)
-        assert due == []
+        assert due == [("github", "github-producer")]
 
     @pytest.mark.asyncio
     async def test_no_producer_container_skipped(self, mock_db):

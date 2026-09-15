@@ -146,7 +146,51 @@ def get_detail_layout(connector_type: str):
             )
         )
 
-    # 4. Repository Cards — only for connectors that support items
+    # 4. Connector Settings — connector-level settings, collapsed by default
+    sections.append(
+        _section_container(
+            html.Div(
+                [
+                    html.Div(
+                        [
+                            html.I(className="fas fa-cog me-1", style={"fontSize": "11px"}),
+                            "Connector Settings",
+                        ],
+                        id="connector-settings-collapse-toggle",
+                        className="collapse-toggle-subtle",
+                        style={
+                            "fontSize": "11px",
+                            "fontWeight": FONT_WEIGHT_SEMIBOLD,
+                            "color": COLOR_GRAY_DARK,
+                            "marginBottom": SPACING_XSMALL,
+                            "cursor": "pointer",
+                            "userSelect": "none",
+                        },
+                    ),
+                    dbc.Collapse(
+                        id="connector-settings-collapse",
+                        is_open=False,
+                        children=[
+                            _render_connector_config(form_spec, connector_type),
+                            *(
+                                [_render_scan_interval_input(connector_type)]
+                                if producer_container else []
+                            ),
+                            dbc.Button(
+                                "Save Configuration",
+                                id={"type": "connector-save", "connector_type": connector_type},
+                                color="primary",
+                                size="sm",
+                                className="mt-2",
+                            ),
+                        ],
+                    ),
+                ],
+            )
+        )
+    )
+
+    # 5. Repository Cards — only for connectors that support items
     if supports_items:
         sections.append(
             _section_container(
@@ -169,25 +213,6 @@ def get_detail_layout(connector_type: str):
     else:
         # Hidden placeholder required for shared render_items_list callback
         sections.append(html.Div(id="connector-items-list", style={"display": "none"}))
-
-    # 5. Global Configuration — connector-level settings
-    sections.append(
-        _section_container(
-            html.Div(
-                [
-                    _section_title("Connector Settings"),
-                    _render_connector_config(form_spec, connector_type),
-                    dbc.Button(
-                        "Save Configuration",
-                        id={"type": "connector-save", "connector_type": connector_type},
-                        color="primary",
-                        size="sm",
-                        className="mt-2",
-                    ),
-                ],
-            )
-        )
-    )
 
     return html.Div(
         [
@@ -352,6 +377,81 @@ def _section_title(text: str) -> html.Div:
             "textTransform": "uppercase",
             "letterSpacing": "0.5px",
         },
+    )
+
+
+def _render_scan_interval_input(connector_type: str) -> html.Div:
+    """Render the Auto-Scan Interval number input for producer-backed connectors.
+
+    The value is stored in ``connectors.scan_interval_hours``.  A blank/empty
+    value means no automatic schedule (manual scans only).  Any value >= 1
+    enables the scheduler for this connector.
+    """
+    tooltip_id = f"tooltip-target-{connector_type}-scan-interval"
+    return html.Div(
+        [
+            html.Div(
+                [
+                    html.Span("AUTO-SCAN INTERVAL"),
+                    html.I(
+                        className="fas fa-info-circle",
+                        id=tooltip_id,
+                        style={"cursor": "help", "marginLeft": "6px", "color": COLOR_GRAY_MEDIUM},
+                    ),
+                    dbc.Tooltip(
+                        (
+                            "How often (in hours) the scheduler automatically triggers a scan for this "
+                            "connector. Leave blank to disable automatic scanning (manual only). "
+                            "The minimum value is 1 hour."
+                        ),
+                        target=tooltip_id,
+                        placement="top",
+                    ),
+                ],
+                style={
+                    "fontFamily": FONT_SANS,
+                    "fontSize": FONT_SIZE_SMALL,
+                    "color": COLOR_GRAY_MEDIUM,
+                    "marginTop": SPACING_SMALL,
+                    "marginBottom": SPACING_XSMALL,
+                    "letterSpacing": "0.5px",
+                    "display": "flex",
+                    "alignItems": "center",
+                },
+            ),
+            dbc.Row(
+                [
+                    dbc.Col(
+                        dbc.Input(
+                            id={
+                                "type": "connector-scan-interval",
+                                "connector_type": connector_type,
+                            },
+                            type="number",
+                            min=1,
+                            step=1,
+                            placeholder="e.g. 24  (blank = disabled)",
+                        ),
+                        md=4,
+                        xs=12,
+                    ),
+                    dbc.Col(
+                        html.Div(
+                            "hours between automated scans",
+                            style={
+                                "fontFamily": FONT_SANS,
+                                "fontSize": FONT_SIZE_SMALL,
+                                "color": COLOR_GRAY_MEDIUM,
+                                "lineHeight": "38px",
+                            },
+                        ),
+                        md=8,
+                        xs=12,
+                    ),
+                ],
+                className="g-2",
+            ),
+        ],
     )
 
 

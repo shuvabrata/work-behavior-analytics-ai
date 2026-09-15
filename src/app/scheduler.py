@@ -108,7 +108,6 @@ async def _get_due_connectors(
     skipped — no error, no log noise.
     """
     stmt = select(Connector).where(
-        Connector.enabled.is_(True),
         Connector.scan_interval_hours.isnot(None),
     )
     connectors = (await db.execute(stmt)).scalars().all()

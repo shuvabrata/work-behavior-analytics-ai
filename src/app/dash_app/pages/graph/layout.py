@@ -56,6 +56,8 @@ def create_graph_container():
         id="graph-cytoscape-container",
         style={"display": "none"},  # Hidden initially, then maintains consistent size after first query
         children=[
+            # Do not enable autoRefreshLayout=True. If the user has manually dragged nodes 
+            # into positions they like, add/remove nodes via filters can disturb that arrangement.
             cyto.Cytoscape(
                 id="graph-cytoscape",
                 elements=[],

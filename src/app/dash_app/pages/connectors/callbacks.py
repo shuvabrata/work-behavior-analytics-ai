@@ -241,6 +241,27 @@ def load_connector_detail(pathname: str):
 
 
 @callback(
+    Output({"type": "connector-scan-interval", "connector_type": ALL}, "value"),
+    Input("connector-detail-store", "data"),
+    State({"type": "connector-scan-interval", "connector_type": ALL}, "id"),
+    prevent_initial_call=True,
+)
+def populate_scan_interval(store: Dict[str, Any] | None, input_ids: List[Dict[str, Any]]):
+    """Populate the Auto-Scan Interval input from the loaded connector detail.
+
+    Only producer-backed connectors render a scan-interval input, so the
+    number of matched components (``input_ids``) varies per connector.  We
+    return one value per matched input to satisfy Dash's ALL output contract.
+    """
+    if not input_ids:
+        return []
+    if not store or store.get("status") != "ok":
+        return [None for _ in input_ids]
+    value = store.get("data", {}).get("scan_interval_hours")
+    return [value for _ in input_ids]
+
+
+@callback(
     Output("add-item-collapse", "is_open"),
     Input("add-item-collapse-toggle", "n_clicks"),
     State("add-item-collapse", "is_open"),
@@ -248,6 +269,19 @@ def load_connector_detail(pathname: str):
 )
 def toggle_add_item_collapse(n_clicks: int | None, is_open: bool) -> bool:
     """Toggle the Add New Repository collapsible section."""
+    if not n_clicks:
+        raise PreventUpdate
+    return not is_open
+
+
+@callback(
+    Output("connector-settings-collapse", "is_open"),
+    Input("connector-settings-collapse-toggle", "n_clicks"),
+    State("connector-settings-collapse", "is_open"),
+    prevent_initial_call=True,
+)
+def toggle_connector_settings_collapse(n_clicks: int | None, is_open: bool) -> bool:
+    """Toggle the Connector Settings collapsible section."""
     if not n_clicks:
         raise PreventUpdate
     return not is_open
@@ -1083,6 +1117,7 @@ def handle_cancel_scan(n_clicks: List[int | None], pathname: str | None):
     State({"type": "connector-save", "connector_type": ALL}, "id"),
     State({"type": "connector-field", "connector_type": ALL, "section": "connector", "field": ALL}, "id"),
     State({"type": "connector-field", "connector_type": ALL, "section": "connector", "field": ALL}, "value"),
+    State({"type": "connector-scan-interval", "connector_type": ALL}, "value"),
     prevent_initial_call=True,
 )
 def handle_connector_save(
@@ -1090,6 +1125,7 @@ def handle_connector_save(
     button_ids: List[Dict[str, Any]],
     field_ids: List[Dict[str, Any]],
     field_values: List[Any],
+    scan_interval_values: List[Any],
 ):
     triggered = callback_context.triggered_id
     if not isinstance(triggered, dict):
@@ -1097,11 +1133,24 @@ def handle_connector_save(
     connector_type = triggered.get("connector_type")
     payload_config = _build_payload(connector_type, "connector", field_ids, field_values)
 
+    payload: Dict[str, Any] = {"config": payload_config}
+    # Include scan_interval_hours only when the connector has a scan-interval
+    # input (i.e. it is producer-backed).  Blank/empty clears the schedule.
+    if scan_interval_values:
+        raw_interval = scan_interval_values[0]
+        if raw_interval in (None, ""):
+            payload["scan_interval_hours"] = None
+        else:
+            try:
+                payload["scan_interval_hours"] = int(raw_interval)
+            except (TypeError, ValueError):
+                payload["scan_interval_hours"] = None
+
     api_base = _get_api_base_url()
     try:
         response = requests.patch(
             f"{api_base}/api/v1/connectors/{connector_type}",
-            json={"config": payload_config},
+            json=payload,
             timeout=TIMEOUT_SECONDS,
         )
         response.raise_for_status()

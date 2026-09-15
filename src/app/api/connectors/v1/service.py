@@ -399,6 +399,7 @@ async def list_connectors(db: AsyncSession) -> List[Dict[str, Any]]:
                 "config": _normalize_connector_config(connector.connector_type, connector.config),
                 "last_tested_at": connector.last_tested_at,
                 "last_test_error": connector.last_test_error,
+                "scan_interval_hours": connector.scan_interval_hours,
             }
         )
     logger.debug(f"[list_connectors] Returning {len(results)} normalized connectors")
@@ -429,11 +430,16 @@ async def get_connector(
         ),
         "last_tested_at": connector.last_tested_at,
         "last_test_error": connector.last_test_error,
+        "scan_interval_hours": connector.scan_interval_hours,
     }
 
 
 async def update_connector_config(
-    db: AsyncSession, connector_type: str, config: Optional[Dict[str, Any]]
+    db: AsyncSession,
+    connector_type: str,
+    config: Optional[Dict[str, Any]],
+    scan_interval_hours: Optional[int] = None,
+    scan_interval_hours_set: bool = False,
 ) -> Dict[str, Any]:
     _validate_connector_type(connector_type)
     existing_connector = await query.get_connector(db, connector_type)
@@ -447,6 +453,15 @@ async def update_connector_config(
     connector = await query.update_connector_config(db, connector_type, prepared_config)
     if not connector:
         raise ValueError("Connector not found")
+
+    # Persist scan_interval_hours only when the caller explicitly included the
+    # field in the request (None means "clear the schedule"; field absent means
+    # "don't touch the schedule").
+    if scan_interval_hours_set:
+        connector.scan_interval_hours = scan_interval_hours
+        await db.commit()
+        await db.refresh(connector)
+
     return await get_connector(db, connector_type)
 
 

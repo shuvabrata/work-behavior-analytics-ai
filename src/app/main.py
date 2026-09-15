@@ -4,6 +4,8 @@ from contextlib import asynccontextmanager
 from uuid import uuid4
 
 from typing import AsyncGenerator, Callable, Awaitable
+
+from app.scheduler import scheduler_loop
 import aio_pika
 from fastapi import FastAPI, Request, Response
 from a2wsgi import WSGIMiddleware
@@ -115,9 +117,28 @@ async def lifespan(app_instance: FastAPI) -> AsyncGenerator[None, None]:
         _rabbitmq_connection = None
         listener_task = None
 
+    # 3. Start the scheduler loop.
+    _scheduler_instance_id = str(uuid4())
+    scheduler_task = asyncio.ensure_future(
+        scheduler_loop(_scheduler_instance_id, settings.SCHEDULER_TICK_MINUTES)
+    )
+    logger.info(
+        "[Startup] Scheduler started instance_id=%s tick_minutes=%d",
+        _scheduler_instance_id,
+        settings.SCHEDULER_TICK_MINUTES,
+    )
+
     yield  # ── Application runs here ────────────────────────────────────
 
     # ── Shutdown ─────────────────────────────────────────────────────────
+    # Stop the scheduler first so no new scans fire during shutdown.
+    scheduler_task.cancel()
+    try:
+        await scheduler_task
+    except asyncio.CancelledError:
+        pass
+    logger.info("[Shutdown] Scheduler stopped")
+
     if listener_task is not None:
         listener_task.cancel()
         try:

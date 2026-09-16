@@ -62,7 +62,9 @@ def _ensure_retry_settings() -> None:
         _backoff_cap = DEFAULT_BACKOFF_CAP
         _base_delay = DEFAULT_BASE_DELAY
 
-    logger.info("Resolved retry settings: budget=%s, backoff_cap=%s, base_delay=%s", _retry_budget, _backoff_cap, _base_delay)
+    logger.info(
+        f"Resolved retry settings: budget={_retry_budget}, backoff_cap={_backoff_cap}, base_delay={_base_delay}"
+    )
     
 
 
@@ -224,20 +226,15 @@ def retry_with_backoff(
             remaining = deadline - time.time()
             if remaining <= 0:
                 logger.warning(
-                    "Retry budget exhausted after %d attempts and %.0fs: %s Raising WbaRetryTimeoutError.",
-                    attempt,
-                    retry_budget,
-                    e,
+                    f"Retry budget exhausted after {attempt} attempts and {retry_budget:.0f}s: {e} Raising "
+                    f"WbaRetryTimeoutError."
                 )
                 raise WbaRetryTimeoutError(retry_budget, e) from e
 
             sleep_for = min(delay, backoff_cap, remaining)
             logger.info(
-                "Retryable error. Retrying in %.0fs... (attempt %d): %s. Time remaining: %.0fs",
-                sleep_for,
-                attempt,
-                e,
-                remaining
+                f"Retryable error. Retrying in {sleep_for:.0f}s... (attempt {attempt}): {e}. Time remaining: "
+                f"{remaining:.0f}s"
             )
             time.sleep(sleep_for)
             delay = min(delay * 2, backoff_cap)

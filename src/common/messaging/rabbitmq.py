@@ -141,9 +141,7 @@ class RabbitMQPublisher:
         )
         await exchange.publish(message, routing_key=f"{signal.source}.{signal.entity_type}")
         logger.debug(
-            "Published signal signal_id=%s routing_key=%s",
-            signal.signal_id,
-            f"{signal.source}.{signal.entity_type}",
+            f"Published signal signal_id={signal.signal_id} routing_key={f'{signal.source}.{signal.entity_type}'}"
         )
 
 
@@ -224,10 +222,6 @@ class RabbitMQConsumer:
             payload = json.loads(message.body)
             return ActivitySignal.model_validate(payload)
         except Exception as exc:  # noqa: BLE001
-            logger.error(
-                "Failed to parse ActivitySignal — routing to DLQ. error=%s body=%r",
-                exc,
-                message.body[:200],
-            )
+            logger.error(f"Failed to parse ActivitySignal — routing to DLQ. error={exc} body={message.body[:200]!r}")
             await message.nack(requeue=False)
             return None

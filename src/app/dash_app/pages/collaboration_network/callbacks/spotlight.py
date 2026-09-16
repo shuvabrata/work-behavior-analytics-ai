@@ -139,12 +139,7 @@ def update_collab_spotlight(query: str | None, elements: list | None):
     node_count = len(node_elements)
     match_count = len(match_wba_ids)
 
-    logger.info(
-        "[Collab Spotlight] query=%r  node_count=%d  match_count=%d",
-        q,
-        node_count,
-        match_count,
-    )
+    logger.info(f"[Collab Spotlight] query={q!r}  node_count={node_count}  match_count={match_count}")
 
     updated = _apply_spotlight_classes(elements, match_wba_ids)
     count_text = f"{match_count} of {node_count} nodes match" if node_count > 0 else ""

@@ -195,18 +195,13 @@ async def sync_github_mcp_env_status(db: AsyncSession) -> None:
     new_status = _github_mcp_env_status()
 
     if connector.status == new_status:
-        logger.debug(
-            "[github_mcp] Status already '%s' — no change needed", new_status
-        )
+        logger.debug(f"[github_mcp] Status already '{new_status}' — no change needed")
         return
 
     await query.update_connector_status(db, "github_mcp", status=new_status)
     logger.info(
-        "[github_mcp] Status synced from env: enabled=%s server_url_set=%s token_set=%s → %s",
-        bool(settings.GITHUB_MCP_ENABLED),
-        bool(settings.GITHUB_MCP_SERVER_URL),
-        bool(settings.GITHUB_MCP_TOKEN),
-        new_status,
+        f"[github_mcp] Status synced from env: enabled={bool(settings.GITHUB_MCP_ENABLED)} server_url_set="
+        f"{bool(settings.GITHUB_MCP_SERVER_URL)} token_set={bool(settings.GITHUB_MCP_TOKEN)} → {new_status}"
     )
 
 
@@ -278,7 +273,7 @@ def _validate_atlassian_mcp_config(
             "Server URL is required when Atlassian MCP is enabled. "
             "Use the Atlassian cloud endpoint: https://mcp.atlassian.com/v1/mcp"
         )
-        logger.error("[atlassian_mcp] Validation failed: %s", msg)
+        logger.error(f"[atlassian_mcp] Validation failed: {msg}")
         raise ValueError(msg)
 
     token = data.get("token")
@@ -293,7 +288,7 @@ def _validate_atlassian_mcp_config(
             "API token is required when Atlassian MCP is enabled. "
             "Generate a Rovo MCP scoped token at https://id.atlassian.com/manage-profile/security/api-tokens"
         )
-        logger.error("[atlassian_mcp] Validation failed: %s", msg)
+        logger.error(f"[atlassian_mcp] Validation failed: {msg}")
         raise ValueError(msg)
 
 
@@ -622,14 +617,11 @@ async def test_connector(
     # service -> tool_executor -> atlassian_config_loader -> service (lazy).
     from app.ai_agent.mcp_integration.tool_executor import test_mcp_connection
 
-    logger.debug("[%s] Running Test Connection", connector_type)
+    logger.debug(f"[{connector_type}] Running Test Connection")
     result = await anyio.to_thread.run_sync(test_mcp_connection, connector_type)
     logger.debug(
-        "[%s] Test Connection finished status=%s connected=%s tool_count=%s",
-        connector_type,
-        result.get("status"),
-        result.get("connected"),
-        result.get("tool_count"),
+        f"[{connector_type}] Test Connection finished status={result.get('status')} connected="
+        f"{result.get('connected')} tool_count={result.get('tool_count')}"
     )
 
     status = result.get("status")

@@ -107,9 +107,9 @@ async def create_and_publish_command(
         ) as pub:
             await pub.publish(envelope)
         cmd.status = "accepted"
-        logger.info("Command published command_id=%s target=%s", command_id, request.target)
+        logger.info(f"Command published command_id={command_id} target={request.target}")
     except Exception as exc:
-        logger.error("Failed to publish command command_id=%s: %s", command_id, exc, exc_info=True)
+        logger.error(f"Failed to publish command command_id={command_id}: {exc}", exc_info=True)
         cmd.status = "failed"
         cmd.error_message = "Failed to publish to RabbitMQ"
 

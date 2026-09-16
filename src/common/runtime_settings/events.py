@@ -91,16 +91,11 @@ async def publish_settings_changed(
             ),
             routing_key="",  # fanout ignores routing key
         )
-        logger.info(
-            "Published settings.changed event: keys=%s",
-            sorted(changed_keys),
-        )
+        logger.info(f"Published settings.changed event: keys={sorted(changed_keys)}")
         return True
     except Exception:  # pylint: disable=broad-except
         logger.warning(
-            "Failed to publish settings.changed event (DB change preserved): "
-            "keys=%s",
-            sorted(changed_keys),
+            f"Failed to publish settings.changed event (DB change preserved): keys={sorted(changed_keys)}",
             exc_info=True,
         )
         return False
@@ -147,10 +142,7 @@ async def listen_for_settings_changed(
     )
     await queue.bind(exchange, routing_key="")
 
-    logger.info(
-        "Listening for runtime config events on queue %s",
-        queue_name,
-    )
+    logger.info(f"Listening for runtime config events on queue {queue_name}")
 
     async with queue.iterator() as queue_iter:
         async for message in queue_iter:
@@ -159,17 +151,11 @@ async def listen_for_settings_changed(
                     payload = json.loads(message.body.decode())
                     event_type = payload.get("event_type")
                     if event_type != "settings.changed":
-                        logger.debug(
-                            "Ignoring unknown runtime config event: %s",
-                            event_type,
-                        )
+                        logger.debug(f"Ignoring unknown runtime config event: {event_type}")
                         continue
 
                     changed_keys: list[str] = payload.get("changed_keys", [])
-                    logger.info(
-                        "Received settings.changed event: keys=%s",
-                        changed_keys,
-                    )
+                    logger.info(f"Received settings.changed event: keys={changed_keys}")
                     await on_event(changed_keys)
                 except Exception:  # pylint: disable=broad-except
                     logger.warning(

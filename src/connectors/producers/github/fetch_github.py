@@ -67,17 +67,14 @@ def fetch_commits(repo: Any, since_date: datetime) -> List[Any]:
             return list(repo.get_commits(sha=branch_sha, since=since_date))
         except GithubException as exc:
             if exc.status == 409:
-                logger.info("Repository '%s' is empty, skipping commits.", getattr(repo, "full_name", "?"))
+                logger.info(f"Repository '{getattr(repo, 'full_name', '?')}' is empty, skipping commits.")
                 return []
             raise
 
     commits = retry_with_backoff(_get_commits)
     logger.debug(
-        "[fetch_commits] repo=%s branch=%s since=%s fetched=%d commits",
-        getattr(repo, "full_name", "?"),
-        branch_sha,
-        since_date.date(),
-        len(commits),
+        f"[fetch_commits] repo={getattr(repo, 'full_name', '?')} branch={branch_sha} since={since_date.date()} "
+        f"fetched={len(commits)} commits"
     )
     return commits
 
@@ -92,11 +89,7 @@ def fetch_commit_files(commit: Any) -> List[Any]:
         List of PyGithub File objects.
     """
     files = retry_with_backoff(lambda: list(commit.files))
-    logger.debug(
-        "[fetch_commit_files] sha=%s fetched=%d files",
-        getattr(commit, "sha", "?")[:12],
-        len(files),
-    )
+    logger.debug(f"[fetch_commit_files] sha={getattr(commit, 'sha', '?')[:12]} fetched={len(files)} files")
     return files
 
 
@@ -161,11 +154,8 @@ def fetch_pull_requests_search(
             if issue.pull_request:
                 converted.append(issue.as_pull_request())
         logger.debug(
-            "[fetch_pull_requests_search] repo=%s since=%s raw_issues=%d converted_prs=%d",
-            repo_full_name,
-            since_date.date(),
-            len(raw),
-            len(converted),
+            f"[fetch_pull_requests_search] repo={repo_full_name} since={since_date.date()} raw_issues={len(raw)} "
+            f"converted_prs={len(converted)}"
         )
         return converted
 
@@ -308,7 +298,7 @@ def fetch_issues(
         f" updated:>={since_date.date()}"
     )
 
-    logger.info("Fetching issues for '%s' since %s ...", repo_full_name, since_date.date())
+    logger.info(f"Fetching issues for '{repo_full_name}' since {since_date.date()} ...")
 
     def _search_and_filter() -> List[Any]:
         # search_issues returns partially-loaded Issue objects. Accessing
@@ -322,14 +312,13 @@ def fetch_issues(
             # Accessing .pull_request triggers a lazy GET — inside retry scope.
             is_pr = bool(getattr(issue, "pull_request", None))
             logger.debug(
-                "Issue #%d: pull_request=%s, state=%s",
-                getattr(issue, "number", "?"),
-                is_pr,
-                getattr(issue, "state", "?"),
+                f"Issue #{getattr(issue, 'number', '?')}: pull_request={is_pr}, state={getattr(issue, 'state', '?')}"
             )
             if not is_pr:
                 filtered.append(issue)
-        logger.info("Found %d total issues (filtered %d PRs) for '%s'", len(filtered), len(raw) - len(filtered), repo_full_name)
+        logger.info(
+            f"Found {len(filtered)} total issues (filtered {len(raw) - len(filtered)} PRs) for '{repo_full_name}'"
+        )
         return filtered
 
     return retry_with_backoff(_search_and_filter)
@@ -355,13 +344,9 @@ def fetch_issues_direct(repo_obj: Any, since_date: Optional[datetime] = None) ->
     """
     full_name = getattr(repo_obj, "full_name", "?")
     if since_date is not None:
-        logger.info(
-            "Fetching issues directly for '%s' since %s (fallback)...",
-            full_name,
-            since_date.date(),
-        )
+        logger.info(f"Fetching issues directly for '{full_name}' since {since_date.date()} (fallback)...")
     else:
-        logger.info("Fetching issues directly for '%s' (fallback, full sync)...", full_name)
+        logger.info(f"Fetching issues directly for '{full_name}' (fallback, full sync)...")
 
     # Materialize inside the retry: get_issues returns a lazy PaginatedList
     # whose network I/O happens on iteration, so the retry must wrap the list().
@@ -379,7 +364,7 @@ def fetch_issues_direct(repo_obj: Any, since_date: Optional[datetime] = None) ->
     )
 
     filtered = [issue for issue in raw if not getattr(issue, "pull_request", None)]
-    logger.info("Found %d issues (direct) for '%s'", len(filtered), full_name)
+    logger.info(f"Found {len(filtered)} issues (direct) for '{full_name}'")
     return filtered
 
 
@@ -393,9 +378,9 @@ def fetch_issue_comments(issue: Any) -> List[Any]:
         List of PyGithub IssueComment objects.
     """
     issue_number = getattr(issue, "number", "?")
-    logger.debug("Fetching comments for issue #%s ...", issue_number)
+    logger.debug(f"Fetching comments for issue #{issue_number} ...")
     comments = retry_with_backoff(lambda: list(issue.get_comments()))
-    logger.debug("Fetched %d comments for issue #%s", len(comments), issue_number)
+    logger.debug(f"Fetched {len(comments)} comments for issue #{issue_number}")
     return comments
 
 
@@ -418,19 +403,14 @@ def fetch_repo_teams(repo: Any) -> List[Any]:
         # sees an empty list as success). Re-raise so the config-level handler
         # skips this repo without advancing the cursor.
         logger.debug(
-            "fetch_repo_teams: WbaRetryTimeoutError for '%s' after %.0fs — re-raising "
-            "so repo is skipped without cursor advance: %s",
-            getattr(repo, "full_name", "?"),
-            exc.timeout,
-            exc,
+            f"fetch_repo_teams: WbaRetryTimeoutError for '{getattr(repo, 'full_name', '?')}' after {exc.timeout:.0f}s "
+            f"— re-raising so repo is skipped without cursor advance: {exc}"
         )
         raise
     except Exception as exc:
         logger.debug(
-            "fetch_repo_teams: could not fetch teams for '%s' type=%s: %s",
-            getattr(repo, "full_name", "?"),
-            type(exc).__name__,
-            exc,
+            f"fetch_repo_teams: could not fetch teams for '{getattr(repo, 'full_name', '?')}' type="
+            f"{type(exc).__name__}: {exc}"
         )
         return []
 
@@ -454,19 +434,14 @@ def fetch_repo_collaborators(repo: Any) -> List[Any]:
         # Re-raise so the config-level handler skips this repo without
         # advancing the cursor.
         logger.debug(
-            "fetch_repo_collaborators: WbaRetryTimeoutError for '%s' after %.0fs — "
-            "re-raising so repo is skipped without cursor advance: %s",
-            getattr(repo, "full_name", "?"),
-            exc.timeout,
-            exc,
+            f"fetch_repo_collaborators: WbaRetryTimeoutError for '{getattr(repo, 'full_name', '?')}' after "
+            f"{exc.timeout:.0f}s — re-raising so repo is skipped without cursor advance: {exc}"
         )
         raise
     except Exception as exc:
         logger.debug(
-            "fetch_repo_collaborators: could not fetch collaborators for '%s' type=%s: %s",
-            getattr(repo, "full_name", "?"),
-            type(exc).__name__,
-            exc,
+            f"fetch_repo_collaborators: could not fetch collaborators for '{getattr(repo, 'full_name', '?')}' type="
+            f"{type(exc).__name__}: {exc}"
         )
         return []
 
@@ -522,11 +497,11 @@ def resolve_issues_since_date(last_synced_at: Optional[datetime]) -> datetime:
     """
     if last_synced_at:
         resolved = last_synced_at if last_synced_at.tzinfo else last_synced_at.replace(tzinfo=timezone.utc)
-        logger.info("Issues incremental sync: using cursor %s", resolved.isoformat())
+        logger.info(f"Issues incremental sync: using cursor {resolved.isoformat()}")
         return resolved
     issue_days_limit = _resolve_issue_days_limit()
     resolved = datetime.now(timezone.utc) - timedelta(days=issue_days_limit)
-    logger.info("Issues first sync: using %d-day lookback window (since %s)", issue_days_limit, resolved.date())
+    logger.info(f"Issues first sync: using {issue_days_limit}-day lookback window (since {resolved.date()})")
     return resolved
 
 

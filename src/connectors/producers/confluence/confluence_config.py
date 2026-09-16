@@ -19,7 +19,7 @@ def load_config_from_server() -> Dict[str, Any]:
     config_url = f"{api_server.rstrip('/')}/api/v1/connectors/confluence/configs"
     params = {"include_secrets": "true"}
 
-    logger.info("Fetching Confluence configuration from %s", config_url)
+    logger.info(f"Fetching Confluence configuration from {config_url}")
     try:
         response = requests.get(config_url, params=params, timeout=10)
         response.raise_for_status()
@@ -39,10 +39,10 @@ def load_config_from_server() -> Dict[str, Any]:
                 }
             )
 
-        logger.info("Loaded %d Confluence configs from server", len(transformed_configs))
+        logger.info(f"Loaded {len(transformed_configs)} Confluence configs from server")
         return {"account": transformed_configs}
     except requests.exceptions.RequestException as exc:
-        logger.error("Failed to fetch Confluence configuration: %s", exc)
+        logger.error(f"Failed to fetch Confluence configuration: {exc}")
         raise
 
 
@@ -57,10 +57,10 @@ def load_config_from_file() -> Dict[str, Any]:
             f"Could not find .config.json file in {Path(__file__).parent} or its parent directories."
         )
 
-    logger.info("Loading Confluence configuration from %s", config_path)
+    logger.info(f"Loading Confluence configuration from {config_path}")
     with open(config_path, "r", encoding="utf-8") as f:
         config = cast(Dict[str, Any], json.load(f))
-    logger.debug("Loaded %d Confluence configs from file", len(config.get("account", [])))
+    logger.debug(f"Loaded {len(config.get('account', []))} Confluence configs from file")
     return config
 
 
@@ -68,7 +68,7 @@ def create_confluence_connection(config: Dict[str, Any]) -> Confluence:
     """Create and validate an authenticated Confluence connection."""
     account = config["account"][0]
 
-    logger.info("Creating Confluence connection for url=%s", account["url"])
+    logger.info(f"Creating Confluence connection for url={account['url']}")
     confluence = Confluence(
         url=account["url"],
         username=account["email"],
@@ -77,7 +77,7 @@ def create_confluence_connection(config: Dict[str, Any]) -> Confluence:
     )
 
     # Validate credentials with a lightweight read.
-    logger.info("Validating Confluence credentials for url=%s", account["url"])
+    logger.info(f"Validating Confluence credentials for url={account['url']}")
     confluence.get_all_spaces(start=0, limit=1)
-    logger.info("Successfully authenticated to Confluence instance %s", account["url"])
+    logger.info(f"Successfully authenticated to Confluence instance {account['url']}")
     return confluence

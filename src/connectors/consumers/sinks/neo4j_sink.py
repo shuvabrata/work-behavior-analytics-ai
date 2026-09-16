@@ -116,12 +116,7 @@ def _to_db_relationships(
         target = rel.target
 
         if not (target.id or target.email or target.url):
-            logger.warning(
-                "Skipping relationship %s from %s/%s: target has no identifier",
-                rel.type,
-                from_type,
-                from_id,
-            )
+            logger.warning(f"Skipping relationship {rel.type} from {from_type}/{from_id}: target has no identifier")
             continue
 
         # Resolve to_id using priority order
@@ -186,10 +181,7 @@ def _to_db_relationships(
 
         if to_id is None:
             logger.warning(
-                "Skipping relationship %s from %s/%s: target identifier could not be resolved",
-                rel.type,
-                from_type,
-                from_id,
+                f"Skipping relationship {rel.type} from {from_type}/{from_id}: target identifier could not be resolved"
             )
             continue
 
@@ -287,10 +279,8 @@ def _rehome_person_stub(session: Session, stale_person_id: str, canonical_person
         stale_id=stale_person_id,
     )
     logger.info(
-        "Rehomed stale Person stub stale_id=%s canonical_id=%s relationships_migrated=%s",
-        stale_person_id,
-        canonical_person_id,
-        migrated,
+        f"Rehomed stale Person stub stale_id={stale_person_id} canonical_id={canonical_person_id} "
+        f"relationships_migrated={migrated}"
     )
 
 
@@ -458,11 +448,8 @@ def _handle_person(
                 signal_node_id = wba_node_id(signal)
                 if person_id != signal_node_id:
                     logger.info(
-                        "Deduplicated Person signal source=%s signal_id=%s signal_node_id=%s canonical_id=%s",
-                        signal.source,
-                        signal.id,
-                        signal_node_id,
-                        person_id,
+                        f"Deduplicated Person signal source={signal.source} signal_id={signal.id} signal_node_id="
+                        f"{signal_node_id} canonical_id={person_id}"
                     )
                     _rehome_person_stub(session, signal_node_id, person_id)
                 identity_id = wba_format("github", "IdentityMapping", login)
@@ -504,11 +491,8 @@ def _handle_person(
                 signal_node_id = wba_node_id(signal)
                 if person_id != signal_node_id:
                     logger.info(
-                        "Deduplicated Person signal source=%s signal_id=%s signal_node_id=%s canonical_id=%s",
-                        signal.source,
-                        signal.id,
-                        signal_node_id,
-                        person_id,
+                        f"Deduplicated Person signal source={signal.source} signal_id={signal.id} signal_node_id="
+                        f"{signal_node_id} canonical_id={person_id}"
                     )
                     _rehome_person_stub(session, signal_node_id, person_id)
                 identity_id = wba_format("jira", "IdentityMapping", account_id)
@@ -547,11 +531,8 @@ def _handle_person(
                 signal_node_id = wba_node_id(signal)
                 if person_id != signal_node_id:
                     logger.info(
-                        "Deduplicated Person signal source=%s signal_id=%s signal_node_id=%s canonical_id=%s",
-                        signal.source,
-                        signal.id,
-                        signal_node_id,
-                        person_id,
+                        f"Deduplicated Person signal source={signal.source} signal_id={signal.id} signal_node_id="
+                        f"{signal_node_id} canonical_id={person_id}"
                     )
                     _rehome_person_stub(session, signal_node_id, person_id)
                 identity_id = wba_format("confluence", "IdentityMapping", account_id)
@@ -670,8 +651,9 @@ def _handle_sprint(session: Session, signal: ActivitySignal) -> None:
 
 
 def _handle_issue(session: Session, signal: ActivitySignal) -> None:
-    logger.debug("Handling Issue signal: id=%s, source=%s, entity_type=%s",
-                 wba_node_id(signal), signal.source, signal.entity_type)
+    logger.debug(
+        f"Handling Issue signal: id={wba_node_id(signal)}, source={signal.source}, entity_type={signal.entity_type}"
+    )
     attrs = signal.attributes.model_dump()
     issue = Issue(
         id=wba_node_id(signal),
@@ -780,11 +762,7 @@ def upsert_signal(
     else:
         handler = _HANDLERS.get(entity_type)
         if handler is None:
-            logger.warning(
-                "No handler for entity_type=%s signal_id=%s — skipping",
-                entity_type,
-                signal.signal_id,
-            )
+            logger.warning(f"No handler for entity_type={entity_type} signal_id={signal.signal_id} — skipping")
             return canonical_wba_id
         handler(session, signal)
 
@@ -792,10 +770,7 @@ def upsert_signal(
         person_cache.flush_identity_mappings(session)
 
     logger.info(
-        "Upserted signal_id=%s entity_type=%s id=%s canonical_wba_id=%s",
-        signal.signal_id,
-        entity_type,
-        signal.id,
-        canonical_wba_id,
+        f"Upserted signal_id={signal.signal_id} entity_type={entity_type} id={signal.id} canonical_wba_id="
+        f"{canonical_wba_id}"
     )
     return canonical_wba_id

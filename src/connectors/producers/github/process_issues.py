@@ -50,10 +50,7 @@ def _resolve_issue_fetch_mode() -> str:
     """
     mode = os.getenv("ISSUE_FETCH_MODE", "search").strip().lower()
     if mode not in ("search", "direct"):
-        logger.warning(
-            "Unknown ISSUE_FETCH_MODE=%r — defaulting to 'search'",
-            mode,
-        )
+        logger.warning(f"Unknown ISSUE_FETCH_MODE={mode!r} — defaulting to 'search'")
         return "search"
     return mode
 
@@ -85,40 +82,33 @@ async def process_issues(
     """
     issue_since = resolve_issues_since_date(last_synced_at)
     fetch_mode = _resolve_issue_fetch_mode()
-    logger.info(
-        "Fetching issues for '%s' (owner=%s, mode=%s)...",
-        full_name,
-        repo_owner,
-        fetch_mode,
-    )
+    logger.info(f"Fetching issues for '{full_name}' (owner={repo_owner}, mode={fetch_mode})...")
 
     # Fetch issues using the explicitly configured strategy. No automatic
     # fallback between the two implementations — the mode is fixed per scan so
     # published counts stay consistent regardless of transient network errors.
     issues_raw: List[Any] = []
     if fetch_mode == "direct":
-        logger.info("Using direct issues fetch for '%s' (ISSUE_FETCH_MODE=direct)", full_name)
+        logger.info(f"Using direct issues fetch for '{full_name}' (ISSUE_FETCH_MODE=direct)")
         try:
             issues_raw = list(
                 await asyncio.to_thread(fetch_issues_direct, repo, issue_since)
             )
         except WbaRetryTimeoutError:
             logger.debug(
-                "[process_issues] WbaRetryTimeoutError propagating for '%s' (direct fetch) — "
-                "repo will be skipped without cursor advance",
-                full_name,
+                f"[process_issues] WbaRetryTimeoutError propagating for '{full_name}' (direct fetch) — repo will be "
+                f"skipped without cursor advance"
             )
             raise
         except Exception as exc:
-            logger.error("Failed to fetch issues for '%s': %s", full_name, exc)
+            logger.error(f"Failed to fetch issues for '{full_name}': {exc}")
             return
     else:
         # search mode — requires the Search API client
         if github_obj is None:
             logger.error(
-                "ISSUE_FETCH_MODE=search but no github_obj provided for '%s' — "
-                "cannot use Search API, skipping issues",
-                full_name,
+                f"ISSUE_FETCH_MODE=search but no github_obj provided for '{full_name}' — cannot use Search API, "
+                f"skipping issues"
             )
             return
         try:
@@ -127,30 +117,22 @@ async def process_issues(
             )
         except WbaRetryTimeoutError:
             logger.debug(
-                "[process_issues] WbaRetryTimeoutError propagating for '%s' (search fetch) — "
-                "repo will be skipped without cursor advance",
-                full_name,
+                f"[process_issues] WbaRetryTimeoutError propagating for '{full_name}' (search fetch) — repo will be "
+                f"skipped without cursor advance"
             )
             raise
         except Exception as exc:
-            logger.error("Search API failed for '%s': %s", full_name, exc)
+            logger.error(f"Search API failed for '{full_name}': {exc}")
             return
 
-    logger.info("Fetched %d issues for '%s'", len(issues_raw), full_name)
+    logger.info(f"Fetched {len(issues_raw)} issues for '{full_name}'")
 
     total = len(issues_raw)
     for idx, issue in enumerate(issues_raw, start=1):
         try:
             issue_number = getattr(issue, "number", "?")
             issue_state = getattr(issue, "state", "?")
-            logger.debug(
-                "Processing issue '%s#%s' (%s) [%d/%d]",
-                full_name,
-                issue_number,
-                issue_state,
-                idx,
-                total,
-            )
+            logger.debug(f"Processing issue '{full_name}#{issue_number}' ({issue_state}) [{idx}/{total}]")
 
             await _process_single_issue(
                 issue,
@@ -161,20 +143,16 @@ async def process_issues(
             )
         except WbaRetryTimeoutError:
             logger.debug(
-                "[process_issues] WbaRetryTimeoutError propagating for '%s' — repo will be "
-                "skipped without cursor advance",
-                full_name,
+                f"[process_issues] WbaRetryTimeoutError propagating for '{full_name}' — repo will be skipped without "
+                f"cursor advance"
             )
             raise
         except Exception as exc:
             logger.warning(
-                "Issue skipped: type=%s exception=%r issue=#%s",
-                type(exc).__name__,
-                exc,
-                getattr(issue, "number", "?"),
+                f"Issue skipped: type={type(exc).__name__} exception={exc!r} issue=#{getattr(issue, 'number', '?')}"
             )
 
-    logger.info("Issues done (%d) for '%s'", published.get("Issue", 0), full_name)
+    logger.info(f"Issues done ({published.get('Issue', 0)}) for '{full_name}'")
 
 
 async def _process_single_issue(
@@ -255,7 +233,7 @@ async def _process_single_issue(
 
     for login in all_person_logins:
         if login in seen_persons:
-            logger.debug("Person '%s' already seen, skipping Person signal", login)
+            logger.debug(f"Person '{login}' already seen, skipping Person signal")
             continue
         seen_persons.add(login)
 
@@ -269,11 +247,8 @@ async def _process_single_issue(
             person_data = await asyncio.to_thread(fetch_github_user, user_obj)
 
         logger.debug(
-            "[person:issue_related] login=%r  name=%r  email=%r  issue=#%s",
-            login,
-            person_data.get("name"),
-            person_data.get("email"),
-            getattr(issue, "number", "?"),
+            f"[person:issue_related] login={login!r}  name={person_data.get('name')!r}  email="
+            f"{person_data.get('email')!r}  issue=#{getattr(issue, 'number', '?')}"
         )
         await pub_callback(build_person_signal(person_data))
 

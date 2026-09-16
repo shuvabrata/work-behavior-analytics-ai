@@ -76,11 +76,13 @@ def fetch_space_pages(
                 )
             )
             if not isinstance(response, dict):
-                logger.debug("Exiting loop for space %s content_type %s: unexpected response format", space_key, content_type)
+                logger.debug(
+                    f"Exiting loop for space {space_key} content_type {content_type}: unexpected response format"
+                )
                 break
             batch = response.get("results", [])
             if not batch:
-                logger.debug("Exiting loop for space %s content_type %s: no more results", space_key, content_type)
+                logger.debug(f"Exiting loop for space {space_key} content_type {content_type}: no more results")
                 break
 
             for item in batch:
@@ -89,29 +91,20 @@ def fetch_space_pages(
                     results.append(item)
 
             logger.debug(
-                "Space %s %s: fetched batch start=%d size=%d (filtered_total=%d)",
-                space_key,
-                content_type,
-                start,
-                len(batch),
-                len(results),
+                f"Space {space_key} {content_type}: fetched batch start={start} size={len(batch)} (filtered_total="
+                f"{len(results)})"
             )
             start += len(batch)
             if len(batch) < page_size:
                 break
 
-    logger.info(
-        "Space %s: %d content items on or after %s",
-        space_key,
-        len(results),
-        since_date.isoformat(),
-    )
+    logger.info(f"Space {space_key}: {len(results)} content items on or after {since_date.isoformat()}")
     return results
 
 async def get_spaces(confluence) -> List[Dict[str, Any]]:
     logger.debug("Dispatching Confluence space fetch to worker thread")
     spaces = await asyncio.to_thread(fetch_spaces, confluence)
-    logger.info("Helper fetched %d spaces from Confluence", len(spaces))
+    logger.info(f"Helper fetched {len(spaces)} spaces from Confluence")
     return spaces
 
 
@@ -121,56 +114,26 @@ async def get_space_pages(
     since_date: datetime,
 ) -> List[Dict[str, Any]]:
     """Async wrapper around fetch_space_pages."""
-    logger.debug(
-        "Dispatching storage-layer content fetch for space=%s since=%s",
-        space_key,
-        since_date.isoformat(),
-    )
+    logger.debug(f"Dispatching storage-layer content fetch for space={space_key} since={since_date.isoformat()}")
     results = await asyncio.to_thread(fetch_space_pages, confluence, space_key, since_date)
-    logger.info(
-        "Helper fetched %d content items for space=%s",
-        len(results),
-        space_key,
-    )
+    logger.info(f"Helper fetched {len(results)} content items for space={space_key}")
     return results
 
 
 async def get_comments(confluence, content_id: str, content_type: str = "page") -> List[Dict[str, Any]]:
-    logger.debug(
-        "Dispatching comment fetch to worker thread for content_type=%s content_id=%s",
-        content_type,
-        content_id,
-    )
+    logger.debug(f"Dispatching comment fetch to worker thread for content_type={content_type} content_id={content_id}")
     comments = await asyncio.to_thread(fetch_page_comments, confluence, content_id, content_type)
-    logger.info(
-        "Helper fetched %d comments for content_type=%s content_id=%s",
-        len(comments),
-        content_type,
-        content_id,
-    )
+    logger.info(f"Helper fetched {len(comments)} comments for content_type={content_type} content_id={content_id}")
     return comments
 
 async def get_likes(confluence, content_id: str, content_type: str = "page") -> List[Dict[str, Any]]:
-    logger.debug(
-        "Dispatching like fetch to worker thread for content_type=%s content_id=%s",
-        content_type,
-        content_id,
-    )
+    logger.debug(f"Dispatching like fetch to worker thread for content_type={content_type} content_id={content_id}")
     likes = await asyncio.to_thread(fetch_content_likes, confluence, content_id, content_type)
-    logger.info(
-        "Helper fetched %d likes for content_type=%s content_id=%s",
-        len(likes),
-        content_type,
-        content_id,
-    )
+    logger.info(f"Helper fetched {len(likes)} likes for content_type={content_type} content_id={content_id}")
     return likes
 
 async def get_user_details_async(confluence, account_id: str) -> Dict[str, Any]:
-    logger.debug("Dispatching user detail fetch to worker thread for account_id=%s", account_id)
+    logger.debug(f"Dispatching user detail fetch to worker thread for account_id={account_id}")
     user_details = await asyncio.to_thread(fetch_user_details, confluence, account_id)
-    logger.info(
-        "Helper fetched user details for account_id=%s (found=%s)",
-        account_id,
-        bool(user_details),
-    )
+    logger.info(f"Helper fetched user details for account_id={account_id} (found={bool(user_details)})")
     return user_details

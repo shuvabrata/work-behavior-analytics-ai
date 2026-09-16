@@ -53,18 +53,17 @@ async def process_collaborators(
     carrying a COLLABORATOR relationship to the repository with permission,
     optional role, and granted_at properties.
     """
-    logger.info("Fetching collaborators for '%s'...", full_name)
+    logger.info(f"Fetching collaborators for '{full_name}'...")
     try:
         collaborators = await asyncio.to_thread(fetch_repo_collaborators, repo)
     except WbaRetryTimeoutError:
         logger.debug(
-            "[process_collaborators] WbaRetryTimeoutError propagating for '%s' — repo will "
-            "be skipped without cursor advance",
-            full_name,
+            f"[process_collaborators] WbaRetryTimeoutError propagating for '{full_name}' — repo will be skipped "
+            f"without cursor advance"
         )
         raise
     except Exception as exc:
-        logger.warning("Could not fetch collaborators for '%s': %s", full_name, exc)
+        logger.warning(f"Could not fetch collaborators for '{full_name}': {exc}")
         return
 
     repo_created_at = repo_data.get("created_at")
@@ -93,11 +92,8 @@ async def process_collaborators(
             )
 
             logger.debug(
-                "[person:collaborator] login=%r permission=%r role=%r repo=%s",
-                login,
-                permission,
-                role,
-                repo_data.get("full_name", "?"),
+                f"[person:collaborator] login={login!r} permission={permission!r} role={role!r} repo="
+                f"{repo_data.get('full_name', '?')}"
             )
 
             sig = build_person_signal_fn(
@@ -107,18 +103,14 @@ async def process_collaborators(
             await pub_callback(sig)
         except WbaRetryTimeoutError:
             logger.debug(
-                "[process_collaborators] WbaRetryTimeoutError propagating for collaborator "
-                "'%s' in '%s' — repo will be skipped without cursor advance",
-                getattr(collaborator, "login", "unknown"),
-                full_name,
+                f"[process_collaborators] WbaRetryTimeoutError propagating for collaborator '"
+                f"{getattr(collaborator, 'login', 'unknown')}' in '{full_name}' — repo will be skipped without cursor "
+                f"advance"
             )
             raise
         except Exception as exc:
             logger.warning(
-                "Could not process collaborator '%s' in '%s': %s",
-                getattr(collaborator, "login", "unknown"),
-                full_name,
-                exc,
+                f"Could not process collaborator '{getattr(collaborator, 'login', 'unknown')}' in '{full_name}': {exc}"
             )
 
-    logger.info("Collaborators done (%d) for '%s'", published.get("Person", 0), full_name)
+    logger.info(f"Collaborators done ({published.get('Person', 0)}) for '{full_name}'")

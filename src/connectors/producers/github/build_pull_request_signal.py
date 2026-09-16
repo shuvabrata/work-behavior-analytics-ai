@@ -194,5 +194,5 @@ def build_pull_request_signal(
             relationships=rels,
         )
     except Exception as exc:
-        logger.warning("Skipping PR signal for #%s (validation error): %s", pr_data.get("number"), exc)
+        logger.warning(f"Skipping PR signal for #{pr_data.get('number')} (validation error): {exc}")
         return None

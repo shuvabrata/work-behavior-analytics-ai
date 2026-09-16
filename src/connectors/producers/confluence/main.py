@@ -363,7 +363,7 @@ def build_person_signal(
             attributes=attrs,
         )
     except Exception as exc:  # pragma: no cover
-        logger.warning("Skipping Person signal for '%s' (validation error): %s", account_id, exc)
+        logger.warning(f"Skipping Person signal for '{account_id}' (validation error): {exc}")
         return None
 
 
@@ -605,9 +605,8 @@ async def _publish_person_signals(
         if signal is None:
             continue
         logger.debug(
-            "Publishing Person signal: id=%s relationships=%d",
-            account_id,
-            len(signal.relationships) if hasattr(signal, 'relationships') else 0,
+            f"Publishing Person signal: id={account_id} relationships="
+            f"{len(signal.relationships) if hasattr(signal, 'relationships') else 0}"
         )
         await publisher.publish(signal)
         published += 1
@@ -657,11 +656,8 @@ async def _publish_content_signal(
         return 0
     title = content.get("title", "")
     logger.debug(
-        "Publishing %s signal: id=%s title=%r relationships=%d",
-        signal.entity_type,
-        signal.id,
-        title,
-        len(signal.relationships) if hasattr(signal, 'relationships') else 0,
+        f"Publishing {signal.entity_type} signal: id={signal.id} title={title!r} relationships="
+        f"{len(signal.relationships) if hasattr(signal, 'relationships') else 0}"
     )
     await publisher.publish(signal)
     return 1
@@ -687,10 +683,7 @@ async def process_account(
     scan_started_at = datetime.now(timezone.utc)
 
     logger.info(
-        "Processing Confluence config id=%s url=%s last_synced_at=%s",
-        sync_resource_id,
-        confluence_url,
-        last_synced_at,
+        f"Processing Confluence config id={sync_resource_id} url={confluence_url} last_synced_at={last_synced_at}"
     )
 
     total_published = 0
@@ -715,9 +708,8 @@ async def process_account(
         if signal is None:
             continue
         logger.debug(
-            "Publishing Space signal: id=%s relationships=%d",
-            key,
-            len(signal.relationships) if hasattr(signal, 'relationships') else 0,
+            f"Publishing Space signal: id={key} relationships="
+            f"{len(signal.relationships) if hasattr(signal, 'relationships') else 0}"
         )
         await publisher.publish(signal)
         total_published += 1
@@ -727,11 +719,7 @@ async def process_account(
         # Uses the storage-layer content API (not CQL search) to avoid
         # Confluence Cloud index gaps that silently skip pages.
         space_items = await get_space_pages(confluence, key, since_date)
-        logger.info(
-            "Space %s: processing %d content items",
-            key,
-            len(space_items),
-        )
+        logger.info(f"Space {key}: processing {len(space_items)} content items")
         
         # First assume that the body of pages was last synced at the 
         # time of the lookback window.
@@ -781,11 +769,8 @@ async def process_account(
 
     await set_sync_cursor(_SOURCE, sync_resource_id, scan_started_at)
     logger.info(
-        "Published counts: Pages=%d, Blogposts=%d, Spaces=%d, People=%d",
-        entity_type_counts["Page"],
-        entity_type_counts["Blogpost"],
-        entity_type_counts["Space"],
-        entity_type_counts["Person"],
+        f"Published counts: Pages={entity_type_counts['Page']}, Blogposts={entity_type_counts['Blogpost']}, Spaces="
+        f"{entity_type_counts['Space']}, People={entity_type_counts['Person']}"
     )
     return total_published
 
@@ -794,7 +779,7 @@ async def main_async() -> ScanResult:
     rabbitmq_url = os.environ.get("RABBITMQ_URL", "amqp://guest:guest@localhost:5672/")
     config_source = os.getenv("CONFIGURATION_SOURCE", "FILE").upper()
 
-    logger.info("Confluence ActivitySignal Producer starting (config_source=%s)", config_source)
+    logger.info(f"Confluence ActivitySignal Producer starting (config_source={config_source})")
     if config_source == "SERVER":
         config = load_config_from_server()
     else:
@@ -809,14 +794,11 @@ async def main_async() -> ScanResult:
     async with RabbitMQPublisher(rabbitmq_url) as publisher:
         for account in accounts:
             if not account.get("enabled", True):
-                logger.info("Skipping disabled Confluence config id=%s", account.get("id"))
+                logger.info(f"Skipping disabled Confluence config id={account.get('id')}")
                 continue
 
             if not account.get("url") or not account.get("email") or not account.get("api_token"):
-                logger.warning(
-                    "Skipping Confluence config id=%s due to missing url/email/api_token",
-                    account.get("id"),
-                )
+                logger.warning(f"Skipping Confluence config id={account.get('id')} due to missing url/email/api_token")
                 result.add_error(
                     str(account.get("id", "unknown")),
                     "missing url/email/api_token",
@@ -830,28 +812,20 @@ async def main_async() -> ScanResult:
                 confluence = create_confluence_connection({"account": [account]})
                 published = await process_account(publisher, confluence, account)
                 logger.info(
-                    "Finished Confluence config id=%s url=%s published=%d",
-                    account.get("id"),
-                    account.get("url"),
-                    published,
+                    f"Finished Confluence config id={account.get('id')} url={account.get('url')} published={published}"
                 )
                 result.items_succeeded += 1
             except WbaRetryTimeoutError as exc:
                 # Retry budget exhausted — the account is incomplete. Do NOT
                 # advance its sync cursor so the next scan re-considers it.
                 logger.error(
-                    "Retry budget exhausted for Confluence config id=%s url=%s — skipping, will retry next scan: %s",
-                    account.get("id"),
-                    account.get("url"),
-                    exc,
+                    f"Retry budget exhausted for Confluence config id={account.get('id')} url={account.get('url')} — "
+                    f"skipping, will retry next scan: {exc}"
                 )
                 result.add_error(str(account.get("id", "unknown")), str(exc))
             except Exception as exc:  # pragma: no cover
                 logger.error(
-                    "Failed to process Confluence config id=%s url=%s: %s",
-                    account.get("id"),
-                    account.get("url"),
-                    exc,
+                    f"Failed to process Confluence config id={account.get('id')} url={account.get('url')}: {exc}",
                     exc_info=True,
                 )
                 result.add_error(str(account.get("id", "unknown")), str(exc))

@@ -107,12 +107,12 @@ async def search_persons(
         full=True,  # Need attributes for name/email/source extraction
     )
 
-    logger.info("[PersonSearch] q=%r page_size=%d", q, page_size)
+    logger.info(f"[PersonSearch] q={q!r} page_size={page_size}")
 
     try:
         response = service.search(request)
     except Exception as exc:
-        logger.exception("[PersonSearch] Search failed: %s", exc)
+        logger.exception(f"[PersonSearch] Search failed: {exc}")
         raise HTTPException(
             status_code=500,
             detail={"error": "Person search failed", "message": str(exc)},
@@ -124,5 +124,5 @@ async def search_persons(
         if suggestion:
             suggestions.append(suggestion)
 
-    logger.info("[PersonSearch] q=%r returned=%d", q, len(suggestions))
+    logger.info(f"[PersonSearch] q={q!r} returned={len(suggestions)}")
     return PersonSuggestResponse(results=suggestions)

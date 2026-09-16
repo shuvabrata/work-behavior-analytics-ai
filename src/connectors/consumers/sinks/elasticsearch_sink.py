@@ -92,11 +92,7 @@ def index_signal(client: Elasticsearch, signal: ActivitySignal) -> None:
     doc = _build_document(signal)
 
     client.index(index=index_name, id=wba_id, document=doc)
-    logger.debug(
-        "Indexed signal wba_id=%s into index=%s",
-        wba_id,
-        index_name,
-    )
+    logger.debug(f"Indexed signal wba_id={wba_id} into index={index_name}")
 
 
 def _enrich_canonical_document(
@@ -146,18 +142,12 @@ def _enrich_canonical_document(
     partial_attrs = {k: v for k, v in attr_dict.items() if v is not None}
 
     if not partial_attrs:
-        logger.debug(
-            "Skipping dedup ES update for canonical_wba_id=%s: no non-null attributes",
-            canonical_wba_id,
-        )
+        logger.debug(f"Skipping dedup ES update for canonical_wba_id={canonical_wba_id}: no non-null attributes")
         return
 
     client.update(index=index_name, id=canonical_wba_id, doc=partial_attrs)
     logger.debug(
-        "Enriched canonical ES doc wba_id=%s from dedup signal source=%s id=%s",
-        canonical_wba_id,
-        signal.source,
-        signal.id,
+        f"Enriched canonical ES doc wba_id={canonical_wba_id} from dedup signal source={signal.source} id={signal.id}"
     )
 
 
@@ -196,10 +186,8 @@ def index_signal_with_canonical_id(
         # existing node.  Enrich that node's ES document instead of creating a
         # stale document under the non-existent signal wba_id.
         logger.info(
-            "Person dedup detected: signal wba_id=%s merged into canonical wba_id=%s — "
-            "enriching canonical ES document instead of creating new entry",
-            signal_wba_id,
-            canonical_wba_id,
+            f"Person dedup detected: signal wba_id={signal_wba_id} merged into canonical wba_id={canonical_wba_id} — "
+            f"enriching canonical ES document instead of creating new entry"
         )
         _enrich_canonical_document(client, signal, canonical_wba_id)
 

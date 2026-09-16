@@ -51,21 +51,17 @@ async def stream_message(session_id: str, message: StreamMessageCreate):
         if not session_status.exists:
             raise HTTPException(status_code=404, detail="Session not found.")
 
-        logger.info(
-            "[stream_message] Starting stream: session_id=%s message=%.80s",
-            session_id,
-            message.message,
-        )
+        logger.info(f"[stream_message] Starting stream: session_id={session_id} message={message.message[:80]}")
 
         async def event_generator():
             try:
                 async for chunk in service.stream_chat_response(session_id, message.message):
                     yield chunk
             except asyncio.CancelledError:
-                logger.warning("[stream_message] Client disconnected: session_id=%s", session_id)
+                logger.warning(f"[stream_message] Client disconnected: session_id={session_id}")
                 raise
             except Exception as exc:
-                logger.error("[stream_message] Stream error: session_id=%s error=%s", session_id, exc)
+                logger.error(f"[stream_message] Stream error: session_id={session_id} error={exc}")
                 raise
 
         return StreamingResponse(event_generator(), media_type="text/event-stream")

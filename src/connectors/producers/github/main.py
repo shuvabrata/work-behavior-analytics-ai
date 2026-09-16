@@ -60,7 +60,7 @@ async def main_async() -> ScanResult:
     rabbitmq_url = os.environ.get("RABBITMQ_URL", "amqp://guest:guest@localhost:5672/")
     config_source = os.getenv("CONFIGURATION_SOURCE", "FILE").upper()
 
-    logger.info("GitHub ActivitySignal Producer starting (config_source=%s)", config_source)
+    logger.info(f"GitHub ActivitySignal Producer starting (config_source={config_source})")
 
     if config_source == "SERVER":
         config = load_config_from_server()
@@ -76,7 +76,7 @@ async def main_async() -> ScanResult:
     async with RabbitMQPublisher(rabbitmq_url) as publisher:
         for repo_cfg in repos_cfg:
             if not repo_cfg.get("enabled", True):
-                logger.info("Skipping disabled configuration for url: %s", repo_cfg.get("url", "unknown"))
+                logger.info(f"Skipping disabled configuration for url: {repo_cfg.get('url', 'unknown')}")
                 continue
 
             result.items_processed += 1
@@ -102,7 +102,7 @@ async def main_async() -> ScanResult:
                     owner, repo_name = parse_repo_url(url)
                     repo_list = [g.get_repo(f"{owner}/{repo_name}")]
             except Exception as exc:
-                logger.error("Failed to resolve repos for '%s': %s", url, exc)
+                logger.error(f"Failed to resolve repos for '{url}': {exc}")
                 result.add_error(url, str(exc))
                 continue
 
@@ -112,11 +112,7 @@ async def main_async() -> ScanResult:
                 full_name = repo.full_name
                 try:
                     last_synced_at = await get_sync_cursor(_SOURCE, full_name)
-                    logger.info(
-                        "Processing repo '%s' (last_synced_at=%s)",
-                        full_name,
-                        last_synced_at,
-                    )
+                    logger.info(f"Processing repo '{full_name}' (last_synced_at={last_synced_at})")
 
                     scan_started_at = datetime.now(timezone.utc)
                     published: Dict[str, int] = {}
@@ -126,25 +122,18 @@ async def main_async() -> ScanResult:
                     await set_sync_cursor(_SOURCE, full_name, scan_started_at)
 
                     total = sum(published.values())
-                    logger.info(
-                        "Repo '%s' done — %d signals published: %s",
-                        full_name,
-                        total,
-                        published,
-                    )
+                    logger.info(f"Repo '{full_name}' done — {total} signals published: {published}")
                 except WbaRetryTimeoutError as exc:
                     # Retry budget exhausted — the repo is incomplete. Do NOT
                     # advance its sync cursor so the next scan re-considers it.
                     logger.error(
-                        "Retry budget exhausted for repo '%s' — skipping, will retry next scan: %s",
-                        full_name,
-                        exc,
+                        f"Retry budget exhausted for repo '{full_name}' — skipping, will retry next scan: {exc}"
                     )
                     config_failed = True
                     if first_error is None:
                         first_error = str(exc)
                 except Exception as exc:
-                    logger.error("Error processing repo '%s': %s", full_name, exc, exc_info=True)
+                    logger.error(f"Error processing repo '{full_name}': {exc}", exc_info=True)
                     config_failed = True
                     if first_error is None:
                         first_error = str(exc)

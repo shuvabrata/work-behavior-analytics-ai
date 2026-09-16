@@ -363,12 +363,12 @@ def get_collaboration_network(
     # Log GitHub issue layer enablement status
     params = config.to_cypher_parameters()
     logger.info(
-        "Collaboration network: GitHub issue comment engagement layer %s",
-        "enabled" if params.get("include_github_issue_comment_engagement") else "disabled",
+        f"Collaboration network: GitHub issue comment engagement layer "
+        f"{'enabled' if params.get('include_github_issue_comment_engagement') else 'disabled'}"
     )
     logger.info(
-        "Collaboration network: GitHub issue co-commenters layer %s",
-        "enabled" if params.get("include_github_issue_co_commenters") else "disabled",
+        f"Collaboration network: GitHub issue co-commenters layer "
+        f"{'enabled' if params.get('include_github_issue_co_commenters') else 'disabled'}"
     )
 
     # Load the Cypher query from the analytics module
@@ -395,9 +395,7 @@ def get_collaboration_network(
     # Run community detection pipeline
     g = build_graph(records)
     logger.debug(
-        "Collaboration graph built before filtering: %d people, %d pairs",
-        g.number_of_nodes(),
-        g.number_of_edges(),
+        f"Collaboration graph built before filtering: {g.number_of_nodes()} people, {g.number_of_edges()} pairs"
     )
     if config.top_n_edges_per_node > 0:
         g = filter_top_edges_per_node(
@@ -406,11 +404,8 @@ def get_collaboration_network(
             ensure_min_connection=config.ensure_min_connection,
         )
         logger.debug(
-            "Collaboration graph after top-N filtering: %d people, %d pairs, top_n=%d, ensure_min_connection=%s",
-            g.number_of_nodes(),
-            g.number_of_edges(),
-            config.top_n_edges_per_node,
-            config.ensure_min_connection,
+            f"Collaboration graph after top-N filtering: {g.number_of_nodes()} people, {g.number_of_edges()} pairs, "
+            f"top_n={config.top_n_edges_per_node}, ensure_min_connection={config.ensure_min_connection}"
         )
     partition = detect_communities(g)
     hub_scores = compute_hub_scores(g)
@@ -424,11 +419,8 @@ def get_collaboration_network(
     )
     positioned_nodes = sum(1 for element in elements if element.get("position"))
     logger.debug(
-        "Collaboration Cytoscape payload built: %d elements, %d positioned nodes, gap=(%.1f, %.1f)",
-        len(elements),
-        positioned_nodes,
-        config.community_gap_x,
-        config.community_gap_y,
+        f"Collaboration Cytoscape payload built: {len(elements)} elements, {positioned_nodes} positioned nodes, gap=("
+        f"{config.community_gap_x:.1f}, {config.community_gap_y:.1f})"
     )
 
     num_communities = len(set(partition.values()))

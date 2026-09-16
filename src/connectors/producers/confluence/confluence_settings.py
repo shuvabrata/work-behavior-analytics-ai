@@ -18,5 +18,5 @@ def _read_positive_int(env_name: str, default: int) -> int:
 
 def get_lookback_days() -> int:
     lookback_days = _read_positive_int("CONFLUENCE_LOOKBACK_DAYS", _DEFAULT_LOOKBACK_DAYS)
-    logger.debug("Using Confluence lookback window of %d days", lookback_days)
+    logger.debug(f"Using Confluence lookback window of {lookback_days} days")
     return lookback_days

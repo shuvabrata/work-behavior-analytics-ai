@@ -102,7 +102,7 @@ def extract_mentions_from_texts(
             if account_id not in combined:
                 combined.append(account_id)
 
-    logger.debug("Extracted mentions from text(s): %s", combined)
+    logger.debug(f"Extracted mentions from text(s): {combined}")
     return combined
 
 

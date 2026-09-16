@@ -483,9 +483,7 @@ def fetch_comments(
 
             start_at += len(batch)
 
-        logger.debug(
-            "Fetched %d comments for issue %s", len(all_comments), issue_id_or_key
-        )
+        logger.debug(f"Fetched {len(all_comments)} comments for issue {issue_id_or_key}")
         return all_comments
 
     except WbaRetryTimeoutError:

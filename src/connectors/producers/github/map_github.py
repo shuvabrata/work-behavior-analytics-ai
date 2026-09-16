@@ -286,11 +286,8 @@ def fetch_github_user(user_obj: Any) -> Dict[str, Any]:
             # Non-retryable error (e.g. 404/403) or unexpected failure fetching
             # this user's details. Fall back to login-only data.
             logger.debug(
-                "[fetch_github_user] non-retryable error for login=%r type=%s — "
-                "falling back to login-only data (name/email lost): %s",
-                login,
-                type(exc).__name__,
-                exc,
+                f"[fetch_github_user] non-retryable error for login={login!r} type={type(exc).__name__} — falling back"
+                f" to login-only data (name/email lost): {exc}"
             )
             name = login
             email = ""
@@ -510,13 +507,8 @@ def map_issue(issue: Any, repo_full_name: str) -> Dict[str, Any]:
     url = getattr(issue, "html_url", None)
 
     logger.debug(
-        "Mapped issue '%s': state=%s, assignee=%s, reporter=%s, labels=%d, comments=%d",
-        key,
-        state,
-        assignee_login,
-        reporter_login,
-        len(labels),
-        getattr(issue, "comments", 0),
+        f"Mapped issue '{key}': state={state}, assignee={assignee_login}, reporter={reporter_login}, labels="
+        f"{len(labels)}, comments={getattr(issue, 'comments', 0)}"
     )
 
     return {
@@ -571,10 +563,7 @@ def _strip_code_blocks(text: str) -> str:
     blocks_removed = original_len - stripped_len
     if blocks_removed > 0:
         logger.debug(
-            "Stripped code blocks: %d chars removed (original=%d, result=%d)",
-            blocks_removed,
-            original_len,
-            stripped_len,
+            f"Stripped code blocks: {blocks_removed} chars removed (original={original_len}, result={stripped_len})"
         )
 
     return result
@@ -608,9 +597,9 @@ def extract_mentions(text: str) -> List[str]:
     cleaned = _strip_code_blocks(text)
     mentions = list(set(_MENTION_PATTERN.findall(cleaned)))
 
-    logger.debug("Extracted %d mentions from text (len=%d)", len(mentions), len(text))
+    logger.debug(f"Extracted {len(mentions)} mentions from text (len={len(text)})")
     if mentions:
-        logger.debug("Mentions found: %s", mentions)
+        logger.debug(f"Mentions found: {mentions}")
 
     return mentions
 
@@ -669,8 +658,8 @@ def extract_github_issue_refs(text: str, repo_full_name: str) -> List[str]:
         refs.add(f"{repo_full_name}#{number}")
 
     result = list(refs)
-    logger.debug("Extracted %d GitHub issue refs from text (len=%d)", len(result), len(text))
+    logger.debug(f"Extracted {len(result)} GitHub issue refs from text (len={len(text)})")
     if result:
-        logger.debug("GitHub issue refs found: %s", result)
+        logger.debug(f"GitHub issue refs found: {result}")
 
     return result

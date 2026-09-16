@@ -54,15 +54,9 @@ def build_file_signal(
         file_id = hashlib.sha256(f"{repo_name}::{filename}".encode()).hexdigest()
 
         logger.info(
-            "[build_file_signal] id=%s  file=%r  repo=%r  sha=%s  ext=%r  lang=%r  add=%s  del=%s",
-            file_id,
-            filename,
-            repo_name,
-            sha[:8],
-            file_data.get("extension"),
-            file_data.get("language"),
-            file_data.get("additions"),
-            file_data.get("deletions"),
+            f"[build_file_signal] id={file_id}  file={filename!r}  repo={repo_name!r}  sha={sha[:8]}  ext="
+            f"{file_data.get('extension')!r}  lang={file_data.get('language')!r}  add={file_data.get('additions')}  "
+            f"del={file_data.get('deletions')}"
         )
 
         event_time = datetime.fromisoformat(commit_data["created_at"]).replace(
@@ -115,9 +109,7 @@ def build_file_signal(
         )
     except Exception as exc:
         logger.warning(
-            "Skipping File signal for '%s' in commit '%s' (validation error): %s",
-            file_data.get("filename"),
-            commit_data.get("sha", "?")[:8] if commit_data.get("sha") else "?",
-            exc,
+            f"Skipping File signal for '{file_data.get('filename')}' in commit '"
+            f"{commit_data.get('sha', '?')[:8] if commit_data.get('sha') else '?'}' (validation error): {exc}"
         )
         return None

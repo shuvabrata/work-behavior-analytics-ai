@@ -152,13 +152,13 @@ async def augment_message_with_mcp_stream(
             timeout=20.0,
         )
     except asyncio.TimeoutError:
-        logger.warning("MCP relevance check timed out for message: %.80s", user_message)
+        logger.warning(f"MCP relevance check timed out for message: {user_message[:80]}")
         yield {"type": "thinking_chunk", "content": "MCP relevance check timed out; skipping MCP."}
         yield {"type": "thinking_end"}
         yield {"type": "augmented_message", "content": envelope}
         return
     except Exception as exc:  # noqa: BLE001
-        logger.warning("MCP relevance check error: %s", exc)
+        logger.warning(f"MCP relevance check error: {exc}")
         yield {"type": "thinking_chunk", "content": f"MCP relevance check failed: {exc}"}
         yield {"type": "thinking_end"}
         yield {"type": "augmented_message", "content": envelope}
@@ -176,7 +176,7 @@ async def augment_message_with_mcp_stream(
     try:
         tools = await asyncio.to_thread(list_available_tools)
     except Exception as exc:  # noqa: BLE001
-        logger.warning("MCP tool discovery error: %s", exc)
+        logger.warning(f"MCP tool discovery error: {exc}")
         envelope["error"] = "tool_discovery_failed"
         yield {"type": "thinking_chunk", "content": f"Tool discovery failed: {exc}"}
         yield {"type": "thinking_end"}
@@ -192,10 +192,7 @@ async def augment_message_with_mcp_stream(
         return
 
     available_tool_names = [t.get("function", {}).get("name", "") for t in tools]
-    logger.debug(
-        "MCP tool discovery complete: available_tools=%s",
-        ", ".join(n for n in available_tool_names if n),
-    )
+    logger.debug(f"MCP tool discovery complete: available_tools={', '.join((n for n in available_tool_names if n))}")
     yield {"type": "thinking_chunk", "content": f"Found {len(tools)} tool(s). Selecting relevant tools..."}
 
     # ── Step 3: tool selection and execution loop ─────────────────────────────
@@ -238,12 +235,12 @@ async def augment_message_with_mcp_stream(
             yield {"type": "thinking_chunk", "content": "Provider does not support tool calling; skipping MCP."}
             break
         except asyncio.TimeoutError:
-            logger.warning("MCP tool selection timed out at iteration %s", iteration)
+            logger.warning(f"MCP tool selection timed out at iteration {iteration}")
             envelope["error"] = "tool_selection_timeout"
             yield {"type": "thinking_chunk", "content": f"Tool selection timed out (iteration {iteration})."}
             break
         except Exception as exc:  # noqa: BLE001
-            logger.warning("MCP tool selection failed: %s", exc)
+            logger.warning(f"MCP tool selection failed: {exc}")
             envelope["error"] = "tool_selection_failed"
             yield {"type": "thinking_chunk", "content": f"Tool selection failed: {exc}"}
             break
@@ -267,22 +264,18 @@ async def augment_message_with_mcp_stream(
         messages.append(assistant_message)
 
         if not tool_calls:
-            logger.info("MCP tool selection: iteration=%s selected_tools=none", iteration)
+            logger.info(f"MCP tool selection: iteration={iteration} selected_tools=none")
             break
 
         selected_names = [c.get("name", "") for c in tool_calls if c.get("name")]
-        logger.info(
-            "MCP tool selection: iteration=%s selected_tools=%s",
-            iteration,
-            ", ".join(selected_names),
-        )
+        logger.info(f"MCP tool selection: iteration={iteration} selected_tools={', '.join(selected_names)}")
         yield {"type": "thinking_chunk", "content": f"Calling: {', '.join(selected_names)}"}
 
         for call in tool_calls:
             name = call.get("name", "")
             arguments = call.get("arguments") or {}
-            logger.info("MCP tool execution started: tool=%s", name)
-            logger.debug("MCP tool execution arguments: tool=%s args=%s", name, arguments)
+            logger.info(f"MCP tool execution started: tool={name}")
+            logger.debug(f"MCP tool execution arguments: tool={name} args={arguments}")
 
             try:
                 execution_result = await asyncio.wait_for(
@@ -302,7 +295,7 @@ async def augment_message_with_mcp_stream(
 
             collected_results.append(execution_result)
             status = execution_result.get("status", "unknown")
-            logger.info("MCP tool execution finished: tool=%s status=%s", name, status)
+            logger.info(f"MCP tool execution finished: tool={name} status={status}")
             yield {"type": "thinking_chunk", "content": f"{name}: {status}"}
 
             tool_content = execution_result.get("result")
@@ -329,12 +322,8 @@ async def augment_message_with_mcp_stream(
         for result in collected_results
     ]
     logger.info(
-        "MCP augmentation applied: executed_tools=%s",
-        ", ".join(
-            f"{call['name']}({call['status']})"
-            for call in envelope["tool_calls"]
-            if call.get("name")
-        ),
+        f"MCP augmentation applied: executed_tools="
+        f"{', '.join((f"{call['name']}({call['status']})" for call in envelope['tool_calls'] if call.get('name')))}"
     )
     yield {"type": "thinking_end"}
     yield {"type": "augmented_message", "content": envelope}

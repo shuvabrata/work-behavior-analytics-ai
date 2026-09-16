@@ -128,8 +128,4 @@ class CommandPublisher:
         for target in targets:
             routing_key = f"command_n_control.{target}"
             await exchange.publish(message, routing_key=routing_key)
-            logger.debug(
-                "Published command command_id=%s routing_key=%s",
-                envelope.command_id,
-                routing_key,
-            )
+            logger.debug(f"Published command command_id={envelope.command_id} routing_key={routing_key}")

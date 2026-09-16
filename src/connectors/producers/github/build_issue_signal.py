@@ -80,17 +80,10 @@ def build_issue_signal(
         event_time = _parse_event_time(raw_updated, raw_created)
 
         logger.info(
-            "Building Issue signal for '%s#%d' (state=%s, assignees=%d, mentions=%d, "
-            "jira_refs=%d, github_refs=%d, relates_to=%d, comments=%d)",
-            repo_full_name,
-            number,
-            issue_data.get("status", "?"),
-            len(assignee_logins),
-            len(mention_logins),
-            len(referenced_jira_keys),
-            len(referenced_github_issue_ids),
-            len(relates_to_ids),
-            len(comments_data or []),
+            f"Building Issue signal for '{repo_full_name}#{number}' (state={issue_data.get('status', '?')}, assignees="
+            f"{len(assignee_logins)}, mentions={len(mention_logins)}, jira_refs={len(referenced_jira_keys)}, "
+            f"github_refs={len(referenced_github_issue_ids)}, relates_to={len(relates_to_ids)}, comments="
+            f"{len(comments_data or [])})"
         )
 
         attrs = IssueAttributes(
@@ -154,7 +147,7 @@ def build_issue_signal(
         # MENTIONS → each mentioned login (undirected, skip self-refs)
         for mention_login in mention_logins:
             if mention_login == reporter_login:
-                logger.debug("Skipping self-mention: @%s is the issue author", mention_login)
+                logger.debug(f"Skipping self-mention: @{mention_login} is the issue author")
                 continue
             rels.append(
                 Relationship(
@@ -200,7 +193,7 @@ def build_issue_signal(
         # RELATES_TO → each GitHub issue ref in the same repo (undirected, skip self-refs)
         for relates_id in relates_to_ids:
             if relates_id == issue_id:
-                logger.debug("Skipping self-reference: %s references itself", relates_id)
+                logger.debug(f"Skipping self-reference: {relates_id} references itself")
                 continue
             rels.append(
                 Relationship(
@@ -246,27 +239,18 @@ def build_issue_signal(
         )
 
         logger.debug(
-            "Issue signal built: id=%s, event_time=%s, %d relationships "
-            "(ASSIGNED_TO=%d, REPORTED_BY=1, PART_OF=1, MENTIONS=%d, REFERENCES=%d, "
-            "RELATES_TO=%d, COMMENTED_ON=%d)",
-            signal.id,
-            event_time.isoformat() if isinstance(event_time, datetime) else str(event_time),
-            len(rels),
-            len(assignee_logins),
-            len([r for r in rels if r.type == "MENTIONS"]),
-            len(referenced_jira_keys) + len(referenced_github_issue_ids),
-            len([r for r in rels if r.type == "RELATES_TO"]),
-            len(comments_data or []),
+            f"Issue signal built: id={signal.id}, event_time="
+            f"{event_time.isoformat() if isinstance(event_time, datetime) else str(event_time)}, {len(rels)} "
+            f"relationships (ASSIGNED_TO={len(assignee_logins)}, REPORTED_BY=1, PART_OF=1, MENTIONS="
+            f"{len([r for r in rels if r.type == 'MENTIONS'])}, REFERENCES="
+            f"{len(referenced_jira_keys) + len(referenced_github_issue_ids)}, RELATES_TO="
+            f"{len([r for r in rels if r.type == 'RELATES_TO'])}, COMMENTED_ON={len(comments_data or [])})"
         )
 
         return signal
 
     except Exception as exc:
-        logger.warning(
-            "Skipping Issue signal for '%s' (validation error): %s",
-            issue_data.get("key", "?"),
-            exc,
-        )
+        logger.warning(f"Skipping Issue signal for '{issue_data.get('key', '?')}' (validation error): {exc}")
         return None
 
 

@@ -118,9 +118,7 @@ class OpenAIProvider(LLMProvider):
 
             try:
                 logger.debug(
-                    "Sending Responses API request to OpenAI model: %s (input chars=%s)",
-                    model_to_use,
-                    len(input_text),
+                    f"Sending Responses API request to OpenAI model: {model_to_use} (input chars={len(input_text)})"
                 )
                 response = self._client.responses.create(**request_kwargs)
                 response_text = self._extract_response_text(response)
@@ -133,9 +131,7 @@ class OpenAIProvider(LLMProvider):
                     if prompt_details is not None:
                         cached_tokens = getattr(prompt_details, "cached_tokens", None)
                 logger.debug(
-                    "Received Responses API result: output_chars=%s cached_tokens=%s",
-                    len(response_text),
-                    cached_tokens,
+                    f"Received Responses API result: output_chars={len(response_text)} cached_tokens={cached_tokens}"
                 )
                 return response_text
             except Exception as e:
@@ -201,12 +197,7 @@ class OpenAIProvider(LLMProvider):
             raise ValueError(f"Model '{model_to_use}' is not supported by OpenAI provider")
 
         try:
-            logger.debug(
-                "Sending %s messages and %s tools to OpenAI model: %s",
-                len(messages),
-                len(tools),
-                model_to_use,
-            )
+            logger.debug(f"Sending {len(messages)} messages and {len(tools)} tools to OpenAI model: {model_to_use}")
             response = openai.chat.completions.create(
                 model=model_to_use,
                 messages=messages,
@@ -290,11 +281,7 @@ class OpenAIProvider(LLMProvider):
 
         async_client = openai.AsyncOpenAI(api_key=self._api_key)
         try:
-            logger.debug(
-                "Starting streaming request to OpenAI model: %s (%s messages)",
-                model_to_use,
-                len(messages),
-            )
+            logger.debug(f"Starting streaming request to OpenAI model: {model_to_use} ({len(messages)} messages)")
             stream = await async_client.chat.completions.create(
                 model=model_to_use,
                 messages=messages,
@@ -306,7 +293,7 @@ class OpenAIProvider(LLMProvider):
                 if delta.content:
                     yield delta.content
         except Exception as e:
-            logger.error("OpenAI streaming API error: %s", e)
+            logger.error(f"OpenAI streaming API error: {e}")
             raise RuntimeError(f"OpenAI streaming error: {e}") from e
         finally:
             await async_client.close()

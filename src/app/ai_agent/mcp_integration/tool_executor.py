@@ -24,12 +24,9 @@ def _mask_token_for_log(token: str) -> str:
 def _build_github_manager() -> GithubMCPClientManager:
     """Create a GitHub manager instance from application settings."""
     logger.debug(
-        "[github_mcp] Building manager: enabled=%s server_url=%r token_set=%s token=%s timeout=%ds",
-        settings.GITHUB_MCP_ENABLED,
-        settings.GITHUB_MCP_SERVER_URL,
-        bool(settings.GITHUB_MCP_TOKEN),
-        _mask_token_for_log(settings.GITHUB_MCP_TOKEN),
-        runtime_settings.get_int("HTTP_REQUEST_TIMEOUT"),
+        f"[github_mcp] Building manager: enabled={settings.GITHUB_MCP_ENABLED} server_url="
+        f"{settings.GITHUB_MCP_SERVER_URL!r} token_set={bool(settings.GITHUB_MCP_TOKEN)} token="
+        f"{_mask_token_for_log(settings.GITHUB_MCP_TOKEN)} timeout={runtime_settings.get_int('HTTP_REQUEST_TIMEOUT')}s"
     )
     return GithubMCPClientManager(
         github_server_url=settings.GITHUB_MCP_SERVER_URL,
@@ -150,12 +147,7 @@ def test_mcp_connection(connector_type: str) -> dict[str, Any]:
         raise ValueError(f"Not an MCP connector type: {connector_type}")
 
     logger.debug(
-        "[%s] Test connection result: status=%s connected=%s tool_count=%s server=%s error=%r",
-        connector_type,
-        result.get("status"),
-        result.get("connected"),
-        result.get("tool_count"),
-        result.get("server"),
-        result.get("error"),
+        f"[{connector_type}] Test connection result: status={result.get('status')} connected={result.get('connected')}"
+        f" tool_count={result.get('tool_count')} server={result.get('server')} error={result.get('error')!r}"
     )
     return result

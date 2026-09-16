@@ -105,5 +105,5 @@ def build_commit_signal(
             relationships=rels,
         )
     except Exception as exc:
-        logger.warning("Skipping Commit signal for sha '%s' (validation error): %s", commit_data.get("sha"), exc)
+        logger.warning(f"Skipping Commit signal for sha '{commit_data.get('sha')}' (validation error): {exc}")
         return None

@@ -67,11 +67,7 @@ class _MCPClientBase:
         if token:
             headers["Authorization"] = f"Bearer {token}"
 
-        logger.debug(
-            "[mcp] Opening HTTP session to %s (auth_token_set=%s)",
-            server_url,
-            bool(token),
-        )
+        logger.debug(f"[mcp] Opening HTTP session to {server_url} (auth_token_set={bool(token)})")
 
         timeout = httpx.Timeout(self.request_timeout_seconds)
         async with httpx.AsyncClient(headers=headers, timeout=timeout) as http_client:
@@ -128,9 +124,7 @@ class _MCPClientBase:
         try:
             tools = self._run_sync(session_factory, _list)
         except Exception as exc:  # noqa: BLE001 - return structured error to caller
-            logger.debug(
-                "[mcp] Test connection FAILED for server=%s — %r", server, exc
-            )
+            logger.debug(f"[mcp] Test connection FAILED for server={server} — {exc!r}")
             return {
                 "server": server,
                 "status": "unavailable",
@@ -140,11 +134,7 @@ class _MCPClientBase:
             }
 
         if not tools:
-            logger.debug(
-                "[mcp] Test connection reached server=%s but returned 0 tools "
-                "(token may lack scopes)",
-                server,
-            )
+            logger.debug(f"[mcp] Test connection reached server={server} but returned 0 tools (token may lack scopes)")
             return {
                 "server": server,
                 "status": "empty_toolset",
@@ -153,9 +143,7 @@ class _MCPClientBase:
                 "error": "server returned 0 tools — token may lack scopes",
             }
 
-        logger.debug(
-            "[mcp] Test connection SUCCESS server=%s tool_count=%s", server, len(tools)
-        )
+        logger.debug(f"[mcp] Test connection SUCCESS server={server} tool_count={len(tools)}")
         return {
             "server": server,
             "status": "connected",
@@ -233,7 +221,7 @@ class GithubMCPClientManager(_MCPClientBase):
         try:
             return self._run_sync(self._with_github_session, _list)
         except Exception as exc:
-            logger.exception("Failed to list tools from GitHub MCP server: %s", exc)
+            logger.exception(f"Failed to list tools from GitHub MCP server: {exc}")
             return []
 
     def call_tool(self, tool_name: str, arguments: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -396,7 +384,7 @@ class AtlassianMCPClientManager(_MCPClientBase):
         try:
             return self._run_sync(self._with_atlassian_session, _list)
         except Exception as exc:
-            logger.exception("Failed to list tools from Atlassian MCP server: %s", exc)
+            logger.exception(f"Failed to list tools from Atlassian MCP server: {exc}")
             return []
 
     def call_tool(self, tool_name: str, arguments: dict[str, Any] | None = None) -> dict[str, Any]:

@@ -392,9 +392,9 @@ def load_query_catalog(pathname: str | None):
         response.raise_for_status()
         payload = response.json()
         items = payload.get("items", [])
-        logger.info("[GRAPH-CATALOG] loaded count=%d", len(items))
+        logger.info(f"[GRAPH-CATALOG] loaded count={len(items)}")
     except requests.exceptions.RequestException as exc:
-        logger.error("[GRAPH-CATALOG] load_failed %s", exc)
+        logger.error(f"[GRAPH-CATALOG] load_failed {exc}")
         error_display = create_error_alert(
             "",
             alert_type="warning",
@@ -430,7 +430,7 @@ def _fetch_catalog_metadata(api_base: str) -> dict:
             }
         return metadata
     except requests.exceptions.RequestException as exc:
-        logger.warning("[GRAPH-CATALOG] metadata_load_failed %s", exc)
+        logger.warning(f"[GRAPH-CATALOG] metadata_load_failed {exc}")
         return {}
 
 
@@ -629,7 +629,7 @@ def toggle_catalog_favourite(
         response.raise_for_status()
         body = response.json()
     except requests.exceptions.RequestException as exc:
-        logger.warning("[GRAPH-CATALOG] favourite_toggle_failed %s", exc)
+        logger.warning(f"[GRAPH-CATALOG] favourite_toggle_failed {exc}")
         raise PreventUpdate from exc
 
     store[catalog_id] = {
@@ -967,7 +967,7 @@ def sync_person_suggestions(
             response.raise_for_status()
             data = response.json()
         except requests.exceptions.RequestException as exc:
-            logger.warning("[PersonSearch] API call failed: %s", exc)
+            logger.warning(f"[PersonSearch] API call failed: {exc}")
             all_children.append([
                 html.Small(
                     "Search failed — check your connection",

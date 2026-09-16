@@ -133,10 +133,7 @@ def _start_settings_listener(rabbitmq_url: str) -> None:
             connection = await aio_pika.connect_robust(rabbitmq_url)
 
             async def _on_event(changed_keys: list[str]) -> None:
-                logger.info(
-                    "Daemon received settings.changed event: keys=%s",
-                    changed_keys,
-                )
+                logger.info(f"Daemon received settings.changed event: keys={changed_keys}")
                 runtime_cache.refresh(fetch_runtime_snapshot(_api_base()))
 
             await listen_for_settings_changed(
@@ -187,10 +184,7 @@ def _reap_children(signum: int, frame: Any) -> None:  # pylint: disable=unused-a
                 break
             command_id = _children.pop(pid, None)
             if command_id:
-                logger.info(
-                    "Child reaped pid=%d command_id=%s exit_code=%d",
-                    pid, command_id, exit_code,
-                )
+                logger.info(f"Child reaped pid={pid} command_id={command_id} exit_code={exit_code}")
         except ChildProcessError:
             break
 
@@ -216,7 +210,7 @@ def _poll_test_children() -> None:
         if popen_obj.poll() is not None:
             stdout_bytes, stderr_bytes = popen_obj.communicate()
             raw = (stdout_bytes or stderr_bytes or b"").decode("utf-8", errors="replace").strip()
-            logger.debug("_poll_test_children pid=%d raw_stdout=%r", pid, raw)
+            logger.debug(f"_poll_test_children pid={pid} raw_stdout={raw!r}")
 
             # Search for SUCCESS: / FAILED: in any line (child prints log
             # lines before the result line).
@@ -238,15 +232,11 @@ def _poll_test_children() -> None:
                 success = popen_obj.returncode == 0
                 error_message = None
                 logger.debug(
-                    "_poll_test_children pid=%d no SUCCESS/FAILED prefix, "
-                    "falling back to returncode=%d success=%s",
-                    pid, popen_obj.returncode, success,
+                    f"_poll_test_children pid={pid} no SUCCESS/FAILED prefix, falling back to returncode="
+                    f"{popen_obj.returncode} success={success}"
                 )
 
-            logger.debug(
-                "_poll_test_children pid=%d success=%s error_message=%s",
-                pid, success, error_message,
-            )
+            logger.debug(f"_poll_test_children pid={pid} success={success} error_message={error_message}")
 
             # Advance through running first so the terminal-status PATCH
             # has a valid transition path from accepted (if the child
@@ -267,14 +257,14 @@ def _update_status(command_id: uuid.UUID, update: CommandStatusUpdate) -> None:
     """PATCH a status update to the app's API (sync)."""
     url = f"{_api_base()}/api/v1/commands/{command_id}/status"
     payload = update.model_dump(mode="json", exclude_none=True)
-    logger.debug("PATCH %s %s", url, payload)
+    logger.debug(f"PATCH {url} {payload}")
     try:
         with httpx.Client(timeout=10) as client:
             resp = client.patch(url, json=payload)
-            logger.debug("Response status=%d body=%s", resp.status_code, resp.text)
+            logger.debug(f"Response status={resp.status_code} body={resp.text}")
             resp.raise_for_status()
     except httpx.HTTPError as exc:
-        logger.warning("Failed to update command status (%s → %s): %s", url, payload.get("status"), exc)
+        logger.warning(f"Failed to update command status ({url} → {payload.get('status')}): {exc}")
 
 
 def _spawn_scan(
@@ -283,10 +273,7 @@ def _spawn_scan(
 ) -> Optional[subprocess.Popen]:  # type: ignore[type-arg]
     """Spawn a child process to run the scan (or reject if at capacity)."""
     if len(_children) >= _max_scans:
-        logger.warning(
-            "Max concurrent scans reached (%d) — rejecting command_id=%s",
-            _max_scans, envelope.command_id,
-        )
+        logger.warning(f"Max concurrent scans reached ({_max_scans}) — rejecting command_id={envelope.command_id}")
         _update_status(envelope.command_id, CommandStatusUpdate(
             status="failed", completed_at=datetime.now(timezone.utc),
             error_message=f"Max concurrent scans reached ({_max_scans})",
@@ -302,7 +289,7 @@ def _spawn_scan(
     if envelope.parameters:
         cmd += ["--parameters", json.dumps(envelope.parameters)]
 
-    logger.info("Spawning scan child command_id=%s pid=%d", envelope.command_id, len(_children) + 1)
+    logger.info(f"Spawning scan child command_id={envelope.command_id} pid={len(_children) + 1}")
     child = subprocess.Popen(cmd, stdout=sys.stdout, stderr=sys.stderr)  # pylint: disable=consider-using-with
     _children[child.pid] = envelope.command_id
     return child
@@ -314,10 +301,7 @@ def _spawn_test(
 ) -> Optional[subprocess.Popen]:  # type: ignore[type-arg]
     """Spawn a child process to run the test (or reject if at capacity)."""
     if len(_test_children) >= _max_scans:
-        logger.warning(
-            "Max concurrent tests reached (%d) — rejecting command_id=%s",
-            _max_scans, envelope.command_id,
-        )
+        logger.warning(f"Max concurrent tests reached ({_max_scans}) — rejecting command_id={envelope.command_id}")
         _update_status(envelope.command_id, CommandStatusUpdate(
             status="failed", completed_at=datetime.now(timezone.utc),
             error_message=f"Max concurrent tests reached ({_max_scans})",
@@ -333,7 +317,7 @@ def _spawn_test(
     if envelope.parameters:
         cmd += ["--parameters", json.dumps(envelope.parameters)]
 
-    logger.info("Spawning test child command_id=%s", envelope.command_id)
+    logger.info(f"Spawning test child command_id={envelope.command_id}")
     child = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)  # pylint: disable=consider-using-with
     _test_children[child.pid] = (envelope.command_id, child)
     return child
@@ -366,7 +350,7 @@ def _cancel_scan(envelope: CommandEnvelope) -> None:
     try:
         target_command_id = uuid.UUID(str(target_command_id_str))
     except ValueError:
-        logger.warning("Invalid cancel_command_id: %s", target_command_id_str)
+        logger.warning(f"Invalid cancel_command_id: {target_command_id_str}")
         _update_status(cancel_command_id, CommandStatusUpdate(
             status="failed", completed_at=datetime.now(timezone.utc),
             error_message=f"Invalid cancel_command_id: {target_command_id_str}",
@@ -375,7 +359,7 @@ def _cancel_scan(envelope: CommandEnvelope) -> None:
 
     pid = _find_pid_by_command_id(target_command_id)
     if pid is None:
-        logger.info("No running scan found for command_id=%s", target_command_id)
+        logger.info(f"No running scan found for command_id={target_command_id}")
         _update_status(cancel_command_id, CommandStatusUpdate(
             status="completed", completed_at=datetime.now(timezone.utc),
             result_summary={"message": f"No running scan found for {target_command_id}"},
@@ -384,10 +368,7 @@ def _cancel_scan(envelope: CommandEnvelope) -> None:
 
     try:
         os.kill(pid, signal.SIGTERM)
-        logger.info(
-            "Sent SIGTERM to pid=%d for command_id=%s",
-            pid, target_command_id,
-        )
+        logger.info(f"Sent SIGTERM to pid={pid} for command_id={target_command_id}")
         # Remove from _children so reaper doesn't double-log
         _children.pop(pid, None)
         # Mark the scan as cancelled
@@ -400,10 +381,7 @@ def _cancel_scan(envelope: CommandEnvelope) -> None:
             result_summary={"cancelled_command_id": str(target_command_id)},
         ))
     except ProcessLookupError:
-        logger.warning(
-            "Process pid=%d already exited for command_id=%s",
-            pid, target_command_id,
-        )
+        logger.warning(f"Process pid={pid} already exited for command_id={target_command_id}")
         _children.pop(pid, None)
         _update_status(cancel_command_id, CommandStatusUpdate(
             status="completed", completed_at=datetime.now(timezone.utc),
@@ -430,10 +408,7 @@ def run_daemon(
     rabbitmq_url = os.environ.get("RABBITMQ_URL", "amqp://guest:guest@localhost:5672/")
     queue_name = f"cnc.{container_name}"
 
-    logger.info(
-        "Daemon started container=%s max_concurrent_scans=%d",
-        container_name, _max_scans,
-    )
+    logger.info(f"Daemon started container={container_name} max_concurrent_scans={_max_scans}")
 
     connection = pika.BlockingConnection(pika.URLParameters(rabbitmq_url))
     channel = connection.channel()
@@ -459,7 +434,7 @@ def run_daemon(
         routing_key=f"command_n_control.{container_name}",
     )
 
-    logger.info("Consuming from queue=%s", queue_name)
+    logger.info(f"Consuming from queue={queue_name}")
 
     try:
         for method_frame, properties, body in channel.consume(
@@ -476,10 +451,7 @@ def run_daemon(
                 channel.basic_nack(method_frame.delivery_tag, requeue=False)
                 continue
 
-            logger.info(
-                "Received command command_id=%s type=%s",
-                envelope.command_id, envelope.command_type,
-            )
+            logger.info(f"Received command command_id={envelope.command_id} type={envelope.command_type}")
 
             if envelope.command_type == "scan":
                 _spawn_scan(envelope, producer_main_path)
@@ -488,7 +460,7 @@ def run_daemon(
             elif envelope.command_type == "cancel":
                 _cancel_scan(envelope)
             else:
-                logger.warning("Unknown command type=%s — discarding", envelope.command_type)
+                logger.warning(f"Unknown command type={envelope.command_type} — discarding")
 
             channel.basic_ack(method_frame.delivery_tag)
 
@@ -498,7 +470,7 @@ def run_daemon(
         for pid in list(_children.keys()):
             try:
                 os.kill(pid, signal.SIGTERM)
-                logger.info("Sent SIGTERM to child pid=%d", pid)
+                logger.info(f"Sent SIGTERM to child pid={pid}")
             except ProcessLookupError:
                 pass
         for pid in list(_test_children.keys()):
@@ -526,7 +498,7 @@ def run_scan(
     # Fetch a fresh runtime settings snapshot at child startup (best-effort).
     runtime_cache.refresh(fetch_runtime_snapshot(_api_base()))
 
-    logger.info("Scan started command_id=%s", command_id)
+    logger.info(f"Scan started command_id={command_id}")
 
     _update_status(command_id, CommandStatusUpdate(
         status="running", started_at=datetime.now(timezone.utc),
@@ -535,16 +507,13 @@ def run_scan(
     try:
         result = asyncio.run(scan_func())
         if result.success:
-            logger.info("Scan completed command_id=%s", command_id)
+            logger.info(f"Scan completed command_id={command_id}")
             _update_status(command_id, CommandStatusUpdate(
                 status="completed", completed_at=datetime.now(timezone.utc),
                 result_summary=result.summary(),
             ))
         else:
-            logger.error(
-                "Scan failed command_id=%s: %s errors=%s",
-                command_id, result.error_message(), result.errors,
-            )
+            logger.error(f"Scan failed command_id={command_id}: {result.error_message()} errors={result.errors}")
             _update_status(command_id, CommandStatusUpdate(
                 status="failed", completed_at=datetime.now(timezone.utc),
                 error_message=result.error_message(),
@@ -552,7 +521,7 @@ def run_scan(
             ))
             sys.exit(1)
     except Exception as exc:
-        logger.error("Scan failed command_id=%s: %s", command_id, exc, exc_info=True)
+        logger.error(f"Scan failed command_id={command_id}: {exc}", exc_info=True)
         _update_status(command_id, CommandStatusUpdate(
             status="failed", completed_at=datetime.now(timezone.utc),
             error_message=str(exc),
@@ -576,7 +545,7 @@ def run_test(
     # Fetch a fresh runtime settings snapshot at child startup (best-effort).
     runtime_cache.refresh(fetch_runtime_snapshot(_api_base()))
 
-    logger.info("Test started command_id=%s", command_id)
+    logger.info(f"Test started command_id={command_id}")
 
     # Forward item_id to the test function via environment variable
     # (Option A from design: keeps test_func signature clean)

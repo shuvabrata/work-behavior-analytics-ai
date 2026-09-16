@@ -112,7 +112,4 @@ async def load_db_overrides_from_session(db: AsyncSession) -> None:
     config = _resolve_effective_config(rows)
     _runtime_settings.refresh(config)
 
-    logger.info(
-        "Runtime settings cache refreshed from DB (%d settings)",
-        len(rows),
-    )
+    logger.info(f"Runtime settings cache refreshed from DB ({len(rows)} settings)")

@@ -147,6 +147,36 @@ def get_detail_layout(connector_type: str):
         )
 
     # 4. Connector Settings — connector-level settings, collapsed by default
+    connector_fields = form_spec.get("connector_config", [])
+    has_connector_settings = bool(connector_fields) or bool(producer_container)
+
+    connector_settings_children = []
+    if not has_connector_settings:
+        connector_settings_children.append(
+            html.Div(
+                "No connector-level settings required.",
+                style={
+                    "fontFamily": FONT_SANS,
+                    "fontSize": FONT_SIZE_SMALL,
+                    "color": COLOR_GRAY_MEDIUM,
+                },
+            )
+        )
+    else:
+        if connector_fields:
+            connector_settings_children.append(_render_connector_config(form_spec, connector_type))
+        if producer_container:
+            connector_settings_children.append(_render_scan_interval_input(connector_type))
+        connector_settings_children.append(
+            dbc.Button(
+                "Save Configuration",
+                id={"type": "connector-save", "connector_type": connector_type},
+                color="primary",
+                size="sm",
+                className="mt-2",
+            )
+        )
+
     sections.append(
         _section_container(
             html.Div(
@@ -170,20 +200,7 @@ def get_detail_layout(connector_type: str):
                     dbc.Collapse(
                         id="connector-settings-collapse",
                         is_open=False,
-                        children=[
-                            _render_connector_config(form_spec, connector_type),
-                            *(
-                                [_render_scan_interval_input(connector_type)]
-                                if producer_container else []
-                            ),
-                            dbc.Button(
-                                "Save Configuration",
-                                id={"type": "connector-save", "connector_type": connector_type},
-                                color="primary",
-                                size="sm",
-                                className="mt-2",
-                            ),
-                        ],
+                        children=connector_settings_children,
                     ),
                 ],
             )

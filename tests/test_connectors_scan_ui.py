@@ -735,3 +735,80 @@ class TestTestConnectionCallback:
             result = handle_item_test_connection([None])
 
         assert result == (no_update, no_update)
+
+
+class TestConnectorSettingsLayout:
+    """Test connector-level settings rendering in get_detail_layout."""
+
+    def _find_component(self, component, predicate):
+        if predicate(component):
+            return component
+        children = getattr(component, "children", None)
+        if children is None:
+            return None
+        if not isinstance(children, list):
+            children = [children]
+        for child in children:
+            res = self._find_component(child, predicate)
+            if res is not None:
+                return res
+        return None
+
+    def test_github_connector_settings_has_scan_interval_and_no_fallback_message(self):
+        from app.dash_app.pages.connectors.layout import get_detail_layout
+
+        layout = get_detail_layout("github")
+        collapse = self._find_component(layout, lambda c: getattr(c, "id", None) == "connector-settings-collapse")
+        assert collapse is not None
+        text = _flatten_dash(collapse)
+        assert "AUTO-SCAN INTERVAL" in text
+        assert "No connector-level settings required." not in text
+
+        save_button = self._find_component(
+            collapse,
+            lambda c: getattr(c, "id", None) == {"type": "connector-save", "connector_type": "github"},
+        )
+        assert save_button is not None
+
+    def test_jira_and_confluence_have_scan_interval_and_no_fallback_message(self):
+        from app.dash_app.pages.connectors.layout import get_detail_layout
+
+        for conn in ("jira", "confluence"):
+            layout = get_detail_layout(conn)
+            collapse = self._find_component(layout, lambda c: getattr(c, "id", None) == "connector-settings-collapse")
+            assert collapse is not None
+            text = _flatten_dash(collapse)
+            assert "AUTO-SCAN INTERVAL" in text
+            assert "No connector-level settings required." not in text
+
+    def test_slack_has_fallback_message_and_no_save_button(self):
+        from app.dash_app.pages.connectors.layout import get_detail_layout
+
+        layout = get_detail_layout("slack")
+        collapse = self._find_component(layout, lambda c: getattr(c, "id", None) == "connector-settings-collapse")
+        assert collapse is not None
+        text = _flatten_dash(collapse)
+        assert "No connector-level settings required." in text
+        assert "AUTO-SCAN INTERVAL" not in text
+
+        save_button = self._find_component(
+            collapse,
+            lambda c: getattr(c, "id", None) == {"type": "connector-save", "connector_type": "slack"},
+        )
+        assert save_button is None
+
+    def test_atlassian_mcp_has_connector_fields_and_save_button(self):
+        from app.dash_app.pages.connectors.layout import get_detail_layout
+
+        layout = get_detail_layout("atlassian_mcp")
+        collapse = self._find_component(layout, lambda c: getattr(c, "id", None) == "connector-settings-collapse")
+        assert collapse is not None
+        text = _flatten_dash(collapse)
+        assert "No connector-level settings required." not in text
+
+        save_button = self._find_component(
+            collapse,
+            lambda c: getattr(c, "id", None) == {"type": "connector-save", "connector_type": "atlassian_mcp"},
+        )
+        assert save_button is not None
+

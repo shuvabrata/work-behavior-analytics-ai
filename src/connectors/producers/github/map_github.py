@@ -245,11 +245,15 @@ def fetch_github_user(user_obj: Any) -> Dict[str, Any]:
     All person-discovery paths in the producer should go through this
     function so that login/name/email are extracted consistently.
 
-    Handles two shapes:
+    Handles three shapes:
 
     * **NamedUser** (has a ``login`` attribute) — accessing ``.name`` or
       ``.email`` triggers a blocking ``GET /users/{login}`` API call via
       PyGithub lazy loading.  **Always call inside** ``asyncio.to_thread()``.
+    * **NamedUser stub** (has a ``login`` attribute but no URL) — accessing
+      ``.login``/``.name``/``.email`` raises ``IncompletableObject``
+      ("Cannot complete object as it contains no URL").  This happens for
+      ``commit.author`` on PR commits.  Falls back to the GitAuthor path.
     * **GitAuthor** (has ``name``/``email``, no ``login``) — reads
       git-embedded metadata directly; no network call needed.
 
@@ -260,9 +264,17 @@ def fetch_github_user(user_obj: Any) -> Dict[str, Any]:
     if user_obj is None:
         return {"login": "unknown", "name": "Unknown", "email": ""}
 
-    if hasattr(user_obj, "login") and user_obj.login:
+    # A NamedUser stub (e.g. commit.author on a PR commit) may be created
+    # without a URL, so accessing .login/.name/.email raises
+    # IncompletableObject ("Cannot complete object as it contains no URL").
+    # Detect this and fall back to the GitAuthor path (git-embedded name/email)
+    # or unknown, instead of letting the exception propagate.
+    try:
         login = user_obj.login
+    except Exception:
+        login = None
 
+    if login:
         # Cache hit — skip the blocking GET /users/{login} entirely.
         if login in _user_cache:
             return _user_cache[login]
@@ -296,18 +308,23 @@ def fetch_github_user(user_obj: Any) -> Dict[str, Any]:
         _user_cache[login] = result
         return result
 
-    elif hasattr(user_obj, "name"):
-        # GitAuthor — email is embedded in git commit metadata, no API call needed.
-        # Not cached: the data is already in the object, no savings from caching.
+    # No usable login. Try the GitAuthor path (git-embedded name/email).
+    # NOTE: use try/except rather than hasattr() — a NamedUser stub raises
+    # IncompletableObject (a GithubException, NOT AttributeError) on attribute
+    # access, and hasattr() only swallows AttributeError.
+    try:
         name = user_obj.name or "Unknown"
-        email = (getattr(user_obj, "email", "") or "").lower()
+    except Exception:
+        name = None
+    if name is not None:
+        try:
+            email = (getattr(user_obj, "email", "") or "").lower()
+        except Exception:
+            email = ""
         login = email.split("@")[0] if email else name.lower().replace(" ", "_")
-    else:
-        login = "unknown"
-        name = "Unknown"
-        email = ""
+        return {"login": login, "name": name, "email": email}
 
-    return {"login": login, "name": name, "email": email}
+    return {"login": "unknown", "name": "Unknown", "email": ""}
 
 
 def map_pull_request(

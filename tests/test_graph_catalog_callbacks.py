@@ -235,7 +235,7 @@ def test_render_catalog_query_detail_uses_rich_metadata_and_default_view():
     assert view_options[1]["value"] == "tabular"
     assert selected_view == "graph"
     assert "Compare two people by direct code review activity." in detail_text
-    assert "Active" in detail_text
+    assert "Active" not in detail_text
     # Label is now a list: ["First person", Span(" *", style={color: red})]
     label_children = first_parameter_block.children[0].children
     label_text = "".join(c if isinstance(c, str) else c.children for c in label_children)
@@ -246,4 +246,97 @@ def test_render_catalog_query_detail_uses_rich_metadata_and_default_view():
     assert chip_area is not None, "Expected catalog-person-chip area"
     assert run_disabled is False
     assert load_disabled is False
+
+
+def test_build_status_badge_only_renders_draft_and_deprecated():
+    assert catalog_callbacks._build_status_badge("active") is None
+    assert catalog_callbacks._build_status_badge("ACTIVE") is None
+    assert catalog_callbacks._build_status_badge(None) is None
+    assert catalog_callbacks._build_status_badge("") is None
+
+    draft_badge = catalog_callbacks._build_status_badge("draft")
+    assert draft_badge is not None
+    assert draft_badge.children == "Draft"
+    assert draft_badge.color == "warning"
+
+    deprecated_badge = catalog_callbacks._build_status_badge("deprecated")
+    assert deprecated_badge is not None
+    assert deprecated_badge.children == "Deprecated"
+    assert deprecated_badge.color == "secondary"
+
+
+def test_render_catalog_query_list_omits_active_badge():
+    catalog_queries = [
+        {
+            "id": "q1",
+            "name": "Production Query",
+            "namespace": {"name": "Test", "directory": "test"},
+            "available_views": ["graph"],
+            "status": "active",
+        },
+        {
+            "id": "q2",
+            "name": "Draft Query",
+            "namespace": {"name": "Test", "directory": "test"},
+            "available_views": ["graph"],
+            "status": "draft",
+        },
+        {
+            "id": "q3",
+            "name": "Deprecated Query",
+            "namespace": {"name": "Test", "directory": "test"},
+            "available_views": ["graph"],
+            "status": "deprecated",
+        },
+    ]
+
+    result = catalog_callbacks.render_catalog_query_list(
+        catalog_queries=catalog_queries,
+        namespace_filter=None,
+        search_text=None,
+        selected_query=None,
+        metadata_store={},
+    )
+    result_text = " ".join(_flatten_text(result))
+    assert "Production Query" in result_text
+    assert "Active" not in result_text
+    assert "Draft Query" in result_text
+    assert "Draft" in result_text
+    assert "Deprecated Query" in result_text
+    assert "Deprecated" in result_text
+
+
+def test_render_catalog_query_detail_inverts_popover_theme():
+    catalog_query = {
+        "id": "confluence/comment_trend",
+        "name": "Comment Trend",
+        "description": "Test description popover",
+        "summary": "Summary text",
+        "namespace": {"name": "Confluence", "directory": "confluence"},
+        "available_views": ["tabular"],
+    }
+
+    # In light theme, popover class should be theme-executive-dark (dark popup)
+    detail_light, *_ = catalog_callbacks.render_catalog_query_detail(
+        selected_query={"id": "confluence/comment_trend"},
+        catalog_queries=[catalog_query],
+        theme_name="executive-light",
+        parameter_values={},
+        current_view=None,
+    )
+    popover_light = detail_light[1].children[2]
+    assert popover_light.class_name == "theme-executive-dark"
+
+    # In dark theme, popover class should be theme-executive-light (light popup)
+    detail_dark, *_ = catalog_callbacks.render_catalog_query_detail(
+        selected_query={"id": "confluence/comment_trend"},
+        catalog_queries=[catalog_query],
+        theme_name="executive-dark",
+        parameter_values={},
+        current_view=None,
+    )
+    popover_dark = detail_dark[1].children[2]
+    assert popover_dark.class_name == "theme-executive-light"
+
+
 

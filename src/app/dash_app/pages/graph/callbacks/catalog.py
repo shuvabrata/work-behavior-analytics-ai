@@ -207,11 +207,12 @@ def _query_matches(query: dict, needle: str) -> bool:
 
 
 def _status_badge_color(status: str | None) -> str:
-    if status == "active":
-        return "success"
-    if status == "draft":
+    if not status:
+        return "secondary"
+    status_lower = status.strip().lower()
+    if status_lower == "draft":
         return "warning"
-    if status == "deprecated":
+    if status_lower == "deprecated":
         return "secondary"
     return "secondary"
 
@@ -219,9 +220,12 @@ def _status_badge_color(status: str | None) -> str:
 def _build_status_badge(status: str | None):
     if not status:
         return None
+    status_lower = status.strip().lower()
+    if status_lower not in ("draft", "deprecated"):
+        return None
     return dbc.Badge(
-        status.title(),
-        color=_status_badge_color(status),
+        status_lower.title(),
+        color=_status_badge_color(status_lower),
         className="ms-2",
     )
 

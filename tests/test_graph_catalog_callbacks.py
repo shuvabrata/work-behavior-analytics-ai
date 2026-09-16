@@ -306,3 +306,37 @@ def test_render_catalog_query_list_omits_active_badge():
     assert "Deprecated" in result_text
 
 
+def test_render_catalog_query_detail_inverts_popover_theme():
+    catalog_query = {
+        "id": "confluence/comment_trend",
+        "name": "Comment Trend",
+        "description": "Test description popover",
+        "summary": "Summary text",
+        "namespace": {"name": "Confluence", "directory": "confluence"},
+        "available_views": ["tabular"],
+    }
+
+    # In light theme, popover class should be theme-executive-dark (dark popup)
+    detail_light, *_ = catalog_callbacks.render_catalog_query_detail(
+        selected_query={"id": "confluence/comment_trend"},
+        catalog_queries=[catalog_query],
+        theme_name="executive-light",
+        parameter_values={},
+        current_view=None,
+    )
+    popover_light = detail_light[1].children[2]
+    assert popover_light.class_name == "theme-executive-dark"
+
+    # In dark theme, popover class should be theme-executive-light (light popup)
+    detail_dark, *_ = catalog_callbacks.render_catalog_query_detail(
+        selected_query={"id": "confluence/comment_trend"},
+        catalog_queries=[catalog_query],
+        theme_name="executive-dark",
+        parameter_values={},
+        current_view=None,
+    )
+    popover_dark = detail_dark[1].children[2]
+    assert popover_dark.class_name == "theme-executive-light"
+
+
+

@@ -3,7 +3,8 @@
 /* ============================================================================= */
 
 :root,
-:root[data-theme="executive-light"] {
+:root[data-theme="executive-light"],
+.theme-executive-light {
     /* Colors - Primary */
     --color-navy: #2c5282;
     --color-navy-dark: #1e3a5f;
@@ -1157,9 +1158,23 @@ input::placeholder {
     color: var(--color-charcoal) !important;
 }
 
+.popover-body p:last-child {
+    margin-bottom: 0;
+}
+
+.bs-popover-auto[data-popper-placement^=top] > .popover-arrow::before,
+.bs-popover-top > .popover-arrow::before {
+    border-top-color: var(--color-border) !important;
+}
+
 .bs-popover-auto[data-popper-placement^=top] > .popover-arrow::after, 
 .bs-popover-top > .popover-arrow::after {
     border-top-color: var(--color-background-white) !important;
+}
+
+.bs-popover-auto[data-popper-placement^=bottom] > .popover-arrow::before,
+.bs-popover-bottom > .popover-arrow::before {
+    border-bottom-color: var(--color-border) !important;
 }
 
 .bs-popover-auto[data-popper-placement^=bottom] > .popover-arrow::after, 
@@ -1167,11 +1182,25 @@ input::placeholder {
     border-bottom-color: var(--color-background-white) !important;
 }
 
+.bs-popover-auto[data-popper-placement^=end] > .popover-arrow::before,
+.bs-popover-end > .popover-arrow::before,
+.bs-popover-auto[data-popper-placement^=right] > .popover-arrow::before,
+.bs-popover-right > .popover-arrow::before {
+    border-right-color: var(--color-border) !important;
+}
+
 .bs-popover-auto[data-popper-placement^=end] > .popover-arrow::after, 
 .bs-popover-end > .popover-arrow::after,
 .bs-popover-auto[data-popper-placement^=right] > .popover-arrow::after,
 .bs-popover-right > .popover-arrow::after {
     border-right-color: var(--color-background-white) !important;
+}
+
+.bs-popover-auto[data-popper-placement^=start] > .popover-arrow::before,
+.bs-popover-start > .popover-arrow::before,
+.bs-popover-auto[data-popper-placement^=left] > .popover-arrow::before,
+.bs-popover-left > .popover-arrow::before {
+    border-left-color: var(--color-border) !important;
 }
 
 .bs-popover-auto[data-popper-placement^=start] > .popover-arrow::after, 

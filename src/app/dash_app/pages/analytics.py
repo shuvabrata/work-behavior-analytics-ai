@@ -2,7 +2,7 @@
 
 from urllib.parse import urlencode
 
-from dash import Input, Output, State, callback, html
+from dash import Input, Output, State, callback, clientside_callback, html
 import dash_bootstrap_components as dbc
 
 from app.analytics.collaboration.config import (
@@ -22,6 +22,7 @@ from app.analytics.registry import GRAPH_ANALYTICS
 from app.dash_app.components.common import create_page_header
 from app.dash_app.styles import (
     CARD_CONTAINER_STYLE,
+    COLOR_BACKGROUND_LIGHT,
     COLOR_BACKGROUND_WHITE,
     COLOR_BORDER,
     COLOR_CHARCOAL_MEDIUM,
@@ -31,10 +32,14 @@ from app.dash_app.styles import (
     FONT_SIZE_LARGE,
     FONT_SIZE_MEDIUM,
     FONT_SIZE_SMALL,
+    FONT_SIZE_XSMALL,
+    FONT_SIZE_XTINY,
     FONT_WEIGHT_MEDIUM,
+    FONT_WEIGHT_SEMIBOLD,
     SPACING_MEDIUM,
     SPACING_SMALL,
     SPACING_XSMALL,
+    SPACING_XXSMALL,
 )
 
 
@@ -114,6 +119,123 @@ def _create_analytic_card(analytic) -> dbc.Card:
     )
 
 
+_LAYER_GRID_TEMPLATE = "70px 1fr 110px"
+
+
+def _field_label(text: str) -> html.Div:
+    """Small uppercase column label matching Graph Styling."""
+    return html.Div(
+        text,
+        style={
+            "fontFamily": FONT_SANS,
+            "fontSize": FONT_SIZE_XTINY,
+            "fontWeight": FONT_WEIGHT_MEDIUM,
+            "color": COLOR_GRAY_MEDIUM,
+            "textTransform": "uppercase",
+            "letterSpacing": "0.5px",
+        },
+    )
+
+
+def _layer_header_row() -> html.Div:
+    """Column header row for the layer table."""
+    return html.Div(
+        [
+            _field_label("Enable"),
+            _field_label("Layer"),
+            _field_label("Weight"),
+        ],
+        style={
+            "display": "grid",
+            "gridTemplateColumns": _LAYER_GRID_TEMPLATE,
+            "gap": SPACING_XSMALL,
+            "alignItems": "center",
+            "padding": f"{SPACING_XXSMALL} 0",
+            "borderBottom": f"1px solid {COLOR_BORDER}",
+        },
+    )
+
+
+def _layer_row(layer: str) -> html.Div:
+    """Single row in the layer table with Switch, Label, and Weight input."""
+    return html.Div(
+        [
+            dbc.Switch(
+                id=f"collab-layer-enable-{layer}",
+                value=True,
+                className="m-0",
+            ),
+            html.Div(
+                LAYER_LABELS[layer],
+                style={
+                    "fontFamily": FONT_SANS,
+                    "fontSize": FONT_SIZE_SMALL,
+                    "fontWeight": FONT_WEIGHT_MEDIUM,
+                    "color": COLOR_CHARCOAL_MEDIUM,
+                },
+            ),
+            dbc.Input(
+                id=f"collab-weight-{layer}",
+                type="number",
+                min=0,
+                step=0.1,
+                value=DEFAULT_LAYER_WEIGHTS[layer],
+                size="sm",
+                style={
+                    "fontFamily": FONT_SANS,
+                    "fontSize": FONT_SIZE_SMALL,
+                    "padding": SPACING_XXSMALL,
+                    "border": f"1px solid {COLOR_BORDER}",
+                    "borderRadius": "2px",
+                    "width": "100%",
+                },
+            ),
+        ],
+        id=f"collab-layer-row-{layer}",
+        style={
+            "display": "grid",
+            "gridTemplateColumns": _LAYER_GRID_TEMPLATE,
+            "gap": SPACING_XSMALL,
+            "alignItems": "center",
+            "padding": f"{SPACING_XXSMALL} 0",
+            "borderBottom": f"1px solid {COLOR_BORDER}",
+        },
+    )
+
+
+def _table_title_bar() -> html.Div:
+    """Title bar for the layer configuration table."""
+    return html.Div(
+        "Layers & Weights",
+        style={
+            "fontFamily": FONT_SANS,
+            "fontSize": FONT_SIZE_SMALL,
+            "fontWeight": FONT_WEIGHT_SEMIBOLD,
+            "color": COLOR_CHARCOAL_MEDIUM,
+            "textTransform": "uppercase",
+            "letterSpacing": "0.5px",
+            "marginBottom": SPACING_XSMALL,
+        },
+    )
+
+
+def _section_header(title: str) -> html.Div:
+    """Section header for grouped settings."""
+    return html.Div(
+        title,
+        style={
+            "fontFamily": FONT_SANS,
+            "fontSize": FONT_SIZE_XTINY,
+            "fontWeight": FONT_WEIGHT_SEMIBOLD,
+            "color": COLOR_GRAY_MEDIUM,
+            "textTransform": "uppercase",
+            "letterSpacing": "0.5px",
+            "marginBottom": SPACING_XSMALL,
+            "marginTop": SPACING_MEDIUM,
+        },
+    )
+
+
 def _create_collaboration_controls() -> html.Div:
     return html.Div(
         [
@@ -145,30 +267,32 @@ def _create_collaboration_controls() -> html.Div:
             dbc.Collapse(
                 [
                     html.Div(
-                        "Adjust layers and weights before opening the graph.",
+                        "Configure collaboration layers and weights in the table below, then adjust network layout and filtering parameters as needed.",
                         style={
                             "fontFamily": FONT_SANS,
                             "fontSize": FONT_SIZE_SMALL,
                             "color": COLOR_GRAY_MEDIUM,
-                            "marginBottom": SPACING_XSMALL,
+                            "marginBottom": SPACING_SMALL,
                             "marginTop": SPACING_SMALL,
                         },
                     ),
-                    html.Label("Layers", style={"fontSize": FONT_SIZE_SMALL, "fontFamily": FONT_SANS}),
-                    dbc.Checklist(
-                        id="collab-layers",
-                        options=[{"label": LAYER_LABELS[layer], "value": layer} for layer in LAYER_ORDER],
-                        value=list(LAYER_ORDER),
-                        inline=False,
-                        style={"fontSize": FONT_SIZE_SMALL, "marginBottom": SPACING_SMALL},
-                    ),
-                    dbc.Row(
+                    # Layer configuration table
+                    html.Div(
                         [
-                            dbc.Col(_weight_input(layer), md=6)
-                            for layer in LAYER_ORDER
+                            _table_title_bar(),
+                            _layer_header_row(),
+                            *[_layer_row(layer) for layer in LAYER_ORDER],
                         ],
-                        className="g-2 mb-2",
+                        style={
+                            "padding": SPACING_SMALL,
+                            "backgroundColor": COLOR_BACKGROUND_LIGHT,
+                            "border": f"1px solid {COLOR_BORDER}",
+                            "borderRadius": "2px",
+                            "marginBottom": SPACING_SMALL,
+                        },
                     ),
+                    # Network Dynamics section
+                    _section_header("Network Dynamics"),
                     dbc.Row(
                         [
                             dbc.Col(
@@ -202,8 +326,19 @@ def _create_collaboration_controls() -> html.Div:
                                 md=6,
                             ),
                         ],
-                        className="g-2 mb-2",
+                        className="g-2 mb-1",
                     ),
+                    html.Div(
+                        "Tip: For dense networks, start with X=1400-2400 and Y=1000-1800. Higher values increase spacing between communities.",
+                        style={
+                            "fontFamily": FONT_SANS,
+                            "fontSize": "11px",
+                            "color": COLOR_GRAY_MEDIUM,
+                            "marginBottom": SPACING_SMALL,
+                        },
+                    ),
+                    # Filtering & Topology section
+                    _section_header("Filtering & Topology"),
                     dbc.Row(
                         [
                             dbc.Col(
@@ -230,16 +365,6 @@ def _create_collaboration_controls() -> html.Div:
                         ],
                         className="g-2 mb-2",
                     ),
-                    html.Div(
-                        "Tip: For dense networks, start with X=1400-2400 and Y=1000-1800. Higher values increase spacing between communities.",
-                        style={
-                            "fontFamily": FONT_SANS,
-                            "fontSize": "11px",
-                            "color": COLOR_GRAY_MEDIUM,
-                            "marginTop": "-4px",
-                            "marginBottom": SPACING_XSMALL,
-                        },
-                    ),
                     dbc.Row(
                         [
                             dbc.Col(
@@ -259,7 +384,16 @@ def _create_collaboration_controls() -> html.Div:
                                 md=6,
                             ),
                         ],
-                        className="g-2 mb-2",
+                        className="g-2 mb-3",
+                    ),
+                    # Secondary action button at bottom
+                    dbc.Button(
+                        "Open Visualization",
+                        id="collab-open-btn-bottom",
+                        href="/app/collaboration",
+                        color="primary",
+                        size="sm",
+                        className="w-100 mb-2",
                     ),
                 ],
                 id="collab-controls-collapse",
@@ -278,29 +412,31 @@ def _create_collaboration_controls() -> html.Div:
     )
 
 
-def _weight_input(layer: str) -> html.Div:
-    return html.Div(
-        [
-            html.Label(
-                f"Weight: {LAYER_LABELS[layer]}",
-                style={"fontSize": FONT_SIZE_SMALL, "fontFamily": FONT_SANS},
-            ),
-            dbc.Input(
-                id=f"collab-weight-{layer}",
-                type="number",
-                min=0,
-                step=0.1,
-                value=DEFAULT_LAYER_WEIGHTS[layer],
-                size="sm",
-            ),
-        ]
+# ---------------------------------------------------------------------------
+# Callbacks
+# ---------------------------------------------------------------------------
+
+# Disable Weight input when the corresponding layer switch is off
+for _layer in LAYER_ORDER:
+    clientside_callback(
+        """
+        function(enabled) {
+            return !enabled;
+        }
+        """,
+        Output(f"collab-weight-{_layer}", "disabled"),
+        Input(f"collab-layer-enable-{_layer}", "value"),
     )
 
 
 @callback(
-    [Output("collab-open-btn", "href"), Output("collab-url-preview", "children")],
     [
-        Input("collab-layers", "value"),
+        Output("collab-open-btn", "href"),
+        Output("collab-open-btn-bottom", "href"),
+        Output("collab-url-preview", "children"),
+    ],
+    [
+        *[Input(f"collab-layer-enable-{layer}", "value") for layer in LAYER_ORDER],
         Input("collab-lookback-days", "value"),
         Input("collab-min-pair-score", "value"),
         Input("collab-top-n-edges", "value"),
@@ -308,41 +444,32 @@ def _weight_input(layer: str) -> html.Div:
         Input("collab-community-gap-y", "value"),
         Input("collab-exclude-bots", "value"),
         Input("collab-ensure-min-connection", "value"),
-        Input("collab-weight-reporter_assignee", "value"),
-        Input("collab-weight-pr_reviews", "value"),
-        Input("collab-weight-shared_file_commits", "value"),
-        Input("collab-weight-sprint_coworkers", "value"),
-        Input("collab-weight-explicit_review_requests", "value"),
-        Input("collab-weight-epic_overlap", "value"),
-        Input("collab-weight-confluence_co_authorship", "value"),
-        Input("collab-weight-confluence_comment_engagement", "value"),
-        Input("collab-weight-confluence_co_commenters", "value"),
-        Input("collab-weight-confluence_mentions", "value"),
+        *[Input(f"collab-weight-{layer}", "value") for layer in LAYER_ORDER],
     ],
 )
-def build_collaboration_href(
-    layers,
-    lookback_days,
-    min_pair_score,
-    top_n_edges_per_node,
-    community_gap_x,
-    community_gap_y,
-    exclude_bots,
-    ensure_min_connection,
-    w_reporter_assignee,
-    w_pr_reviews,
-    w_shared_file_commits,
-    w_sprint_coworkers,
-    w_explicit_review_requests,
-    w_epic_overlap,
-    w_confluence_co_authorship,
-    w_confluence_comment_engagement,
-    w_confluence_co_commenters,
-    w_confluence_mentions,
-):
+def build_collaboration_href(*args):
     """Build a graph-mode URL that carries collaboration query overrides."""
+    n_layers = len(LAYER_ORDER)
+    layer_enables = args[:n_layers]
+    lookback_days = args[n_layers]
+    min_pair_score = args[n_layers + 1]
+    top_n_edges_per_node = args[n_layers + 2]
+    community_gap_x = args[n_layers + 3]
+    community_gap_y = args[n_layers + 4]
+    exclude_bots = args[n_layers + 5]
+    ensure_min_connection = args[n_layers + 6]
+    weight_values = args[n_layers + 7 : n_layers + 7 + n_layers]
+
+    enabled_layers = [
+        layer for layer, enabled in zip(LAYER_ORDER, layer_enables) if enabled
+    ]
+    weight_overrides = {
+        f"w_{layer}": weight
+        for layer, weight in zip(LAYER_ORDER, weight_values)
+    }
+
     query_values = {
-        "layers": layers or list(LAYER_ORDER),
+        "layers": enabled_layers,
         "lookback_days": lookback_days,
         "min_pair_score": min_pair_score,
         "top_n_edges_per_node": top_n_edges_per_node,
@@ -350,16 +477,7 @@ def build_collaboration_href(
         "community_gap_y": community_gap_y,
         "exclude_bots": exclude_bots,
         "ensure_min_connection": ensure_min_connection,
-        "w_reporter_assignee": w_reporter_assignee,
-        "w_pr_reviews": w_pr_reviews,
-        "w_shared_file_commits": w_shared_file_commits,
-        "w_sprint_coworkers": w_sprint_coworkers,
-        "w_explicit_review_requests": w_explicit_review_requests,
-        "w_epic_overlap": w_epic_overlap,
-        "w_confluence_co_authorship": w_confluence_co_authorship,
-        "w_confluence_comment_engagement": w_confluence_comment_engagement,
-        "w_confluence_co_commenters": w_confluence_co_commenters,
-        "w_confluence_mentions": w_confluence_mentions,
+        **weight_overrides,
     }
 
     try:
@@ -376,20 +494,11 @@ def build_collaboration_href(
         "community_gap_y": config.community_gap_y,
         "exclude_bots": str(config.exclude_bots).lower(),
         "ensure_min_connection": str(config.ensure_min_connection).lower(),
-        "w_reporter_assignee": config.weights["reporter_assignee"],
-        "w_pr_reviews": config.weights["pr_reviews"],
-        "w_shared_file_commits": config.weights["shared_file_commits"],
-        "w_sprint_coworkers": config.weights["sprint_coworkers"],
-        "w_explicit_review_requests": config.weights["explicit_review_requests"],
-        "w_epic_overlap": config.weights["epic_overlap"],
-        "w_confluence_co_authorship": config.weights["confluence_co_authorship"],
-        "w_confluence_comment_engagement": config.weights["confluence_comment_engagement"],
-        "w_confluence_co_commenters": config.weights["confluence_co_commenters"],
-        "w_confluence_mentions": config.weights["confluence_mentions"],
+        **{f"w_{layer}": config.weights[layer] for layer in LAYER_ORDER},
     }
 
     href = f"/app/collaboration?{urlencode(params)}"
-    return href, f"URL: {href}"
+    return href, href, f"URL: {href}"
 
 
 @callback(

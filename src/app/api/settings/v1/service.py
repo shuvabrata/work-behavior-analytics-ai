@@ -169,9 +169,7 @@ def _resolve_effective_config(db_rows: list[Any]) -> RuntimeConfig:
                 RuntimeConfig(**{key: value})
                 valid[key] = value
             except ValidationError:
-                logger.warning(
-                    "Ignoring invalid persisted override: %s=%r", key, value
-                )
+                logger.warning(f"Ignoring invalid persisted override: {key}={value!r}")
         return RuntimeConfig(**valid)
 
 

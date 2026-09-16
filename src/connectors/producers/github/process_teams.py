@@ -36,7 +36,7 @@ async def process_teams(
     member. Teams exceeding MAX_TEAM_SIZE are skipped entirely.
     """
     max_team_size = int(os.environ.get("MAX_TEAM_SIZE", "100"))
-    logger.info("Fetching teams for '%s'...", full_name)
+    logger.info(f"Fetching teams for '{full_name}'...")
     try:
         teams_raw = await asyncio.to_thread(fetch_repo_teams, repo)
         for team in teams_raw:
@@ -61,22 +61,18 @@ async def process_teams(
                 )
             except WbaRetryTimeoutError:
                 logger.debug(
-                    "[process_teams] WbaRetryTimeoutError propagating for team '%s' in '%s' — "
-                    "repo will be skipped without cursor advance",
-                    team_slug,
-                    full_name,
+                    f"[process_teams] WbaRetryTimeoutError propagating for team '{team_slug}' in '{full_name}' — repo "
+                    f"will be skipped without cursor advance"
                 )
                 raise
             except Exception as exc:
-                logger.warning("Could not fetch members for team '%s': %s", team_slug, exc)
+                logger.warning(f"Could not fetch members for team '{team_slug}': {exc}")
                 members_raw = []
 
             if len(members_raw) > max_team_size:
                 logger.warning(
-                    "Skipping team '%s' entirely (%d members exceeds MAX_TEAM_SIZE=%d)",
-                    team_slug,
-                    len(members_raw),
-                    max_team_size,
+                    f"Skipping team '{team_slug}' entirely ({len(members_raw)} members exceeds MAX_TEAM_SIZE="
+                    f"{max_team_size})"
                 )
                 continue
             logger.info(
@@ -115,11 +111,8 @@ async def process_teams(
                     member_name = member_info["name"]
                     member_email = member_info["email"]
                     logger.debug(
-                        "[person:team_member] login=%r  name=%r  email=%r  team=%s",
-                        member_login,
-                        member_name,
-                        member_email,
-                        team_slug,
+                        f"[person:team_member] login={member_login!r}  name={member_name!r}  email={member_email!r}  "
+                        f"team={team_slug}"
                     )
                     member_sig = build_person_signal_fn(
                         {
@@ -132,21 +125,18 @@ async def process_teams(
                     await pub_callback(member_sig)
             except WbaRetryTimeoutError:
                 logger.debug(
-                    "[process_teams] WbaRetryTimeoutError propagating for member-detail fetch "
-                    "of team '%s' in '%s' — repo will be skipped without cursor advance",
-                    team_slug,
-                    full_name,
+                    f"[process_teams] WbaRetryTimeoutError propagating for member-detail fetch of team '{team_slug}' "
+                    f"in '{full_name}' — repo will be skipped without cursor advance"
                 )
                 raise
             except Exception as exc:
-                logger.warning("Could not fetch members for team '%s': %s", team_slug, exc)
+                logger.warning(f"Could not fetch members for team '{team_slug}': {exc}")
     except WbaRetryTimeoutError:
         logger.debug(
-            "[process_teams] WbaRetryTimeoutError propagating for '%s' — repo will be skipped "
-            "without cursor advance",
-            full_name,
+            f"[process_teams] WbaRetryTimeoutError propagating for '{full_name}' — repo will be skipped without cursor"
+            f" advance"
         )
         raise
     except Exception as exc:
-        logger.warning("Could not fetch teams for '%s': %s", full_name, exc)
-    logger.info("Teams done (%d) for '%s'", published.get("Team", 0), full_name)
+        logger.warning(f"Could not fetch teams for '{full_name}': {exc}")
+    logger.info(f"Teams done ({published.get('Team', 0)}) for '{full_name}'")

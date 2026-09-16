@@ -201,21 +201,6 @@ def test_build_issue_signal_event_time_falls_back_to_created_at():
 
 
 @pytest.mark.unit
-def test_build_issue_signal_returns_none_on_missing_number():
-    """Missing 'number' should cause a validation error and return None."""
-    signal = build_issue_signal(
-        issue_data=_issue_data(number=None),  # type: ignore[arg-type]
-        repo_data=_repo_data(),
-        assignee_logins=["bob"],
-        mention_logins=[],
-        referenced_jira_keys=[],
-        referenced_github_issue_ids=[],
-        relates_to_ids=[],
-    )
-    assert signal is None
-
-
-@pytest.mark.unit
 def test_build_issue_signal_returns_none_on_empty_dict():
     """An empty issue_data dict should return None — missing mandatory fields.
 

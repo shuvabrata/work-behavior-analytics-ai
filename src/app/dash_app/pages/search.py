@@ -202,7 +202,7 @@ def _format_event_time(event_time_str: str | None) -> html.Span | str:
         duration_str = humanize_duration(local_dt)
         return html.Span(duration_str, title=actual_time)
     except Exception as exc:
-        logger.warning("Failed to parse event time '%s': %s", event_time_str, exc)
+        logger.warning(f"Failed to parse event time '{event_time_str}': {exc}")
         return event_time_str
 
 

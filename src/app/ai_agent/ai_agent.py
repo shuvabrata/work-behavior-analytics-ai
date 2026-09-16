@@ -116,11 +116,7 @@ def _build_and_log_stream_metadata(
         "sources": sources,
     }
     normalized_payload = _normalize_stream_metadata_payload(payload)
-    logger.info(
-        "Stream metadata: session_id=%s metadata=%s",
-        session_id,
-        json.dumps(normalized_payload, default=str),
-    )
+    logger.info(f"Stream metadata: session_id={session_id} metadata={json.dumps(normalized_payload, default=str)}")
     return normalized_payload
 
 
@@ -161,14 +157,14 @@ async def _augument_user_message(session_id: str, user_message: str):
                     final_augmented_message = event["content"]
                     chain_sources = event.get("sources_used", [])
                 else:
-                    logger.debug("Stream thinking event: %s", event.get("type"))
+                    logger.debug(f"Stream thinking event: {event.get('type')}")
                     yield "sse", f"data: {json.dumps(event)}\n\n"
                 
     except asyncio.TimeoutError:
-        logger.warning("Augmentation phase timed out for session %s", session_id)
+        logger.warning(f"Augmentation phase timed out for session {session_id}")
         yield "sse", f"data: {json.dumps({'type': 'thinking_chunk', 'content': 'Context gathering timed out.'})}\n\n"
     except Exception as aug_exc:
-        logger.error("Augmentation phase error for session %s: %s", session_id, aug_exc)
+        logger.error(f"Augmentation phase error for session {session_id}: {aug_exc}")
         yield "sse", f"data: {json.dumps({'type': 'thinking_chunk', 'content': f'Context gathering failed: {aug_exc}'})}\n\n"
 
     # Yield the final result tuple so the caller can extract it
@@ -195,12 +191,7 @@ def _build_message_list_for_llm_with_token_pruning(
     messages = _chat_sessions[session_id] + [{"role": "user", "content": final_augmented_message}]
 
     total_tokens = _provider.count_tokens(messages, model)
-    logger.info(
-        "Stream token count before pruning: session_id=%s tokens=%d max=%d",
-        session_id,
-        total_tokens,
-        max_tokens,
-    )
+    logger.info(f"Stream token count before pruning: session_id={session_id} tokens={total_tokens} max={max_tokens}")
 
     if total_tokens > max_tokens:
         # Keep last 4 messages which is the minimum to maintain context
@@ -263,11 +254,7 @@ async def stream_chat(
     assembled_tokens: list[str] = []
 
     with LogContext(request_id=session_id):
-        logger.info(
-            "Stream started: session_id=%s user_message=%.80s",
-            session_id,
-            user_message,
-        )
+        logger.info(f"Stream started: session_id={session_id} user_message={user_message[:80]}")
         
         try:
             # ── Phase 1: Augmentation (adding more info to user message) ───────────────
@@ -293,7 +280,7 @@ async def stream_chat(
                         assembled_tokens.append(token)
                         yield f"data: {json.dumps({'type': 'message_chunk', 'content': token})}\n\n"
             except asyncio.TimeoutError:
-                logger.error("LLM streaming timed out for session %s", session_id)
+                logger.error(f"LLM streaming timed out for session {session_id}")
                 _streaming_metrics["errors"] += 1
                 yield f"data: {json.dumps({'type': 'error', 'content': 'LLM response timed out.'})}\n\n"
                 return
@@ -323,31 +310,20 @@ async def stream_chat(
             _streaming_metrics["completions"] += 1
             _streaming_metrics["total_duration_seconds"] += elapsed
             logger.info(
-                "Stream completed: session_id=%s duration=%.2fs tokens_generated=%d",
-                session_id,
-                elapsed,
-                len(assembled_tokens),
+                f"Stream completed: session_id={session_id} duration={elapsed:.2f}s tokens_generated="
+                f"{len(assembled_tokens)}"
             )
 
         except asyncio.CancelledError:
             elapsed = time.monotonic() - stream_start
             _streaming_metrics["disconnects"] += 1
-            logger.warning(
-                "Stream disconnected by client: session_id=%s duration=%.2fs",
-                session_id,
-                elapsed,
-            )
+            logger.warning(f"Stream disconnected by client: session_id={session_id} duration={elapsed:.2f}s")
             raise
 
         except Exception as exc:
             elapsed = time.monotonic() - stream_start
             _streaming_metrics["errors"] += 1
-            logger.error(
-                "Stream error: session_id=%s error=%s duration=%.2fs",
-                session_id,
-                exc,
-                elapsed,
-            )
+            logger.error(f"Stream error: session_id={session_id} error={exc} duration={elapsed:.2f}s")
             yield f"data: {json.dumps({'type': 'error', 'content': str(exc)})}\n\n"
 
 def end_chat(session_id):

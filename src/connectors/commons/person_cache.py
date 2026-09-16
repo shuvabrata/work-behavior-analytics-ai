@@ -169,10 +169,8 @@ class PersonCache:
             if existing_by_account:
                 person_id = existing_by_account
                 logger.debug(
-                    "    ✓ Found existing Person by Atlassian account_id '%s': %s — reusing instead of creating %s",
-                    account_id,
-                    person_id,
-                    fallback_person_id,
+                    f"    ✓ Found existing Person by Atlassian account_id '{account_id}': {person_id} — reusing "
+                    f"instead of creating {fallback_person_id}"
                 )
                 person = Person(
                     id=person_id, name=name, email=email, url=url,
@@ -274,7 +272,7 @@ class PersonCache:
                 person.set_last_observed_at(observed_at)
             merge_person(session, person)
         except Exception as exc:  # pragma: no cover - defensive
-            logger.debug("    ! Failed to upgrade Person %s on cache hit: %s", person_id, exc)
+            logger.debug(f"    ! Failed to upgrade Person {person_id} on cache hit: {exc}")
 
     def queue_identity_mapping(
         self,

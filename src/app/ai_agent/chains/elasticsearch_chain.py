@@ -36,7 +36,7 @@ def _load_es_prompt() -> str:
     prompt_file = Path(__file__).parent.parent / "es_prompt.md"
     if prompt_file.exists():
         return prompt_file.read_text()
-    logger.warning("es_prompt.md not found at %s", prompt_file)
+    logger.warning(f"es_prompt.md not found at {prompt_file}")
     return ""
 
 
@@ -128,7 +128,7 @@ def check_es_relevance(
         logger.info(f"ES relevance check: {answer}")
         return "YES" in answer.strip().upper()
     except Exception as exc:  # noqa: BLE001
-        logger.warning("ES relevance check failed: %s", exc)
+        logger.warning(f"ES relevance check failed: {exc}")
         return False
 
 
@@ -171,7 +171,7 @@ def generate_search_request(
     try:
         raw = provider.chat_completion([{"role": "user", "content": prompt}])
     except Exception as exc:  # noqa: BLE001
-        logger.warning("ES query generation LLM call failed: %s", exc)
+        logger.warning(f"ES query generation LLM call failed: {exc}")
         return None
 
     # Strip markdown fences if the LLM wraps the JSON despite instructions
@@ -183,11 +183,11 @@ def generate_search_request(
     try:
         parsed = json.loads(cleaned)
     except json.JSONDecodeError as exc:
-        logger.warning("ES query generation returned invalid JSON: %s | raw=%s", exc, raw[:200])
+        logger.warning(f"ES query generation returned invalid JSON: {exc} | raw={raw[:200]}")
         return None
 
     if not isinstance(parsed, dict):
-        logger.warning("ES query generation returned non-dict JSON: %s", type(parsed))
+        logger.warning(f"ES query generation returned non-dict JSON: {type(parsed)}")
         return None
 
     # Explicit not-relevant signal from the LLM
@@ -206,10 +206,10 @@ def generate_search_request(
             page_size=settings.ES_CHAIN_MAX_RESULTS,
         )
     except Exception as exc:  # noqa: BLE001
-        logger.warning("ES query generation produced invalid SearchRequest: %s | parsed=%s", exc, filtered)
+        logger.warning(f"ES query generation produced invalid SearchRequest: {exc} | parsed={filtered}")
         return None
 
-    logger.debug("ES chain generated SearchRequest: %s", request.model_dump(exclude_none=True))
+    logger.debug(f"ES chain generated SearchRequest: {request.model_dump(exclude_none=True)}")
     return request
 
 
@@ -322,13 +322,13 @@ async def augment_message_with_es_stream(
             timeout=30.0,
         )
     except asyncio.TimeoutError:
-        logger.warning("ES relevance check timed out: %.80s", user_message)
+        logger.warning(f"ES relevance check timed out: {user_message[:80]}")
         yield {"type": "thinking_chunk", "content": "Entity search relevance check timed out; skipping."}
         yield {"type": "thinking_end"}
         yield {"type": "augmented_message", "content": _not_applied}
         return
     except Exception as exc:  # noqa: BLE001
-        logger.warning("ES relevance check error: %s", exc)
+        logger.warning(f"ES relevance check error: {exc}")
         yield {"type": "thinking_chunk", "content": f"Entity search check failed: {exc}"}
         yield {"type": "thinking_end"}
         yield {"type": "augmented_message", "content": _not_applied}
@@ -349,13 +349,13 @@ async def augment_message_with_es_stream(
             timeout=30.0,
         )
     except asyncio.TimeoutError:
-        logger.warning("ES query generation timed out: %.80s", user_message)
+        logger.warning(f"ES query generation timed out: {user_message[:80]}")
         yield {"type": "thinking_chunk", "content": "Search request generation timed out; skipping."}
         yield {"type": "thinking_end"}
         yield {"type": "augmented_message", "content": _not_applied}
         return
     except Exception as exc:  # noqa: BLE001
-        logger.warning("ES query generation error: %s", exc)
+        logger.warning(f"ES query generation error: {exc}")
         yield {"type": "thinking_chunk", "content": f"Search request generation failed: {exc}"}
         yield {"type": "thinking_end"}
         yield {"type": "augmented_message", "content": _not_applied}
@@ -373,14 +373,14 @@ async def augment_message_with_es_stream(
     try:
         response: SearchResponse = es_search(search_request)
     except Exception as exc:  # noqa: BLE001
-        logger.warning("ES search execution failed: %s", exc)
+        logger.warning(f"ES search execution failed: {exc}")
         yield {"type": "thinking_chunk", "content": f"Elasticsearch search failed: {exc}"}
         yield {"type": "thinking_end"}
         yield {"type": "augmented_message", "content": _not_applied}
         return
 
     if not response.results:
-        logger.debug("ES augmentation skipped: no results for request=%s", search_request.model_dump(exclude_none=True))
+        logger.debug(f"ES augmentation skipped: no results for request={search_request.model_dump(exclude_none=True)}")
         yield {"type": "thinking_chunk", "content": "No matching entities found."}
         yield {"type": "thinking_end"}
         yield {"type": "augmented_message", "content": _not_applied}
@@ -389,10 +389,8 @@ async def augment_message_with_es_stream(
     # ── Step 4: Format and yield ──────────────────────────────────────────────
     context_block = _format_results(response)
     logger.info(
-        "ES augmentation applied: total_hits=%d returned=%d query=%s",
-        response.total,
-        len(response.results),
-        search_request.model_dump(exclude_none=True, exclude={"full", "page_size", "page"}),
+        f"ES augmentation applied: total_hits={response.total} returned={len(response.results)} query="
+        f"{search_request.model_dump(exclude_none=True, exclude={'full', 'page_size', 'page'})}"
     )
     yield {"type": "thinking_end"}
     yield {

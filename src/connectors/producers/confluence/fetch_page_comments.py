@@ -13,7 +13,7 @@ from connectors.producers.github.retry_with_backoff import (
 
 def fetch_page_comments(confluence: Confluence, page_id: str, content_type: str = "page") -> List[Dict[str, Any]]:
     """Fetch all comments for a page/blogpost, paginating through the full result set."""
-    logger.debug("Fetching comments for %s content_id=%s", content_type, page_id)
+    logger.debug(f"Fetching comments for {content_type} content_id={page_id}")
     all_results: List[Dict[str, Any]] = []
     start = 0
     page_size = 50
@@ -36,11 +36,7 @@ def fetch_page_comments(confluence: Confluence, page_id: str, content_type: str 
                 break
             all_results.extend(results)
             logger.debug(
-                "Fetched %d comments (batch start=%d) for %s content_id=%s",
-                len(results),
-                start,
-                content_type,
-                page_id,
+                f"Fetched {len(results)} comments (batch start={start}) for {content_type} content_id={page_id}"
             )
             start += len(results)
             # Stop if we received fewer than a full page — no more results.
@@ -49,19 +45,9 @@ def fetch_page_comments(confluence: Confluence, page_id: str, content_type: str 
     except WbaRetryTimeoutError:
         raise
     except Exception as exc:
-        logger.warning(
-            "Failed to fetch comments for %s content_id=%s: %s",
-            content_type,
-            page_id,
-            exc,
-        )
+        logger.warning(f"Failed to fetch comments for {content_type} content_id={page_id}: {exc}")
 
-    logger.debug(
-        "Total %d comments fetched for %s content_id=%s",
-        len(all_results),
-        content_type,
-        page_id,
-    )
+    logger.debug(f"Total {len(all_results)} comments fetched for {content_type} content_id={page_id}")
     return all_results
 
 

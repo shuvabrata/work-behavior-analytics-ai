@@ -24,12 +24,8 @@ def build_person_signal(
     login = person_data.get("login") or person_data.get("name", "unknown")
     person_id = wba_format(_SOURCE, "Person", login)
     logger.debug(
-        "[build_person_signal] id=%s  login=%r  name=%r  email=%r  extra_rels=%d",
-        person_id,
-        login,
-        person_data.get("name"),
-        person_data.get("email"),
-        len(extra_relationships) if extra_relationships else 0,
+        f"[build_person_signal] id={person_id}  login={login!r}  name={person_data.get('name')!r}  email="
+        f"{person_data.get('email')!r}  extra_rels={len(extra_relationships) if extra_relationships else 0}"
     )
     try:
         attrs = PersonAttributes(
@@ -48,6 +44,6 @@ def build_person_signal(
             relationships=list(extra_relationships) if extra_relationships else [],
         )
     except Exception as exc:
-        logger.warning("Skipping Person signal for '%s' (validation error): %s", login, exc)
+        logger.warning(f"Skipping Person signal for '{login}' (validation error): {exc}")
         return None
 

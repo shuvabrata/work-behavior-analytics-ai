@@ -47,11 +47,7 @@ async def _on_settings_changed(changed_keys: list[str]) -> None:
     try:
         async with ASYNC_SESSION_LOCAL() as db:
             await load_db_overrides_from_session(db)
-        logger.info(
-            "Runtime settings cache refreshed after settings.changed event: "
-            "keys=%s",
-            changed_keys,
-        )
+        logger.info(f"Runtime settings cache refreshed after settings.changed event: keys={changed_keys}")
     except Exception:  # pylint: disable=broad-except
         logger.warning(
             "Failed to refresh runtime settings cache after event: "
@@ -123,9 +119,8 @@ async def lifespan(app_instance: FastAPI) -> AsyncGenerator[None, None]:
         scheduler_loop(_scheduler_instance_id, settings.SCHEDULER_TICK_MINUTES)
     )
     logger.info(
-        "[Startup] Scheduler started instance_id=%s tick_minutes=%d",
-        _scheduler_instance_id,
-        settings.SCHEDULER_TICK_MINUTES,
+        f"[Startup] Scheduler started instance_id={_scheduler_instance_id} tick_minutes="
+        f"{settings.SCHEDULER_TICK_MINUTES}"
     )
 
     yield  # ── Application runs here ────────────────────────────────────

@@ -48,7 +48,7 @@ def load_collaboration_network(search: str | None, pathname: str | None):
     if pathname != "/app/collaboration":
         raise PreventUpdate
 
-    logger.info("[COLLAB-PAGE] Loading collaboration network search=%r", search)
+    logger.info(f"[COLLAB-PAGE] Loading collaboration network search={search!r}")
 
     params = parse_qs((search or "").lstrip("?"), keep_blank_values=True)
     hide = {"display": "none"}
@@ -108,18 +108,18 @@ def load_collaboration_network(search: str | None, pathname: str | None):
         )
 
         logger.info(
-            "[COLLAB-PAGE] SUCCESS \u2014 %d elements, %d people, %d communities, modularity=%.3f",
-            len(elements), data.num_people, data.num_communities, data.modularity,
+            f"[COLLAB-PAGE] SUCCESS — {len(elements)} elements, {data.num_people} people, {data.num_communities} "
+            f"communities, modularity={data.modularity:.3f}"
         )
 
         return elements, _COLLABORATION_LAYOUT, [banner_content], {**show, "flex": "1"}, hide, False
 
     except ValueError as exc:
-        logger.warning("[COLLAB-PAGE] No data: %s", exc)
+        logger.warning(f"[COLLAB-PAGE] No data: {exc}")
         return [], _COLLABORATION_LAYOUT, [_error_banner(str(exc))], show, hide, False
 
     except Exception as exc:  # pylint: disable=broad-except
-        logger.exception("[COLLAB-PAGE] Unexpected error: %s", exc)
+        logger.exception(f"[COLLAB-PAGE] Unexpected error: {exc}")
         return [], _COLLABORATION_LAYOUT, [_error_banner("An unexpected error occurred.")], show, hide, False
 
 
@@ -145,8 +145,8 @@ def apply_collab_filters(elements, selected_communities, weight_threshold, top_n
         top_n_mode or "all",
     )
     logger.debug(
-        "[COLLAB-FILTER] communities=%s weight>=%s top_n=%s \u2192 %d elements",
-        selected_communities, weight_threshold, top_n_mode, len(result),
+        f"[COLLAB-FILTER] communities={selected_communities} weight>={weight_threshold} top_n={top_n_mode} → "
+        f"{len(result)} elements"
     )
     return result
 

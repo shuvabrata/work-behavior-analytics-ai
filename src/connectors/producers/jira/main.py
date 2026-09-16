@@ -144,7 +144,7 @@ def build_project_signal(
             attributes=attrs,
         )
     except Exception as exc:
-        logger.warning("Skipping Project signal for '%s' (validation error): %s", project_data.get("project_key"), exc)
+        logger.warning(f"Skipping Project signal for '{project_data.get('project_key')}' (validation error): {exc}")
         return None
 
 
@@ -178,7 +178,7 @@ def build_person_signal(
             attributes=attrs,
         )
     except Exception as exc:
-        logger.warning("Skipping Person signal for '%s' (validation error): %s", account_id, exc)
+        logger.warning(f"Skipping Person signal for '{account_id}' (validation error): {exc}")
         return None
 
 
@@ -280,8 +280,7 @@ def build_initiative_signal(
         for account_id in (mention_account_ids or []):
             if account_id == reporter_person_id:
                 logger.debug(
-                    "Skipping self-mention: accountId=%s on initiative %s",
-                    account_id, initiative_data.get("key"),
+                    f"Skipping self-mention: accountId={account_id} on initiative {initiative_data.get('key')}"
                 )
                 continue
             rels.append(
@@ -310,7 +309,7 @@ def build_initiative_signal(
             relationships=rels,
         )
     except Exception as exc:
-        logger.warning("Skipping Initiative signal for '%s' (validation error): %s", initiative_data.get("key"), exc)
+        logger.warning(f"Skipping Initiative signal for '{initiative_data.get('key')}' (validation error): {exc}")
         return None
 
 
@@ -439,10 +438,7 @@ def build_epic_signal(
         # MENTIONS → each @mentioned accountId (undirected, skip self-refs)
         for account_id in (mention_account_ids or []):
             if account_id == reporter_person_id:
-                logger.debug(
-                    "Skipping self-mention: accountId=%s on epic %s",
-                    account_id, epic_data.get("key"),
-                )
+                logger.debug(f"Skipping self-mention: accountId={account_id} on epic {epic_data.get('key')}")
                 continue
             rels.append(
                 Relationship(
@@ -470,7 +466,7 @@ def build_epic_signal(
             relationships=rels,
         )
     except Exception as exc:
-        logger.warning("Skipping Epic signal for '%s' (validation error): %s", epic_data.get("key"), exc)
+        logger.warning(f"Skipping Epic signal for '{epic_data.get('key')}' (validation error): {exc}")
         return None
 
 
@@ -498,7 +494,7 @@ def build_sprint_signal(
             attributes=attrs,
         )
     except Exception as exc:
-        logger.warning("Skipping Sprint signal for '%s' (validation error): %s", sprint_data.get("name"), exc)
+        logger.warning(f"Skipping Sprint signal for '{sprint_data.get('name')}' (validation error): {exc}")
         return None
 
 
@@ -689,10 +685,7 @@ def build_issue_signal(
         # MENTIONS → each @mentioned accountId (undirected, skip self-refs)
         for account_id in (mention_account_ids or []):
             if account_id == reporter_person_id:
-                logger.debug(
-                    "Skipping self-mention: accountId=%s on issue %s",
-                    account_id, issue_data.get("key"),
-                )
+                logger.debug(f"Skipping self-mention: accountId={account_id} on issue {issue_data.get('key')}")
                 continue
             rels.append(
                 Relationship(
@@ -720,7 +713,7 @@ def build_issue_signal(
             relationships=rels,
         )
     except Exception as exc:
-        logger.warning("Skipping Issue signal for '%s' (validation error): %s", issue_data.get("key"), exc)
+        logger.warning(f"Skipping Issue signal for '{issue_data.get('key')}' (validation error): {exc}")
         return None
 
 
@@ -761,12 +754,7 @@ async def publish_signals(
     async def _pub(sig: Optional[ActivitySignal]) -> None:
         if sig:
             await publisher.publish(sig)
-            logger.info(
-                "Published entity_type=%s id=%s signal with signal_id=%s ",
-                sig.entity_type,
-                sig.id,
-                sig.signal_id,
-            )
+            logger.info(f"Published entity_type={sig.entity_type} id={sig.id} signal with signal_id={sig.signal_id} ")
             _inc(sig.entity_type)
 
     # ------------------------------------------------------------------
@@ -862,10 +850,7 @@ async def publish_signals(
             comments_raw = await asyncio.to_thread(
                 fetch_comments, jira, jira_issue_id
             )
-            logger.debug(
-                "Fetched %d comments for %s '%s'",
-                len(comments_raw), entity_label, entity_key,
-            )
+            logger.debug(f"Fetched {len(comments_raw)} comments for {entity_label} '{entity_key}'")
 
             for c in comments_raw:
                 author = c.get("author") or {}
@@ -888,9 +873,8 @@ async def publish_signals(
                 description_adf, comment_bodies_adf,
             )
             logger.debug(
-                "Extracted %d mentions from %s '%s': %s",
-                len(mention_account_ids), entity_label, entity_key,
-                mention_account_ids,
+                f"Extracted {len(mention_account_ids)} mentions from {entity_label} '{entity_key}': "
+                f"{mention_account_ids}"
             )
 
         # Emit Person signals for new commenters and mentioned users
@@ -948,26 +932,26 @@ async def publish_signals(
     # ------------------------------------------------------------------
     logger.info("Fetching projects...")
     projects_raw = await asyncio.to_thread(fetch_projects, jira, max_results_per_page)
-    logger.info("Fetched %d projects", len(projects_raw))
+    logger.info(f"Fetched {len(projects_raw)} projects")
     # key → internal id map for downstream relationship wiring
     project_key_to_id: Dict[str, str] = {}
 
     for p_raw in projects_raw:
         p_data = map_project(p_raw, jira_base_url)
         project_key_to_id[p_data["project_key"]] = p_data["project_key"]
-        logger.debug("Processing project '%s' (%s)", p_data.get("project_key"), p_data.get("project_name"))
+        logger.debug(f"Processing project '{p_data.get('project_key')}' ({p_data.get('project_name')})")
         await _pub(build_project_signal(p_data, jira_base_url))
 
-    logger.info("Projects done (%d)", published.get("Project", 0))
+    logger.info(f"Projects done ({published.get('Project', 0)})")
 
     # ------------------------------------------------------------------
     # Initiatives
     # ------------------------------------------------------------------
-    logger.info("Fetching initiatives (lookback=%d days)...", lookback_days)
+    logger.info(f"Fetching initiatives (lookback={lookback_days} days)...")
     initiatives_raw = await asyncio.to_thread(
         fetch_initiatives, jira, lookback_days, max_results_per_page, last_synced_at,
     )
-    logger.info("Fetched %d initiatives", len(initiatives_raw))
+    logger.info(f"Fetched {len(initiatives_raw)} initiatives")
     # issue_id (Jira) → internal id for Epic → Initiative wiring
     initiative_jira_id_to_id: Dict[str, str] = {}
 
@@ -1002,10 +986,7 @@ async def publish_signals(
                         seen_persons.add(assignee_person_id)
                         await _pub(build_person_signal(user_data, jira_base_url))
 
-        logger.debug(
-            "Processing initiative '%s': '%s'",
-            i_data.get("key"), str(i_data.get("summary", ""))[:60],
-        )
+        logger.debug(f"Processing initiative '{i_data.get('key')}': '{str(i_data.get('summary', ''))[:60]}'")
         initiative_items.append({
             "raw": i_raw,
             "kwargs": {
@@ -1019,16 +1000,16 @@ async def publish_signals(
         initiative_items, map_initiative, build_initiative_signal, "Initiative",
     )
 
-    logger.info("Initiatives done (%d)", published.get("Initiative", 0))
+    logger.info(f"Initiatives done ({published.get('Initiative', 0)})")
 
     # ------------------------------------------------------------------
     # Epics
     # ------------------------------------------------------------------
-    logger.info("Fetching epics (lookback=%d days)...", lookback_days)
+    logger.info(f"Fetching epics (lookback={lookback_days} days)...")
     epics_raw = await asyncio.to_thread(
         fetch_epics, jira, lookback_days, max_results_per_page, last_synced_at,
     )
-    logger.info("Fetched %d epics", len(epics_raw))
+    logger.info(f"Fetched {len(epics_raw)} epics")
     # jira issue id → internal epic id for Issue → Epic wiring
     epic_jira_id_to_id: Dict[str, str] = {}
 
@@ -1071,10 +1052,7 @@ async def publish_signals(
 
         team_id = f"jira_team_{e_data['team_value']}" if e_data.get("team_value") else None
 
-        logger.debug(
-            "Processing epic '%s': '%s'",
-            e_data.get("key"), str(e_data.get("summary", ""))[:60],
-        )
+        logger.debug(f"Processing epic '{e_data.get('key')}': '{str(e_data.get('summary', ''))[:60]}'")
         epic_items.append({
             "raw": e_raw,
             "kwargs": {
@@ -1090,34 +1068,34 @@ async def publish_signals(
         epic_items, map_epic, build_epic_signal, "Epic",
     )
 
-    logger.info("Epics done (%d)", published.get("Epic", 0))
+    logger.info(f"Epics done ({published.get('Epic', 0)})")
 
     # ------------------------------------------------------------------
     # Issues (fetch all first so we can collect sprint IDs)
     # ------------------------------------------------------------------
-    logger.info("Fetching issues (lookback=%d days, page_size=%d)...", lookback_days, max_results_per_page)
+    logger.info(f"Fetching issues (lookback={lookback_days} days, page_size={max_results_per_page})...")
     issues_raw = await asyncio.to_thread(
         fetch_issues, jira, lookback_days, max_results_per_page, last_synced_at,
     )
     sprint_ids_needed = extract_sprint_ids_from_issues(issues_raw)
-    logger.info("Fetched %d issues; found %d unique sprint IDs", len(issues_raw), len(sprint_ids_needed))
+    logger.info(f"Fetched {len(issues_raw)} issues; found {len(sprint_ids_needed)} unique sprint IDs")
 
     # ------------------------------------------------------------------
     # Sprints
     # ------------------------------------------------------------------
-    logger.info("Fetching %d sprints by ID...", len(sprint_ids_needed))
+    logger.info(f"Fetching {len(sprint_ids_needed)} sprints by ID...")
     sprints_raw = await asyncio.to_thread(fetch_sprints_by_ids, jira, sprint_ids_needed)
-    logger.info("Fetched %d sprints", len(sprints_raw))
+    logger.info(f"Fetched {len(sprints_raw)} sprints")
     # jira sprint id string → internal sprint id for Issue → Sprint wiring
     sprint_jira_id_to_id: Dict[str, str] = {}
 
     for s_raw in sprints_raw:
         s_data = map_sprint(s_raw)
         sprint_jira_id_to_id[str(s_raw.get("id", ""))] = s_data["sprint_id"]
-        logger.debug("Processing sprint '%s' (state=%s)", s_data.get("name"), s_data.get("status"))
+        logger.debug(f"Processing sprint '{s_data.get('name')}' (state={s_data.get('status')})")
         await _pub(build_sprint_signal(s_data, jira_base_url))
 
-    logger.info("Sprints done (%d)", published.get("Sprint", 0))
+    logger.info(f"Sprints done ({published.get('Sprint', 0)})")
 
     # ------------------------------------------------------------------
     # Issues
@@ -1178,7 +1156,7 @@ async def publish_signals(
         except WbaRetryTimeoutError:
             raise
         except Exception as exc:
-            logger.warning("Issue skipped: %s", exc)
+            logger.warning(f"Issue skipped: {exc}")
 
     def _issue_runner_factory() -> Any:
         """Return an async runner that processes a single issue with isolation.
@@ -1203,11 +1181,9 @@ async def publish_signals(
             except WbaRetryTimeoutError:
                 raise
             except Exception as exc:
-                logger.warning("Issue skipped: %s", exc)
+                logger.warning(f"Issue skipped: {exc}")
             if processed % 25 == 0:
-                logger.info(
-                    "  ... %d/%d issues processed", processed, len(issue_items)
-                )
+                logger.info(f"  ... {processed}/{len(issue_items)} issues processed")
 
         return _run_issue
 
@@ -1216,8 +1192,8 @@ async def publish_signals(
         runner=_issue_runner_factory(),
     )
 
-    logger.info("Issues done (%d)", published.get("Issue", 0))
-    logger.info("Persons done (%d)", published.get("Person", 0))
+    logger.info(f"Issues done ({published.get('Issue', 0)})")
+    logger.info(f"Persons done ({published.get('Person', 0)})")
 
     return published
 
@@ -1235,7 +1211,7 @@ async def main_async() -> ScanResult:
     lookback_days = int(os.getenv("JIRA_LOOKBACK_DAYS", "90"))
     max_results_per_page = int(os.getenv("JIRA_MAX_RESULTS_PER_PAGE", "100"))
 
-    logger.info("Jira ActivitySignal Producer starting (config_source=%s)", config_source)
+    logger.info(f"Jira ActivitySignal Producer starting (config_source={config_source})")
 
     if config_source == "SERVER":
         config = load_config_from_server()
@@ -1251,7 +1227,7 @@ async def main_async() -> ScanResult:
     async with RabbitMQPublisher(rabbitmq_url) as publisher:
         for account in accounts:
             if not account.get("enabled", True):
-                logger.info("Skipping disabled configuration for url: %s", account.get("url", "unknown"))
+                logger.info(f"Skipping disabled configuration for url: {account.get('url', 'unknown')}")
                 continue
 
             jira_base_url: str = account.get("url", "").rstrip("/")
@@ -1266,17 +1242,13 @@ async def main_async() -> ScanResult:
             try:
                 jira = create_jira_connection({"account": [account]})
             except Exception as exc:
-                logger.error("Failed to connect to Jira '%s': %s", jira_base_url, exc)
+                logger.error(f"Failed to connect to Jira '{jira_base_url}': {exc}")
                 result.add_error(jira_base_url, str(exc))
                 continue
 
             try:
                 last_synced_at = await get_sync_cursor(_SOURCE, jira_base_url)
-                logger.info(
-                    "Processing Jira '%s' (last_synced_at=%s)",
-                    jira_base_url,
-                    last_synced_at,
-                )
+                logger.info(f"Processing Jira '{jira_base_url}' (last_synced_at={last_synced_at})")
 
                 scan_started_at = datetime.now(timezone.utc)
                 published = await publish_signals(
@@ -1287,24 +1259,17 @@ async def main_async() -> ScanResult:
                 await set_sync_cursor(_SOURCE, jira_base_url, scan_started_at)
 
                 total = sum(published.values())
-                logger.info(
-                    "Jira '%s' done — %d signals published: %s",
-                    jira_base_url,
-                    total,
-                    published,
-                )
+                logger.info(f"Jira '{jira_base_url}' done — {total} signals published: {published}")
                 result.items_succeeded += 1
             except WbaRetryTimeoutError as exc:
                 # Retry budget exhausted — the account is incomplete. Do NOT
                 # advance its sync cursor so the next scan re-considers it.
                 logger.error(
-                    "Retry budget exhausted for Jira '%s' — skipping, will retry next scan: %s",
-                    jira_base_url,
-                    exc,
+                    f"Retry budget exhausted for Jira '{jira_base_url}' — skipping, will retry next scan: {exc}"
                 )
                 result.add_error(jira_base_url, str(exc))
             except Exception as exc:
-                logger.error("Error processing Jira '%s': %s", jira_base_url, exc, exc_info=True)
+                logger.error(f"Error processing Jira '{jira_base_url}': {exc}", exc_info=True)
                 result.add_error(jira_base_url, str(exc))
 
     logger.info("Jira ActivitySignal Producer finished.")

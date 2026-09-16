@@ -50,11 +50,8 @@ async def _process_identity_refresh(
     if skip_identity:
         days_since = (now_utc - last_synced_at).days  # type: ignore[operator]
         logger.info(
-            "Skipping collaborators and teams for '%s' "
-            "(last synced %d day(s) ago, within %d-day refresh window).",
-            full_name,
-            days_since,
-            identity_refresh_days,
+            f"Skipping collaborators and teams for '{full_name}' (last synced {days_since} day(s) ago, within "
+            f"{identity_refresh_days}-day refresh window)."
         )
         return
 
@@ -94,13 +91,13 @@ async def process_repo_signals(
 
     # Topics — run in thread so time.sleep in retry_with_backoff never blocks the event loop
     topics = await asyncio.to_thread(fetch_repo_topics, repo)
-    logger.debug("[process_repo_signals] repo=%s topics=%d", full_name, len(topics))
+    logger.debug(f"[process_repo_signals] repo={full_name} topics={len(topics)}")
 
     # Repository signal
     try:
         repo_data = map_repo(repo, topics)
     except ValueError as exc:
-        logger.warning("Skipping repo '%s': %s", full_name, exc)
+        logger.warning(f"Skipping repo '{full_name}': {exc}")
         return
 
     await _pub(build_repository_signal(repo_data))
@@ -140,7 +137,7 @@ async def process_repo_signals(
     )
 
     # Issues
-    logger.info("Processing issues for '%s'...", full_name)
+    logger.info(f"Processing issues for '{full_name}'...")
     await process_issues(
         repo=repo,
         repo_data=repo_data,
@@ -152,4 +149,4 @@ async def process_repo_signals(
         pub_callback=_pub,
         github_obj=github_obj,
     )
-    logger.info("Issues processing complete for '%s'", full_name)
+    logger.info(f"Issues processing complete for '{full_name}'")

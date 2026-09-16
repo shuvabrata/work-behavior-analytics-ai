@@ -420,11 +420,11 @@ async def augment_message_with_neo4j_stream(
             timeout=300.0,
         )
     except asyncio.TimeoutError:
-        logger.warning("Neo4j augmentation timed out for message: %.80s", user_message)
+        logger.warning(f"Neo4j augmentation timed out for message: {user_message[:80]}")
         result = None
         yield {"type": "thinking_chunk", "content": "Graph database query timed out; proceeding without graph context."}
     except Exception as exc:
-        logger.error("Neo4j augmentation error: %s", exc)
+        logger.error(f"Neo4j augmentation error: {exc}")
         result = None
         yield {"type": "thinking_chunk", "content": f"Graph database query failed: {exc}"}
     yield {"type": "thinking_end"}

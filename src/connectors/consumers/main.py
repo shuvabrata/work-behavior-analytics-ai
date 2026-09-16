@@ -140,17 +140,15 @@ async def consume_queue(
     driver = GraphDatabase.driver(neo4j_uri, auth=(neo4j_user, neo4j_password))
     es_client = build_es_client()
     if es_client is not None:
-        logger.info("Elasticsearch sink enabled for queue=%s", queue_name)
+        logger.info(f"Elasticsearch sink enabled for queue={queue_name}")
     else:
-        logger.info("Elasticsearch sink disabled for queue=%s", queue_name)
+        logger.info(f"Elasticsearch sink disabled for queue={queue_name}")
     signal_dumps_enabled = os.environ.get("LOG_SIGNAL_DUMPS", "").strip().lower() in ("1", "true", "yes")
     dump_path = _signal_dump_path(queue_name) if signal_dumps_enabled else None
     if dump_path:
         logger.info(f"Signal dumps enabled and will dump at: {dump_path}")
     logger.info(
-        "Consumer started: queue=%s  signal_dump=%s",
-        queue_name,
-        dump_path if signal_dumps_enabled else "disabled",
+        f"Consumer started: queue={queue_name}  signal_dump={dump_path if signal_dumps_enabled else 'disabled'}"
     )
 
     def _open_dump():
@@ -168,17 +166,12 @@ async def consume_queue(
                     canonical_wba_id = await asyncio.to_thread(_sync_upsert, driver, signal, person_cache)
                     await message.ack()
                     logger.info(
-                        "Upserted to neo4j signal_id=%s entity_type=%s id=%s queue=%s",
-                        signal.signal_id,
-                        signal.entity_type,
-                        signal.id,
-                        queue_name,
+                        f"Upserted to neo4j signal_id={signal.signal_id} entity_type={signal.entity_type} id="
+                        f"{signal.id} queue={queue_name}"
                     )
                 except Exception as exc:
                     logger.error(
-                        "Failed to upsert signal_id=%s: %s — nacking to DLQ",
-                        signal.signal_id,
-                        exc,
+                        f"Failed to upsert signal_id={signal.signal_id}: {exc} — nacking to DLQ",
                         exc_info=True,
                     )
                     await message.nack(requeue=False)
@@ -193,15 +186,12 @@ async def consume_queue(
                         logger.info(f"Indexed to Elasticsearch signal_id={signal.signal_id} queue={queue_name}")
                     except Exception as es_exc:  # pylint: disable=broad-except
                         logger.warning(
-                            "Elasticsearch index failed for wba_id=%s::%s::%s — %s",
-                            signal.source,
-                            signal.entity_type,
-                            signal.id,
-                            es_exc,
+                            f"Elasticsearch index failed for wba_id={signal.source}::{signal.entity_type}::{signal.id}"
+                            f" — {es_exc}"
                         )
     finally:
         driver.close()
-        logger.info("Consumer stopped: queue=%s", queue_name)
+        logger.info(f"Consumer stopped: queue={queue_name}")
 
 
 async def main() -> None:
@@ -217,10 +207,7 @@ async def main() -> None:
         connection = await aio_pika.connect_robust(rabbitmq_url)
 
         async def _on_event(changed_keys: list[str]) -> None:
-            logger.info(
-                "Consumer received settings.changed event: keys=%s",
-                changed_keys,
-            )
+            logger.info(f"Consumer received settings.changed event: keys={changed_keys}")
             runtime_cache.refresh(fetch_runtime_snapshot(api_base))
 
         _listener_task = asyncio.ensure_future(
@@ -248,7 +235,7 @@ async def main() -> None:
         sys.exit(1)
 
     queues = [q.strip() for q in listen_queues_raw.split(",") if q.strip()]
-    logger.info("Starting consumers for queues: %s", queues)
+    logger.info(f"Starting consumers for queues: {queues}")
 
     neo4j_uri = _env("NEO4J_URI", "bolt://localhost:7687")
     neo4j_user = _env("NEO4J_USERNAME", "neo4j")

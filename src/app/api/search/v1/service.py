@@ -238,10 +238,10 @@ def search_in_graph(request: SearchRequest, graph_wba_ids: list[str]) -> SearchR
         logger.warning("[Spotlight] wba_all alias not found")
         return SearchResponse(total=0, page=1, page_size=0, results=[])
     except BadRequestError as exc:
-        logger.warning("[Spotlight] Bad request from Elasticsearch: %s", exc)
+        logger.warning(f"[Spotlight] Bad request from Elasticsearch: {exc}")
         return SearchResponse(total=0, page=1, page_size=0, results=[])
     except Exception as exc:
-        logger.exception("[Spotlight] Elasticsearch query failed: %s", exc)
+        logger.exception(f"[Spotlight] Elasticsearch query failed: {exc}")
         raise
 
     hits = response.get("hits", {})

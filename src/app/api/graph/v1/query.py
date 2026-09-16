@@ -50,11 +50,11 @@ def _get_driver():
                 auth=(settings.NEO4J_USERNAME, settings.NEO4J_PASSWORD),
             )
             _driver_instance.verify_connectivity()
-            logger.info("Neo4j driver singleton created: uri=%s", settings.NEO4J_URI)
+            logger.info(f"Neo4j driver singleton created: uri={settings.NEO4J_URI}")
             return _driver_instance
         except (ServiceUnavailable, Exception) as e:
             _driver_instance = None
-            logger.error("Neo4j driver creation failed: %s", e)
+            logger.error(f"Neo4j driver creation failed: {e}")
             raise RuntimeError(
                 f"Unable to connect to Neo4j database: {str(e)}"
             ) from e

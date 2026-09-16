@@ -25,7 +25,7 @@ async def process_prs(
 ) -> None:
     """Fetch pull requests for *repo* and publish PullRequest and related signals."""
     pr_since = resolve_prs_since_date(last_synced_at)
-    logger.info("Fetching pull requests for '%s'...", full_name)
+    logger.info(f"Fetching pull requests for '{full_name}'...")
     try:
         prs_raw = await asyncio.to_thread(fetch_pull_requests_direct, repo)
     except WbaRetryTimeoutError:  # pylint: disable=try-except-raise
@@ -36,13 +36,11 @@ async def process_prs(
             pr_updated = getattr(pr, "updated_at", None)
             logger.debug(f"PR # {pr.number} updated at {pr_updated} (since={pr_since})")
             if pr_updated and pr_updated.replace(tzinfo=timezone.utc) < pr_since:
-                logger.debug("PR #%s skipped (updated before since=%s)", pr.number, pr_since.date())
+                logger.debug(f"PR #{pr.number} skipped (updated before since={pr_since.date()})")
                 # Since PRs are processed newest-first, we can stop the entire loop
                 # once we hit a PR older than our cutoff, saving massive API pagination!
                 logger.info(
-                    "Stopping PR fetch loop for '%s' since remaining PRs will be older than %s",
-                    full_name,
-                    pr_since.date(),
+                    f"Stopping PR fetch loop for '{full_name}' since remaining PRs will be older than {pr_since.date()}"
                 )
                 break
 
@@ -57,12 +55,11 @@ async def process_prs(
             )
         except WbaRetryTimeoutError:
             logger.debug(
-                "[process_prs] WbaRetryTimeoutError propagating for '%s' — repo will be "
-                "skipped without cursor advance",
-                full_name,
+                f"[process_prs] WbaRetryTimeoutError propagating for '{full_name}' — repo will be skipped without "
+                f"cursor advance"
             )
             raise
         except Exception as exc:
-            logger.warning("PR skipped: type=%s exception=%r pr=#%s", type(exc).__name__, exc, getattr(pr, "number", "?"))
+            logger.warning(f"PR skipped: type={type(exc).__name__} exception={exc!r} pr=#{getattr(pr, 'number', '?')}")
 
-    logger.info("PRs done (%d) for '%s'", published.get("PullRequest", 0), full_name)
+    logger.info(f"PRs done ({published.get('PullRequest', 0)}) for '{full_name}'")

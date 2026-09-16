@@ -204,9 +204,7 @@ async def create_theme(
     except IntegrityError as exc:
         await db.rollback()
         _raise_on_duplicate_name(exc)
-    logger.info(
-        "Created graph theme '%s' (base=%s)", theme.name, theme.base_theme
-    )
+    logger.info(f"Created graph theme '{theme.name}' (base={theme.base_theme})")
     return theme
 
 
@@ -250,7 +248,7 @@ async def update_theme(
     except IntegrityError as exc:
         await db.rollback()
         _raise_on_duplicate_name(exc)
-    logger.info("Updated graph theme '%s' (id=%s)", theme.name, theme.id)
+    logger.info(f"Updated graph theme '{theme.name}' (id={theme.id})")
     return theme
 
 
@@ -266,7 +264,7 @@ async def delete_theme(db: AsyncSession, theme_id: int) -> None:
     name = theme.name
     await qry.delete_theme(db, theme)
     await db.commit()
-    logger.info("Deleted graph theme '%s' (id=%s)", name, theme_id)
+    logger.info(f"Deleted graph theme '{name}' (id={theme_id})")
 
 
 async def clone_theme(db: AsyncSession, theme_id: int) -> GraphTheme:
@@ -291,12 +289,7 @@ async def clone_theme(db: AsyncSession, theme_id: int) -> GraphTheme:
     except IntegrityError as exc:
         await db.rollback()
         _raise_on_duplicate_name(exc)
-    logger.info(
-        "Cloned graph theme '%s' → '%s' (id=%s)",
-        source.name,
-        clone.name,
-        clone.id,
-    )
+    logger.info(f"Cloned graph theme '{source.name}' → '{clone.name}' (id={clone.id})")
     return clone
 
 
@@ -321,12 +314,7 @@ async def set_default(db: AsyncSession, theme_id: int) -> GraphTheme:
     await db.flush()
     await db.commit()
     await db.refresh(theme)
-    logger.info(
-        "Set graph theme '%s' (id=%s) as default for %s",
-        theme.name,
-        theme.id,
-        theme.base_theme,
-    )
+    logger.info(f"Set graph theme '{theme.name}' (id={theme.id}) as default for {theme.base_theme}")
     return theme
 
 

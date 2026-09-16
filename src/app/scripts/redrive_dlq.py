@@ -92,7 +92,7 @@ async def redrive(url: str, limit: Optional[int], dry_run: bool) -> None:
             all messages currently in the DLQ.
         dry_run: If ``True``, print messages but do not republish or ack.
     """
-    logger.info("Connecting to RabbitMQ: %s", url)
+    logger.info(f"Connecting to RabbitMQ: {url}")
     connection = await aio_pika.connect_robust(url)
 
     async with connection:
@@ -121,16 +121,11 @@ async def redrive(url: str, limit: Optional[int], dry_run: bool) -> None:
         processed = 0
         skipped = 0
 
-        logger.info(
-            "Starting DLQ redrive (dry_run=%s, limit=%s) from queue '%s'",
-            dry_run,
-            limit,
-            DLQ_NAME,
-        )
+        logger.info(f"Starting DLQ redrive (dry_run={dry_run}, limit={limit}) from queue '{DLQ_NAME}'")
 
         while True:
             if limit is not None and processed >= limit:
-                logger.info("Reached --limit %d, stopping.", limit)
+                logger.info(f"Reached --limit {limit}, stopping.")
                 break
 
             # basic_get: pull one message without blocking.
@@ -144,9 +139,7 @@ async def redrive(url: str, limit: Optional[int], dry_run: bool) -> None:
 
                 if not routing_key:
                     logger.warning(
-                        "Cannot determine routing key for message — skipping. "
-                        "body_preview=%s",
-                        message.body[:200],
+                        f"Cannot determine routing key for message — skipping. body_preview={message.body[:200]}"
                     )
                     skipped += 1
                     await message.nack(requeue=False)
@@ -161,19 +154,10 @@ async def redrive(url: str, limit: Optional[int], dry_run: bool) -> None:
                     signal_id = "<invalid-json>"
                     entity_type = "<invalid-json>"
 
-                logger.info(
-                    "DLQ message signal_id=%s entity_type=%s routing_key=%s",
-                    signal_id,
-                    entity_type,
-                    routing_key,
-                )
+                logger.info(f"DLQ message signal_id={signal_id} entity_type={entity_type} routing_key={routing_key}")
 
                 if dry_run:
-                    logger.info(
-                        "[DRY-RUN] Would republish signal_id=%s to routing_key=%s",
-                        signal_id,
-                        routing_key,
-                    )
+                    logger.info(f"[DRY-RUN] Would republish signal_id={signal_id} to routing_key={routing_key}")
                     # In dry-run: nack with requeue=True to leave message in DLQ.
                     await message.nack(requeue=True)
                     processed += 1
@@ -193,19 +177,10 @@ async def redrive(url: str, limit: Optional[int], dry_run: bool) -> None:
                 await exchange.publish(republish_msg, routing_key=routing_key)
                 await message.ack()
 
-                logger.info(
-                    "Redriven signal_id=%s to routing_key=%s",
-                    signal_id,
-                    routing_key,
-                )
+                logger.info(f"Redriven signal_id={signal_id} to routing_key={routing_key}")
                 processed += 1
 
-        logger.info(
-            "Redrive complete. processed=%d skipped=%d dry_run=%s",
-            processed,
-            skipped,
-            dry_run,
-        )
+        logger.info(f"Redrive complete. processed={processed} skipped={skipped} dry_run={dry_run}")
 
 
 def main() -> None:

@@ -80,7 +80,7 @@ async def init_rabbitmq(url: str) -> None:
     Args:
         url: AMQP connection URL, e.g. ``amqp://guest:guest@localhost:5672/``.
     """
-    logger.info("Connecting to RabbitMQ: %s", url)
+    logger.info(f"Connecting to RabbitMQ: {url}")
     connection = await aio_pika.connect_robust(url)
 
     async with connection:
@@ -92,12 +92,12 @@ async def init_rabbitmq(url: str) -> None:
             aio_pika.ExchangeType.DIRECT,
             durable=True,
         )
-        logger.info("Exchange ready: %s (direct, durable)", DLX_NAME)
+        logger.info(f"Exchange ready: {DLX_NAME} (direct, durable)")
 
         # 2. Dead-letter queue bound to DLX ──────────────────────────────────
         dlq = await channel.declare_queue(DLQ_NAME, durable=True)
         await dlq.bind(dlx, routing_key=DLQ_NAME)
-        logger.info("Queue ready: %s, bound to exchange %s", DLQ_NAME, DLX_NAME)
+        logger.info(f"Queue ready: {DLQ_NAME}, bound to exchange {DLX_NAME}")
 
         # 3. Main topic exchange ──────────────────────────────────────────────
         exchange = await channel.declare_exchange(
@@ -105,7 +105,7 @@ async def init_rabbitmq(url: str) -> None:
             aio_pika.ExchangeType.TOPIC,
             durable=True,
         )
-        logger.info("Exchange ready: %s (topic, durable)", EXCHANGE_NAME)
+        logger.info(f"Exchange ready: {EXCHANGE_NAME} (topic, durable)")
 
         # 4. Source queues ────────────────────────────────────────────────────
         # Classic durable queues with dead-letter routing on rejection.
@@ -122,9 +122,7 @@ async def init_rabbitmq(url: str) -> None:
                 },
             )
             await queue.bind(exchange, routing_key=routing_key)
-            logger.info(
-                "Queue ready: %s  ← routing key: %s", queue_name, routing_key
-            )
+            logger.info(f"Queue ready: {queue_name}  ← routing key: {routing_key}")
 
         # ── Command-and-control exchange ─────────────────────────────────────
         logger.info("Declaring command_n_control topology...")
@@ -135,7 +133,7 @@ async def init_rabbitmq(url: str) -> None:
             aio_pika.ExchangeType.TOPIC,
             durable=True,
         )
-        logger.info("Exchange ready: %s (topic, durable)", CONTROL_EXCHANGE)
+        logger.info(f"Exchange ready: {CONTROL_EXCHANGE} (topic, durable)")
 
         # 6. Control dead-letter exchange (direct)
         control_dlx = await channel.declare_exchange(
@@ -143,12 +141,12 @@ async def init_rabbitmq(url: str) -> None:
             aio_pika.ExchangeType.DIRECT,
             durable=True,
         )
-        logger.info("Exchange ready: %s (direct, durable)", CONTROL_DLX)
+        logger.info(f"Exchange ready: {CONTROL_DLX} (direct, durable)")
 
         # 7. Control dead-letter queue bound to DLX
         control_dlq = await channel.declare_queue(CONTROL_DLQ, durable=True)
         await control_dlq.bind(control_dlx, routing_key=CONTROL_DLQ)
-        logger.info("Queue ready: %s, bound to exchange %s", CONTROL_DLQ, CONTROL_DLX)
+        logger.info(f"Queue ready: {CONTROL_DLQ}, bound to exchange {CONTROL_DLX}")
 
         # 8. Per-producer control queues
         for queue_name, routing_key in CONTROL_QUEUES:
@@ -161,9 +159,7 @@ async def init_rabbitmq(url: str) -> None:
                 },
             )
             await queue.bind(control_exchange, routing_key=routing_key)
-            logger.info(
-                "Queue ready: %s  ← routing key: %s", queue_name, routing_key
-            )
+            logger.info(f"Queue ready: {queue_name}  ← routing key: {routing_key}")
 
         # ── Runtime config events exchange (fanout) ─────────────────────────
         logger.info("Declaring runtime_config_events topology...")
@@ -174,9 +170,7 @@ async def init_rabbitmq(url: str) -> None:
             aio_pika.ExchangeType.FANOUT,
             durable=True,
         )
-        logger.info(
-            "Exchange ready: %s (fanout, durable)", RUNTIME_CONFIG_EXCHANGE
-        )
+        logger.info(f"Exchange ready: {RUNTIME_CONFIG_EXCHANGE} (fanout, durable)")
 
     logger.info("RabbitMQ initialization complete.")
 
@@ -194,5 +188,5 @@ if __name__ == "__main__":
     try:
         asyncio.run(init_rabbitmq(rabbitmq_url))
     except Exception as exc:  # pylint: disable=broad-except
-        logger.error("RabbitMQ initialization failed: %s", exc)
+        logger.error(f"RabbitMQ initialization failed: {exc}")
         sys.exit(1)

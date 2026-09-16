@@ -145,11 +145,7 @@ async def scheduler_loop(instance_id: str, tick_minutes: int) -> None:
         tick_minutes: How often (in minutes) to wake up and check for due
             connectors.  Controlled by ``SCHEDULER_TICK_MINUTES`` env var.
     """
-    logger.info(
-        "Scheduler started instance_id=%s tick_minutes=%d",
-        instance_id,
-        tick_minutes,
-    )
+    logger.info(f"Scheduler started instance_id={instance_id} tick_minutes={tick_minutes}")
 
     while True:
         await asyncio.sleep(tick_minutes * 60)
@@ -158,31 +154,20 @@ async def scheduler_loop(instance_id: str, tick_minutes: int) -> None:
             async with ASYNC_SESSION_LOCAL() as db:
                 is_leader = await _try_acquire_lease(db, instance_id, tick_minutes)
                 if not is_leader:
-                    logger.debug(
-                        "Scheduler tick skipped — not the lease holder instance_id=%s",
-                        instance_id,
-                    )
+                    logger.debug(f"Scheduler tick skipped — not the lease holder instance_id={instance_id}")
                     continue
 
                 now = datetime.now(timezone.utc)
                 due = await _get_due_connectors(db, now)
 
                 if not due:
-                    logger.debug("Scheduler tick: no connectors due instance_id=%s", instance_id)
+                    logger.debug(f"Scheduler tick: no connectors due instance_id={instance_id}")
                     continue
 
-                logger.info(
-                    "Scheduler tick: %d connector(s) due instance_id=%s",
-                    len(due),
-                    instance_id,
-                )
+                logger.info(f"Scheduler tick: {len(due)} connector(s) due instance_id={instance_id}")
 
                 for connector_type, producer in due:
-                    logger.info(
-                        "Scheduler firing scan connector_type=%s target=%s",
-                        connector_type,
-                        producer,
-                    )
+                    logger.info(f"Scheduler firing scan connector_type={connector_type} target={producer}")
                     try:
                         request = CreateCommandRequest(
                             command_type="scan",
@@ -192,21 +177,13 @@ async def scheduler_loop(instance_id: str, tick_minutes: int) -> None:
                         await create_and_publish_command(request, db)
                     except Exception as exc:  # pylint: disable=broad-except
                         logger.error(
-                            "Scheduler failed to fire scan connector_type=%s target=%s: %s",
-                            connector_type,
-                            producer,
-                            exc,
+                            f"Scheduler failed to fire scan connector_type={connector_type} target={producer}: {exc}",
                             exc_info=True,
                         )
 
         except asyncio.CancelledError:
-            logger.info("Scheduler loop cancelled — shutting down instance_id=%s", instance_id)
+            logger.info(f"Scheduler loop cancelled — shutting down instance_id={instance_id}")
             return
         except Exception as exc:  # pylint: disable=broad-except
             # Never crash the loop — log and sleep until next tick.
-            logger.error(
-                "Scheduler tick error instance_id=%s: %s",
-                instance_id,
-                exc,
-                exc_info=True,
-            )
+            logger.error(f"Scheduler tick error instance_id={instance_id}: {exc}", exc_info=True)

@@ -38,5 +38,5 @@ def build_repository_signal(repo_data: Dict[str, Any]) -> Optional[ActivitySigna
             attributes=attrs,
         )
     except Exception as exc:  # pragma: no cover
-        logger.warning("Skipping Repository signal (validation error): %s", exc)
+        logger.warning(f"Skipping Repository signal (validation error): {exc}")
         return None

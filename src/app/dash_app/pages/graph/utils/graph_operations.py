@@ -40,17 +40,9 @@ def fetch_effective_theme(base_theme: str) -> dict | None:
         )
         if resp.status_code == 200:
             return resp.json()
-        logger.warning(
-            "Effective theme fetch returned %s for base_theme=%s",
-            resp.status_code,
-            base_theme,
-        )
+        logger.warning(f"Effective theme fetch returned {resp.status_code} for base_theme={base_theme}")
     except requests.RequestException as exc:
-        logger.warning(
-            "Effective theme fetch failed for base_theme=%s: %s",
-            base_theme,
-            exc,
-        )
+        logger.warning(f"Effective theme fetch failed for base_theme={base_theme}: {exc}")
     return None
 
 

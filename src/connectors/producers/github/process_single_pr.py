@@ -44,29 +44,18 @@ async def process_single_pr(pr: Any,
 
     author_data, pr_data = await asyncio.to_thread(get_pr_author_and_data)
     logger.debug(
-        "[process_single_pr] PR #%s author=%r fetched",
-        pr.number,
-        author_data.get("login") or author_data.get("name", "unknown"),
+        f"[process_single_pr] PR #{pr.number} author="
+        f"{author_data.get('login') or author_data.get('name', 'unknown')!r} fetched"
     )
 
     author_login = author_data.get("login") or author_data.get("name", "unknown")
-    logger.debug(
-        "Processing PR #%s '%s' by '%s'",
-        pr.number,
-        str(getattr(pr, "title", ""))[:60],
-        author_login,
-    )
+    logger.debug(f"Processing PR #{pr.number} '{str(getattr(pr, 'title', ''))[:60]}' by '{author_login}'")
 
     # Reviewer logins from review state dict
     reviews_raw = await asyncio.to_thread(fetch_pr_reviews, pr)
     review_map = map_pr_reviews(reviews_raw)
     reviewer_logins = list(review_map.keys())
-    logger.debug(
-        "[process_single_pr] PR #%s reviews=%d reviewer_logins=%r",
-        pr.number,
-        len(reviews_raw),
-        reviewer_logins,
-    )
+    logger.debug(f"[process_single_pr] PR #{pr.number} reviews={len(reviews_raw)} reviewer_logins={reviewer_logins!r}")
     # Build reviewer enriched data in a thread — same lazy-load concern as PR author.
     def build_reviewer_user_data() -> Dict[str, Dict[str, Any]]:
         return {
@@ -78,11 +67,7 @@ async def process_single_pr(pr: Any,
     reviewer_user_data: Dict[str, Dict[str, Any]] = await asyncio.to_thread(
         build_reviewer_user_data
     )
-    logger.debug(
-        "[process_single_pr] PR #%s reviewer_user_data=%d entries",
-        pr.number,
-        len(reviewer_user_data),
-    )
+    logger.debug(f"[process_single_pr] PR #{pr.number} reviewer_user_data={len(reviewer_user_data)} entries")
 
     # Extract merger details — fetch full user data so a proper Person signal
     # is emitted (not just a stub node created by merge_relationship).
@@ -93,9 +78,7 @@ async def process_single_pr(pr: Any,
         if merged_by_obj and getattr(merged_by_obj, "login", None):
             merger_data = await asyncio.to_thread(fetch_github_user, merged_by_obj)
             merger_login = merger_data["login"]
-            logger.debug(
-                "[process_single_pr] PR #%s merger=%r fetched", pr.number, merger_login,
-            )
+            logger.debug(f"[process_single_pr] PR #{pr.number} merger={merger_login!r} fetched")
 
     # Requested reviewers — fetch full user data via fetch_github_user so
     # these users get dedicated Person signals, not just stub nodes.
@@ -112,11 +95,7 @@ async def process_single_pr(pr: Any,
         fetch_requested_reviewer_data
     )
     requested_reviewer_logins: List[str] = list(requested_reviewer_user_data.keys())
-    logger.debug(
-        "[process_single_pr] PR #%s requested_reviewers=%d",
-        pr.number,
-        len(requested_reviewer_logins),
-    )
+    logger.debug(f"[process_single_pr] PR #{pr.number} requested_reviewers={len(requested_reviewer_logins)}")
 
     # Commit SHAs for INCLUDES relationships
     pr_commits_raw = []
@@ -158,12 +137,8 @@ async def process_single_pr(pr: Any,
                     if pr_login not in published_persons:
                         published_persons.add(pr_login)
                         logger.debug(
-                            "[person:pr_commit_author] login=%r  name=%r  email=%r  pr=#%s  sha=%s",
-                            pr_login,
-                            pr_a_data.get("name"),
-                            pr_a_data.get("email"),
-                            pr.number,
-                            c_sha[:8],
+                            f"[person:pr_commit_author] login={pr_login!r}  name={pr_a_data.get('name')!r}  email="
+                            f"{pr_a_data.get('email')!r}  pr=#{pr.number}  sha={c_sha[:8]}"
                         )
                         await _pub(build_person_signal(pr_a_data))
 
@@ -174,23 +149,20 @@ async def process_single_pr(pr: Any,
                     seen_commits.add(c_sha)
                 except WbaRetryTimeoutError:
                     logger.debug(
-                        "[process_single_pr] WbaRetryTimeoutError propagating for PR commit "
-                        "sha=%s pr=#%s — repo will be skipped without cursor advance",
-                        c_sha[:8],
-                        pr.number,
+                        f"[process_single_pr] WbaRetryTimeoutError propagating for PR commit sha={c_sha[:8]} pr=#"
+                        f"{pr.number} — repo will be skipped without cursor advance"
                     )
                     raise
                 except Exception as inner_exc:
-                    logger.warning("Failed to emit PR commit '%s': %s", c_sha, inner_exc)
+                    logger.warning(f"Failed to emit PR commit '{c_sha}': {inner_exc}")
     except WbaRetryTimeoutError:
         logger.debug(
-            "[process_single_pr] WbaRetryTimeoutError propagating for PR #%s (commits) — "
-            "repo will be skipped without cursor advance",
-            pr.number,
+            f"[process_single_pr] WbaRetryTimeoutError propagating for PR #{pr.number} (commits) — repo will be "
+            f"skipped without cursor advance"
         )
         raise
     except Exception as exc:
-        logger.warning("Could not fetch commits for PR #%s: %s", pr.number, exc)
+        logger.warning(f"Could not fetch commits for PR #{pr.number}: {exc}")
         commit_shas = []
 
     # Fetch comments to extract commenters.
@@ -206,17 +178,13 @@ async def process_single_pr(pr: Any,
                     return await asyncio.to_thread(fetch_commit_comments, c)
                 except WbaRetryTimeoutError:
                     logger.debug(
-                        "[process_single_pr] WbaRetryTimeoutError propagating for commit-comment "
-                        "fetch sha=%s pr=#%s — repo will be skipped without cursor advance",
-                        getattr(c, "sha", "unknown")[:8],
-                        pr.number,
+                        f"[process_single_pr] WbaRetryTimeoutError propagating for commit-comment fetch sha="
+                        f"{getattr(c, 'sha', 'unknown')[:8]} pr=#{pr.number} — repo will be skipped without cursor "
+                        f"advance"
                     )
                     raise
                 except Exception as e:
-                    logger.warning(
-                        "Could not fetch comments for commit %s: %s",
-                        getattr(c, "sha", "unknown"), e,
-                    )
+                    logger.warning(f"Could not fetch comments for commit {getattr(c, 'sha', 'unknown')}: {e}")
                     return []
 
         results = await asyncio.gather(*[_one(c) for c in pr_commits_raw])
@@ -237,13 +205,12 @@ async def process_single_pr(pr: Any,
     issue_comments_raw: List[Any] = []
     if isinstance(_ir_results[0], WbaRetryTimeoutError):
         logger.debug(
-            "[process_single_pr] WbaRetryTimeoutError propagating for PR #%s (issue comments) — "
-            "repo will be skipped without cursor advance",
-            pr.number,
+            f"[process_single_pr] WbaRetryTimeoutError propagating for PR #{pr.number} (issue comments) — repo will be"
+            f" skipped without cursor advance"
         )
         raise _ir_results[0]
     if isinstance(_ir_results[0], Exception):
-        logger.warning("Could not fetch issue comments for PR #%s: %s", pr.number, _ir_results[0])
+        logger.warning(f"Could not fetch issue comments for PR #{pr.number}: {_ir_results[0]}")
     else:
         issue_comments_raw = _ir_results[0]
         logger.info(f"Fetched {len(issue_comments_raw)} issue comments for PR #{pr.number}")
@@ -251,13 +218,12 @@ async def process_single_pr(pr: Any,
     review_comments_raw: List[Any] = []
     if isinstance(_ir_results[1], WbaRetryTimeoutError):
         logger.debug(
-            "[process_single_pr] WbaRetryTimeoutError propagating for PR #%s (review comments) — "
-            "repo will be skipped without cursor advance",
-            pr.number,
+            f"[process_single_pr] WbaRetryTimeoutError propagating for PR #{pr.number} (review comments) — repo will "
+            f"be skipped without cursor advance"
         )
         raise _ir_results[1]
     if isinstance(_ir_results[1], Exception):
-        logger.warning("Could not fetch review comments for PR #%s: %s", pr.number, _ir_results[1])
+        logger.warning(f"Could not fetch review comments for PR #{pr.number}: {_ir_results[1]}")
     else:
         review_comments_raw = _ir_results[1]
         logger.info(f"Fetched {len(review_comments_raw)} review comments for PR #{pr.number}")
@@ -282,8 +248,8 @@ async def process_single_pr(pr: Any,
                 ts = dt.isoformat()
             else:
                 logger.warning(
-                    "Comment %s does not have a created_at timestamp. Using current timestamp.",
-                    getattr(comment, "id", "unknown"),
+                    f"Comment {getattr(comment, 'id', 'unknown')} does not have a created_at timestamp. Using current "
+                    f"timestamp."
                 )
                 ts = datetime.now(timezone.utc).isoformat()
             comments_list.append({"login": login, "timestamp": ts})
@@ -320,11 +286,8 @@ async def process_single_pr(pr: Any,
         if person_login not in published_persons:
             published_persons.add(person_login)
             logger.debug(
-                "[person:pr_author] login=%r  name=%r  email=%r  pr=#%s",
-                person_login,
-                author_data.get("name"),
-                author_data.get("email"),
-                pr.number,
+                f"[person:pr_author] login={person_login!r}  name={author_data.get('name')!r}  email="
+                f"{author_data.get('email')!r}  pr=#{pr.number}"
             )
             p_sig = build_person_signal(author_data)
             await _pub(p_sig)
@@ -334,11 +297,8 @@ async def process_single_pr(pr: Any,
             published_persons.add(r_login)
             r_data = reviewer_user_data.get(r_login, {"login": r_login, "name": r_login, "email": ""})
             logger.debug(
-                "[person:pr_reviewer] login=%r  name=%r  email=%r  pr=#%s",
-                r_login,
-                r_data.get("name"),
-                r_data.get("email"),
-                pr.number,
+                f"[person:pr_reviewer] login={r_login!r}  name={r_data.get('name')!r}  email={r_data.get('email')!r}  "
+                f"pr=#{pr.number}"
             )
             r_sig = build_person_signal(r_data)
             await _pub(r_sig)
@@ -347,11 +307,8 @@ async def process_single_pr(pr: Any,
         if rr_login not in published_persons:
             published_persons.add(rr_login)
             logger.debug(
-                "[person:requested_reviewer] login=%r  name=%r  email=%r  pr=#%s",
-                rr_login,
-                rr_data.get("name"),
-                rr_data.get("email"),
-                pr.number,
+                f"[person:requested_reviewer] login={rr_login!r}  name={rr_data.get('name')!r}  email="
+                f"{rr_data.get('email')!r}  pr=#{pr.number}"
             )
             await _pub(build_person_signal(rr_data))
 
@@ -359,22 +316,16 @@ async def process_single_pr(pr: Any,
         if c_login not in published_persons:
             published_persons.add(c_login)
             logger.debug(
-                "[person:pr_commenter] login=%r  name=%r  email=%r  pr=#%s",
-                c_login,
-                c_data.get("name"),
-                c_data.get("email"),
-                pr.number,
+                f"[person:pr_commenter] login={c_login!r}  name={c_data.get('name')!r}  email={c_data.get('email')!r}"
+                f"  pr=#{pr.number}"
             )
             await _pub(build_person_signal(c_data))
 
     if merger_login and merger_data and merger_login not in published_persons:
         published_persons.add(merger_login)
         logger.debug(
-            "[person:merger] login=%r  name=%r  email=%r  pr=#%s",
-            merger_login,
-            merger_data.get("name"),
-            merger_data.get("email"),
-            pr.number,
+            f"[person:merger] login={merger_login!r}  name={merger_data.get('name')!r}  email="
+            f"{merger_data.get('email')!r}  pr=#{pr.number}"
         )
         await _pub(build_person_signal(merger_data))
 

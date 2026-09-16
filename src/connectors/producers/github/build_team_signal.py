@@ -57,5 +57,5 @@ def build_team_signal(
             relationships=rels,
         )
     except Exception as exc:
-        logger.warning("Skipping Team signal for '%s' (validation error): %s", team_data.get("name"), exc)
+        logger.warning(f"Skipping Team signal for '{team_data.get('name')}' (validation error): {exc}")
         return None

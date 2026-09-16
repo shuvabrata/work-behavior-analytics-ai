@@ -70,24 +70,21 @@ async def process_single_commit(
             if login not in published_persons:
                 published_persons.add(login)
                 logger.debug(
-                    "[person:commit_author] login=%r  name=%r  email=%r  sha=%s",
-                    login,
-                    author_data.get("name"),
-                    author_data.get("email"),
-                    commit_data.get("sha", "?")[:8],
+                    f"[person:commit_author] login={login!r}  name={author_data.get('name')!r}  email="
+                    f"{author_data.get('email')!r}  sha={commit_data.get('sha', '?')[:8]}"
                 )
                 await pub_callback(build_person_signal(author_data))
 
             sha_short = commit_data.get("sha", "?")[:8]
             seen_commits.add(commit_data.get("sha"))
-            logger.debug("Commit %s by '%s' processed", sha_short, login)
+            logger.debug(f"Commit {sha_short} by '{login}' processed")
 
             branch_name = repo.default_branch or "main" # this does not cause a new API call since it's already loaded in the repo object
             await pub_callback(build_commit_signal(commit_data, author_data, repo_name=repo.name, branch_name=branch_name))
 
             # Emit one File signal per file changed in this commit
             repo_data = {"name": repo.name, "owner": repo_owner}
-            logger.info("Commit %s touches %d file(s)", sha_short, len(file_data_list))
+            logger.info(f"Commit {sha_short} touches {len(file_data_list)} file(s)")
             for file_data in file_data_list:
                 await pub_callback(build_file_signal(file_data, commit_data, repo_data))
 
@@ -96,16 +93,12 @@ async def process_single_commit(
             # so the config-level handler skips this repo's cursor and retries
             # it on the next scan.
             logger.debug(
-                "[process_single_commit] WbaRetryTimeoutError propagating for sha=%s — "
-                "repo will be skipped without cursor advance",
-                getattr(commit, "sha", "?")[:12],
+                f"[process_single_commit] WbaRetryTimeoutError propagating for sha={getattr(commit, 'sha', '?')[:12]} "
+                f"— repo will be skipped without cursor advance"
             )
             raise
         except Exception as exc:
             logger.warning(
-                "Commit skipped: type=%s exception=%r sha=%s",
-                type(exc).__name__,
-                exc,
-                getattr(commit, "sha", "?")[:12],
+                f"Commit skipped: type={type(exc).__name__} exception={exc!r} sha={getattr(commit, 'sha', '?')[:12]}",
                 exc_info=False,
             )

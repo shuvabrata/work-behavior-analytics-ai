@@ -26,7 +26,7 @@ async def process_commits(
         and consumed by downstream processors (e.g. process_prs, process_teams).
     """
     since = resolve_commits_since_date(last_synced_at)
-    logger.info("Fetching commits for '%s' since %s...", full_name, since.date())
+    logger.info(f"Fetching commits for '{full_name}' since {since.date()}...")
     commits_raw = await asyncio.to_thread(fetch_commits, repo, since)
     logger.info(f"Number of commits fetched for {full_name} = {len(commits_raw)}")
 
@@ -55,5 +55,5 @@ async def process_commits(
             ),
         )
 
-    logger.info("Commits done (%d) for '%s'", published.get("Commit", 0), full_name)
+    logger.info(f"Commits done ({published.get('Commit', 0)}) for '{full_name}'")
     return seen_commits, published_persons

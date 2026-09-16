@@ -50,22 +50,14 @@ def fetch_runtime_snapshot(
         resp.raise_for_status()
         data: dict[str, Any] = resp.json()
         config = RuntimeConfig(**data)
-        logger.info("Fetched runtime settings snapshot from %s", url)
+        logger.info(f"Fetched runtime settings snapshot from {url}")
         return config
     except requests.exceptions.RequestException as exc:
-        logger.warning(
-            "Runtime settings API unreachable at %s — "
-            "falling back to env/default values. Reason: %s",
-            url,
-            exc,
-        )
+        logger.warning(f"Runtime settings API unreachable at {url} — falling back to env/default values. Reason: {exc}")
     except (ValueError, TypeError, RuntimeError) as exc:
         # Covers Pydantic validation errors and unexpected response shapes.
         logger.warning(
-            "Runtime settings API returned invalid data from %s — "
-            "falling back to env/default values. Reason: %s",
-            url,
-            exc,
+            f"Runtime settings API returned invalid data from {url} — falling back to env/default values. Reason: {exc}"
         )
 
     return RuntimeConfig()

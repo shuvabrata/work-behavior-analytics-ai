@@ -7,7 +7,7 @@ import dash_bootstrap_components as dbc
 from dash import Input, Output, State, callback, clientside_callback, html
 from dash.exceptions import PreventUpdate
 
-from app.analytics.collaboration.config import CollaborationNetworkConfig
+from app.analytics.collaboration.config import CollaborationNetworkConfig, LAYER_ORDER
 from app.api.graph.v1.service import get_collaboration_network
 from app.dash_app.components.common import create_alert, register_loading_overlay_hider
 from app.dash_app.styles import FONT_SIZE_SMALL
@@ -50,7 +50,7 @@ def load_collaboration_network(search: str | None, pathname: str | None):
 
     logger.info("[COLLAB-PAGE] Loading collaboration network search=%r", search)
 
-    params = parse_qs((search or "").lstrip("?"))
+    params = parse_qs((search or "").lstrip("?"), keep_blank_values=True)
     hide = {"display": "none"}
     show = {"display": "block"}
 
@@ -62,7 +62,7 @@ def load_collaboration_network(search: str | None, pathname: str | None):
     }
 
     try:
-        config = CollaborationNetworkConfig.from_query_values({
+        query_dict = {
             "layers":                     params.get("layers"),
             "lookback_days":              params.get("lookback_days",              [None])[0],
             "min_pair_score":             params.get("min_pair_score",             [None])[0],
@@ -72,13 +72,12 @@ def load_collaboration_network(search: str | None, pathname: str | None):
             "ensure_min_connection":      params.get("ensure_min_connection",      [None])[0],
             "exclude_bots":               params.get("exclude_bots",               [None])[0],
             "exclude_suffixes":           params.get("exclude_suffixes",           [None])[0],
-            "w_reporter_assignee":        params.get("w_reporter_assignee",        [None])[0],
-            "w_pr_reviews":               params.get("w_pr_reviews",               [None])[0],
-            "w_shared_file_commits":      params.get("w_shared_file_commits",      [None])[0],
-            "w_sprint_coworkers":         params.get("w_sprint_coworkers",         [None])[0],
-            "w_explicit_review_requests": params.get("w_explicit_review_requests", [None])[0],
-            "w_epic_overlap":             params.get("w_epic_overlap",             [None])[0],
-        })
+            **{
+                f"w_{layer}": params.get(f"w_{layer}", [None])[0]
+                for layer in LAYER_ORDER
+            },
+        }
+        config = CollaborationNetworkConfig.from_query_values(query_dict)
 
         data = get_collaboration_network(config=config)
         elements = data.elements

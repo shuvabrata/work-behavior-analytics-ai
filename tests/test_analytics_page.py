@@ -167,10 +167,12 @@ def test_build_collaboration_href_all_layers_disabled():
 
 def test_toggle_collaboration_controls():
     """Toggling collaboration controls changes visibility and button label."""
-    is_open, label = toggle_collaboration_controls(1, False)
+    is_open, label, preview_style = toggle_collaboration_controls(1, False)
     assert is_open is True
     assert label == "Hide Options"
+    assert preview_style["display"] == "block"
 
-    is_open, label = toggle_collaboration_controls(2, True)
+    is_open, label, preview_style = toggle_collaboration_controls(2, True)
     assert is_open is False
     assert label == "Show Options"
+    assert preview_style["display"] == "none"

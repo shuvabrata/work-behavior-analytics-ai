@@ -405,6 +405,7 @@ def _create_collaboration_controls() -> html.Div:
                     "color": COLOR_GRAY_MEDIUM,
                     "marginTop": SPACING_XSMALL,
                     "wordBreak": "break-all",
+                    "display": "none",
                 },
             ),
         ]
@@ -569,7 +570,11 @@ def build_collaboration_href(  # pylint: disable=too-many-arguments
 
 
 @callback(
-    [Output("collab-controls-collapse", "is_open"), Output("collab-controls-toggle-btn", "children")],
+    [
+        Output("collab-controls-collapse", "is_open"),
+        Output("collab-controls-toggle-btn", "children"),
+        Output("collab-url-preview", "style"),
+    ],
     Input("collab-controls-toggle-btn", "n_clicks"),
     State("collab-controls-collapse", "is_open"),
     prevent_initial_call=True,
@@ -578,4 +583,11 @@ def toggle_collaboration_controls(_n_clicks, is_open):
     """Toggle collaboration controls visibility in the analytics card."""
     next_state = not is_open
     label = "Hide Options" if next_state else "Show Options"
-    return next_state, label
+    preview_style = {
+        "fontSize": "11px",
+        "color": COLOR_GRAY_MEDIUM,
+        "marginTop": SPACING_XSMALL,
+        "wordBreak": "break-all",
+        "display": "block" if next_state else "none",
+    }
+    return next_state, label, preview_style

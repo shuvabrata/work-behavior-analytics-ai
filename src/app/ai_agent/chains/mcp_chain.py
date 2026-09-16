@@ -321,9 +321,11 @@ async def augment_message_with_mcp_stream(
         {"name": result.get("tool_name", ""), "status": result.get("status", "unknown")}
         for result in collected_results
     ]
-    logger.info(
-        f"MCP augmentation applied: executed_tools="
-        f"{', '.join((f"{call['name']}({call['status']})" for call in envelope['tool_calls'] if call.get('name')))}"
+    executed_tools = ", ".join(
+        f"{call['name']}({call['status']})"
+        for call in envelope["tool_calls"]
+        if call.get("name")
     )
+    logger.info(f"MCP augmentation applied: executed_tools={executed_tools}")
     yield {"type": "thinking_end"}
     yield {"type": "augmented_message", "content": envelope}

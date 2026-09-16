@@ -1222,42 +1222,47 @@ input::placeholder {
     border-radius: var(--border-radius, 2px) !important;
 }
 
-/* Light theme default (app is light, popover is dark card) */
+/* Light theme default (app is light, popover is dark card).
+   The inverted palette is the OPPOSITE theme's tokens, so it is defined once
+   per theme block as dedicated custom properties (a token change is a one-line
+   edit here) and referenced everywhere below. */
 :root .popover-inverted,
 .theme-executive-light .popover-inverted,
 .popover-inverted.theme-executive-dark {
-    --bs-popover-bg: #1f262f;
-    --bs-popover-border-color: #3a4653;
-    --bs-popover-arrow-border: #3a4653;
     --popover-inv-bg: #1f262f;
     --popover-inv-border: #3a4653;
-    background-color: #1f262f !important;
-    border-color: #3a4653 !important;
-    color: #e6edf3 !important;
+    --popover-inv-text: #e6edf3;
+    --bs-popover-bg: var(--popover-inv-bg);
+    --bs-popover-border-color: var(--popover-inv-border);
+    --bs-popover-arrow-border: var(--popover-inv-border);
+    background-color: var(--popover-inv-bg) !important;
+    border-color: var(--popover-inv-border) !important;
+    color: var(--popover-inv-text) !important;
 }
 
 :root .popover-inverted .popover-body,
 .theme-executive-light .popover-inverted .popover-body,
 .popover-inverted.theme-executive-dark .popover-body {
-    color: #e6edf3 !important;
+    color: var(--popover-inv-text) !important;
 }
 
 /* Dark theme active (app is dark, popover is light card) */
 .theme-executive-dark .popover-inverted,
 .popover-inverted.theme-executive-light {
-    --bs-popover-bg: #ffffff;
-    --bs-popover-border-color: #e2e8f0;
-    --bs-popover-arrow-border: #e2e8f0;
     --popover-inv-bg: #ffffff;
     --popover-inv-border: #e2e8f0;
-    background-color: #ffffff !important;
-    border-color: #e2e8f0 !important;
-    color: #1a202c !important;
+    --popover-inv-text: #1a202c;
+    --bs-popover-bg: var(--popover-inv-bg);
+    --bs-popover-border-color: var(--popover-inv-border);
+    --bs-popover-arrow-border: var(--popover-inv-border);
+    background-color: var(--popover-inv-bg) !important;
+    border-color: var(--popover-inv-border) !important;
+    color: var(--popover-inv-text) !important;
 }
 
 .theme-executive-dark .popover-inverted .popover-body,
 .popover-inverted.theme-executive-light .popover-body {
-    color: #1a202c !important;
+    color: var(--popover-inv-text) !important;
 }
 
 /* Directional arrow rules: only color the active border side to preserve transparent diagonals */

@@ -184,6 +184,7 @@ def render_scan_item(command: dict) -> html.Div:  # type: ignore[type-arg]
                 trigger="hover focus",
                 placement="auto",
                 style={"maxWidth": "560px"},
+                class_name="popover-inverted",
             ),
         ]
 

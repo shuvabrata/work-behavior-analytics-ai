@@ -151,3 +151,37 @@ def test_badge_color_uses_effective_when_provided():
     assert search_module._badge_color("Person", colors) == "#00FF00"
     # Without an effective map, falls back to base.
     assert search_module._badge_color("Person") == "#3B82F6"
+
+
+def _find_component(component, predicate):
+    """Depth-first search for the first descendant matching ``predicate``."""
+    if predicate(component):
+        return component
+    children = getattr(component, "children", None)
+    if children is None:
+        return None
+    if not isinstance(children, list):
+        children = [children]
+    for child in children:
+        res = _find_component(child, predicate)
+        if res is not None:
+            return res
+    return None
+
+
+@pytest.mark.unit
+def test_person_only_help_uses_popover_inverted():
+    """The 'Person only' help affordance uses the Scheme A popover convention.
+
+    Guards the dbc.Tooltip -> dbc.Popover conversion on the search page: the
+    popover must target the info icon, use the ``popover-inverted`` class, and
+    keep the keyboard ``focus`` trigger (not just ``hover``) for accessibility.
+    """
+    import dash_bootstrap_components as dbc
+
+    layout = search_module.get_layout()
+    popover = _find_component(layout, lambda c: isinstance(c, dbc.Popover))
+    assert popover is not None
+    assert popover.target == "search-person-only-help"
+    assert popover.class_name == "popover-inverted"
+    assert popover.trigger == "hover focus"

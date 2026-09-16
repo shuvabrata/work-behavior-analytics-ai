@@ -891,7 +891,7 @@ def get_layout() -> html.Div:
                             style={"maxWidth": "280px"},
                         ),
                         target="search-person-only-help",
-                        trigger="hover",
+                        trigger="hover focus",
                         placement="right",
                         class_name="popover-inverted",
                     ),

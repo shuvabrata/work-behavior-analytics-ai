@@ -36,7 +36,7 @@ license: Complete terms in LICENSE.txt
 - Keep interaction affordance minimal: chevron + subtle text-color hover changes.
 
 **Information Affordance & Hover-over Popovers (`(i)` Icons - Scheme A Convention)**:
-- **Component**: Use `dbc.Popover` with `trigger="hover"` rather than unstyled `dbc.Tooltip`.
+- **Component**: Use `dbc.Popover` with `trigger="hover focus"` rather than unstyled `dbc.Tooltip`. The `focus` trigger keeps the help text reachable by keyboard/screen-reader users (tab onto the icon), matching the existing `scan_status.py` precedent.
 - **Icon Styling**: Standardize on `html.I(className="fas fa-info-circle")` with `style={"cursor": "help", "marginLeft": "6px", "color": COLOR_GRAY_MEDIUM}`.
 - **Inverted Contrast Scheme**:
   - In **Light Theme**: The popover renders an inverted dark card (`#1f262f` background, `#e6edf3` text, `#3a4653` border).

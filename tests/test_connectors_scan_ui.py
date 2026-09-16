@@ -824,13 +824,13 @@ class TestConnectorSettingsLayout:
         )
         popover = self._find_component(field_div, lambda c: isinstance(c, dbc.Popover))
         assert popover is not None
-        assert popover.trigger == "hover"
+        assert popover.trigger == "hover focus"
         assert popover.class_name == "popover-inverted"
 
         auto_scan_div = _render_scan_interval_input("github")
         popover_scan = self._find_component(auto_scan_div, lambda c: isinstance(c, dbc.Popover))
         assert popover_scan is not None
-        assert popover_scan.trigger == "hover"
+        assert popover_scan.trigger == "hover focus"
         assert popover_scan.class_name == "popover-inverted"
 
 

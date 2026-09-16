@@ -135,9 +135,20 @@ async def process_single_pr(pr: Any,
                     # fetch_github_user handles NamedUser stubs (triggers GET /users/{login})
                     # and GitAuthor objects (git metadata, no API call) uniformly.
                     # Run in a worker thread to avoid blocking the event loop.
+                    #
+                    # NOTE: pr_c.author may be a NamedUser stub with no URL (raises
+                    # IncompletableObject on access). Prefer the git-embedded
+                    # GitAuthor (pr_c.commit.author) when the NamedUser is unusable.
                     def extract_pr_commit_data() -> tuple[Dict[str, Any], Dict[str, Any]]:
+                        author_obj = pr_c.author
+                        if author_obj is not None:
+                            try:
+                                _ = author_obj.login
+                            except Exception:
+                                # Stub NamedUser with no URL — fall back to git metadata.
+                                author_obj = pr_c.commit.author
                         return (
-                            fetch_github_user(pr_c.author or pr_c.commit.author),
+                            fetch_github_user(author_obj),
                             map_commit(repo.name, pr_c, repo_owner),
                         )
 

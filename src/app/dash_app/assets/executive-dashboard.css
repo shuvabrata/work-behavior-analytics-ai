@@ -54,56 +54,26 @@
     --color-details-icon: #adb5bd;
     --color-validation-code-background: rgba(255, 255, 255, 0.3);
 
-    /* Colors - Graph */
-    --color-graph-node-default: #b8b8b8;
-    --color-graph-node-default-border: #9e9e9e;
-    --color-graph-node-project: #aec6cf;
-    --color-graph-node-project-border: #8fa8b5;
-    --color-graph-node-person: #c5b4e3;
-    --color-graph-node-person-border: #a798c7;
-    --color-graph-node-branch: #b5e7e3;
-    --color-graph-node-branch-border: #96c9c5;
-    --color-graph-node-epic: #f4c2b0;
-    --color-graph-node-epic-border: #d9a892;
-    --color-graph-node-issue: #f5e6d3;
-    --color-graph-node-issue-border: #d9c8b5;
-    --color-graph-node-repository: #c8d5b9;
-    --color-graph-node-repository-border: #aab89b;
-    --color-graph-edge-default: #c0c0c0;
-    --color-graph-selection: #424242;
-
     /* Typography */
-    --font-serif: 'Cormorant Garamond', serif;
     --font-sans: 'Inter', sans-serif;
     
     /* Font Sizes */
-    --font-size-xlarge: 42px;
-    --font-size-large: 15px;
-    --font-size-medium: 14px;
     --font-size-small: 13px;
     --font-size-xsmall: 12px;
-    --font-size-tiny: 11px;
 
     /* Font Weights */
     --font-weight-normal: 400;
     --font-weight-medium: 500;
     --font-weight-semibold: 600;
-    --font-weight-bold: 700;
 
     /* Spacing */
-    --spacing-xxxsmall: 4px;
     --spacing-xxsmall: 8px;
     --spacing-xsmall: 12px;
-    --spacing-small: 16px;
     --spacing-medium: 24px;
-    --spacing-large: 32px;
-    --spacing-xlarge: 40px;
-    --spacing-xxlarge: 48px;
 
     /* Border Radius */
     --border-radius: 2px;
     --border-radius-medium: 3px;
-    --border-radius-large: 4px;
 
     /* Transitions */
     --transition-base: 0.2s ease;
@@ -152,23 +122,6 @@
     --color-details-icon: #8ea0b3;
     --color-validation-code-background: rgba(255, 255, 255, 0.08);
     --color-overlay-bg: rgba(31, 38, 47, 0.92);
-
-    --color-graph-node-default: #7f8fa3;
-    --color-graph-node-default-border: #96a4b6;
-    --color-graph-node-project: #6f8fb1;
-    --color-graph-node-project-border: #89a5c2;
-    --color-graph-node-person: #8b7eab;
-    --color-graph-node-person-border: #a193bf;
-    --color-graph-node-branch: #6b9ea1;
-    --color-graph-node-branch-border: #83b3b6;
-    --color-graph-node-epic: #b18676;
-    --color-graph-node-epic-border: #c49a8b;
-    --color-graph-node-issue: #b6a58a;
-    --color-graph-node-issue-border: #cabaa1;
-    --color-graph-node-repository: #7e9a7b;
-    --color-graph-node-repository-border: #97b092;
-    --color-graph-edge-default: #8c9aab;
-    --color-graph-selection: #d5deea;
 }
 
 .app-shell {
@@ -776,7 +729,7 @@ input::placeholder {
 }
 
 .graph-catalog-favourite-toggle:focus-visible {
-    outline: 2px solid var(--color-accent, #3b82f6);
+    outline: 2px solid var(--color-navy);
     outline-offset: 2px;
     border-radius: 2px;
 }

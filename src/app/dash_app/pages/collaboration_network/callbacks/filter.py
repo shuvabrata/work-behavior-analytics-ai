@@ -50,7 +50,7 @@ def load_collaboration_network(search: str | None, pathname: str | None):
 
     logger.info("[COLLAB-PAGE] Loading collaboration network search=%r", search)
 
-    params = parse_qs((search or "").lstrip("?"))
+    params = parse_qs((search or "").lstrip("?"), keep_blank_values=True)
     hide = {"display": "none"}
     show = {"display": "block"}
 

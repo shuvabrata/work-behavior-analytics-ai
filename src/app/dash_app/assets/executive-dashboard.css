@@ -1211,6 +1211,111 @@ input::placeholder {
 }
 
 /* ============================================================================= */
+/* Unified Inverted Popover for (i) Info Icons (Scheme A)                        */
+/* In light theme -> dark card; in dark theme -> light card                      */
+/* ============================================================================= */
+
+.popover-inverted {
+    font-size: 12px;
+    line-height: 1.5;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+    border-radius: var(--border-radius, 2px) !important;
+}
+
+/* Light theme default (app is light, popover is dark card).
+   The inverted palette is the OPPOSITE theme's tokens, so it is defined once
+   per theme block as dedicated custom properties (a token change is a one-line
+   edit here) and referenced everywhere below. */
+:root .popover-inverted,
+.theme-executive-light .popover-inverted,
+.popover-inverted.theme-executive-dark {
+    --popover-inv-bg: #1f262f;
+    --popover-inv-border: #3a4653;
+    --popover-inv-text: #e6edf3;
+    --bs-popover-bg: var(--popover-inv-bg);
+    --bs-popover-border-color: var(--popover-inv-border);
+    --bs-popover-arrow-border: var(--popover-inv-border);
+    background-color: var(--popover-inv-bg) !important;
+    border-color: var(--popover-inv-border) !important;
+    color: var(--popover-inv-text) !important;
+}
+
+:root .popover-inverted .popover-body,
+.theme-executive-light .popover-inverted .popover-body,
+.popover-inverted.theme-executive-dark .popover-body {
+    color: var(--popover-inv-text) !important;
+}
+
+/* Dark theme active (app is dark, popover is light card) */
+.theme-executive-dark .popover-inverted,
+.popover-inverted.theme-executive-light {
+    --popover-inv-bg: #ffffff;
+    --popover-inv-border: #e2e8f0;
+    --popover-inv-text: #1a202c;
+    --bs-popover-bg: var(--popover-inv-bg);
+    --bs-popover-border-color: var(--popover-inv-border);
+    --bs-popover-arrow-border: var(--popover-inv-border);
+    background-color: var(--popover-inv-bg) !important;
+    border-color: var(--popover-inv-border) !important;
+    color: var(--popover-inv-text) !important;
+}
+
+.theme-executive-dark .popover-inverted .popover-body,
+.popover-inverted.theme-executive-light .popover-body {
+    color: var(--popover-inv-text) !important;
+}
+
+/* Directional arrow rules: only color the active border side to preserve transparent diagonals */
+.popover-inverted.bs-popover-auto[data-popper-placement^=top] > .popover-arrow::before,
+.popover-inverted.bs-popover-top > .popover-arrow::before {
+    border-top-color: var(--popover-inv-border) !important;
+}
+
+.popover-inverted.bs-popover-auto[data-popper-placement^=top] > .popover-arrow::after,
+.popover-inverted.bs-popover-top > .popover-arrow::after {
+    border-top-color: var(--popover-inv-bg) !important;
+}
+
+.popover-inverted.bs-popover-auto[data-popper-placement^=bottom] > .popover-arrow::before,
+.popover-inverted.bs-popover-bottom > .popover-arrow::before {
+    border-bottom-color: var(--popover-inv-border) !important;
+}
+
+.popover-inverted.bs-popover-auto[data-popper-placement^=bottom] > .popover-arrow::after,
+.popover-inverted.bs-popover-bottom > .popover-arrow::after {
+    border-bottom-color: var(--popover-inv-bg) !important;
+}
+
+.popover-inverted.bs-popover-auto[data-popper-placement^=end] > .popover-arrow::before,
+.popover-inverted.bs-popover-end > .popover-arrow::before,
+.popover-inverted.bs-popover-auto[data-popper-placement^=right] > .popover-arrow::before,
+.popover-inverted.bs-popover-right > .popover-arrow::before {
+    border-right-color: var(--popover-inv-border) !important;
+}
+
+.popover-inverted.bs-popover-auto[data-popper-placement^=end] > .popover-arrow::after,
+.popover-inverted.bs-popover-end > .popover-arrow::after,
+.popover-inverted.bs-popover-auto[data-popper-placement^=right] > .popover-arrow::after,
+.popover-inverted.bs-popover-right > .popover-arrow::after {
+    border-right-color: var(--popover-inv-bg) !important;
+}
+
+.popover-inverted.bs-popover-auto[data-popper-placement^=start] > .popover-arrow::before,
+.popover-inverted.bs-popover-start > .popover-arrow::before,
+.popover-inverted.bs-popover-auto[data-popper-placement^=left] > .popover-arrow::before,
+.popover-inverted.bs-popover-left > .popover-arrow::before {
+    border-left-color: var(--popover-inv-border) !important;
+}
+
+.popover-inverted.bs-popover-auto[data-popper-placement^=start] > .popover-arrow::after,
+.popover-inverted.bs-popover-start > .popover-arrow::after,
+.popover-inverted.bs-popover-auto[data-popper-placement^=left] > .popover-arrow::after,
+.popover-inverted.bs-popover-left > .popover-arrow::after {
+    border-left-color: var(--popover-inv-bg) !important;
+}
+
+
+/* ============================================================================= */
 /* Catalog — Person Autocomplete Combobox                                        */
 /* ============================================================================= */
 

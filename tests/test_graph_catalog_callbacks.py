@@ -325,7 +325,8 @@ def test_render_catalog_query_detail_inverts_popover_theme():
         current_view=None,
     )
     popover_light = detail_light[1].children[2]
-    assert popover_light.class_name == "theme-executive-dark"
+    assert "theme-executive-dark" in popover_light.class_name
+    assert "popover-inverted" in popover_light.class_name
 
     # In dark theme, popover class should be theme-executive-light (light popup)
     detail_dark, *_ = catalog_callbacks.render_catalog_query_detail(
@@ -336,7 +337,8 @@ def test_render_catalog_query_detail_inverts_popover_theme():
         current_view=None,
     )
     popover_dark = detail_dark[1].children[2]
-    assert popover_dark.class_name == "theme-executive-light"
+    assert "theme-executive-light" in popover_dark.class_name
+    assert "popover-inverted" in popover_dark.class_name
 
 
 

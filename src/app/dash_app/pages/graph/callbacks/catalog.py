@@ -711,7 +711,7 @@ def render_catalog_query_detail(
                 trigger="hover",
                 placement="auto",
                 style={"maxWidth": "800px"},
-                class_name=f"theme-{'executive-dark' if (theme_name or 'executive-light') == 'executive-light' else 'executive-light'}",
+                class_name=f"popover-inverted theme-{'executive-dark' if (theme_name or 'executive-light') == 'executive-light' else 'executive-light'}",
             )
         ])
 

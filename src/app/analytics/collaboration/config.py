@@ -189,7 +189,10 @@ class CollaborationNetworkConfig(BaseModel):
                         parsed.append(cleaned)
             return parsed
 
-        layers = _as_list(values.get("layers"))
+        raw_layers = values.get("layers")
+        layers = _as_list(raw_layers)
+        if raw_layers is None:
+            layers = list(LAYER_ORDER)
         weight_overrides: Dict[str, float] = {}
         for layer in LAYER_ORDER:
             weight_key = f"w_{layer}"
@@ -199,7 +202,7 @@ class CollaborationNetworkConfig(BaseModel):
         excluded_suffixes = _as_list(values.get("exclude_suffixes"))
 
         payload: Dict[str, Any] = {
-            "enabled_layers": layers or list(LAYER_ORDER),
+            "enabled_layers": layers,
             "weights": {**DEFAULT_LAYER_WEIGHTS, **weight_overrides},
             "lookback_days": _as_int(values.get("lookback_days"), DEFAULT_LOOKBACK_DAYS),
             "min_pair_score": _as_float(values.get("min_pair_score"), DEFAULT_MIN_PAIR_SCORE),

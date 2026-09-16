@@ -32,7 +32,6 @@ from app.dash_app.styles import (
     FONT_SIZE_LARGE,
     FONT_SIZE_MEDIUM,
     FONT_SIZE_SMALL,
-    FONT_SIZE_XSMALL,
     FONT_SIZE_XTINY,
     FONT_WEIGHT_MEDIUM,
     FONT_WEIGHT_SEMIBOLD,
@@ -447,27 +446,95 @@ for _layer in LAYER_ORDER:
         *[Input(f"collab-weight-{layer}", "value") for layer in LAYER_ORDER],
     ],
 )
-def build_collaboration_href(*args):
+def build_collaboration_href(  # pylint: disable=too-many-arguments
+    layer_enable_reporter_assignee,
+    layer_enable_pr_reviews,
+    layer_enable_shared_file_commits,
+    layer_enable_sprint_coworkers,
+    layer_enable_explicit_review_requests,
+    layer_enable_epic_overlap,
+    layer_enable_confluence_co_authorship,
+    layer_enable_confluence_comment_engagement,
+    layer_enable_confluence_co_commenters,
+    layer_enable_confluence_mentions,
+    layer_enable_github_pr_comment_engagement,
+    layer_enable_github_pr_co_commenters,
+    layer_enable_github_issue_comment_engagement,
+    layer_enable_github_issue_co_commenters,
+    layer_enable_jira_issue_comment_engagement,
+    layer_enable_jira_issue_co_commenters,
+    layer_enable_jira_epic_initiative_comment_engagement,
+    layer_enable_jira_epic_initiative_co_commenters,
+    lookback_days,
+    min_pair_score,
+    top_n_edges_per_node,
+    community_gap_x,
+    community_gap_y,
+    exclude_bots,
+    ensure_min_connection,
+    w_reporter_assignee,
+    w_pr_reviews,
+    w_shared_file_commits,
+    w_sprint_coworkers,
+    w_explicit_review_requests,
+    w_epic_overlap,
+    w_confluence_co_authorship,
+    w_confluence_comment_engagement,
+    w_confluence_co_commenters,
+    w_confluence_mentions,
+    w_github_pr_comment_engagement,
+    w_github_pr_co_commenters,
+    w_github_issue_comment_engagement,
+    w_github_issue_co_commenters,
+    w_jira_issue_comment_engagement,
+    w_jira_issue_co_commenters,
+    w_jira_epic_initiative_comment_engagement,
+    w_jira_epic_initiative_co_commenters,
+):
     """Build a graph-mode URL that carries collaboration query overrides."""
-    n_layers = len(LAYER_ORDER)
-    layer_enables = args[:n_layers]
-    lookback_days = args[n_layers]
-    min_pair_score = args[n_layers + 1]
-    top_n_edges_per_node = args[n_layers + 2]
-    community_gap_x = args[n_layers + 3]
-    community_gap_y = args[n_layers + 4]
-    exclude_bots = args[n_layers + 5]
-    ensure_min_connection = args[n_layers + 6]
-    weight_values = args[n_layers + 7 : n_layers + 7 + n_layers]
-
+    layer_enables = [
+        layer_enable_reporter_assignee,
+        layer_enable_pr_reviews,
+        layer_enable_shared_file_commits,
+        layer_enable_sprint_coworkers,
+        layer_enable_explicit_review_requests,
+        layer_enable_epic_overlap,
+        layer_enable_confluence_co_authorship,
+        layer_enable_confluence_comment_engagement,
+        layer_enable_confluence_co_commenters,
+        layer_enable_confluence_mentions,
+        layer_enable_github_pr_comment_engagement,
+        layer_enable_github_pr_co_commenters,
+        layer_enable_github_issue_comment_engagement,
+        layer_enable_github_issue_co_commenters,
+        layer_enable_jira_issue_comment_engagement,
+        layer_enable_jira_issue_co_commenters,
+        layer_enable_jira_epic_initiative_comment_engagement,
+        layer_enable_jira_epic_initiative_co_commenters,
+    ]
+    weight_values = [
+        w_reporter_assignee,
+        w_pr_reviews,
+        w_shared_file_commits,
+        w_sprint_coworkers,
+        w_explicit_review_requests,
+        w_epic_overlap,
+        w_confluence_co_authorship,
+        w_confluence_comment_engagement,
+        w_confluence_co_commenters,
+        w_confluence_mentions,
+        w_github_pr_comment_engagement,
+        w_github_pr_co_commenters,
+        w_github_issue_comment_engagement,
+        w_github_issue_co_commenters,
+        w_jira_issue_comment_engagement,
+        w_jira_issue_co_commenters,
+        w_jira_epic_initiative_comment_engagement,
+        w_jira_epic_initiative_co_commenters,
+    ]
     enabled_layers = [
         layer for layer, enabled in zip(LAYER_ORDER, layer_enables) if enabled
     ]
-    weight_overrides = {
-        f"w_{layer}": weight
-        for layer, weight in zip(LAYER_ORDER, weight_values)
-    }
-
     query_values = {
         "layers": enabled_layers,
         "lookback_days": lookback_days,
@@ -477,7 +544,7 @@ def build_collaboration_href(*args):
         "community_gap_y": community_gap_y,
         "exclude_bots": exclude_bots,
         "ensure_min_connection": ensure_min_connection,
-        **weight_overrides,
+        **{f"w_{layer}": weight for layer, weight in zip(LAYER_ORDER, weight_values)},
     }
 
     try:

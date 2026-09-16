@@ -140,6 +140,31 @@ def test_build_collaboration_href_selective_layers():
     assert "pr_reviews" not in top_href.split("layers=")[1].split("&")[0]
 
 
+def test_build_collaboration_href_all_layers_disabled():
+    """Disabling every layer produces an empty enabled-layers query param."""
+    n = len(LAYER_ORDER)
+    args = (
+        [False] * n  # all layers disabled
+        + [
+            DEFAULT_LOOKBACK_DAYS,
+            DEFAULT_MIN_PAIR_SCORE,
+            DEFAULT_TOP_N_EDGES_PER_NODE,
+            DEFAULT_COMMUNITY_GAP_X,
+            DEFAULT_COMMUNITY_GAP_Y,
+            DEFAULT_EXCLUDE_BOTS,
+            DEFAULT_ENSURE_MIN_CONNECTION,
+        ]
+        + [DEFAULT_LAYER_WEIGHTS[l] for l in LAYER_ORDER]
+    )
+
+    top_href, bottom_href, _ = build_collaboration_href(*args)
+    assert top_href == bottom_href
+    assert "layers=" in top_href
+    # The layers param must be present but empty (no layer names after '=').
+    layers_param = top_href.split("layers=")[1].split("&")[0]
+    assert layers_param == ""
+
+
 def test_toggle_collaboration_controls():
     """Toggling collaboration controls changes visibility and button label."""
     is_open, label = toggle_collaboration_controls(1, False)

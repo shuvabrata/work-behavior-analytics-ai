@@ -47,6 +47,16 @@ def test_from_query_values_parses_layers_and_overrides_weights():
     assert config.exclude_bots is False
 
 
+def test_from_query_values_empty_layers_stays_empty():
+    config = CollaborationNetworkConfig.from_query_values({"layers": ""})
+    assert config.enabled_layers == []
+
+
+def test_from_query_values_missing_layers_defaults_to_all():
+    config = CollaborationNetworkConfig.from_query_values({})
+    assert config.enabled_layers == LAYER_ORDER
+
+
 def test_to_cypher_parameters_contains_include_and_weight_keys():
     config = CollaborationNetworkConfig.from_query_values({"layers": "epic_overlap"})
     params = config.to_cypher_parameters()

@@ -812,3 +812,25 @@ class TestConnectorSettingsLayout:
         )
         assert save_button is not None
 
+    def test_connector_fields_use_popover_inverted(self):
+        """Verify connector fields use dbc.Popover with Scheme A popover-inverted class."""
+        import dash_bootstrap_components as dbc
+        from app.dash_app.pages.connectors.layout import _render_field, _render_scan_interval_input
+
+        field_div = _render_field(
+            {"key": "url", "label": "Repository URL", "required": True},
+            connector_type="github",
+            section="item",
+        )
+        popover = self._find_component(field_div, lambda c: isinstance(c, dbc.Popover))
+        assert popover is not None
+        assert popover.trigger == "hover"
+        assert popover.class_name == "popover-inverted"
+
+        auto_scan_div = _render_scan_interval_input("github")
+        popover_scan = self._find_component(auto_scan_div, lambda c: isinstance(c, dbc.Popover))
+        assert popover_scan is not None
+        assert popover_scan.trigger == "hover"
+        assert popover_scan.class_name == "popover-inverted"
+
+

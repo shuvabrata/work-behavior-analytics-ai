@@ -854,7 +854,7 @@ def get_layout() -> html.Div:
                                             {
                                                 "label": html.Span([
                                                     "Person only",
-                                                    html.Span(html.I(className="fas fa-info-circle"), id="search-person-only-help", style={"marginLeft": 0, "color": COLOR_GRAY_MEDIUM, "fontSize": "12px", "cursor": "default", "display": "inline-flex", "alignItems": "center"})
+                                                    html.Span(html.I(className="fas fa-info-circle"), id="search-person-only-help", style={"marginLeft": "6px", "color": COLOR_GRAY_MEDIUM, "fontSize": "12px", "cursor": "help", "display": "inline-flex", "alignItems": "center"})
                                                 ]),
                                                 "value": "person_only",
                                             }
@@ -885,10 +885,15 @@ def get_layout() -> html.Div:
                     ),
                     _build_filters_panel(),
 
-                    dbc.Tooltip(
-                        "Finds people by name, username, or email when you type 3 or more starting characters.",
+                    dbc.Popover(
+                        dbc.PopoverBody(
+                            "Finds people by name, username, or email when you type 3 or more starting characters.",
+                            style={"maxWidth": "280px"},
+                        ),
                         target="search-person-only-help",
+                        trigger="hover",
                         placement="right",
+                        class_name="popover-inverted",
                     ),
 
                     # ── Results header (count + full-attributes toggle) ─────

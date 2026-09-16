@@ -415,14 +415,19 @@ def _render_scan_interval_input(connector_type: str) -> html.Div:
                         id=tooltip_id,
                         style={"cursor": "help", "marginLeft": "6px", "color": COLOR_GRAY_MEDIUM},
                     ),
-                    dbc.Tooltip(
-                        (
-                            "How often (in hours) the scheduler automatically triggers a scan for this "
-                            "connector. Leave blank to disable automatic scanning (manual only). "
-                            "The minimum value is 1 hour."
+                    dbc.Popover(
+                        dbc.PopoverBody(
+                            (
+                                "How often (in hours) the scheduler automatically triggers a scan for this "
+                                "connector. Leave blank to disable automatic scanning (manual only). "
+                                "The minimum value is 1 hour."
+                            ),
+                            style={"maxWidth": "320px"},
                         ),
                         target=tooltip_id,
+                        trigger="hover",
                         placement="top",
+                        class_name="popover-inverted",
                     ),
                 ],
                 style={
@@ -583,16 +588,21 @@ def _render_search_filters_editor(connector_type: str) -> html.Div:
                         id=tooltip_id,
                         style={"cursor": "help", "marginLeft": "6px", "color": COLOR_GRAY_MEDIUM},
                     ),
-                    dbc.Tooltip(
-                        (
-                            "Search filters let you tag a repository with custom key/value metadata "
-                            "for downstream filtering and analysis. Add any string key (for example, "
-                            "props.division) and value (for example, platform). These filters do not "
-                            "change GitHub data collection; they help scope and segment results in "
-                            "analytics and queries."
+                    dbc.Popover(
+                        dbc.PopoverBody(
+                            (
+                                "Search filters let you tag a repository with custom key/value metadata "
+                                "for downstream filtering and analysis. Add any string key (for example, "
+                                "props.division) and value (for example, platform). These filters do not "
+                                "change GitHub data collection; they help scope and segment results in "
+                                "analytics and queries."
+                            ),
+                            style={"maxWidth": "360px"},
                         ),
                         target=tooltip_id,
+                        trigger="hover",
                         placement="top",
+                        class_name="popover-inverted",
                     ),
                 ],
                 style={
@@ -700,10 +710,15 @@ def _render_field(field: dict, connector_type: str, section: str) -> html.Div:
             )
         )
         label_children.append(
-            dbc.Tooltip(
-                tooltip_text,
+            dbc.Popover(
+                dbc.PopoverBody(
+                    tooltip_text,
+                    style={"maxWidth": "340px"},
+                ),
                 target=icon_id,
+                trigger="hover",
                 placement="top",
+                class_name="popover-inverted",
             )
         )
 

@@ -35,6 +35,17 @@ license: Complete terms in LICENSE.txt
 - Reuse shared collapse styles/classes rather than inline per-page button borders/backgrounds.
 - Keep interaction affordance minimal: chevron + subtle text-color hover changes.
 
+**Information Affordance & Hover-over Popovers (`(i)` Icons - Scheme A Convention)**:
+- **Component**: Use `dbc.Popover` with `trigger="hover"` rather than unstyled `dbc.Tooltip`.
+- **Icon Styling**: Standardize on `html.I(className="fas fa-info-circle")` with `style={"cursor": "help", "marginLeft": "6px", "color": COLOR_GRAY_MEDIUM}`.
+- **Inverted Contrast Scheme**:
+  - In **Light Theme**: The popover renders an inverted dark card (`#1f262f` background, `#e6edf3` text, `#3a4653` border).
+  - In **Dark Theme**: The popover renders an inverted light card (`#ffffff` background, `#1a202c` text, `#e2e8f0` border).
+  - Apply the `popover-inverted` CSS class (or dynamic theme inversion) to achieve automatic high-contrast visibility.
+- **Interaction & Content**:
+  - Hover trigger keeps the popover active when the cursor moves onto the popover body, allowing comfortable reading and text selection.
+  - Supports rich markdown formatting (`dcc.Markdown`) with clear typography and comfortable padding.
+
 ---
 
 This skill guides creation of distinctive, production-grade frontend interfaces that avoid generic "AI slop" aesthetics. Implement real working code with exceptional attention to aesthetic details and creative choices.

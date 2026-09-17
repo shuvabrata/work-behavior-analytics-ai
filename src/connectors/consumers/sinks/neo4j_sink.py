@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timezone
-from typing import Callable, List, Optional
+from typing import Callable, Dict, List, Optional, Tuple
 
 from neo4j import Session
 
@@ -87,6 +87,90 @@ def _sync_timestamp(signal: ActivitySignal) -> str:
 # ---------------------------------------------------------------------------
 
 
+def _batch_resolve_targets(
+    session: Session,
+    signal_rels: List[SignalRelationship],
+) -> Tuple[Dict[str, str], Dict[str, str], Dict[str, str]]:
+    """Resolve all relationship target identifiers in a single pass.
+
+    Returns three lookup maps keyed by the raw identifier, each mapping to the
+    canonical Neo4j node ``id``:
+
+    - ``email_map``: ``email -> Person.id`` (only for ``Person`` targets)
+    - ``url_map``: ``url -> node.id`` (any node with that ``url``)
+    - ``atlassian_map``: ``account_id -> Person.id`` for Jira/Confluence
+      ``Person`` targets, resolved via the shared Atlassian ``account_id``
+      namespace (``IdentityMapping`` first, then an existing ``Person`` node).
+
+    Batching collapses the per-relationship N+1 ``session.run()`` calls into at
+    most three queries regardless of relationship count.
+    """
+    emails: List[str] = []
+    urls: List[str] = []
+    identity_ids: List[str] = []
+    person_ids: List[str] = []
+
+    for rel in signal_rels:
+        target = rel.target
+        if not (target.id or target.email or target.url):
+            continue
+
+        if target.entity_type == "Person" and target.email:
+            emails.append(target.email)
+
+        if target.url:
+            urls.append(target.url)
+
+        if (
+            target.entity_type == "Person"
+            and target.source in ("jira", "confluence")
+            and target.id
+        ):
+            account_id = target.id
+            identity_ids.append(wba_format("jira", "IdentityMapping", account_id))
+            identity_ids.append(wba_format("confluence", "IdentityMapping", account_id))
+            person_ids.append(wba_format("jira", "Person", account_id))
+            person_ids.append(wba_format("confluence", "Person", account_id))
+
+    email_map: Dict[str, str] = {}
+    url_map: Dict[str, str] = {}
+    atlassian_map: Dict[str, str] = {}
+
+    if emails:
+        for row in session.run(
+            "UNWIND $emails AS email MATCH (p:Person {email: email}) RETURN email, p.id AS id",
+            emails=list(dict.fromkeys(emails)),
+        ):
+            email_map[row["email"]] = row["id"]
+
+    if urls:
+        for row in session.run(
+            "UNWIND $urls AS url MATCH (n {url: url}) RETURN url, n.id AS id",
+            urls=list(dict.fromkeys(urls)),
+        ):
+            url_map[row["url"]] = row["id"]
+
+    if identity_ids:
+        for row in session.run(
+            (
+                "UNWIND $identity_ids AS iid "
+                "MATCH (im:IdentityMapping {id: iid})-[:MAPS_TO]->(p:Person) "
+                "RETURN iid, p.id AS id"
+            ),
+            identity_ids=list(dict.fromkeys(identity_ids)),
+        ):
+            atlassian_map[row["iid"]] = row["id"]
+
+    if person_ids:
+        for row in session.run(
+            "UNWIND $person_ids AS pid MATCH (p:Person {id: pid}) RETURN pid, p.id AS id",
+            person_ids=list(dict.fromkeys(person_ids)),
+        ):
+            atlassian_map[row["pid"]] = row["id"]
+
+    return email_map, url_map, atlassian_map
+
+
 def _to_db_relationships(
     session: Session,
     signal_rels: List[SignalRelationship],
@@ -111,6 +195,8 @@ def _to_db_relationships(
 
     Relationships with no resolvable target identifier are skipped with a warning.
     """
+    email_map, url_map, atlassian_map = _batch_resolve_targets(session, signal_rels)
+
     result: List[DbRelationship] = []
     for rel in signal_rels:
         target = rel.target
@@ -123,20 +209,10 @@ def _to_db_relationships(
         to_id: Optional[str] = None
 
         if target.entity_type == "Person" and target.email:
-            row = session.run(
-                "MATCH (p:Person) WHERE p.email = $email RETURN p.id AS id LIMIT 1",
-                email=target.email,
-            ).single()
-            if row:
-                to_id = row["id"]
+            to_id = email_map.get(target.email)
 
         if to_id is None and target.url:
-            row = session.run(
-                "MATCH (n) WHERE n.url = $url RETURN n.id AS id LIMIT 1",
-                url=target.url,
-            ).single()
-            if row:
-                to_id = row["id"]
+            to_id = url_map.get(target.url)
 
         # Step 3: For Jira/Confluence Person targets, resolve via shared Atlassian
         # account_id before falling back to raw wba_format. Jira and Confluence share
@@ -158,23 +234,15 @@ def _to_db_relationships(
                 wba_format("jira", "Person", account_id),
                 wba_format("confluence", "Person", account_id),
             ]
-            row = session.run(
-                (
-                    "MATCH (im:IdentityMapping)-[:MAPS_TO]->(p:Person) "
-                    "WHERE im.id IN $identity_ids "
-                    "RETURN p.id AS id LIMIT 1"
-                ),
-                identity_ids=identity_ids,
-            ).single()
-            if row:
-                to_id = row["id"]
-            else:
-                row = session.run(
-                    "MATCH (p:Person) WHERE p.id IN $person_ids RETURN p.id AS id LIMIT 1",
-                    person_ids=person_ids,
-                ).single()
-                if row:
-                    to_id = row["id"]
+            to_id = next(
+                (atlassian_map[iid] for iid in identity_ids if iid in atlassian_map),
+                None,
+            )
+            if to_id is None:
+                to_id = next(
+                    (atlassian_map[pid] for pid in person_ids if pid in atlassian_map),
+                    None,
+                )
 
         if to_id is None and target.source and target.entity_type and target.id:
             to_id = wba_format(target.source, target.entity_type, target.id)
@@ -290,7 +358,7 @@ def _rehome_person_stub(session: Session, stale_person_id: str, canonical_person
 
 
 def _handle_repository(session: Session, signal: ActivitySignal) -> None:
-    attrs = signal.attributes.model_dump()  # type: ignore[union-attr]
+    attrs = signal.attributes.model_dump()
     node_id = wba_node_id(signal)
     repo = Repository(
         id=node_id,
@@ -307,7 +375,7 @@ def _handle_repository(session: Session, signal: ActivitySignal) -> None:
 
 
 def _handle_space(session: Session, signal: ActivitySignal) -> None:
-    attrs = signal.attributes.model_dump()  # type: ignore[union-attr]
+    attrs = signal.attributes.model_dump()
     node_id = wba_node_id(signal)
     space = Space(
         id=node_id,
@@ -322,7 +390,7 @@ def _handle_space(session: Session, signal: ActivitySignal) -> None:
 
 
 def _handle_page(session: Session, signal: ActivitySignal) -> None:
-    attrs = signal.attributes.model_dump()  # type: ignore[union-attr]
+    attrs = signal.attributes.model_dump()
     node_id = wba_node_id(signal)
     page = Page(
         id=node_id,
@@ -339,7 +407,7 @@ def _handle_page(session: Session, signal: ActivitySignal) -> None:
 
 
 def _handle_blogpost(session: Session, signal: ActivitySignal) -> None:
-    attrs = signal.attributes.model_dump()  # type: ignore[union-attr]
+    attrs = signal.attributes.model_dump()
     node_id = wba_node_id(signal)
     blogpost = Blogpost(
         id=node_id,
@@ -425,7 +493,7 @@ def _handle_person(
     signal's own wba_id — to avoid creating stale documents pointing to nodes
     that do not exist in Neo4j.
     """
-    attrs = signal.attributes.model_dump()  # type: ignore[union-attr]
+    attrs = signal.attributes.model_dump()
 
     if person_cache is not None:
         if signal.source == "github":

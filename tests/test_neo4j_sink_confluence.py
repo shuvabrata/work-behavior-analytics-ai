@@ -67,14 +67,14 @@ def test_upsert_page_signal_converts_relationships() -> None:
     session = MagicMock()
 
     def run_side_effect(query: str, **_kwargs):
-        if "WHERE p.email = $email" in query:
-            return _SingleResult(None)
-        if "WHERE n.url = $url" in query:
-            return _SingleResult(None)
-        if "WHERE im.id IN $identity_ids" in query:
-            return _SingleResult(None)
-        if "WHERE p.id IN $person_ids" in query:
-            return _SingleResult(None)
+        if "UNWIND $emails AS email" in query:
+            return []
+        if "UNWIND $urls AS url" in query:
+            return []
+        if "UNWIND $identity_ids AS iid" in query:
+            return []
+        if "UNWIND $person_ids AS pid" in query:
+            return []
         raise AssertionError(f"Unexpected query: {query}")
 
     session.run.side_effect = run_side_effect

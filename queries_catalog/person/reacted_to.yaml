@@ -1,4 +1,4 @@
-name: Nodes Reacted To
+name: Content Reacted To
 description: |-
   **What it is:** Finds all Confluence Pages and Blogposts this person has reacted to (emoji reactions).
 
@@ -33,4 +33,4 @@ tags:
 - table
 - graph
 owner: graph-team
-status: draft
+status: active

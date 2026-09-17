@@ -45,6 +45,7 @@ htmlcov/
 .cache
 nosetests.xml
 coverage.xml
+*.sarif
 *.cover
 *.py.cover
 .hypothesis/
@@ -238,3 +239,4 @@ simulation/data/layer8_pull_requests.json
 tests/neo4j_queries/results/
 tests/z_collab_validation/results/
 pytest_report.html
+bandit-report.html

@@ -165,7 +165,7 @@ async def init_rabbitmq(url: str) -> None:
         logger.info("Declaring runtime_config_events topology...")
 
         # 9. Runtime config fanout exchange
-        runtime_config_exchange = await channel.declare_exchange(
+        await channel.declare_exchange(
             RUNTIME_CONFIG_EXCHANGE,
             aio_pika.ExchangeType.FANOUT,
             durable=True,

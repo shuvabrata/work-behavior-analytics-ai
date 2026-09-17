@@ -79,20 +79,6 @@ def fetch_commits(repo: Any, since_date: datetime) -> List[Any]:
     return commits
 
 
-def fetch_commit_files(commit: Any) -> List[Any]:
-    """Fetch the file list for a single commit.
-
-    Args:
-        commit: PyGithub Commit object.
-
-    Returns:
-        List of PyGithub File objects.
-    """
-    files = retry_with_backoff(lambda: list(commit.files))
-    logger.debug(f"[fetch_commit_files] sha={getattr(commit, 'sha', '?')[:12]} fetched={len(files)} files")
-    return files
-
-
 def fetch_commit_comments(commit: Any) -> List[Any]:
     """Fetch all comments on a specific commit.
 
@@ -108,58 +94,6 @@ def fetch_commit_comments(commit: Any) -> List[Any]:
 # ---------------------------------------------------------------------------
 # Pull request fetchers
 # ---------------------------------------------------------------------------
-
-
-def fetch_pull_requests_search(
-    github_obj: Any,
-    repo_full_name: str,
-    since_date: datetime,
-) -> List[Any]:
-    """Fetch all PRs (open + closed) via the GitHub Search API and convert to PR objects.
-
-    Uses the Search API which is more efficient for incremental syncs but is
-    subject to a separate rate limit (30 req/min for authenticated users).
-
-    Args:
-        github_obj: Authenticated PyGithub ``Github`` client instance.
-        repo_full_name: Repository full name (e.g. ``"owner/repo"``).
-        since_date: Lower bound for ``updated_at`` filtering.
-
-    Returns:
-        List of PyGithub PullRequest objects (issues converted via
-        ``as_pull_request()``).
-    """
-    # Unlike the direct endpoint, the Search API DOES support an ``updated:>=``
-    # filter, so we can fetch open and closed PRs in a single query. The Search
-    # API sorts by ``updated`` regardless of state, so the caller's early-break
-    # on the ``updated_at`` cutoff remains correct across both state groups.
-    query = (
-        f"repo:{repo_full_name} is:pr"
-        f" updated:>={since_date.date()}"
-    )
-
-    def _search_and_convert() -> List[Any]:
-        # search_issues returns partially-loaded Issue objects. Accessing
-        # .pull_request on each triggers a lazy GET /repos/{owner}/{repo}/issues/{number}
-        # API call per issue. Both the search and the per-issue lazy loads are
-        # inside the enclosing retry_with_backoff, so a transient network blip or
-        # rate-limit error during either retries instead of being swallowed to [].
-        raw = list(github_obj.search_issues(query=query, sort="updated", order="desc"))
-        converted: List[Any] = []
-        for idx, issue in enumerate(raw, start=1):
-            logger.debug(
-                f"[fetch_pull_requests_search] Issue {idx}: "
-                f"pull_request={bool(issue.pull_request)} number={getattr(issue, 'number', None)}"
-            )
-            if issue.pull_request:
-                converted.append(issue.as_pull_request())
-        logger.debug(
-            f"[fetch_pull_requests_search] repo={repo_full_name} since={since_date.date()} raw_issues={len(raw)} "
-            f"converted_prs={len(converted)}"
-        )
-        return converted
-
-    return retry_with_backoff(_search_and_convert)
 
 
 def fetch_pull_requests_direct(repo_obj: Any) -> Iterable[Any]:

@@ -72,50 +72,6 @@ def map_repo(repo: Any, topics: List[str]) -> Dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
-def map_commit_author(commit_author: Any) -> Dict[str, Any]:
-    """Normalise a commit author object into a plain dict.
-
-    Handles three author shapes returned by PyGithub:
-    1. Full ``NamedUser`` objects with a ``login`` attribute.
-    2. Lightweight objects with only ``name`` / ``email`` attributes.
-    3. Unknown fallback.
-
-    Email is always lower-cased at the source to enable case-insensitive
-    identity resolution downstream.
-
-    Args:
-        commit_author: PyGithub commit author (``commit.author`` or
-            ``commit.commit.author``).
-
-    Returns:
-        Dict with keys: ``login``, ``name``, ``email``.
-    """
-    if hasattr(commit_author, "login"):
-        login = commit_author.login
-        try:
-            name = commit_author.name or login
-        except Exception:
-            name = login
-        try:
-            email = commit_author.email or ""
-        except Exception:
-            email = ""
-    elif hasattr(commit_author, "name"):
-        name = commit_author.name or "Unknown"
-        email = commit_author.email or ""
-        login = email.split("@")[0] if email else name.lower().replace(" ", "_")
-    else:
-        login = "unknown"
-        name = "Unknown"
-        email = ""
-
-    return {
-        "login": login,
-        "name": name,
-        "email": email.lower() if email else "",
-    }
-
-
 def map_commit(
     repo_name: str,
     commit: Any,
@@ -205,38 +161,6 @@ def map_commit_files(files: List[Any]) -> List[Dict[str, Any]]:
 # Thread-safe for CPython: dict reads/writes are GIL-protected; worst-case
 # race is a duplicate fetch on first encounter, which is harmless.
 _user_cache: Dict[str, Dict[str, Any]] = {}
-
-
-def map_pr_user(pr_user: Any) -> Dict[str, Any]:
-    """Normalise a GitHub user attached to a PR (author, reviewer, merger).
-
-    Gracefully handles lazy-load failures common with bot accounts.
-
-    Args:
-        pr_user: PyGithub ``NamedUser`` object, or ``None``.
-
-    Returns:
-        Dict with keys: ``login``, ``name``, ``email``.  Falls back to
-        ``"unknown"`` values when ``pr_user`` is ``None``.
-    """
-    if pr_user is None:
-        return {"login": "unknown", "name": "Unknown", "email": None}
-
-    login = pr_user.login
-    try:
-        name = pr_user.name or login
-    except Exception:
-        name = login
-    try:
-        email = pr_user.email if pr_user.email else None
-    except Exception:
-        email = None
-
-    return {
-        "login": login,
-        "name": name,
-        "email": email.lower() if email else None,
-    }
 
 
 def fetch_github_user(user_obj: Any) -> Dict[str, Any]:

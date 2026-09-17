@@ -1,0 +1,13 @@
+# Bandit Security Linter Configuration
+targets:
+  - src
+
+exclude_dirs:
+  - tests
+  - docs
+  - scripts
+  - simulation
+  - src/app/alembic
+
+# Skips specific tests across the codebase if needed
+# skips: ['B101']

@@ -38,7 +38,7 @@ class OpenAIProvider(LLMProvider):
         "gpt-3.5-turbo-16k",
     }
     
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize the OpenAI provider.
         
         Loads API key from environment and configures the OpenAI client.

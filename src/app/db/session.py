@@ -1,5 +1,6 @@
 
 import asyncio
+from typing import AsyncIterator
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
     async_sessionmaker,
@@ -27,7 +28,7 @@ ASYNC_SESSION_LOCAL = async_sessionmaker(
 )
 
 # Dependency for FastAPI (async version)
-async def get_async_db():
+async def get_async_db() -> AsyncIterator[AsyncSession]:
     try:
         loop = asyncio.get_running_loop()
         logger.debug(f"[get_async_db] Running in loop={id(loop)}")
@@ -35,5 +36,5 @@ async def get_async_db():
         logger.warning("[get_async_db] No running event loop detected")
     
     async with ASYNC_SESSION_LOCAL() as session:
-        logger.debug(f"[get_async_db] Session created, yielding for use")
+        logger.debug("[get_async_db] Session created, yielding for use")
         yield session

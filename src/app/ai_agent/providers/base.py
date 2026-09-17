@@ -5,7 +5,7 @@ to integrate with the AI agent system.
 """
 
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional
+from typing import Any, AsyncIterator, Dict, List, Optional
 
 
 class LLMProvider(ABC):
@@ -85,9 +85,9 @@ class LLMProvider(ABC):
 
     async def stream_chat_completion(
         self,
-        messages: List[Dict[str, str]],
-        model: Optional[str] = None,
-    ):
+        messages: list[dict[str, str]],
+        model: str | None = None,
+    ) -> AsyncIterator[str]:
         """Async generator that streams chat completion tokens.
 
         This optional extension method enables providers to support streaming

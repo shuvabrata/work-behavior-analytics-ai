@@ -151,7 +151,7 @@ async def consume_queue(
         f"Consumer started: queue={queue_name}  signal_dump={dump_path if signal_dumps_enabled else 'disabled'}"
     )
 
-    def _open_dump():
+    def _open_dump() -> Any:
         return dump_path.open("w", encoding="utf-8") if signal_dumps_enabled else contextlib.nullcontext()
 
     try:

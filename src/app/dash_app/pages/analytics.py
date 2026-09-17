@@ -1,5 +1,6 @@
 """Analytics gallery page for pre-built graph visualizations."""
 
+from typing import Any
 from urllib.parse import urlencode
 
 from dash import Input, Output, State, callback, clientside_callback, html
@@ -42,7 +43,7 @@ from app.dash_app.styles import (
 )
 
 
-def get_layout():
+def get_layout() -> html.Div:
     """Return the analytics gallery page."""
     return html.Div(
         [
@@ -66,7 +67,7 @@ def get_layout():
     )
 
 
-def _create_analytic_card(analytic) -> dbc.Card:
+def _create_analytic_card(analytic: Any) -> dbc.Card:
     is_collaboration = analytic.key == "collaboration_network"
 
     footer = (

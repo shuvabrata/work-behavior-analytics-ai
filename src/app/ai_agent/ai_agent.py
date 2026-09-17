@@ -120,7 +120,7 @@ def _build_and_log_stream_metadata(
     return normalized_payload
 
 
-def new_chat(system_prompt="You are a helpful AI assistant."):
+def new_chat(system_prompt: str = "You are a helpful AI assistant.") -> str:
     """Create a new chat session and return its session_id (GUID).
     
     Args:
@@ -135,7 +135,7 @@ def new_chat(system_prompt="You are a helpful AI assistant."):
     return session_id
 
 
-async def _augument_user_message(session_id: str, user_message: str):
+async def _augument_user_message(session_id: str, user_message: str) -> AsyncIterator[tuple[str, str | tuple[str, list]]]:
     """Handles the augmentation phase, yielding SSE strings and finally the resulting message."""
     yield "sse", f"data: {json.dumps({'type': 'thinking_start'})}\n\n"
 
@@ -326,7 +326,7 @@ async def stream_chat(
             logger.error(f"Stream error: session_id={session_id} error={exc} duration={elapsed:.2f}s")
             yield f"data: {json.dumps({'type': 'error', 'content': str(exc)})}\n\n"
 
-def end_chat(session_id):
+def end_chat(session_id: str) -> None:
     """End a chat session and clear its history.
     
     Args:

@@ -1,5 +1,6 @@
 # FastAPI router for Chat endpoints (v1)
 import asyncio
+from typing import AsyncIterator
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
@@ -18,7 +19,7 @@ router = APIRouter(prefix="/chats", tags=["chats"])
 
 
 @router.post("/", response_model=ChatSession, status_code=201)
-async def create_chat(chat: ChatCreate):
+async def create_chat(chat: ChatCreate) -> ChatSession:
     """
     Create a new chat session with an optional system prompt.
     Returns a unique session_id to be used for subsequent messages.
@@ -27,7 +28,7 @@ async def create_chat(chat: ChatCreate):
 
 
 @router.get("/{session_id}", response_model=ChatSessionStatus)
-async def get_chat_session(session_id: str):
+async def get_chat_session(session_id: str) -> ChatSessionStatus:
     """
     Check if a chat session exists.
     Returns session status without processing any messages.
@@ -35,9 +36,8 @@ async def get_chat_session(session_id: str):
     return service.get_chat_session_status(session_id)
 
 
-
 @router.post("/{session_id}/stream")
-async def stream_message(session_id: str, message: StreamMessageCreate):
+async def stream_message(session_id: str, message: StreamMessageCreate) -> StreamingResponse:
     """
     Stream a chat response as Server-Sent Events (SSE).
 
@@ -53,7 +53,7 @@ async def stream_message(session_id: str, message: StreamMessageCreate):
 
         logger.info(f"[stream_message] Starting stream: session_id={session_id} message={message.message[:80]}")
 
-        async def event_generator():
+        async def event_generator() -> AsyncIterator[str]:
             try:
                 async for chunk in service.stream_chat_response(session_id, message.message):
                     yield chunk
@@ -66,8 +66,6 @@ async def stream_message(session_id: str, message: StreamMessageCreate):
 
         return StreamingResponse(event_generator(), media_type="text/event-stream")
 
-    except HTTPException:
-        raise
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
     except RuntimeError as e:
@@ -75,7 +73,7 @@ async def stream_message(session_id: str, message: StreamMessageCreate):
 
 
 @router.get("/metrics/stream", tags=["metrics"])
-async def stream_metrics():
+async def stream_metrics() -> dict:
     """
     Return current streaming metrics (starts, completions, errors, disconnects,
     total_duration_seconds).
@@ -84,7 +82,7 @@ async def stream_metrics():
 
 
 @router.delete("/{session_id}", response_model=ChatDeleteResponse)
-async def delete_chat(session_id: str):
+async def delete_chat(session_id: str) -> ChatDeleteResponse:
     """
     End and delete a chat session.
     """

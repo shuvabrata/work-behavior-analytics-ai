@@ -49,7 +49,7 @@ def _status_for_connector_error(exc: ValueError) -> int:
 
 
 @router.get("/", response_model=List[ConnectorStatus])
-async def list_connectors(db: AsyncSession = Depends(get_async_db)):
+async def list_connectors(db: AsyncSession = Depends(get_async_db)) -> list[ConnectorStatus]:
     logger.debug("[router.list_connectors] Request received")
     try:
         result = await service.list_connectors(db)
@@ -65,7 +65,7 @@ async def get_connector(
     connector_type: str,
     include_secrets: bool = False,
     db: AsyncSession = Depends(get_async_db),
-):
+) -> ConnectorStatus:
     try:
         return await service.get_connector(db, connector_type, include_secrets=include_secrets)
     except ValueError as exc:
@@ -77,7 +77,7 @@ async def update_connector_config(
     connector_type: str,
     payload: ConnectorConfigUpdateRequest,
     db: AsyncSession = Depends(get_async_db),
-):
+) -> ConnectorStatus:
     try:
         return await service.update_connector_config(
             db,
@@ -94,7 +94,7 @@ async def update_connector_config(
 async def clear_connector_config(
     connector_type: str,
     db: AsyncSession = Depends(get_async_db),
-):
+) -> ConnectorStatus:
     try:
         return await service.clear_connector_config(db, connector_type)
     except ValueError as exc:
@@ -107,7 +107,7 @@ async def list_config_items(
     # TODO: This should be based on user permissions, not an explicit query parameter.
     include_secrets: bool = False,
     db: AsyncSession = Depends(get_async_db),
-):
+) -> list[dict[str, Any]]:
     try:
         return await service.list_config_items(db, connector_type, include_secrets=include_secrets)
     except ValueError as exc:
@@ -119,7 +119,7 @@ async def create_config_item(
     connector_type: str,
     item: ConfigItemRequest,
     db: AsyncSession = Depends(get_async_db),
-):
+) -> dict[str, Any]:
     try:
         return await service.save_config_item(db, connector_type, item, item_id=None)
     except ValueError as exc:
@@ -132,7 +132,7 @@ async def update_config_item(
     item_id: int,
     item: ConfigItemRequest,
     db: AsyncSession = Depends(get_async_db),
-):
+) -> dict[str, Any]:
     try:
         return await service.save_config_item(db, connector_type, item, item_id=item_id)
     except ValueError as exc:
@@ -145,7 +145,7 @@ async def update_config_item_status(
     item_id: int,
     payload: ConfigItemStatusUpdate,
     db: AsyncSession = Depends(get_async_db),
-):
+) -> dict[str, Any]:
     try:
         return await service.update_config_item_status(db, connector_type, item_id, payload.enabled)
     except ValueError as exc:
@@ -157,7 +157,7 @@ async def delete_config_item(
     connector_type: str,
     item_id: int,
     db: AsyncSession = Depends(get_async_db),
-):
+) -> dict[str, bool]:
     try:
         await service.delete_config_item(db, connector_type, item_id)
     except ValueError as exc:
@@ -168,7 +168,7 @@ async def delete_config_item(
 @router.delete("/{connector_type}")
 async def delete_all_configs(
     connector_type: str, db: AsyncSession = Depends(get_async_db)
-):
+) -> dict[str, bool]:
     try:
         await service.delete_all_configs(db, connector_type)
     except ValueError as exc:
@@ -180,7 +180,7 @@ async def delete_all_configs(
 async def test_connector(
     connector_type: str,
     db: AsyncSession = Depends(get_async_db),
-):
+) -> TestConnectionResponse:
     """Test an MCP connector's connection synchronously.
 
     This endpoint only supports MCP connectors (``atlassian_mcp`` and

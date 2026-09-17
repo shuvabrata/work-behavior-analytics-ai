@@ -7,7 +7,7 @@ existing Elasticsearch search service.
 
 from __future__ import annotations
 
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
@@ -57,7 +57,7 @@ def _extract_name(attrs: dict) -> str:
     )
 
 
-def _build_suggestion(result) -> PersonSuggestion | None:
+def _build_suggestion(result: Any) -> PersonSuggestion | None:
     """Convert a SearchResult (with full attributes) to a PersonSuggestion."""
     attrs = result.attributes or {}
     name = _extract_name(attrs)

@@ -27,21 +27,21 @@ async def list_catalog_queries(
     tag: str | None = Query(default=None, description="Filter by exact tag"),
     q: str | None = Query(default=None, description="Search query names, descriptions, tags, and ids"),
     view: Literal["graph", "tabular"] | None = Query(default=None, description="Filter by available view"),
-):
+) -> CatalogQueryListResponse:
     """List normalized query catalog entries."""
     items = service.list_catalog_queries(namespace=namespace, tag=tag, q=q, view=view)
     return CatalogQueryListResponse(items=items, count=len(items))
 
 
 @router.get("/catalog/namespaces", response_model=CatalogNamespaceListResponse)
-async def list_catalog_namespaces():
+async def list_catalog_namespaces() -> CatalogNamespaceListResponse:
     """List query catalog namespaces in display order."""
     items = service.list_namespaces()
     return CatalogNamespaceListResponse(items=items, count=len(items))
 
 
 @router.get("/catalog/{namespace}/{slug}", response_model=CatalogQuery, response_model_exclude_none=True)
-async def get_catalog_query(namespace: str, slug: str):
+async def get_catalog_query(namespace: str, slug: str) -> CatalogQuery:
     """Get one normalized query catalog entry."""
     catalog_query = service.get_catalog_query(namespace=namespace, slug=slug)
     if catalog_query is None:

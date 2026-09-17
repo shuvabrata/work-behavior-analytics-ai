@@ -5,7 +5,7 @@ LLM provider based on configuration.
 """
 
 import os
-from typing import Optional, Dict
+from typing import Dict
 
 from dotenv import load_dotenv
 
@@ -20,7 +20,7 @@ load_dotenv()
 _provider_cache: Dict[str, LLMProvider] = {}
 
 
-def get_provider(provider_name: Optional[str] = None) -> LLMProvider:
+def get_provider(provider_name: str | None = None) -> LLMProvider:
     """Get an LLM provider instance.
     
     This factory function returns the appropriate provider based on the
@@ -80,7 +80,7 @@ def get_provider(provider_name: Optional[str] = None) -> LLMProvider:
     return provider
 
 
-def clear_provider_cache():
+def clear_provider_cache() -> None:
     """Clear the provider cache.
     
     This is mainly useful for testing to ensure a fresh provider instance

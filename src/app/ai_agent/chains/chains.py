@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import AsyncIterator
+from typing import Any, AsyncIterator
 
 from app.ai_agent.chains.neo4j_chain import augment_message_with_neo4j_stream
 from app.ai_agent.chains.mcp_chain import augment_message_with_mcp_stream
@@ -10,7 +10,7 @@ from app.settings import settings
 from common.logger import logger
 
 
-def _compose_multi_source_message(user_message, envelopes):
+def _compose_multi_source_message(user_message: str, envelopes: list[dict]) -> str:
     """Compose one bounded prompt block from multiple augmentation sources."""
     sections = []
 
@@ -39,7 +39,7 @@ def _compose_multi_source_message(user_message, envelopes):
 
 async def _augment_message_with_neo4j_stream(
     user_message: str,
-    provider,
+    provider: Any,
     conversation_history: list[dict] | None,
     envelopes: list[dict],
     sources_used: list[dict],
@@ -66,7 +66,7 @@ async def _augment_message_with_neo4j_stream(
 
 async def _augment_message_with_elasticsearch_stream(
     user_message: str,
-    provider,
+    provider: Any,
     conversation_history: list[dict] | None,
     envelopes: list[dict],
     sources_used: list[dict],
@@ -96,7 +96,7 @@ async def _augment_message_with_elasticsearch_stream(
 
 async def _augment_message_with_mcp_stream(
     user_message: str,
-    provider,
+    provider: Any,
     conversation_history: list[dict] | None,
     envelopes: list[dict],
     sources_used: list[dict],
@@ -123,7 +123,7 @@ async def _augment_message_with_mcp_stream(
 
 async def augment_message_stream(
     user_message: str,
-    provider=None,
+    provider: Any = None,
     conversation_history: list[dict] | None = None,
 ) -> AsyncIterator[dict]:
     """Async generator that augments a user message and yields thinking chunks.

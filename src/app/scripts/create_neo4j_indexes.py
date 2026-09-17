@@ -23,7 +23,7 @@ def _extract_name(ddl: str) -> str:
     return parts[idx + 1]  # name is right after CONSTRAINT/INDEX
 
 
-def create_indexes():
+def create_indexes() -> None:
     """Create all recommended indexes and uniqueness constraints."""
     driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD))
 

@@ -6,7 +6,7 @@ import asyncio
 import time
 from pathlib import Path
 import re
-from typing import AsyncIterator
+from typing import Any, AsyncIterator
 
 from langchain_neo4j import Neo4jGraph, GraphCypherQAChain
 from langchain_openai import ChatOpenAI
@@ -21,7 +21,7 @@ from app.settings import settings
 _neo4j_graph = None
 
 
-def load_neo4j_prompt():
+def load_neo4j_prompt() -> str:
     """Load Neo4j schema and guidelines from llm_neo4j_prompt.md.
     
     Returns:
@@ -37,7 +37,7 @@ def load_neo4j_prompt():
 NEO4J_SCHEMA_PROMPT = load_neo4j_prompt()
 
 
-def get_neo4j_graph():
+def get_neo4j_graph() -> Any:
     """Get or create Neo4j graph connection.
     
     Returns:
@@ -75,7 +75,7 @@ def _extract_cypher_query(llm_response: str) -> str:
     return response_text
 
 
-def _build_schema_snapshot(graph):
+def _build_schema_snapshot(graph: Any) -> str:
     """Build a fresh schema snapshot from Neo4jGraph."""
     try:
         graph.refresh_schema()
@@ -105,7 +105,12 @@ def _format_history_block(conversation_history: list[dict] | None) -> str:
     return "\n".join(lines) + "\n"
 
 
-def _query_neo4j_with_provider_pipeline(user_message, provider, graph, conversation_history=None):
+def _query_neo4j_with_provider_pipeline(
+    user_message: str,
+    provider: Any,
+    graph: Any,
+    conversation_history: list[dict] | None = None,
+) -> tuple[str | None, str | None]:
     """Provider-native Neo4j query flow (feature-flagged).
 
     Flow:
@@ -181,7 +186,11 @@ Rules:
     ), cypher_query
 
 
-def check_neo4j_relevance(user_message, provider=None, conversation_history=None):
+def check_neo4j_relevance(
+    user_message: str,
+    provider: Any = None,
+    conversation_history: list[dict] | None = None,
+) -> bool:
     """Check if user message is relevant to Neo4j graph database query.
     
     Uses LLM to determine if the query relates to enterprise software
@@ -224,7 +233,11 @@ Respond with only 'YES' if relevant to the above domains, or 'NO' if not."""
         return False
 
 
-def query_neo4j_with_chain(user_message, provider=None, _meta_out=None):
+def query_neo4j_with_chain(
+    user_message: str,
+    provider: Any = None,
+    _meta_out: dict | None = None,
+) -> str | None:
     """Query Neo4j using LangChain's GraphCypherQAChain.
     
     This function uses LangChain to automatically:
@@ -334,7 +347,12 @@ Cypher Query:"""
         return None
 
 
-def augment_message_with_neo4j(user_message, provider=None, _meta_out=None, conversation_history=None):
+def augment_message_with_neo4j(
+    user_message: str,
+    provider: Any = None,
+    _meta_out: dict | None = None,
+    conversation_history: list[dict] | None = None,
+) -> str | None:
     """Augment user message with Neo4j data if relevant.
     
     This is the main entry point for Neo4j integration. It:
@@ -385,7 +403,7 @@ def augment_message_with_neo4j(user_message, provider=None, _meta_out=None, conv
 
 async def augment_message_with_neo4j_stream(
     user_message: str,
-    provider=None,
+    provider: Any = None,
     conversation_history: list[dict] | None = None,
 ) -> AsyncIterator[dict]:
     """Async generator that augments a message with Neo4j context and yields thinking chunks.

@@ -23,7 +23,7 @@ def read_cypher_query(filename: str) -> str:
     with open(query_path, "r") as f:
         return f.read()
 
-def run_test():
+def run_test() -> None:
     print("=== Collaboration Network Test Runner ===\n")
     
     query = read_cypher_query("collaboration_score.cypher")

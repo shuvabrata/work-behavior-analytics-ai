@@ -40,7 +40,7 @@ def _ui_timestamp() -> str:
     return now_in_app_timezone().isoformat()
 
 
-def get_layout():
+def get_layout() -> html.Div:
     """Return the chat page layout with Executive Dashboard aesthetic"""
     return html.Div([
         create_page_header(
@@ -371,7 +371,7 @@ def _render_response_meta(meta: dict) -> list:
     ]
 
 
-def render_messages(messages):
+def render_messages(messages: list[dict] | None) -> list[html.Div]:
     """Render the message history with Executive Dashboard aesthetic"""
     if not messages:
         return [html.Div([

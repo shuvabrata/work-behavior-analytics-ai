@@ -23,7 +23,7 @@ _driver_lock = threading.Lock()
 _driver_instance = None
 
 
-def _get_driver():
+def _get_driver() -> Any:
     """Return the long-lived Neo4j driver instance, creating it on first call.
 
     The driver manages its own connection pool and is safe to share across

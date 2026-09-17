@@ -5,7 +5,7 @@ import tiktoken
 from common.logger import logger
 
 
-def estimate_tokens_from_chars(messages):
+def estimate_tokens_from_chars(messages: list[dict]) -> int:
     """Estimate token count using character-based approximation.
     
     This is a fallback method for when tiktoken is not available or
@@ -23,7 +23,7 @@ def estimate_tokens_from_chars(messages):
     return estimated_tokens
 
 
-def count_tokens(messages, model=None):
+def count_tokens(messages: list[dict], model: str | None = None) -> int:
     """Count the total number of tokens in a list of chat messages.
     
     Attempts to use tiktoken for accurate token counting. If tiktoken

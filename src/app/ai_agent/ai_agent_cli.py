@@ -24,7 +24,7 @@ LLM_MODEL = _provider.default_model
 # Load max tokens from environment or use default
 MAX_TOKENS = int(os.getenv("MAX_TOKENS", "16000"))
 
-def start_chat():
+def start_chat() -> None:
     """Start an interactive CLI chat session.
     
     This function provides a simple command-line interface for chatting
@@ -55,7 +55,7 @@ def start_chat():
         except Exception as e:
             print(f"Unexpected error: {e}")
 
-def do_chat(session_id, user_message, model=LLM_MODEL, max_tokens=MAX_TOKENS):
+def do_chat(session_id: str, user_message: str, model: str = LLM_MODEL, max_tokens: int = MAX_TOKENS) -> tuple[str, int]:
     """Perform chat for a session, maintaining message history.
 
     Synchronous wrapper around :func:`stream_chat` — runs the same async streaming

@@ -36,7 +36,7 @@ from .components.config_forms import (
 from .components.tooltips import FIELD_TOOLTIPS
 
 
-def get_layout():
+def get_layout() -> html.Div:
     return html.Div(
         [
             create_page_header(
@@ -76,7 +76,7 @@ def get_layout():
     )
 
 
-def get_detail_layout(connector_type: str):
+def get_detail_layout(connector_type: str) -> html.Div:
     connector_meta = CONNECTOR_REGISTRY.get(connector_type, {})
     display_name = connector_meta.get("display_name", connector_type)
     setup_type = connector_meta.get("setup_type", "db_backed")

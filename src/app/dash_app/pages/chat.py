@@ -1,5 +1,6 @@
 import os
 from datetime import datetime, timezone
+from typing import Any
 
 import dash_bootstrap_components as dbc
 from dash import html, dcc, Input, Output, State, callback, clientside_callback, ClientsideFunction, no_update
@@ -156,7 +157,7 @@ def get_layout() -> html.Div:
     Output("session-store", "data"),
     Input("session-store", "data")
 )
-def initialize_session(current_data):
+def initialize_session(current_data: dict | None) -> dict:
     """Initialize a new chat session if one doesn't exist or is invalid"""
     api_base = os.getenv("API_BASE_URL", "http://localhost:8000")
     
@@ -215,7 +216,11 @@ def initialize_session(current_data):
      State("session-store", "data")],
     prevent_initial_call=True
 )
-def queue_message(n_clicks, user_message, session_data):
+def queue_message(
+    n_clicks: int | None,
+    user_message: str | None,
+    session_data: dict | None,
+) -> tuple[list, str, dict, Any, dict, str]:
     """Queue a message for sending and update UI optimistically"""
     if session_data is None:
         session_data = {"session_id": None, "messages": []}
@@ -294,7 +299,7 @@ clientside_callback(
     State("session-store", "data"),
     prevent_initial_call=True,
 )
-def render_from_session(streaming_active, session_data):
+def render_from_session(streaming_active: bool, session_data: dict | None) -> list | Any:
     """Re-render chat messages from session-store after the JS stream bridge finishes."""
     if streaming_active:
         return no_update
@@ -309,7 +314,7 @@ def render_from_session(streaming_active, session_data):
      Output("send-button", "disabled")],
     Input("sending-store", "data")
 )
-def toggle_sending_state(sending_data):
+def toggle_sending_state(sending_data: dict | None) -> tuple[bool, bool]:
     sending = bool(sending_data and sending_data.get("sending"))
     return sending, sending
 
@@ -662,7 +667,7 @@ def render_messages(messages: list[dict] | None) -> list[html.Div]:
     State("send-button", "n_clicks"),
     prevent_initial_call=True
 )
-def submit_on_enter(_n_submit, n_clicks):
+def submit_on_enter(_n_submit: int | None, n_clicks: int | None) -> int:
     """Trigger send button when Enter is pressed"""
     return (n_clicks or 0) + 1
 

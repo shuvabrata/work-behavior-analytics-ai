@@ -28,7 +28,7 @@ TIMEOUT_SECONDS = runtime_settings.get_int("HTTP_REQUEST_TIMEOUT")
     Input("rightclicked-node-store", "data"),
     prevent_initial_call=True
 )
-def show_context_menu(rightclick_data):
+def show_context_menu(rightclick_data: dict | None) -> dict:
     """Show context menu at mouse position when node is right-clicked.
 
     Builds the style from scratch on every call so that React always sees a
@@ -245,7 +245,7 @@ clientside_callback(
     State("context-menu", "style"),
     prevent_initial_call=True
 )
-def hide_menu_after_copy(n_clicks, menu_style):
+def hide_menu_after_copy(n_clicks: int | None, menu_style: dict) -> dict:
     """Hide menu after copying node ID"""
     if n_clicks:
         updated_style = menu_style.copy()

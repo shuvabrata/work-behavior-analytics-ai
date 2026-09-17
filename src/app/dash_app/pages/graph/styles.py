@@ -57,7 +57,7 @@ def _to_px(value: Any) -> str:
     return f"{text}px"
 
 
-def build_cytoscape_stylesheet(theme_name: str = ACTIVE_THEME, effective=None):
+def build_cytoscape_stylesheet(theme_name: str = ACTIVE_THEME, effective: dict | None = None) -> list[dict]:
     """Build Cytoscape stylesheet for a specific theme.
 
     Node shape/size/colour are driven by the *effective* theme (base tokens ⊕
@@ -284,7 +284,10 @@ def build_cytoscape_stylesheet(theme_name: str = ACTIVE_THEME, effective=None):
 CYTOSCAPE_STYLESHEET = build_cytoscape_stylesheet()
 
 
-def get_node_type_styles(theme_name: str = ACTIVE_THEME, stylesheet=None):
+def get_node_type_styles(
+    theme_name: str = ACTIVE_THEME,
+    stylesheet: list[dict] | None = None,
+) -> dict[str, dict[str, str]]:
     """Extract node type styling information from the stylesheet.
 
     Parses CYTOSCAPE_STYLESHEET to extract node types and their colors.

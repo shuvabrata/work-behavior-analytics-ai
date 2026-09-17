@@ -580,7 +580,7 @@ def build_collaboration_href(  # pylint: disable=too-many-arguments
     State("collab-controls-collapse", "is_open"),
     prevent_initial_call=True,
 )
-def toggle_collaboration_controls(_n_clicks, is_open):
+def toggle_collaboration_controls(_n_clicks: int | None, is_open: bool) -> tuple[bool, str, dict[str, str]]:
     """Toggle collaboration controls visibility in the analytics card."""
     next_state = not is_open
     label = "Hide Options" if next_state else "Show Options"

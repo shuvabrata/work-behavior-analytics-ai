@@ -11,7 +11,7 @@ from dash import html
 from app.settings import settings
 
 
-def create_expansion_modal():
+def create_expansion_modal() -> dbc.Modal:
     """Create the node expansion configuration modal
     
     Returns:

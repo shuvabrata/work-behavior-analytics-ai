@@ -11,6 +11,8 @@ Usage:
     html.Div("My Header", style=COMPACT_PAGE_HEADER_STYLE)
 """
 
+from typing import Any
+
 # =============================================================================
 # TYPOGRAPHY
 # =============================================================================
@@ -921,7 +923,7 @@ ALERT_DOC_LINK_ICON_STYLE = {
 # LAYOUT UTILITIES
 # =============================================================================
 
-def merge_styles(*styles):
+def merge_styles(*styles: dict[str, Any]) -> dict[str, Any]:
     """
     Merge multiple style dictionaries together.
     Later styles override earlier ones.

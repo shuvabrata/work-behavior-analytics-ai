@@ -4,6 +4,7 @@ Functions for creating UI elements like alerts, tables, and metrics displays.
 These are pure functions that return Dash components.
 """
 
+from typing import Any
 import dash_bootstrap_components as dbc
 from dash import html
 
@@ -37,7 +38,13 @@ from app.dash_app.styles import (
 from ..styles import get_node_type_styles
 
 
-def create_error_alert(message, alert_type='danger', hint=None, heading="Query Execution Failed", doc_link=None):
+def create_error_alert(
+    message: str,
+    alert_type: str = 'danger',
+    hint: str | None = None,
+    heading: str = "Query Execution Failed",
+    doc_link: str | None = None,
+) -> html.Div:
     """Create an error/warning alert component
     
     Args:
@@ -94,7 +101,7 @@ def create_error_alert(message, alert_type='danger', hint=None, heading="Query E
     ])
 
 
-def create_table_display(raw_results, result_count=None):
+def create_table_display(raw_results: list[dict] | None, result_count: int | None = None) -> html.Div:
     """Create table-only content for tabular query results.
 
     Args:
@@ -129,7 +136,7 @@ def create_table_display(raw_results, result_count=None):
         )
 
 
-def create_graph_success_alert(node_count, rel_count):
+def create_graph_success_alert(node_count: int, rel_count: int) -> html.Div:
     """Create a success alert for graph query results
     
     Args:
@@ -145,7 +152,12 @@ def create_graph_success_alert(node_count, rel_count):
     ], color="success", class_name="mb-0")
 
 
-def create_performance_metrics(node_count, rel_count, execution_time_ms, is_graph=True):
+def create_performance_metrics(
+    node_count: int,
+    rel_count: int,
+    execution_time_ms: float,
+    is_graph: bool = True,
+) -> html.Div:
     """Create performance metrics display
     
     Args:
@@ -233,7 +245,7 @@ def create_performance_metrics(node_count, rel_count, execution_time_ms, is_grap
     ], style=PERFORMANCE_CONTAINER_STYLE)
 
 
-def create_expansion_success_alert(node_count, rel_count, has_more=False):
+def create_expansion_success_alert(node_count: int, rel_count: int, has_more: bool = False) -> html.Div:
     """Create a success alert for node expansion
     
     Args:
@@ -257,7 +269,7 @@ def create_expansion_success_alert(node_count, rel_count, has_more=False):
     return create_alert(message_parts, color="success", class_name="mb-0")
 
 
-def create_no_neighbors_alert():
+def create_no_neighbors_alert() -> html.Div:
     """Create an info alert for when no new neighbors are found
     
     Returns:
@@ -269,7 +281,7 @@ def create_no_neighbors_alert():
     ], color="info", class_name="mb-0", duration=4000)
 
 
-def create_expansion_error_alert(error_message, error_type="general"):
+def create_expansion_error_alert(error_message: str, error_type: str = "general") -> html.Div:
     """Create an error alert for expansion failures
     
     Args:
@@ -294,7 +306,7 @@ def create_expansion_error_alert(error_message, error_type="general"):
     ], color=color, class_name="mb-0")
 
 
-def get_shape_css(shape):
+def get_shape_css(shape: str) -> dict[str, Any]:
     """Get CSS styling for a shape icon in the legend
     
     Args:
@@ -348,7 +360,7 @@ def get_shape_css(shape):
     return {**base_style, **shape_styles.get(shape, {'borderRadius': '50%'})}
 
 
-def create_node_legend(node_types=None, theme_name="executive-light"):
+def create_node_legend(node_types: list[str] | None = None, theme_name: str = "executive-light") -> html.Div:
     """Create a legend showing node types and their colors
     
     Args:

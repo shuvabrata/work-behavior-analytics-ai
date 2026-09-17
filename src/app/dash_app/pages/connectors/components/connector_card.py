@@ -38,7 +38,7 @@ def connector_card(
     display_name: str,
     icon: str,
     status: str,
-):
+) -> html.Div:
     status_color = STATUS_COLORS.get(status, COLOR_GRAY_LIGHT)
 
     return html.Div(

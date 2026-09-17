@@ -31,7 +31,7 @@ def settings_card(
     *,
     href: str | None = None,
     coming_soon: bool = False,
-):
+) -> html.Div:
     """Build a settings hub card.
 
     Args:

@@ -4,11 +4,12 @@ Functions for converting between Neo4j format and Cytoscape format,
 and parsing error responses from the backend API.
 """
 
+from typing import Any
 from app.common.node_size import apply_node_size 
 from app.settings import settings
 
 
-def _compact_node_label(label_value):
+def _compact_node_label(label_value: Any) -> str:
     """Create a compact node label for in-node rendering.
 
     Keeps labels short enough to stay visually contained in node shapes.
@@ -26,7 +27,7 @@ def _compact_node_label(label_value):
     return text[: max_chars - 3].rstrip() + "..."
 
 
-def _resolve_display_name(properties, wba_id, node_label):
+def _resolve_display_name(properties: dict[str, Any], wba_id: str | None, node_label: str) -> str:
     """Resolve a human-readable display name for a graph node.
 
     Priority order:
@@ -59,7 +60,7 @@ def _resolve_display_name(properties, wba_id, node_label):
     return node_label
 
 
-def neo4j_to_cytoscape(graph_response):
+def neo4j_to_cytoscape(graph_response: dict[str, Any]) -> list[dict[str, Any]]:
     """Transform Neo4j graph response to Cytoscape elements format
     
     Args:
@@ -124,7 +125,7 @@ def neo4j_to_cytoscape(graph_response):
     return elements
 
 
-def parse_error_response(error_data, status_code):
+def parse_error_response(error_data: dict[str, Any], status_code: int) -> tuple[str, str, str | None, str]:
     """Parse backend error response and provide user-friendly messages with helpful links
     
     Args:

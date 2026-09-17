@@ -174,7 +174,7 @@ def execute_doubleclick_expansion(dblclick_data, current_elements, current_unfil
     [State("graph-cytoscape", "selectedNodeData")],
     prevent_initial_call=True
 )
-def open_expansion_modal(n_clicks, selected_nodes):
+def open_expansion_modal(n_clicks: int | None, selected_nodes: list[dict] | None) -> tuple[bool, str | None]:
     """Open the expansion modal and store the selected node ID"""
     if n_clicks and selected_nodes and len(selected_nodes) > 0:
         node_data = selected_nodes[0]
@@ -188,7 +188,7 @@ def open_expansion_modal(n_clicks, selected_nodes):
     Input("expansion-modal-cancel", "n_clicks"),
     prevent_initial_call=True
 )
-def close_expansion_modal(n_clicks):
+def close_expansion_modal(n_clicks: int | None) -> bool:
     """Close the expansion modal"""
     if n_clicks:
         return False

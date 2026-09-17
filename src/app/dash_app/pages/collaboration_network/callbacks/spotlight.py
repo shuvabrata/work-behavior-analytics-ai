@@ -63,7 +63,7 @@ def _match_node(data: dict, query_lower: str) -> bool:
     return False
 
 
-def _apply_spotlight_classes(elements, match_wba_ids):
+def _apply_spotlight_classes(elements: list[dict] | None, match_wba_ids: set[str] | None) -> list[dict]:
     """Add spotlight-match / spotlight-dim classes to Cytoscape elements.
 
     When match_wba_ids is None, all spotlight-* classes are stripped (clear mode).
@@ -115,7 +115,7 @@ def _apply_spotlight_classes(elements, match_wba_ids):
     State("collab-cytoscape", "elements"),
     prevent_initial_call=True,
 )
-def update_collab_spotlight(query: str | None, elements: list | None):
+def update_collab_spotlight(query: str | None, elements: list[dict] | None) -> tuple[list[dict], str]:
     """Apply spotlight highlighting to collab nodes using client-side field matching."""
     if not elements:
         raise PreventUpdate
@@ -140,11 +140,6 @@ def update_collab_spotlight(query: str | None, elements: list | None):
     match_count = len(match_wba_ids)
 
     logger.info(f"[Collab Spotlight] query={q!r}  node_count={node_count}  match_count={match_count}")
-
-    updated = _apply_spotlight_classes(elements, match_wba_ids)
-    count_text = f"{match_count} of {node_count} nodes match" if node_count > 0 else ""
-    return updated, count_text
-
 
     updated = _apply_spotlight_classes(elements, match_wba_ids)
     count_text = f"{match_count} of {node_count} nodes match" if node_count > 0 else ""

@@ -15,7 +15,7 @@ class FilteringDataValidationError(ValueError):
     """Raised when loaded graph elements violate callback assumptions."""
 
 
-def _split_elements(elements):
+def _split_elements(elements: list[dict] | None) -> tuple[list[dict], list[dict]]:
     """Return node and edge lists from a Cytoscape element collection."""
     nodes = []
     edges = []
@@ -30,7 +30,7 @@ def _split_elements(elements):
     return nodes, edges
 
 
-def _has_weighted_edges(elements):
+def _has_weighted_edges(elements: list[dict] | None) -> bool:
     """Return True when the current graph contains edge weights."""
     for elem in elements or []:
         data = elem.get("data", {})
@@ -39,7 +39,7 @@ def _has_weighted_edges(elements):
     return False
 
 
-def _require_element_ids(elements):
+def _require_element_ids(elements: list[dict] | None) -> None:
     """Validate that all nodes and edges carry stable ids."""
     for elem in elements or []:
         data = elem.get("data", {})
@@ -51,7 +51,7 @@ def _require_element_ids(elements):
             )
 
 
-def _format_counts_summary(filtered_elements, unfiltered_elements):
+def _format_counts_summary(filtered_elements: list[dict] | None, unfiltered_elements: list[dict] | None) -> str:
     """Build a compact before/after summary for the current filter state."""
     if not unfiltered_elements:
         return "Load a graph to refine it locally."
@@ -491,7 +491,7 @@ def update_node_type_filter(unfiltered_elements, created_range, updated_range, s
     Output("weight-threshold-label", "children"),
     Input("weight-threshold-slider", "value")
 )
-def update_weight_threshold_label(threshold):
+def update_weight_threshold_label(threshold: float | int | None) -> str:
     """Update weight threshold label text"""
     return f"Show edges with weight ≥ {threshold}"
 
@@ -712,7 +712,7 @@ def apply_relationship_filters(
     State("time-filters-collapse", "is_open"),
     prevent_initial_call=True
 )
-def toggle_time_filters_collapse(n_clicks, is_open):
+def toggle_time_filters_collapse(n_clicks: int | None, is_open: bool) -> tuple[bool, list]:
     """Toggle the Time Filters collapsible section."""
     if not n_clicks:
         raise PreventUpdate
@@ -746,7 +746,7 @@ def update_fine_slider_bounds(created_val, updated_val, seen_val):
     When the coarse slider moves, the fine slider resets to the full
     coarse extent so the user can refine within that window.
     """
-    def _fine_outputs(val):
+    def _fine_outputs(val: list[int] | None) -> tuple[int, int, list[int]]:
         if val is None:
             return 0, 1, [0, 1]
         return val[0], val[1], list(val)
@@ -787,7 +787,7 @@ def update_fine_slider_bounds(created_val, updated_val, seen_val):
     State("time-filter-full-ranges", "data"),
     prevent_initial_call=True,
 )
-def update_time_filter_ranges(unfiltered_elements, previous_ranges):
+def update_time_filter_ranges(unfiltered_elements: list[dict] | None, previous_ranges: dict | None) -> tuple[dict, ...]:
     """Compute slider ranges from all unfiltered nodes.
 
     Called whenever the unfiltered baseline changes (new query or expansion).
@@ -815,7 +815,7 @@ def update_time_filter_ranges(unfiltered_elements, previous_ranges):
 
     full_ranges_data = previous_ranges or {}
 
-    def _slider_outputs(prop):
+    def _slider_outputs(prop: str) -> tuple[int, int, list[int], None]:
         r = ranges[prop]
         marks = None
         # Preserve previous value if available, else full range
@@ -844,7 +844,7 @@ def update_time_filter_labels(created_val, updated_val, seen_val, full_ranges):
     if not full_ranges:
         return "", "", ""
 
-    def _label(prop, val):
+    def _label(prop: str, val: list[int] | None) -> str:
         full = full_ranges.get(prop, [0, 1])
         lo = _format_day_label(val[0])
         hi = _format_day_label(val[1])

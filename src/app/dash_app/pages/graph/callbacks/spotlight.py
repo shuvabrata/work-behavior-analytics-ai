@@ -44,7 +44,7 @@ clientside_callback(
 # ---------------------------------------------------------------------------
 
 
-def _apply_spotlight_classes(elements, match_wba_ids):
+def _apply_spotlight_classes(elements: list[dict] | None, match_wba_ids: set[str] | None) -> list[dict]:
     """Add spotlight-match / spotlight-dim classes to Cytoscape elements.
 
     When match_wba_ids is None, all spotlight-* classes are stripped (clear mode).
@@ -96,7 +96,7 @@ def _apply_spotlight_classes(elements, match_wba_ids):
     State("graph-cytoscape", "elements"),
     prevent_initial_call=True,
 )
-def update_spotlight(query: str | None, elements: list | None):
+def update_spotlight(query: str | None, elements: list[dict] | None) -> tuple[list[dict], str]:
     """Apply spotlight highlighting to graph nodes based on ES search results."""
     if not elements:
         raise PreventUpdate

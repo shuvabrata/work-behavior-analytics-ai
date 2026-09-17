@@ -53,7 +53,7 @@ def _get_api_base_url() -> str:
     Output("connectors-store", "data"),
     Input("url", "pathname"),
 )
-def load_connectors(pathname: str):
+def load_connectors(pathname: str) -> dict[str, Any] | Any:
     if pathname not in ("/app/connectors", "/app/connectors/"):
         return no_update
 
@@ -70,7 +70,7 @@ def load_connectors(pathname: str):
     Output("connectors-grid", "children"),
     Input("connectors-store", "data"),
 )
-def render_connectors(store: Dict[str, Any] | None):
+def render_connectors(store: Dict[str, Any] | None) -> List[dbc.Col]:
     if not store:
         return [
             dbc.Col(
@@ -177,7 +177,7 @@ def render_connectors(store: Dict[str, Any] | None):
     Input({"type": "connector-card", "connector_type": ALL}, "n_clicks_timestamp"),
     prevent_initial_call=True,
 )
-def handle_card_click(_timestamps: List[int | None]):
+def handle_card_click(_timestamps: List[int | None]) -> str | Any:
     if not callback_context.triggered:
         return no_update
     triggered_value = callback_context.triggered[0].get("value")
@@ -202,7 +202,7 @@ def handle_card_click(_timestamps: List[int | None]):
     Input("url", "pathname"),
     prevent_initial_call="initial_duplicate",
 )
-def load_connector_detail(pathname: str):
+def load_connector_detail(pathname: str) -> tuple[dict | Any, dict | Any, None, None]:
     if not pathname or not pathname.startswith("/app/connectors/"):
         return no_update, no_update, no_update, no_update
 
@@ -246,7 +246,7 @@ def load_connector_detail(pathname: str):
     State({"type": "connector-scan-interval", "connector_type": ALL}, "id"),
     prevent_initial_call=True,
 )
-def populate_scan_interval(store: Dict[str, Any] | None, input_ids: List[Dict[str, Any]]):
+def populate_scan_interval(store: Dict[str, Any] | None, input_ids: List[Dict[str, Any]]) -> List[Any]:
     """Populate the Auto-Scan Interval input from the loaded connector detail.
 
     Only producer-backed connectors render a scan-interval input, so the
@@ -292,7 +292,7 @@ def toggle_connector_settings_collapse(n_clicks: int | None, is_open: bool) -> b
     Input("connector-detail-store", "data"),
     State({"type": "connector-field", "connector_type": ALL, "section": "connector", "field": ALL}, "id"),
 )
-def populate_connector_fields(store: Dict[str, Any] | None, field_ids: List[Dict[str, Any]]):
+def populate_connector_fields(store: Dict[str, Any] | None, field_ids: List[Dict[str, Any]]) -> List[Any] | Any:
     if not field_ids:
         return no_update
     if not store or store.get("status") != "ok":
@@ -312,7 +312,7 @@ def populate_connector_fields(store: Dict[str, Any] | None, field_ids: List[Dict
     Input("connector-edit-item", "data"),
     State({"type": "connector-field", "connector_type": ALL, "section": "item", "field": ALL}, "id"),
 )
-def populate_item_fields(edit_state: Dict[str, Any] | None, field_ids: List[Dict[str, Any]]):
+def populate_item_fields(edit_state: Dict[str, Any] | None, field_ids: List[Dict[str, Any]]) -> List[Any] | Any:
     if not field_ids:
         return no_update
 
@@ -337,7 +337,7 @@ def populate_item_fields(edit_state: Dict[str, Any] | None, field_ids: List[Dict
 def populate_search_filters_store(
     edit_state: Dict[str, Any] | None,
     store_id: Dict[str, Any],
-):
+) -> Dict[str, str] | Any:
     connector_type = store_id.get("connector_type")
     if connector_type != "github":
         return no_update
@@ -385,7 +385,7 @@ def update_search_filters_store(
     key_value: str | None,
     value_value: str | None,
     store_data: Dict[str, str] | None,
-):
+) -> tuple[Dict[str, str] | Any, str | Any, str | Any]:
     if not callback_context.triggered:
         return no_update, no_update, no_update
 
@@ -422,7 +422,7 @@ def update_search_filters_store(
 def render_search_filters_list(
     store_data: Dict[str, str] | None,
     list_component_id: Dict[str, Any],
-):
+) -> html.Div | List[Any]:
     filters = store_data or {}
     if not filters:
         return html.Div(
@@ -478,7 +478,7 @@ def render_search_filters_list(
     Input("connector-edit-item", "data"),
     State({"type": "connector-item-add", "connector_type": MATCH}, "id"),
 )
-def update_item_button_label(edit_state: Dict[str, Any] | None, button_id: Dict[str, Any]):
+def update_item_button_label(edit_state: Dict[str, Any] | None, button_id: Dict[str, Any]) -> str:
     if edit_state and edit_state.get("item_id") and edit_state.get("connector_type") == button_id.get("connector_type"):
         return "Update Item"
     return "Add Item"
@@ -488,7 +488,7 @@ def update_item_button_label(edit_state: Dict[str, Any] | None, button_id: Dict[
     Output("connector-items-list", "children"),
     Input("connector-items-store", "data"),
 )
-def render_items_list(store: Dict[str, Any] | None):
+def render_items_list(store: Dict[str, Any] | None) -> List[Any]:
     if not store:
         return _empty_items_message("Loading items...")
 
@@ -723,7 +723,11 @@ def render_items_list(store: Dict[str, Any] | None):
     State("connector-items-store", "data"),
     prevent_initial_call=True,
 )
-def handle_item_edit(_clicks: List[int | None], ids: List[Dict[str, Any]], store: Dict[str, Any] | None):
+def handle_item_edit(
+    _clicks: List[int | None],
+    ids: List[Dict[str, Any]],
+    store: Dict[str, Any] | None,
+) -> tuple[Dict[str, Any] | Any, bool | Any]:
     triggered = callback_context.triggered_id
     if not isinstance(triggered, dict):
         return no_update, no_update
@@ -766,7 +770,7 @@ def handle_item_save(
     edit_state: Dict[str, Any] | None,
     search_filter_store_ids: List[Dict[str, Any]],
     search_filter_store_data: List[Dict[str, str] | None],
-):
+) -> tuple[Dict[str, Any] | Any, Dict[str, Any] | Any, dbc.Alert | Any, bool | Any]:
     triggered = callback_context.triggered_id
     if not isinstance(triggered, dict):
         return no_update, no_update, no_update, no_update
@@ -832,7 +836,7 @@ def handle_item_save(
     Input({"type": "connector-item-delete", "connector_type": ALL, "item_id": ALL}, "n_clicks"),
     prevent_initial_call=True,
 )
-def confirm_item_delete(_clicks: List[int | None]):
+def confirm_item_delete(_clicks: List[int | None]) -> tuple[bool, Dict[str, Any]]:
     """Show confirmation dialog before deleting an item."""
     if not any(n for n in _clicks if n):
         raise PreventUpdate
@@ -856,7 +860,7 @@ def confirm_item_delete(_clicks: List[int | None]):
 def handle_item_delete(
     submit_clicks: int | None,
     target: Dict[str, Any] | None,
-):
+) -> tuple[Dict[str, Any] | Any, Dict[str, Any] | Any, dbc.Alert | Any, bool]:
     if not submit_clicks:
         raise PreventUpdate
 
@@ -910,7 +914,7 @@ def handle_item_delete(
     Input({"type": "connector-item-cancel", "connector_type": ALL}, "n_clicks"),
     prevent_initial_call=True,
 )
-def handle_item_cancel(_clicks: List[int | None]):
+def handle_item_cancel(_clicks: List[int | None]) -> tuple[Dict[str, Any] | Any, bool | Any]:
     triggered = callback_context.triggered_id
     if not isinstance(triggered, dict):
         return no_update, no_update
@@ -928,7 +932,7 @@ def handle_item_cancel(_clicks: List[int | None]):
     Input({"type": "connector-item-test", "connector_type": ALL, "item_id": ALL}, "n_clicks"),
     prevent_initial_call=True,
 )
-def handle_item_test_connection(_clicks: List[int | None]):
+def handle_item_test_connection(_clicks: List[int | None]) -> tuple[dbc.Alert | Any, bool | Any]:
     """Test connection for a specific config item via the commands API.
 
     Sends a ``command_type: "test"`` command to the producer daemon, which
@@ -999,7 +1003,7 @@ def handle_item_test_connection(_clicks: List[int | None]):
     Input({"type": "connector-mcp-test", "connector_type": ALL}, "n_clicks"),
     prevent_initial_call=True,
 )
-def handle_mcp_test_connection(_clicks: List[int | None]):
+def handle_mcp_test_connection(_clicks: List[int | None]) -> dbc.Alert | Any:
     """Test an MCP connector's connection via the synchronous /test endpoint.
 
     Unlike the producer connectors, MCP connectors run their client inside the
@@ -1045,7 +1049,7 @@ def handle_mcp_test_connection(_clicks: List[int | None]):
     State("url", "pathname"),
     prevent_initial_call=True,
 )
-def handle_cancel_scan(n_clicks: List[int | None], pathname: str | None):
+def handle_cancel_scan(n_clicks: List[int | None], pathname: str | None) -> tuple[dbc.Alert | Any, bool | Any]:
     """Cancel a running scan by sending a cancel command via the API."""
     if not callback_context.triggered:
         return no_update, no_update
@@ -1126,7 +1130,7 @@ def handle_connector_save(
     field_ids: List[Dict[str, Any]],
     field_values: List[Any],
     scan_interval_values: List[Any],
-):
+) -> tuple[Dict[str, Any] | Any, dbc.Alert | Any]:
     triggered = callback_context.triggered_id
     if not isinstance(triggered, dict):
         return no_update, no_update
@@ -1172,7 +1176,7 @@ def handle_connector_save(
     Input({"type": "connector-delete", "connector_type": ALL}, "n_clicks"),
     prevent_initial_call=True,
 )
-def confirm_connector_delete(_clicks: List[int | None]):
+def confirm_connector_delete(_clicks: List[int | None]) -> tuple[bool, Dict[str, Any]]:
     """Show confirmation dialog before deleting all configs for a connector."""
     if not any(n for n in _clicks if n):
         raise PreventUpdate
@@ -1197,7 +1201,7 @@ def confirm_connector_delete(_clicks: List[int | None]):
 def handle_connector_delete(
     submit_clicks: int | None,
     target: Dict[str, Any] | None,
-):
+) -> tuple[Dict[str, Any] | Any, Dict[str, Any] | Any, dbc.Alert | Any, str | Any, bool]:
     if not submit_clicks:
         raise PreventUpdate
 
@@ -1385,7 +1389,10 @@ def _empty_items_message(message: str) -> List[Any]:
     State("connector-items-store", "data"),
     prevent_initial_call=True
 )
-def handle_inline_toggle(new_enabled_state: bool, store: Dict[str, Any] | None):
+def handle_inline_toggle(
+    new_enabled_state: bool,
+    store: Dict[str, Any] | None,
+) -> tuple[dbc.Alert | Any, bool | Any, str, Dict[str, Any] | Any]:
     ctx = callback_context
     if not ctx.triggered:
         return no_update, no_update, no_update, no_update
@@ -1398,7 +1405,12 @@ def handle_inline_toggle(new_enabled_state: bool, store: Dict[str, Any] | None):
     config_id = triggered_id.get("config_id")
     
     if not store or store.get("status") != "ok":
-        return no_update, not new_enabled_state, "Active" if not new_enabled_state else "Disabled", no_update
+        return (
+            no_update,
+            not new_enabled_state,
+            "Active" if not new_enabled_state else "Disabled",
+            no_update,
+        )
         
     api_base = _get_api_base_url()
     try:
@@ -1436,7 +1448,7 @@ def handle_inline_toggle(new_enabled_state: bool, store: Dict[str, Any] | None):
     Input({"type": "connector-run-scan", "connector_type": ALL}, "n_clicks"),
     prevent_initial_call=True,
 )
-def handle_run_scan(n_clicks: List[int | None]):
+def handle_run_scan(n_clicks: List[int | None]) -> tuple[dbc.Alert | Any, bool | Any, html.Div | Any]:
     """Send a scan command via the API when the "Run Scan" button is clicked.
 
     Also enables the scan-polling interval so the scan list auto-refreshes,
@@ -1530,7 +1542,7 @@ def handle_run_scan(n_clicks: List[int | None]):
 def load_recent_scans(
     n_intervals: int | None,
     pathname: str | None,
-):
+) -> html.Div | Any:
     """Load recent scan commands for this connector.
 
     Polled every 5 seconds while scans are in progress.  Disabled when idle.

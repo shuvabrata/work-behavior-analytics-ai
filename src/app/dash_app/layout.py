@@ -1,3 +1,4 @@
+from typing import Any
 import dash
 import dash_bootstrap_components as dbc
 from dash import dcc, html
@@ -19,7 +20,7 @@ from .styles import (
 )
 
 
-def create_dash_app():
+def create_dash_app() -> dash.Dash:
 
     app = dash.Dash(
         __name__,
@@ -133,7 +134,7 @@ def create_dash_app():
         Output("page-content", "children"),
         Input("url", "pathname")
     )
-    def display_page(pathname):
+    def display_page(pathname: str | None) -> Any:
         if pathname in ("/app/analytics", "/app/analytics/"):
             return analytics.get_layout()
         if pathname == "/app/collaboration":
@@ -169,7 +170,7 @@ def create_dash_app():
         State("sidebar-collapsed", "data"),
         prevent_initial_call=True
     )
-    def toggle_sidebar(_n_clicks, is_collapsed):
+    def toggle_sidebar(_n_clicks: int | None, is_collapsed: bool) -> tuple[bool, dict[str, Any], str]:
         # Toggle the state
         new_state = not is_collapsed
         
@@ -202,7 +203,7 @@ def create_dash_app():
         Input("sidebar-collapsed", "data"),
         prevent_initial_call='initial_duplicate'
     )
-    def init_sidebar_state(is_collapsed):
+    def init_sidebar_state(is_collapsed: bool) -> tuple[dict[str, Any], str]:
         base_style = {**SIDEBAR_COL_STYLE, "transition": "min-width 0.2s ease, max-width 0.2s ease"}
         
         # Apply stored state on page load
@@ -231,7 +232,7 @@ def create_dash_app():
         State("global-search-input", "value"),
         prevent_initial_call=True,
     )
-    def navigate_global_search(_n_submit, query: str | None):
+    def navigate_global_search(_n_submit: int | None, query: str | None) -> tuple[str, str, str]:
         """Navigate to the search page with the query term in the URL."""
         if not query or not query.strip():
             raise PreventUpdate
@@ -243,7 +244,7 @@ def create_dash_app():
         State("theme-store", "data"),
         prevent_initial_call=True,
     )
-    def persist_theme(_n_clicks, current_theme: str | None):
+    def persist_theme(_n_clicks: int | None, current_theme: str | None) -> str:
         """Toggle between light and dark theme on each button click."""
         return "executive-dark" if (current_theme or "executive-light") == "executive-light" else "executive-light"
 
@@ -252,7 +253,7 @@ def create_dash_app():
         Output("theme-icon", "className"),
         Input("theme-store", "data"),
     )
-    def apply_theme(theme_name: str | None):
+    def apply_theme(theme_name: str | None) -> tuple[str, str]:
         """Apply the theme CSS class and update the toggle icon."""
         active_theme = theme_name or "executive-light"
         # Show moon when in light mode (click → go dark)

@@ -35,7 +35,7 @@ from ..layout import (
     [Input("url", "search"),
      Input("url", "pathname")],
 )
-def load_collaboration_network(search: str | None, pathname: str | None):
+def load_collaboration_network(search: str | None, pathname: str | None) -> tuple[list[dict], dict, list, dict, dict, bool]:
     """Fetch raw elements into the store when this page is active.
 
     Note: prevent_initial_call is intentionally NOT set here.  In Dash's
@@ -134,7 +134,12 @@ def load_collaboration_network(search: str | None, pathname: str | None):
      Input("collab-weight-threshold-slider", "value"),
      Input("collab-top-n-toggle",            "value")],
 )
-def apply_collab_filters(elements, selected_communities, weight_threshold, top_n_mode):
+def apply_collab_filters(
+    elements: list[dict] | None,
+    selected_communities: list[int] | None,
+    weight_threshold: float | int | None,
+    top_n_mode: str | None,
+) -> list[dict]:
     """Translate raw store elements through the active filters \u2192 cytoscape."""
     if not elements:
         return []
@@ -157,7 +162,7 @@ def apply_collab_filters(elements, selected_communities, weight_threshold, top_n
      Output("collab-community-available-store", "data")],
     Input("collab-elements-store", "data"),
 )
-def update_collab_community_filter(elements):
+def update_collab_community_filter(elements: list[dict] | None) -> tuple[list[dict], list[int], list[int]]:
     """Populate the community checklist when new data loads.
 
     Note: no prev-state guard here.  On re-navigation the
@@ -178,7 +183,7 @@ def update_collab_community_filter(elements):
     Output("collab-weight-threshold-label", "children"),
     Input("collab-weight-threshold-slider", "value"),
 )
-def update_collab_weight_label(value):
+def update_collab_weight_label(value: float | int | None) -> str:
     """Update the weight threshold label text."""
     return f"Show edges with weight \u2265 {value or 0}"
 
@@ -191,7 +196,12 @@ def update_collab_weight_label(value):
      Input("collab-weight-threshold-slider", "value"),
      Input("collab-top-n-toggle",            "value")],
 )
-def update_collab_filter_feedback(elements, selected_communities, weight_threshold, top_n_mode):
+def update_collab_filter_feedback(
+    elements: list[dict] | None,
+    selected_communities: list[int] | None,
+    weight_threshold: float | int | None,
+    top_n_mode: str | None,
+) -> tuple[str, list[Any]]:
     """Keep the summary line and active-filter chips up to date."""
     if not elements:
         return (
@@ -239,7 +249,7 @@ def update_collab_filter_feedback(elements, selected_communities, weight_thresho
     State("collab-community-filter",  "options"),
     prevent_initial_call=True,
 )
-def clear_collab_filters(n_clicks, community_options):
+def clear_collab_filters(n_clicks: int | None, community_options: list[dict] | None) -> tuple[list[int], int, str]:
     """Reset all filter controls to their defaults."""
     all_communities = [opt["value"] for opt in (community_options or [])]
     return all_communities, 0, "all"
@@ -252,7 +262,7 @@ def clear_collab_filters(n_clicks, community_options):
     State("collab-right-tab-filters-collapse", "is_open"),
     prevent_initial_call=True,
 )
-def toggle_collab_filter_panel(n_clicks, is_open):
+def toggle_collab_filter_panel(n_clicks: int | None, is_open: bool) -> tuple[bool, str]:
     """Toggle the Filters tab open/closed and update the icon button active state."""
     new_open = not is_open
     btn_class = "graph-right-panel-tab-icon active" if new_open else "graph-right-panel-tab-icon"

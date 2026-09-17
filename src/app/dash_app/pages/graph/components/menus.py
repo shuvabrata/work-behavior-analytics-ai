@@ -12,7 +12,7 @@ from app.dash_app.styles import (
 )
 
 
-def create_context_menu():
+def create_context_menu() -> html.Div:
     """Create the right-click context menu for nodes
     
     Returns:

@@ -163,7 +163,7 @@ def determine_catalog_view(
     return None
 
 
-def _extract_param_value(value):
+def _extract_param_value(value: str | dict | None) -> str | None:
     """Normalize a catalog parameter value to its raw runtime form.
 
     Person parameters are stored as ``{"wba": "...", "display": "..."}``
@@ -217,7 +217,7 @@ def _status_badge_color(status: str | None) -> str:
     return "secondary"
 
 
-def _build_status_badge(status: str | None):
+def _build_status_badge(status: str | None) -> dbc.Badge | None:
     if not status:
         return None
     status_lower = status.strip().lower()
@@ -238,7 +238,7 @@ def _parameter_placeholder(parameter: dict) -> str:
     return parameter.get("placeholder") or parameter.get("env_var") or parameter.get("name") or ""
 
 
-def _build_parameter_help_text(parameter: dict):
+def _build_parameter_help_text(parameter: dict) -> html.Div | None:
     help_parts: list = []
     description = parameter.get("description")
     env_var = parameter.get("env_var")
@@ -378,7 +378,7 @@ def _build_person_picker(parameter: dict, current_value: str | dict | None) -> h
     Output("catalog-metadata-store", "data"),
     Input("url", "pathname"),
 )
-def load_query_catalog(pathname: str | None):
+def load_query_catalog(pathname: str | None) -> tuple[list[dict], html.Div | None, dict]:
     """Fetch catalog metadata when the Graph page is opened."""
     if pathname != "/app/graph":
         return no_update, no_update, no_update
@@ -438,7 +438,7 @@ def _fetch_catalog_metadata(api_base: str) -> dict:
     Output("catalog-namespace-filter", "options"),
     Input("query-catalog-store", "data"),
 )
-def populate_namespace_filter(catalog_queries: list[dict] | None):
+def populate_namespace_filter(catalog_queries: list[dict] | None) -> list[dict]:
     """Populate namespace options from loaded catalog metadata."""
     return build_namespace_options(catalog_queries or [])
 
@@ -452,11 +452,11 @@ def populate_namespace_filter(catalog_queries: list[dict] | None):
     prevent_initial_call="initial_duplicate",
 )
 def sync_selected_catalog_query(
-    _clicks,
+    _clicks: list[int | None],
     search: str | None,
     catalog_queries: list[dict] | None,
     current_selection: dict | None,
-):
+) -> dict | None:
     """Select a query from button clicks or URL deep links."""
     catalog_queries = catalog_queries or []
     if not catalog_queries:
@@ -491,7 +491,7 @@ def render_catalog_query_list(
     search_text: str | None,
     selected_query: dict | None,
     metadata_store: dict | None,
-):
+) -> html.Div:
     """Render the filtered query list."""
     catalog_queries = catalog_queries or []
     metadata_store = metadata_store or {}
@@ -656,7 +656,7 @@ def render_catalog_query_detail(
     theme_name: str | None,
     parameter_values: dict | None,
     current_view: str | None,
-):
+) -> tuple[list, list[dict], str | None, list]:
     """Render selected query details, view toggle, and parameter inputs."""
     catalog_queries = catalog_queries or []
     parameter_values = parameter_values or {}
@@ -862,7 +862,7 @@ def load_catalog_query_into_console(
     catalog_queries: list[dict] | None,
     catalog_view: str | None,
     catalog_parameters: dict | None,
-):
+) -> tuple[str | None, str | None]:
     """Populate the query console with the selected catalog query text.
 
     Declared ``$param`` placeholders are substituted with the user's current

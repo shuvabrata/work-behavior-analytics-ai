@@ -5,6 +5,7 @@ Callbacks for query validation and execution.
 
 import time
 import requests
+import dash_bootstrap_components as dbc
 from dash import ctx, html, Input, Output, State, callback, no_update
 from dash.exceptions import MissingCallbackContextException, PreventUpdate
 
@@ -48,7 +49,7 @@ def _normalize_catalog_parameters(raw_params: dict | None) -> dict:
     Output("query-validation-message", "children"),
     Input("graph-query-input", "value")
 )
-def validate_query(query_text):
+def validate_query(query_text: str | None) -> dbc.Alert | None:
     """Validate Cypher query and provide real-time feedback"""
     # Empty query - no message
     if not query_text or not query_text.strip():
@@ -182,7 +183,7 @@ def execute_query(
             "all",
         )
 
-    def error_response(error_display):
+    def error_response(error_display: html.Div | str | None) -> tuple:
         return build_response(
             None,
             empty_elements,

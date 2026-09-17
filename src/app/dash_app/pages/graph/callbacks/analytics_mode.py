@@ -10,7 +10,7 @@ from dash import Input, Output, callback
     Output("right-tab-catalog-btn", "style"),
     [Input("url", "pathname"), Input("url", "search")],
 )
-def toggle_query_panel_for_analytics_mode(pathname: str | None, search: str | None):
+def toggle_query_panel_for_analytics_mode(pathname: str | None, search: str | None) -> tuple[dict, dict]:
     """Hide the Console and Catalog tabs when the graph page is in analytics mode."""
     if pathname != "/app/graph":
         return {}, {}

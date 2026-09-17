@@ -37,7 +37,7 @@ from app.dash_app.styles import (
 )
 
 
-def create_graph_controls():
+def create_graph_controls() -> dbc.Row:
     """Create layout controls (layout selector and action buttons)
     
     Returns:
@@ -46,7 +46,7 @@ def create_graph_controls():
     return create_controls_bar("graph")
 
 
-def create_graph_container():
+def create_graph_container() -> html.Div:
     """Create main graph visualization container with Cytoscape
     
     Returns:
@@ -74,7 +74,7 @@ def create_graph_container():
     )
 
 
-def create_table_container():
+def create_table_container() -> html.Div:
     """Create container for tabular query results
     
     Returns:
@@ -86,7 +86,7 @@ def create_table_container():
     )
 
 
-def create_empty_state():
+def create_empty_state() -> html.Div:
     """Create empty state display (shown before any query execution)
     
     Returns:
@@ -117,7 +117,7 @@ def create_empty_state():
     )
 
 
-def _filter_card():
+def _filter_card() -> dbc.Card:
     """Returns the filter controls dbc.Card for the Filters tab collapse."""
     return dbc.Card([
         dbc.CardBody([
@@ -299,8 +299,8 @@ def _filter_card():
     ], className="graph-filter-card", style={"border": "none", "backgroundColor": "transparent"})
 
 
-def _console_card():
-    """Returns the query console dbc.Card for the Console tab collapse."""
+def _console_card() -> dbc.Card:
+    """Returns the Cypher query console dbc.Card for the Console tab collapse."""
     return dbc.Card([
         dbc.CardBody([
             # Row with textarea and execute button side by side
@@ -339,7 +339,7 @@ def _console_card():
     ], style={"border": f"1px solid {COLOR_GRAY_LIGHTER}", "borderRadius": "2px", "backgroundColor": "var(--color-background-white)"})
 
 
-def create_right_panel_tab_bar():
+def create_right_panel_tab_bar() -> html.Div:
     """Create the sticky icon-only horizontal tab bar for the right panel workbench.
 
     Returns:
@@ -374,8 +374,8 @@ def create_right_panel_tab_bar():
     )
 
 
-def create_catalog_tab_content():
-    """Single-column catalog layout for the right panel Catalog tab.
+def create_catalog_tab_content() -> html.Div:
+    """Create catalog tab content containing namespace filter, query cards, and details modal.
 
     Returns:
         html.Div with namespace filter, search, query list, detail, and action buttons.
@@ -481,8 +481,8 @@ def create_catalog_tab_content():
     ], style={"padding": "8px 0"})
 
 
-def create_right_panel_tabs():
-    """Three accordion collapse panels for the right panel workbench.
+def create_right_panel_tabs() -> html.Div:
+    """Create right panel containing tab bar and tab contents for Catalog, Filters, Console, and Details.
 
     Returns:
         html.Div containing dbc.Collapse for Filters, Console, and Catalog tabs.
@@ -506,9 +506,9 @@ def create_right_panel_tabs():
     ])
 
 
-def create_results_section():
-    """Create the results section (graph + details panel)
-    
+def create_results_section() -> html.Div:
+    """Create results section combining visualization, tables, and details panel
+
     Returns:
         html.Div containing the complete results section
     """
@@ -554,7 +554,7 @@ def create_results_section():
     ], className="mb-2")
 
 
-def create_stores():
+def create_stores() -> list[dcc.Store]:
     """Create all dcc.Store components for state management
     
     Returns:
@@ -636,7 +636,7 @@ def create_stores():
     ]
 
 
-def create_hidden_elements():
+def create_hidden_elements() -> list[html.Div]:
     """Create hidden UI elements (triggers, etc.)
     
     Returns:
@@ -661,7 +661,7 @@ def create_hidden_elements():
     ]
 
 
-def get_layout():
+def get_layout() -> html.Div:
     """Build complete graph page layout with Executive Dashboard aesthetic
     
     Returns:

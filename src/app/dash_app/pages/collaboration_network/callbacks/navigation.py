@@ -47,7 +47,7 @@ clientside_callback(
     Input("collab-reset-btn", "n_clicks"),
     prevent_initial_call=True,
 )
-def reset_collab_layout(n_clicks):
+def reset_collab_layout(n_clicks: int | None) -> dict:
     """Re-apply the preset layout to restore default zoom and pan."""
     stop_value = 1000 if (n_clicks or 0) % 2 == 0 else 1001
     return {**_COLLABORATION_LAYOUT, "stop": stop_value}

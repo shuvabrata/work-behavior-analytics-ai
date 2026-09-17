@@ -63,7 +63,7 @@ def toggle_right_panel_tab(
     Input("right-panel-active-tab", "data"),
     prevent_initial_call=False,
 )
-def sync_right_panel_ui(active_tab: str | None):
+def sync_right_panel_ui(active_tab: str | None) -> tuple[bool, bool, bool, str, str, str]:
     """Mirror the active-tab store to collapse open/close states and button styles."""
     filters_open = active_tab == "filters"
     console_open = active_tab == "console"
@@ -90,7 +90,7 @@ def sync_right_panel_ui(active_tab: str | None):
     Input("url", "search"),
     prevent_initial_call="initial_duplicate",
 )
-def handle_url_deep_link_tab(search: str | None):
+def handle_url_deep_link_tab(search: str | None) -> tuple[str, str | None, str | None]:
     """Open the correct tab based on URL query parameters on page load.
 
     - ``?cypher=<encoded>`` → open Console tab, pre-fill input, trigger auto-exec

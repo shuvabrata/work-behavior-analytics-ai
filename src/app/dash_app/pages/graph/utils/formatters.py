@@ -3,6 +3,7 @@
 Functions for formatting node/edge property values for display.
 """
 
+from typing import Any
 from dash import html
 from app.dash_app.styles import (
     PROPERTY_COMPLEX_VALUE_STYLE,
@@ -11,7 +12,7 @@ from app.dash_app.styles import (
 )
 
 
-def format_property_value(value):
+def format_property_value(value: Any) -> html.Pre | html.Span:
     """Format a property value for display in the property panel
     
     Args:
@@ -32,7 +33,7 @@ def format_property_value(value):
         )
 
 
-def build_property_items(properties):
+def build_property_items(properties: dict[str, Any]) -> list[html.Div]:
     """Build property display items from a properties dictionary
     
     Args:

@@ -130,7 +130,7 @@ def update_layout(layout_name, reset_clicks, current_layout):
     Output("graph-cytoscape", "stylesheet"),
     Input("theme-store", "data")
 )
-def update_graph_stylesheet(theme_name):
+def update_graph_stylesheet(theme_name: str | None) -> list[dict]:
     """Update graph node/edge palette when the app theme changes.
 
     Fetches the server-merged effective theme (base tokens ⊕ default-theme

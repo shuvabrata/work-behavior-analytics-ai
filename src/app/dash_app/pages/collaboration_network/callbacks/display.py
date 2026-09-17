@@ -14,7 +14,7 @@ register_edge_hover_dimming_callback("collab-cytoscape")
     Output("collab-cytoscape", "stylesheet"),
     Input("theme-store", "data"),
 )
-def update_collab_stylesheet(theme_name):
+def update_collab_stylesheet(theme_name: str | None) -> list[dict]:
     """Update the collab graph palette when the app theme changes.
 
     Fetches the server-merged effective theme (base tokens ⊕ default-theme
@@ -37,7 +37,7 @@ _PLACEHOLDER = html.P(
     [Input("collab-cytoscape", "selectedNodeData"),
      Input("collab-cytoscape", "selectedEdgeData")],
 )
-def display_collab_properties(selected_nodes, selected_edges):
+def display_collab_properties(selected_nodes: list[dict] | None, selected_edges: list[dict] | None) -> html.Div | html.P:
     """Show properties for a selected node or edge.
 
     Expand Node is disabled (expand_node_enabled=False) because the

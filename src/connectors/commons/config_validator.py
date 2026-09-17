@@ -9,7 +9,6 @@ import re
 from typing import Dict, List, Optional, Any
 import json
 from pathlib import Path
-from common.logger import logger
 
 
 def validate_regex_pattern(pattern: str, pattern_name: str) -> Optional[str]:
@@ -168,68 +167,3 @@ def validate_github_config(config_path: str) -> List[str]:
         errors.extend(repo_errors)
     
     return errors
-
-
-def validate_config(config_path: str, config_type: str = "github") -> bool:
-    """
-    Validate configuration file and log results.
-    
-    Args:
-        config_path: Path to configuration file
-        config_type: Type of config ("github" or "jira")
-        
-    Returns:
-        True if valid, False if invalid
-    """
-    logger.info(f"Validating {config_type} configuration: {config_path}")
-    
-    if config_type == "github":
-        errors = validate_github_config(config_path)
-    else:
-        # Future: Add Jira config validation
-        logger.warning(f"Validation not yet implemented for config type: {config_type}")
-        return True
-    
-    if errors:
-        logger.error(f"Configuration validation failed with {len(errors)} error(s):")
-        for error in errors:
-            logger.error(f"  ✗ {error}")
-        return False
-    
-    logger.info("✓ Configuration validated successfully")
-    return True
-
-
-def get_repo_branch_patterns(repo_config: Dict[str, Any]) -> List[str]:
-    """
-    Get branch name patterns for a repository, using defaults if not specified.
-    
-    Args:
-        repo_config: Repository configuration dictionary
-        
-    Returns:
-        List of regex patterns to use for extracting issue keys from branch names
-    """
-    # Default patterns support both Git Flow and direct prefix
-    default_patterns = [
-        r'(?:feature|bugfix|hotfix|release)/([A-Z]{2,}-\d+)',  # Git Flow: feature/ISSUE-123
-        r'^([A-Z]{2,}-\d+)',  # Direct prefix: ISSUE-123-description
-    ]
-    
-    return repo_config.get("branch_name_patterns", default_patterns)
-
-
-def get_repo_extraction_sources(repo_config: Dict[str, Any]) -> List[str]:
-    """
-    Get extraction sources for a repository, using defaults if not specified.
-    
-    Args:
-        repo_config: Repository configuration dictionary
-        
-    Returns:
-        List of sources to extract issue keys from ("branch", "commit_message")
-    """
-    # Default: extract from both branch names and commit messages
-    default_sources = ["branch", "commit_message"]
-    
-    return repo_config.get("extraction_sources", default_sources)

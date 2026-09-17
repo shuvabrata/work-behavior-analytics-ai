@@ -89,11 +89,6 @@ _runtime_settings.refresh(_build_initial_config())
 runtime_settings = _runtime_settings
 
 
-def get_effective_config() -> RuntimeConfig:
-    """Return the current effective ``RuntimeConfig``."""
-    return runtime_settings.current()
-
-
 async def load_db_overrides_from_session(db: AsyncSession) -> None:
     """Query the DB and refresh the runtime settings cache with DB overrides.
 

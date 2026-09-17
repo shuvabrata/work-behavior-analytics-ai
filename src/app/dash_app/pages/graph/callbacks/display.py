@@ -3,28 +3,8 @@
 Callbacks for graph display, layout management, and property details.
 """
 
-import dash_bootstrap_components as dbc
-from dash import html, Input, Output, State, callback, callback_context
+from dash import Input, Output, State, callback, callback_context
 
-from app.dash_app.styles import (
-    DETAILS_HEADING_STYLE,
-    DETAILS_LABEL_STYLE,
-    DETAILS_VALUE_STYLE,
-    DETAILS_CODE_STYLE,
-    DETAILS_MUTED_TEXT_STYLE,
-    DETAILS_SEPARATOR_STYLE,
-    DETAILS_SUBHEADING_STYLE,
-    DETAILS_PANEL_HEADER_STYLE,
-    DETAILS_PANEL_SUBTYPE_STYLE,
-    DETAILS_TABLE_STYLE,
-    DETAILS_TABLE_KEY_STYLE,
-    DETAILS_TABLE_VALUE_STYLE,
-    DETAILS_TABLE_VALUE_MONO_STYLE,
-    FONT_SIZE_XSMALL,
-    COLOR_NAVY,
-    COLOR_TEXT_MUTED,
-    FONT_SIZE_XTINY
-)
 from app.dash_app.components.common import build_element_properties_content, register_edge_hover_dimming_callback, register_fullwidth_callback
 from ..styles import build_cytoscape_stylesheet
 from ..utils import create_node_legend, fetch_effective_theme, is_node_element

@@ -9,7 +9,6 @@ CSS classes to all Cytoscape elements.
 from dash import Input, Output, State, callback, clientside_callback
 from dash.exceptions import PreventUpdate
 
-from app.api.search.v1 import service as search_service
 from app.api.search.v1.model import SearchRequest
 from app.api.search.v1.service import search_in_graph
 from common.logger import logger

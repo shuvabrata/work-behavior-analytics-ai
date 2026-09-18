@@ -7,6 +7,12 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from app.settings import settings
 
 
+# Relationship type pattern: uppercase letters, digits, and underscores only.
+# This is deliberately stricter than Neo4j's own type-name rules — all
+# existing project types (WORKS_ON, KNOWS, MANAGES, etc.) match this pattern.
+_RELATIONSHIP_TYPE_RE = re.compile(r"^[A-Z][A-Z0-9_]*$")
+
+
 class GraphExecuteRequest(BaseModel):
     """Unified request model for raw and catalog-backed graph execution."""
 
@@ -195,26 +201,24 @@ class NodeExpansionRequest(BaseModel):
         default=None,
         description="List of node IDs to exclude from results (already loaded nodes)"
     )
-    
-    # Add regex validation to relationship_types to prevent Cypher injection
-    # The `/api/v1/graph/expand` endpoint takes a list of `relationship_types` and interpolates them 
-    # directly into a Cypher query string (e.g. `MATCH (m)-[r:{relationship_filter}]->(n)`). 
-    # Because these strings are not validated, an attacker can pass arbitrary Cypher strings 
-    # (like `["KNOWS]-(x) DETACH DELETE x //"]`) to execute malicious write or drop commands, 
-    # bypassing the read-only checks used elsewhere. Validating these fields to only contain safe 
-    # alphanumeric characters eliminates the injection vector.
-    @field_validator('relationship_types')
+
+    @field_validator("relationship_types")
     @classmethod
-    def validate_relationship_types(
-        cls, v: Optional[List[str]]
-    ) -> Optional[List[str]]:
-        if v is not None:
-            for rel_type in v:
-                if not re.match(r"^[A-Za-z0-9_]+$", rel_type):
-                    raise ValueError(
-                        f"Invalid relationship type: {rel_type}. "
-                        "Must be alphanumeric."
-                    )
+    def validate_relationship_types(cls, v: Optional[List[str]]) -> Optional[List[str]]:
+        """Validate relationship type names to prevent Cypher injection.
+
+        Each type must match ``^[A-Z][A-Z0-9_]*$`` — uppercase letters, digits,
+        and underscores only. This is deliberately stricter than Neo4j's own
+        type-name rules; all project types (WORKS_ON, KNOWS, etc.) match this
+        pattern. None/empty list is accepted as a no-op.
+        """
+        if not v:
+            return v
+        for rel_type in v:
+            if not _RELATIONSHIP_TYPE_RE.match(rel_type):
+                raise ValueError(
+                    f"Invalid relationship type: {rel_type!r}"
+                )
         return v
     
     @field_validator('direction')

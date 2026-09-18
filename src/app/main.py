@@ -20,6 +20,7 @@ from app.api.search.v1.persons_router import router as persons_v1_router
 from app.api.commands.v1.router import router as commands_v1_router
 from app.api.settings.v1.router import router as settings_v1_router
 from app.api.graph_themes.v1.router import router as graph_themes_v1_router
+from app.api.graph.v1.query import close_driver
 from app.dash_app.layout import create_dash_app
 from app.db.session import ASYNC_SESSION_LOCAL
 from app.runtime_settings import load_db_overrides_from_session
@@ -145,6 +146,10 @@ async def lifespan(app_instance: FastAPI) -> AsyncGenerator[None, None]:
     if _rabbitmq_connection is not None and not _rabbitmq_connection.is_closed:
         await _rabbitmq_connection.close()
         logger.info("[Shutdown] RabbitMQ connection closed")
+
+    if settings.NEO4J_ENABLED:
+        close_driver()
+        logger.info("[Shutdown] Neo4j driver connection closed")
 
 
 app = FastAPI(lifespan=lifespan)

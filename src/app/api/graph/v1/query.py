@@ -60,6 +60,20 @@ def _get_driver() -> Any:
             ) from e
 
 
+def close_driver() -> None:
+    """Close the shared Neo4j driver singleton if initialized.
+
+    Safe to call multiple times — subsequent calls are no-ops.
+    Intended for application shutdown (FastAPI lifespan teardown).
+    """
+    global _driver_instance
+    with _driver_lock:
+        if _driver_instance is not None:
+            _driver_instance.close()
+            _driver_instance = None
+            logger.info("Neo4j driver singleton closed")
+
+
 # Read-only Cypher keywords (case-insensitive)
 READ_ONLY_KEYWORDS = [
     'MATCH', 'OPTIONAL', 'WITH', 'UNWIND', 'RETURN', 

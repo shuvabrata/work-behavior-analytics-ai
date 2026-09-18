@@ -138,6 +138,8 @@ def fetch_initiatives(
     lookback_days: int = 90,
     max_results_per_page: int = 100,
     last_synced_at: Optional[datetime] = None,
+    max_total_results: Optional[int] = None,
+    retry_timeout: Optional[int] = None,
 ) -> List[Dict[str, Any]]:
     """Fetch initiatives from Jira created (or updated, on incremental runs)
     since the lookback cutoff or the sync cursor.
@@ -148,6 +150,13 @@ def fetch_initiatives(
         max_results_per_page: Page size for the JQL search.
         last_synced_at: Sync cursor timestamp; when present, ``updated >=`` is
             used so entities with new comment activity are re-fetched.
+        max_total_results: Optional cap on the total number of entities
+            returned.  When ``None`` (default) every matching entity is
+            fetched.  Intended for tests and diagnostics — production scans
+            leave it unset.
+        retry_timeout: Total retry budget in seconds for transient failures.
+            When ``None`` (default) the resolved ``RETRY_BUDGET_SECONDS``
+            applies.
 
     Returns:
         List of raw Jira issue dicts (issuetype = Initiative).
@@ -171,7 +180,8 @@ def fetch_initiatives(
                     jql=jql,
                     nextPageToken=next_page_token,
                     limit=max_results_per_page,
-                )
+                ),
+                retry_budget=retry_timeout,
             )
 
             if not response or "issues" not in response:
@@ -183,6 +193,12 @@ def fetch_initiatives(
 
             all_initiatives.extend(batch)
             logger.info(f"  Fetched {len(batch)} initiatives (total: {len(all_initiatives)})")
+
+            if max_total_results is not None and len(all_initiatives) >= max_total_results:
+                logger.warning(f"Reached max total results limit ({max_total_results}) against {len(all_initiatives)}"
+                               "trimming list and stopping fetch.")
+                all_initiatives = all_initiatives[:max_total_results]
+                break
 
             next_page_token = response.get("nextPageToken")
             if not next_page_token:
@@ -209,6 +225,8 @@ def fetch_epics(
     lookback_days: int = 90,
     max_results_per_page: int = 100,
     last_synced_at: Optional[datetime] = None,
+    max_total_results: Optional[int] = None,
+    retry_timeout: Optional[int] = None,
 ) -> List[Dict[str, Any]]:
     """Fetch epics from Jira created (or updated, on incremental runs) since
     the lookback cutoff or the sync cursor.
@@ -219,6 +237,13 @@ def fetch_epics(
         max_results_per_page: Page size for the JQL search.
         last_synced_at: Sync cursor timestamp; when present, ``updated >=`` is
             used so entities with new comment activity are re-fetched.
+        max_total_results: Optional cap on the total number of entities
+            returned.  When ``None`` (default) every matching entity is
+            fetched.  Intended for tests and diagnostics — production scans
+            leave it unset.
+        retry_timeout: Total retry budget in seconds for transient failures.
+            When ``None`` (default) the resolved ``RETRY_BUDGET_SECONDS``
+            applies.
 
     Returns:
         List of raw Jira issue dicts (issuetype = Epic).
@@ -242,7 +267,8 @@ def fetch_epics(
                     jql=jql,
                     nextPageToken=next_page_token,
                     limit=max_results_per_page,
-                )
+                ),
+                retry_budget=retry_timeout,
             )
 
             if not response or "issues" not in response:
@@ -254,6 +280,12 @@ def fetch_epics(
 
             all_epics.extend(batch)
             logger.info(f"  Fetched {len(batch)} epics (total: {len(all_epics)})")
+
+            if max_total_results is not None and len(all_epics) >= max_total_results:
+                logger.warning(f"Reached max total results limit ({max_total_results}) against {len(all_epics)}"
+                               " trimming list and stopping fetch.")
+                all_epics = all_epics[:max_total_results]
+                break
 
             next_page_token = response.get("nextPageToken")
             if not next_page_token:
@@ -349,6 +381,8 @@ def fetch_issues(
     lookback_days: int = 90,
     max_results_per_page: int = 100,
     last_synced_at: Optional[datetime] = None,
+    max_total_results: Optional[int] = None,
+    retry_timeout: Optional[int] = None,
 ) -> List[Dict[str, Any]]:
     """Fetch all issues (excluding Initiatives and Epics) created, or updated
     on incremental runs, since the lookback cutoff or the sync cursor.
@@ -359,6 +393,13 @@ def fetch_issues(
         max_results_per_page: Page size for the JQL search.
         last_synced_at: Sync cursor timestamp; when present, ``updated >=`` is
             used so entities with new comment activity are re-fetched.
+        max_total_results: Optional cap on the total number of entities
+            returned.  When ``None`` (default) every matching entity is
+            fetched.  Intended for tests and diagnostics — production scans
+            leave it unset.
+        retry_timeout: Total retry budget in seconds for transient failures.
+            When ``None`` (default) the resolved ``RETRY_BUDGET_SECONDS``
+            applies.
 
     Returns:
         List of raw Jira issue dicts.
@@ -388,7 +429,8 @@ def fetch_issues(
                     jql=jql,
                     nextPageToken=next_page_token,
                     limit=max_results_per_page,
-                )
+                ),
+                retry_budget=retry_timeout,
             )
 
             if not response or "issues" not in response:
@@ -400,6 +442,12 @@ def fetch_issues(
 
             all_issues.extend(batch)
             logger.info(f"  Fetched {len(batch)} issues (total: {len(all_issues)})")
+
+            if max_total_results is not None and len(all_issues) >= max_total_results:
+                logger.warning(f"Reached max total results limit ({max_total_results}) against {len(all_issues)}"
+                               " trimming list and stopping fetch.")
+                all_issues = all_issues[:max_total_results]
+                break
 
             next_page_token = response.get("nextPageToken")
             if not next_page_token:

@@ -53,6 +53,14 @@ from connectors.producers.jira.map_jira import (
 
 pytestmark = pytest.mark.integration
 
+# Bounded fetch settings for live tests.  ``max_results_per_page`` is a page
+# size, NOT a result cap — without a total cap every ``fetch_*`` call scans
+# the whole 365-day corpus of the Jira instance.  The short retry timeout
+# keeps a transient 429 / network blip from blocking the test for the
+# default 1-hour retry budget.
+_TEST_MAX_TOTAL = 100
+_TEST_RETRY_TIMEOUT = 30
+
 
 # ---------------------------------------------------------------------------
 # API helpers — call the FastAPI app in-process via ASGI transport
@@ -133,7 +141,9 @@ def _find_first_with_comments(
     """
     for raw in issues:
         key = raw.get("key", "?")
-        comments = fetch_comments(jira, key, max_results=5)
+        comments = fetch_comments(
+            jira, key, max_results=5, retry_timeout=_TEST_RETRY_TIMEOUT
+        )
         if comments:
             return raw
     return None
@@ -152,7 +162,13 @@ class TestResolveJqlDateFieldLive:
         jira = _get_jira()
         field, date_str = resolve_jql_date_field(365, None)
         assert field == "created"
-        results = fetch_issues(jira, lookback_days=365, max_results_per_page=5)
+        results = fetch_issues(
+            jira,
+            lookback_days=365,
+            max_results_per_page=5,
+            max_total_results=5,
+            retry_timeout=_TEST_RETRY_TIMEOUT,
+        )
         assert isinstance(results, list), "fetch_issues must return a list"
 
     def test_incremental_jql_is_accepted(self) -> None:
@@ -165,7 +181,12 @@ class TestResolveJqlDateFieldLive:
             f"Incremental date must be quoted for JQL, got: {date_str!r}"
         )
         results = fetch_issues(
-            jira, lookback_days=365, max_results_per_page=5, last_synced_at=cursor
+            jira,
+            lookback_days=365,
+            max_results_per_page=5,
+            last_synced_at=cursor,
+            max_total_results=5,
+            retry_timeout=_TEST_RETRY_TIMEOUT,
         )
         assert isinstance(results, list), "fetch_issues (incremental) must return a list"
 
@@ -176,7 +197,13 @@ class TestFetchCommentsLive:
     def test_fetch_comments_on_issue_with_comments(self) -> None:
         """Find the first Issue with ≥1 comment and verify the response shape."""
         jira = _get_jira()
-        issues = fetch_issues(jira, lookback_days=365, max_results_per_page=50)
+        issues = fetch_issues(
+            jira,
+            lookback_days=365,
+            max_results_per_page=50,
+            max_total_results=_TEST_MAX_TOTAL,
+            retry_timeout=_TEST_RETRY_TIMEOUT,
+        )
         if not issues:
             pytest.skip("No issues found in the Jira instance")
 
@@ -185,7 +212,7 @@ class TestFetchCommentsLive:
             pytest.skip("No Jira Issue with comments found — nothing to validate")
 
         key = target["key"]
-        comments = fetch_comments(jira, key)
+        comments = fetch_comments(jira, key, retry_timeout=_TEST_RETRY_TIMEOUT)
         assert len(comments) >= 1, f"Issue {key} should have ≥1 comment"
         first = comments[0]
         assert "id" in first, "Comment must have an 'id' field"
@@ -200,7 +227,11 @@ class TestFetchCommentsLive:
         """Find the first Initiative with ≥1 comment and verify the response."""
         jira = _get_jira()
         initiatives = fetch_initiatives(
-            jira, lookback_days=365, max_results_per_page=50
+            jira,
+            lookback_days=365,
+            max_results_per_page=50,
+            max_total_results=_TEST_MAX_TOTAL,
+            retry_timeout=_TEST_RETRY_TIMEOUT,
         )
         if not initiatives:
             pytest.skip("No initiatives found in the Jira instance")
@@ -210,7 +241,7 @@ class TestFetchCommentsLive:
             pytest.skip("No Jira Initiative with comments found — nothing to validate")
 
         key = target["key"]
-        comments = fetch_comments(jira, key)
+        comments = fetch_comments(jira, key, retry_timeout=_TEST_RETRY_TIMEOUT)
         assert len(comments) >= 1, f"Initiative {key} should have ≥1 comment"
         assert "author" in comments[0], "Comment must have an 'author' field"
 
@@ -221,14 +252,22 @@ class TestExtractMentionsLive:
     def test_extract_mentions_from_issue_with_mentions(self) -> None:
         """Find the first Issue with an @mention and verify extraction."""
         jira = _get_jira()
-        issues = fetch_issues(jira, lookback_days=365, max_results_per_page=50)
+        issues = fetch_issues(
+            jira,
+            lookback_days=365,
+            max_results_per_page=50,
+            max_total_results=_TEST_MAX_TOTAL,
+            retry_timeout=_TEST_RETRY_TIMEOUT,
+        )
         if not issues:
             pytest.skip("No issues found in the Jira instance")
 
         found_mention = False
         for raw in issues:
             key = raw.get("key", "?")
-            comments = fetch_comments(jira, key, max_results=50)
+            comments = fetch_comments(
+                jira, key, max_results=50, retry_timeout=_TEST_RETRY_TIMEOUT
+            )
             if not comments:
                 continue
 
@@ -260,7 +299,11 @@ class TestExtractMentionsLive:
         """Find the first Initiative with an @mention and verify extraction."""
         jira = _get_jira()
         initiatives = fetch_initiatives(
-            jira, lookback_days=365, max_results_per_page=50
+            jira,
+            lookback_days=365,
+            max_results_per_page=50,
+            max_total_results=_TEST_MAX_TOTAL,
+            retry_timeout=_TEST_RETRY_TIMEOUT,
         )
         if not initiatives:
             pytest.skip("No initiatives found in the Jira instance")
@@ -268,7 +311,9 @@ class TestExtractMentionsLive:
         found_mention = False
         for raw in initiatives:
             key = raw.get("key", "?")
-            comments = fetch_comments(jira, key, max_results=50)
+            comments = fetch_comments(
+                jira, key, max_results=50, retry_timeout=_TEST_RETRY_TIMEOUT
+            )
             if not comments:
                 continue
 
@@ -300,7 +345,12 @@ class TestFetchFunctionsWithLastSyncedAt:
         jira = _get_jira()
         cursor = datetime.now(timezone.utc) - timedelta(days=30)
         results = fetch_issues(
-            jira, lookback_days=365, max_results_per_page=5, last_synced_at=cursor
+            jira,
+            lookback_days=365,
+            max_results_per_page=5,
+            last_synced_at=cursor,
+            max_total_results=5,
+            retry_timeout=_TEST_RETRY_TIMEOUT,
         )
         assert isinstance(results, list)
 
@@ -309,7 +359,12 @@ class TestFetchFunctionsWithLastSyncedAt:
         jira = _get_jira()
         cursor = datetime.now(timezone.utc) - timedelta(days=30)
         results = fetch_epics(
-            jira, lookback_days=365, max_results_per_page=5, last_synced_at=cursor
+            jira,
+            lookback_days=365,
+            max_results_per_page=5,
+            last_synced_at=cursor,
+            max_total_results=5,
+            retry_timeout=_TEST_RETRY_TIMEOUT,
         )
         assert isinstance(results, list)
 
@@ -318,6 +373,11 @@ class TestFetchFunctionsWithLastSyncedAt:
         jira = _get_jira()
         cursor = datetime.now(timezone.utc) - timedelta(days=30)
         results = fetch_initiatives(
-            jira, lookback_days=365, max_results_per_page=5, last_synced_at=cursor
+            jira,
+            lookback_days=365,
+            max_results_per_page=5,
+            last_synced_at=cursor,
+            max_total_results=5,
+            retry_timeout=_TEST_RETRY_TIMEOUT,
         )
         assert isinstance(results, list)

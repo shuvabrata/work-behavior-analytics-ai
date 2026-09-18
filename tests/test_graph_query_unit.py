@@ -198,3 +198,68 @@ class TestEdgeCases:
         """Test that queries with both read and write ops are rejected."""
         query = "MATCH (n) CREATE (m:NewNode)-[:RELATES_TO]->(n) RETURN n, m"
         assert validate_read_only_query(query) is False
+
+
+# ============================================================================
+# Unit Tests: Relationship Type Validation (Cypher injection guard)
+# ============================================================================
+
+class TestRelationshipTypeValidation:
+    """Unit tests for relationship type validation in NodeExpansionRequest."""
+
+    def test_valid_relationship_types_accepted(self):
+        """Valid uppercase types should not raise."""
+        from app.api.graph.v1.model import NodeExpansionRequest
+        request = NodeExpansionRequest(
+            node_id="123",
+            relationship_types=["WORKS_ON", "KNOWS", "MANAGES"]
+        )
+        assert request.relationship_types == ["WORKS_ON", "KNOWS", "MANAGES"]
+
+    def test_none_or_empty_accepted(self):
+        """None or empty list should be a no-op."""
+        from app.api.graph.v1.model import NodeExpansionRequest
+        request = NodeExpansionRequest(node_id="123", relationship_types=None)
+        assert request.relationship_types is None
+        request = NodeExpansionRequest(node_id="123", relationship_types=[])
+        assert request.relationship_types == []
+
+    def test_lowercase_rejected(self):
+        """Lowercase type should raise ValidationError."""
+        from pydantic import ValidationError
+        from app.api.graph.v1.model import NodeExpansionRequest
+        with pytest.raises(ValidationError):
+            NodeExpansionRequest(
+                node_id="123",
+                relationship_types=["works_on"]
+            )
+
+    def test_injection_payload_rejected(self):
+        """A Cypher injection payload should raise ValidationError."""
+        from pydantic import ValidationError
+        from app.api.graph.v1.model import NodeExpansionRequest
+        with pytest.raises(ValidationError):
+            NodeExpansionRequest(
+                node_id="123",
+                relationship_types=["WORKS_ON]->(m) DETACH DELETE m //"]
+            )
+
+    def test_empty_string_rejected(self):
+        """Empty string type should raise ValidationError."""
+        from pydantic import ValidationError
+        from app.api.graph.v1.model import NodeExpansionRequest
+        with pytest.raises(ValidationError):
+            NodeExpansionRequest(
+                node_id="123",
+                relationship_types=[""]
+            )
+
+    def test_mixed_valid_and_invalid_rejected(self):
+        """A mix of valid and invalid types should be rejected."""
+        from pydantic import ValidationError
+        from app.api.graph.v1.model import NodeExpansionRequest
+        with pytest.raises(ValidationError):
+            NodeExpansionRequest(
+                node_id="123",
+                relationship_types=["WORKS_ON", "lowercase", "MANAGES"]
+            )

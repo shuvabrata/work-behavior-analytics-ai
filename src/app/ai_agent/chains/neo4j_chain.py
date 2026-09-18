@@ -317,30 +317,53 @@ Cypher Query:"""
             return_intermediate_steps=True,
             allow_dangerous_requests=True
         )
-        
-        # Use original question - domain context is in the prompt template
-        result = chain.invoke({"query": user_message})
-        
-        logger.info(f"Neo4j chain query result: {result}")
-        
-        # Use the chain's natural language result - it's already formatted nicely
-        # Only fall back to raw context data if the chain couldn't generate an answer
-        chain_result = result.get("result", None)
 
-        if _meta_out is not None and "intermediate_steps" in result:
-            steps = result["intermediate_steps"]
-            if steps:
-                _meta_out["neo4j_query"] = steps[0].get("query", "")
+        # Three-phase flow: generate → validate → execute (read-only) → format.
+        # We call cypher_generation_chain and qa_chain directly instead of
+        # chain.invoke() so we can validate the Cypher before any database
+        # execution. The chain's own _call/invoke is never used.
+        #
+        # Phase 1: Generate Cypher only (no database access).
+        generated_cypher = chain.cypher_generation_chain.invoke(
+            {"question": user_message, "schema": chain.graph_schema}
+        )
+
+        if not generated_cypher:
+            logger.warning("LangChain path produced no Cypher query")
+            return None
+
+        # Phase 2: Validate and execute via the read-only path.
+        logger.info(f"Generated Cypher: {generated_cypher}")
+        if not validate_read_only_query(generated_cypher):
+            logger.warning(
+                f"LangChain-generated query failed read-only validation: {generated_cypher}"
+            )
+            return None
+
+        query_results = execute_cypher_query(
+            generated_cypher,
+            timeout=runtime_settings.get_int("NEO4J_QUERY_TIMEOUT"),
+        )
+
+        if _meta_out is not None:
+            _meta_out["neo4j_query"] = generated_cypher
+
+        # Phase 3: Format the answer using the chain's QA runnable.
+        # qa_chain.invoke returns a string directly (the dict wrapping with
+        # output_key happens inside the chain's _call method, which we skip).
+        chain_result = chain.qa_chain.invoke(
+            {"question": user_message, "context": query_results}
+        )
+
+        logger.info(f"Neo4j chain query result: {chain_result}")
 
         if chain_result and "don't know" not in chain_result.lower():
             return chain_result
-        
-        # Fallback: extract raw context data if chain had no answer
-        if "intermediate_steps" in result and len(result["intermediate_steps"]) > 1:
-            context_data = result["intermediate_steps"][1].get("context", [])
-            if context_data:
-                return str(context_data)
-        
+
+        # Fallback: return raw results if QA chain couldn't answer
+        if query_results:
+            return str(query_results)
+
         return chain_result
     except Exception as e:
         logger.error(f"Error querying Neo4j with chain: {e}")

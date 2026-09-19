@@ -146,7 +146,7 @@ def apply_collab_filters(
     result = _compute_collab_filtered(
         elements,
         selected_communities or [],
-        weight_threshold or 0,
+        int(weight_threshold or 0),
         top_n_mode or "all",
     )
     logger.debug(
@@ -213,7 +213,7 @@ def update_collab_filter_feedback(
     filtered = _compute_collab_filtered(
         elements,
         selected_communities or [],
-        weight_threshold or 0,
+        int(weight_threshold or 0),
         top_n_mode or "all",
     )
     f_nodes, f_edges = _split_elements(filtered)

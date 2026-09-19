@@ -77,7 +77,7 @@ def _extract_routing_key(message: aio_pika.abc.AbstractIncomingMessage) -> Optio
     x_death = headers.get("x-death")
     if x_death and isinstance(x_death, list) and len(x_death) > 0:
         original_routing_key = x_death[0].get("routing-keys")
-        if original_routing_key and len(original_routing_key) > 0:
+        if original_routing_key and len(original_routing_key) > 0:  # type: ignore[arg-type]
             return str(original_routing_key[0])
     # Fall back to whatever routing key the DLQ message carries
     return message.routing_key or None

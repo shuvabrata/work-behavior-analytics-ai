@@ -198,7 +198,7 @@ def execute_query(_raw_clicks: Any, _catalog_clicks: Any, store_cypher: Any, que
             error_display = create_error_alert(
                 "Select a catalog query before running it.",
                 alert_type='warning',
-                heading=None
+                heading=None,  # type: ignore[arg-type]
             )
             return error_response(error_display)
 
@@ -216,7 +216,7 @@ def execute_query(_raw_clicks: Any, _catalog_clicks: Any, store_cypher: Any, que
             error_display = create_error_alert(
                 "Please enter a Cypher query before executing.",
                 alert_type='warning',
-                heading=None
+                heading=None,  # type: ignore[arg-type]
             )
             return error_response(error_display)
 

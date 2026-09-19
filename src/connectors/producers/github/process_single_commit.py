@@ -76,7 +76,7 @@ async def process_single_commit(
                 await pub_callback(build_person_signal(author_data))
 
             sha_short = commit_data.get("sha", "?")[:8]
-            seen_commits.add(commit_data.get("sha"))
+            seen_commits.add(commit_data.get("sha") or "")
             logger.debug(f"Commit {sha_short} by '{login}' processed")
 
             branch_name = repo.default_branch or "main" # this does not cause a new API call since it's already loaded in the repo object

@@ -624,7 +624,7 @@ async def test_connector(
         f"{result.get('connected')} tool_count={result.get('tool_count')}"
     )
 
-    status = result.get("status")
+    status: str = str(result.get("status") or "")
     connected = bool(result.get("connected"))
     tool_count = result.get("tool_count")
     error = result.get("error")
@@ -646,7 +646,8 @@ async def test_connector(
             error=error,
         )
 
-    message = _test_result_message(connector_type, status, tool_count, error)
+    error_str: str = str(error) if error else ""
+    message = _test_result_message(connector_type, status, tool_count, error_str)
     return {
         "success": connected,
         "message": message,

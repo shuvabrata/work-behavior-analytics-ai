@@ -140,7 +140,7 @@ def get_detail_layout(connector_type: str) -> html.Div:
                         dbc.Collapse(
                             id="add-item-collapse",
                             is_open=False,
-                            children=_render_item_form(form_spec, connector_type),
+                            children=_render_item_form(form_spec, connector_type),  # type: ignore[arg-type]
                         ),
                     ],
                 )
@@ -165,7 +165,7 @@ def get_detail_layout(connector_type: str) -> html.Div:
         )
     else:
         if connector_fields:
-            connector_settings_children.append(_render_connector_config(form_spec, connector_type))
+            connector_settings_children.append(_render_connector_config(form_spec, connector_type))  # type: ignore[arg-type]
         if producer_container:
             connector_settings_children.append(_render_scan_interval_input(connector_type))
         connector_settings_children.append(
@@ -704,7 +704,7 @@ def _render_field(field: dict[str, Any], connector_type: str, section: str) -> h
     
     if tooltip_text:
         label_children.append(
-            html.I(
+            html.I(  # type: ignore[arg-type]
                 className="fas fa-info-circle",
                 id=icon_id,
                 style={"cursor": "help", "marginLeft": "6px", "color": COLOR_GRAY_MEDIUM}

@@ -6,7 +6,7 @@ from .model import ChatCreate, ChatSession, ChatDeleteResponse, ChatSessionStatu
 
 def create_chat_session(chat: ChatCreate) -> ChatSession:
     """Create a new chat session"""
-    session_id = new_chat(system_prompt=chat.system_prompt)
+    session_id = new_chat(system_prompt=chat.system_prompt or "")
     return ChatSession(session_id=session_id)
 
 

@@ -77,7 +77,7 @@ def create_error_alert(
         # Add documentation link if provided
         if doc_link:
             alert_content.append(
-                html.Hr(style=ALERT_SEPARATOR_STYLE)
+                html.Hr(style=ALERT_SEPARATOR_STYLE),  # type: ignore[arg-type]
             )
             alert_content.append(
                 html.Small([

@@ -718,7 +718,7 @@ async def process_account(
         # Fetch all pages/blogposts in this space modified since the cursor.
         # Uses the storage-layer content API (not CQL search) to avoid
         # Confluence Cloud index gaps that silently skip pages.
-        space_items = await get_space_pages(confluence, key, since_date)
+        space_items = await get_space_pages(confluence, str(key), since_date or datetime.min)
         logger.info(f"Space {key}: processing {len(space_items)} content items")
         
         # First assume that the body of pages was last synced at the 

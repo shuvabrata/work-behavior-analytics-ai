@@ -111,7 +111,7 @@ def _sort_catalog_queries(
     metadata_store = metadata_store or {}
 
     def sort_key(query: dict[str, Any]) -> tuple[bool, float, str]:
-        catalog_id = query.get("id")
+        catalog_id = query.get("id") or ""
         metadata = metadata_store.get(catalog_id) or {}
         is_favourite = bool(metadata.get("is_favourite"))
         updated_at = (
@@ -521,7 +521,7 @@ def render_catalog_query_list(
         namespace = query.get("namespace") or {}
         subtitle = namespace.get("name", "")
         status_badge = _build_status_badge(query.get("status"))
-        catalog_id = query.get("id")
+        catalog_id = query.get("id") or ""
         is_favourite = bool((metadata_store.get(catalog_id) or {}).get("is_favourite"))
         items.append(
             dbc.ListGroupItem(
@@ -548,7 +548,7 @@ def render_catalog_query_list(
                                     else "graph-catalog-favourite-toggle"
                                 ),
                                 title="Mark as favourite" if not is_favourite else "Remove favourite",
-                                **{
+                                **{  # type: ignore[arg-type]
                                     "aria-label": (
                                         f"Remove {query.get('name', 'query')} from favourites"
                                         if is_favourite
@@ -962,7 +962,7 @@ def sync_person_suggestions(
         try:
             response = requests.get(
                 f"{api_base}/api/v1/search/persons",
-                params={"q": query_text.strip(), "page_size": 10},
+                params={"q": query_text.strip(), "page_size": 10},  # type: ignore[arg-type]
                 timeout=TIMEOUT_SECONDS,
             )
             response.raise_for_status()

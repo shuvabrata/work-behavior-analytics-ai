@@ -89,7 +89,7 @@ def execute_expansion_and_merge(
 
     response = requests.post(
         get_graph_expand_url(),
-        json=payload,
+        json=payload,  # type: ignore[arg-type]
         timeout=timeout_seconds,
     )
 

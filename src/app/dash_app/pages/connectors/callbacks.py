@@ -127,7 +127,7 @@ def render_connectors(store: Dict[str, Any] | None) -> List[dbc.Col]:
                 connector_card(
                     connector_type=connector_type,
                     display_name=display_name,
-                    icon=icon,
+                    icon=icon,  # type: ignore[arg-type]
                     status=status,
                 ),
                 md=3,
@@ -496,7 +496,7 @@ def render_items_list(store: Dict[str, Any] | None) -> List[Any]:
         return [create_alert(store.get("message", "Failed to load items."), color="danger", class_name="mb-0")]
 
     items = store.get("items", [])
-    connector_type = store.get("connector_type")
+    connector_type = store.get("connector_type") or ""
     item_spec = CONFIG_FORM_SPECS.get(connector_type, {}).get("item", {})
     label = item_spec.get("label", "Item")
 
@@ -1134,7 +1134,7 @@ def handle_connector_save(
     triggered = callback_context.triggered_id
     if not isinstance(triggered, dict):
         return no_update, no_update
-    connector_type = triggered.get("connector_type")
+    connector_type = triggered.get("connector_type") or ""
     payload_config = _build_payload(connector_type, "connector", field_ids, field_values)
 
     payload: Dict[str, Any] = {"config": payload_config}
@@ -1320,16 +1320,19 @@ def _normalize_field_value(connector_type: str | None, section: str, key: str, v
 
 
 def _default_field_value(field_id: Dict[str, Any]) -> Any:
-    connector_type = field_id.get("connector_type")
-    section = field_id.get("section")
-    key = field_id.get("field")
-    
+    connector_type_raw: Any = field_id.get("connector_type")
+    section_raw: Any = field_id.get("section")
+    key_raw: Any = field_id.get("field")
+    connector_type: str = str(connector_type_raw) if connector_type_raw else ""
+    section: str = str(section_raw) if section_raw else ""
+    key: str = str(key_raw) if key_raw else ""
+
     if connector_type:
         spec_fields = _get_spec_fields(connector_type, section)
         for spec in spec_fields:
             if spec.get("key") == key and "default" in spec:
                 return _normalize_field_value(connector_type, section, key, spec["default"])
-                
+
     return _normalize_field_value(connector_type, section, key, None)
 
 
@@ -1495,7 +1498,7 @@ def handle_run_scan(n_clicks: List[int | None]) -> tuple[dbc.Alert | Any, bool |
         # without waiting for the next poll interval.
         scans_response = requests.get(
             f"{api_base}/api/v1/commands/",
-            params={"target": container_name, "limit": runtime_settings.get_int("RECENT_ACTIONS_LIMIT")},
+            params={"target": container_name or "", "limit": runtime_settings.get_int("RECENT_ACTIONS_LIMIT")},  # type: ignore[arg-type]
             timeout=TIMEOUT_SECONDS,
         )
         scans_response.raise_for_status()
@@ -1563,7 +1566,7 @@ def load_recent_scans(
     try:
         response = requests.get(
             f"{api_base}/api/v1/commands/",
-            params={"target": container_name, "limit": runtime_settings.get_int("RECENT_ACTIONS_LIMIT")},
+            params={"target": container_name or "", "limit": runtime_settings.get_int("RECENT_ACTIONS_LIMIT")},  # type: ignore[arg-type]
             timeout=TIMEOUT_SECONDS,
         )
         response.raise_for_status()

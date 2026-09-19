@@ -131,7 +131,7 @@ async def _get_due_connectors(
 
         interval = timedelta(hours=connector.scan_interval_hours)  # type: ignore[arg-type]
         if last_scan_at is None or (now - last_scan_at) >= interval:
-            due.append((connector.connector_type, producer))
+            due.append((connector.connector_type, producer))  # type: ignore[arg-type]
 
     return due
 

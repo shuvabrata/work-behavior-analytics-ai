@@ -6,10 +6,11 @@ supporting models like GPT-4o and GPT-5.
 
 import json
 import os
-from typing import Any, AsyncIterator, Dict, List, Optional
+from typing import Any, AsyncIterator, cast, Dict, List, Optional
 
 import openai
 from dotenv import load_dotenv
+from openai.types.chat import ChatCompletionDeveloperMessageParam, ChatCompletionFunctionToolParam
 
 from app.ai_agent.providers.base import LLMProvider
 from app.ai_agent.utils.token_utils import count_tokens
@@ -146,7 +147,7 @@ class OpenAIProvider(LLMProvider):
                 logger.debug(f"Sending {len(messages)} messages to OpenAI model: {model_to_use}")
                 response = openai.chat.completions.create(
                     model=model_to_use,
-                    messages=messages
+                    messages=cast(list[ChatCompletionDeveloperMessageParam], messages)
                 )
                 ai_message = response.choices[0].message.content.strip()
                 logger.debug(f"Received response from OpenAI: {len(ai_message)} characters")
@@ -200,8 +201,8 @@ class OpenAIProvider(LLMProvider):
             logger.debug(f"Sending {len(messages)} messages and {len(tools)} tools to OpenAI model: {model_to_use}")
             response = openai.chat.completions.create(
                 model=model_to_use,
-                messages=messages,
-                tools=tools,
+                messages=cast(list[ChatCompletionDeveloperMessageParam], messages),
+                tools=cast(list[ChatCompletionFunctionToolParam], tools),
             )
 
             message = response.choices[0].message
@@ -284,7 +285,7 @@ class OpenAIProvider(LLMProvider):
             logger.debug(f"Starting streaming request to OpenAI model: {model_to_use} ({len(messages)} messages)")
             stream = await async_client.chat.completions.create(
                 model=model_to_use,
-                messages=messages,
+                messages=cast(list[ChatCompletionDeveloperMessageParam], messages),
                 stream=True,
                 timeout=180,
             )

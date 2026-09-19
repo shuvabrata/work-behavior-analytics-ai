@@ -36,7 +36,7 @@ def fetch_content_likes(
     while True:
         params = {"limit": page_size}
         if cursor:
-            params["cursor"] = cursor
+            params["cursor"] = cursor  # type: ignore[assignment]
 
         logger.debug(f"Calling Confluence API: {path} with params: {params}")
         # Retry rate-limit (HTTP 429) and transient network errors with

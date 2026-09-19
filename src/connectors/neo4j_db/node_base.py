@@ -47,7 +47,6 @@ class GraphNode(ABC):
     """
 
     id: str
-    url: str
 
     # Operational: caller-supplied timestamp; injected into props only when set.
     _last_observed_at_value: Optional[str] = None

@@ -115,7 +115,7 @@ def _validate_connector_type(connector_type: str) -> Dict[str, str]:
     meta = CONNECTOR_REGISTRY.get(connector_type)
     if not meta:
         raise UnknownConnectorError("Unknown connector_type")
-    return meta
+    return meta  # type: ignore[return-value]
 
 
 def _require_config_items_support(connector_type: str) -> None:

@@ -922,7 +922,7 @@ def create_info_card(title: str, content: str, accent_color: str | None = None) 
     ], style=card_style)
 
 
-def create_section_divider(text: str = None) -> html.Div:
+def create_section_divider(text: str | None = None) -> html.Div:
     """
     Create a section divider with optional text.
     
@@ -959,7 +959,7 @@ def create_section_divider(text: str = None) -> html.Div:
         })
 
 
-def create_stat_card(label: str, value: str, subtitle: str = None) -> html.Div:
+def create_stat_card(label: str, value: str, subtitle: str | None = None) -> html.Div:
     """
     Create a statistics card with label, value, and optional subtitle.
     

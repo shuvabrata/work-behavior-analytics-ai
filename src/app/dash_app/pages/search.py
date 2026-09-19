@@ -249,7 +249,7 @@ def _build_attributes_table(attributes: dict[str, Any]) -> html.Table:
         if formatted_date:
             value_cell = formatted_date
         elif is_mono:
-            value_cell = html.Code(str_value, style=DETAILS_TABLE_VALUE_MONO_STYLE)
+            value_cell = html.Code(str_value, style=DETAILS_TABLE_VALUE_MONO_STYLE)  # type: ignore[assignment]
         else:
             value_cell = html.Span(str_value, style=DETAILS_TABLE_VALUE_STYLE)
             

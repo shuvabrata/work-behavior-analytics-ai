@@ -414,7 +414,7 @@ def build_content_signal(
     if content_type == "blogpost":
         attrs = BlogpostAttributes(**common_kwargs)
     else:
-        attrs = PageAttributes(**common_kwargs)
+        attrs: PageAttributes | BlogpostAttributes = PageAttributes(**common_kwargs)
 
     return ActivitySignal(
         source=_SOURCE,

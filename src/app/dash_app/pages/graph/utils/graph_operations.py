@@ -198,8 +198,8 @@ def execute_expansion_and_merge(
         elif node_id_value in radial_positions:
             elem["position"] = radial_positions[node_id_value]
 
-    new_node_ids = [node["elementId"] for node in new_nodes]
-    updated_loaded_ids = list(set((loaded_node_ids or []) + new_node_ids))
+    new_node_id_list = [node["elementId"] for node in new_nodes]
+    updated_loaded_ids = list(set((loaded_node_ids or []) + new_node_id_list))
 
     updated_expanded = expanded_nodes.copy() if expanded_nodes else {}
     updated_expanded[node_id] = {

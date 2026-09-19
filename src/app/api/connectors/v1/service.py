@@ -134,7 +134,7 @@ def _require_config_items_support(connector_type: str) -> None:
 
 def _to_dict(item: Any) -> Dict[str, Any]:
     if hasattr(item, "dict"):
-        return item.dict(exclude_unset=True)
+        return item.dict(exclude_unset=True)  # type: ignore[no-any-return]
     return dict(item)
 
 

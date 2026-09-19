@@ -1300,7 +1300,7 @@ async def test_connection() -> tuple[bool, str]:
             continue
         try:
             jira = create_jira_connection({"account": [account]})
-            user = jira.myself()
+            user = jira.myself()  # type: ignore[no-untyped-call]
             name = user.get("displayName", user.get("emailAddress", "Unknown"))
             return (True, f"Authenticated as {name}")
         except Exception as exc:

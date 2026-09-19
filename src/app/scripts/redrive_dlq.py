@@ -139,7 +139,7 @@ async def redrive(url: str, limit: Optional[int], dry_run: bool) -> None:
 
                 if not routing_key:
                     logger.warning(
-                        f"Cannot determine routing key for message — skipping. body_preview={message.body[:200]}"
+                        f"Cannot determine routing key for message — skipping. body_preview={message.body.decode('utf-8', errors='replace')[:200]}"
                     )
                     skipped += 1
                     await message.nack(requeue=False)

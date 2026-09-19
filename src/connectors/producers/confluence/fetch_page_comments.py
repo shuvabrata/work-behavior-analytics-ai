@@ -24,7 +24,7 @@ def fetch_page_comments(confluence: Confluence, page_id: str, content_type: str 
             # exponential backoff so a momentary connectivity loss does not
             # drop a page's comments.
             response = retry_with_backoff(
-                lambda: confluence.get_page_comments(
+                lambda: confluence.get_page_comments(  # type: ignore[no-untyped-call]
                     page_id,
                     expand='body.storage,history',
                     start=start,

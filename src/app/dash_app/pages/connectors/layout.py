@@ -79,7 +79,7 @@ def get_layout() -> html.Div:
 
 def get_detail_layout(connector_type: str) -> html.Div:
     connector_meta = CONNECTOR_REGISTRY.get(connector_type, {})
-    display_name = connector_meta.get("display_name", connector_type)
+    display_name: str = connector_meta.get("display_name", connector_type)
     setup_type = connector_meta.get("setup_type", "db_backed")
     supports_items = connector_meta.get("supports_items", True)
     form_spec = CONFIG_FORM_SPECS.get(connector_type, {})

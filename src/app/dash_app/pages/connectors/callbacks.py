@@ -970,7 +970,7 @@ def handle_item_test_connection(_clicks: List[int | None]) -> tuple[dbc.Alert | 
             f"{api_base}/api/v1/commands/",
             json={
                 "command_type": "test",
-                "target": container_name,
+                "target": container_name,  # type: ignore[dict-item]
                 "parameters": {"item_id": item_id},
             },
             timeout=TIMEOUT_SECONDS,
@@ -1087,7 +1087,7 @@ def handle_cancel_scan(n_clicks: List[int | None], pathname: str | None) -> tupl
             f"{api_base}/api/v1/commands/",
             json={
                 "command_type": "cancel",
-                "target": container_name,
+                "target": container_name,  # type: ignore[dict-item]
                 "parameters": {"cancel_command_id": scan_command_id},
             },
             timeout=TIMEOUT_SECONDS,
@@ -1485,7 +1485,7 @@ def handle_run_scan(n_clicks: List[int | None]) -> tuple[dbc.Alert | Any, bool |
             f"{api_base}/api/v1/commands/",
             json={
                 "command_type": "scan",
-                "target": container_name,
+                "target": container_name,  # type: ignore[dict-item]
                 "parameters": {},
             },
             timeout=TIMEOUT_SECONDS,

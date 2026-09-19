@@ -338,7 +338,7 @@ def fetch_sprints_by_ids(
                 # drop a sprint. Bind sprint_id as a default arg to avoid
                 # late-binding closure issues in the lambda.
                 sprint_response = retry_with_backoff(
-                    lambda sid=sprint_id: jira.get(f"rest/agile/1.0/sprint/{sid}")
+                    lambda sid=sprint_id: jira.get(f"rest/agile/1.0/sprint/{sid}")  # type: ignore[misc]
                 )
 
                 if sprint_response:

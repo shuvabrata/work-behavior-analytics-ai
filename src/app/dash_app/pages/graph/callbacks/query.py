@@ -125,7 +125,7 @@ def validate_query(query_text: str | None) -> dbc.Alert | None:
 def execute_query(_raw_clicks: Any, _catalog_clicks: Any, store_cypher: Any, query_text: Any, selected_catalog_query: Any, catalog_parameters: Any, catalog_view: Any, ) -> Any:
     """Execute raw console queries and catalog queries via the unified API."""
     # Default empty states
-    empty_elements = []
+    empty_elements: list[Any] = []
     hide_style = {"display": "none"}
     show_style = {"display": "block"}
     graph_visible_style = {"display": "block"}

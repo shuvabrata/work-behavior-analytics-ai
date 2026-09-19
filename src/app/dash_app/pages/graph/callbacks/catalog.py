@@ -701,7 +701,7 @@ def render_catalog_query_detail(
     if description_text:
         icon_id = "query-detail-info-icon"
         summary_children.extend([
-            html.I(
+            html.I(  # type: ignore[list-item]
                 className="fas fa-info-circle",
                 id=icon_id,
                 style={"cursor": "help", "marginLeft": "8px", "color": COLOR_GRAY_MEDIUM},

@@ -286,7 +286,7 @@ def query_neo4j_with_chain(
         llm = ChatOpenAI(
             model=provider.default_model,
             temperature=0,
-            openai_api_key=settings.OPENAI_API_KEY
+            openai_api_key=settings.OPENAI_API_KEY,  # type: ignore[call-arg]
         )
         
         # Custom prompt template with domain context and schema

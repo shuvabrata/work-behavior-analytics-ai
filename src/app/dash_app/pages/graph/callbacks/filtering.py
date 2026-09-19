@@ -730,7 +730,7 @@ def update_fine_slider_bounds(created_val: Any, updated_val: Any, seen_val: Any)
             return 0, 1, [0, 1]
         return val[0], val[1], list(val)
 
-    outputs = []
+    outputs: list[Any] = []
     for val in (created_val, updated_val, seen_val):
         outputs.extend(_fine_outputs(val))
     return outputs
@@ -802,7 +802,7 @@ def update_time_filter_ranges(unfiltered_elements: list[dict[str, Any]] | None, 
         value = prev if prev and prev == r else r
         return r[0], r[1], value, marks
 
-    outputs = []
+    outputs: list[Any] = []
     for prop in ("_created_at", "_last_updated_at", "_last_seen_at"):
         outputs.extend(_slider_outputs(prop))
 

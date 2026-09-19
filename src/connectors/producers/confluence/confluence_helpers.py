@@ -66,7 +66,7 @@ def fetch_space_pages(
             # abort the space content fetch. Bind content_type/start as default
             # args to avoid late-binding closure issues in the lambda.
             response = retry_with_backoff(
-                lambda ct=content_type, st=start: confluence.get(
+                lambda ct=content_type, st=start: confluence.get(  # type: ignore[misc]
                     f"/rest/api/space/{space_key}/content/{ct}",
                     params={
                         "expand": "version,history,status,ancestors,space",

@@ -69,7 +69,7 @@ def create_confluence_connection(config: Dict[str, Any]) -> Confluence:
     account = config["account"][0]
 
     logger.info(f"Creating Confluence connection for url={account['url']}")
-    confluence = Confluence(
+    confluence = Confluence(  # type: ignore[no-untyped-call]
         url=account["url"],
         username=account["email"],
         password=account["api_token"],
@@ -78,6 +78,6 @@ def create_confluence_connection(config: Dict[str, Any]) -> Confluence:
 
     # Validate credentials with a lightweight read.
     logger.info(f"Validating Confluence credentials for url={account['url']}")
-    confluence.get_all_spaces(start=0, limit=1)
+    confluence.get_all_spaces(start=0, limit=1)  # type: ignore[no-untyped-call]
     logger.info(f"Successfully authenticated to Confluence instance {account['url']}")
     return confluence

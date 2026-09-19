@@ -167,7 +167,7 @@ def _extract_highlight(raw_highlight: Optional[Dict[str, Any]]) -> Optional[str]
     # Take the first fragment from the first field that has highlights.
     for fragments in raw_highlight.values():
         if fragments:
-            return fragments[0]
+            return fragments[0]  # type: ignore[no-any-return]
     return None
 
 

@@ -230,14 +230,14 @@ class PersonCache:
             identity_ids=identity_ids,
         ).single()
         if existing_by_identity:
-            return existing_by_identity["id"]
+            return existing_by_identity["id"]  # type: ignore[no-any-return]
 
         existing_by_person_id = session.run(
             "MATCH (p:Person) WHERE p.id IN $person_ids RETURN p.id AS id LIMIT 1",
             person_ids=person_ids,
         ).single()
         if existing_by_person_id:
-            return existing_by_person_id["id"]
+            return existing_by_person_id["id"]  # type: ignore[no-any-return]
 
         return None
 

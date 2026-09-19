@@ -112,7 +112,7 @@ class GraphNode(ABC):
         call this via super() and layer their own filtering on top, or
         replicate the same 5-key injection if they can't call super() cleanly.
         """
-        props = {k: v for k, v in asdict(self).items() if v is not None}
+        props = {k: v for k, v in asdict(self).items() if v is not None}  # type: ignore[call-overload]
         self._inject_computed_properties(props)
         return props
 

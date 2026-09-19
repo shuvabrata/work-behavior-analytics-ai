@@ -57,7 +57,7 @@ async def process_teams(
                 # of dropping the team's members. Bind team as a default arg to
                 # avoid late-binding closure issues in the lambda.
                 members_raw = await asyncio.to_thread(
-                    lambda t=team: retry_with_backoff(lambda: list(t.get_members()))
+                    lambda t=team: retry_with_backoff(lambda: list(t.get_members()))  # type: ignore[misc]
                 )
             except WbaRetryTimeoutError:
                 logger.debug(

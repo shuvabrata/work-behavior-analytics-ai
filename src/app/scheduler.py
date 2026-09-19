@@ -91,7 +91,7 @@ async def _try_acquire_lease(
         .values(held_by=instance_id, expires_at=expires_at)
     )
     await db.commit()
-    return result.rowcount > 0
+    return result.rowcount > 0  # type: ignore[no-any-return]
 
 
 async def _get_due_connectors(

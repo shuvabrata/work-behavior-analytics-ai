@@ -1891,8 +1891,8 @@ def replace_snapshot_interaction_relationships(
             if r.properties.get("timestamp") or r.properties.get("last_interaction_at")
         ]
         count = len(rels)
-        first_at = min(timestamps) if timestamps else None
-        last_at = max(timestamps) if timestamps else None
+        first_at = min(timestamps) if timestamps else None  # type: ignore[type-var]
+        last_at = max(timestamps) if timestamps else None  # type: ignore[type-var]
 
         set_clauses = ["r.count = $count"]
         params: Dict[str, Any] = {

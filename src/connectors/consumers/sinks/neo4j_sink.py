@@ -14,6 +14,7 @@ Direction semantics for relationships (preserved from producer contracts):
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Callable, Dict, List, Optional, Tuple
 
@@ -57,6 +58,46 @@ from connectors.neo4j_db.models import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class _PersonMapping:
+    """Provider-specific field mapping for Person signal handling."""
+
+    provider: str
+    external_id_attr: str
+    identity_provider_label: str  # e.g. "GitHub", "Jira", "Confluence"
+    username_attr: str = "name"   # attr key for queue_identity_mapping username
+    # ^ Default is never used by current providers (all three set it explicitly);
+    #   exists as a safety net for future providers.
+    pass_url: bool = False
+    pass_account_id: bool = False
+
+
+PROVIDER_MAPPINGS: dict[str, _PersonMapping] = {
+    "github": _PersonMapping(
+        provider="github",
+        external_id_attr="login",
+        identity_provider_label="GitHub",
+        username_attr="login",
+        pass_url=True,
+    ),
+    "jira": _PersonMapping(
+        provider="jira",
+        external_id_attr="account_id",
+        identity_provider_label="Jira",
+        username_attr="full_name",
+        pass_account_id=True,
+    ),
+    "confluence": _PersonMapping(
+        provider="confluence",
+        external_id_attr="account_id",
+        identity_provider_label="Confluence",
+        username_attr="full_name",
+        pass_url=True,
+        pass_account_id=True,
+    ),
+}
 
 
 # ---------------------------------------------------------------------------
@@ -487,6 +528,12 @@ def _handle_person(
     fields are filled in; non-empty fields are overwritten by the richer value).
     See ``connectors/commons/identity_resolver.py :: get_or_create_person``.
 
+    Provider-specific behavior is driven by ``PROVIDER_MAPPINGS`` — a
+    ``_PersonMapping`` dataclass per source (``github``, ``jira``,
+    ``confluence``) that controls which attributes are extracted, whether
+    ``url`` or ``account_id`` is passed, and how the identity mapping is
+    labelled.
+
     The returned canonical wba_id reflects what actually exists in Neo4j.  When
     deduplication occurred the returned id differs from ``wba_node_id(signal)``;
     callers (e.g. the Elasticsearch sink) must use the returned id — **not** the
@@ -496,127 +543,57 @@ def _handle_person(
     attrs = signal.attributes.model_dump()
 
     if person_cache is not None:
-        if signal.source == "github":
-            login = attrs.get("login", "")
-            name = attrs.get("full_name") or login
-            raw_email = attrs.get("email")
-            email = raw_email.lower() if raw_email else None
-            url = attrs.get("url")
+        mapping = PROVIDER_MAPPINGS.get(signal.source)
+        if mapping is None:
+            logger.warning(f"Unhandled Person signal source={signal.source}; skipping")
+            return None
 
-            person_id, _ = person_cache.get_or_create_person(
-                session,
-                email=email if email else None,
-                name=name,
-                provider="github",
-                external_id=login,
-                url=url,
-                observed_at=_sync_timestamp(signal),
-            )
-            if person_id:
-                signal_node_id = wba_node_id(signal)
-                if person_id != signal_node_id:
-                    logger.info(
-                        f"Deduplicated Person signal source={signal.source} signal_id={signal.id} signal_node_id="
-                        f"{signal_node_id} canonical_id={person_id}"
-                    )
-                    _rehome_person_stub(session, signal_node_id, person_id)
-                identity_id = wba_format("github", "IdentityMapping", login)
-                person_cache.queue_identity_mapping(
-                    person_id=person_id,
-                    identity_id=identity_id,
-                    provider="GitHub",
-                    username=login,
-                    email=email or "",
-                    last_updated_at=datetime.now(timezone.utc).isoformat(),
+        external_id = attrs.get(mapping.external_id_attr, "")
+        # Populate stub names at the consumer by design: a mention-only
+        # user (no display name) falls back to the external_id so the Person
+        # node is never left with a blank name/label. merge_person still
+        # prevents the raw id from being written to ``name``.
+        name = attrs.get("full_name", "") or external_id
+        raw_email = attrs.get("email")
+        email = raw_email.lower() if raw_email else None
+        url = attrs.get("url") if mapping.pass_url else None
+
+        person_id, _ = person_cache.get_or_create_person(
+            session,
+            email=email if email else None,
+            name=name,
+            provider=mapping.provider,
+            external_id=external_id,
+            url=url,
+            account_id=external_id if mapping.pass_account_id else None,
+            observed_at=_sync_timestamp(signal),
+        )
+        if person_id:
+            signal_node_id = wba_node_id(signal)
+            if person_id != signal_node_id:
+                logger.info(
+                    f"Deduplicated Person signal source={signal.source} signal_id={signal.id} signal_node_id="
+                    f"{signal_node_id} canonical_id={person_id}"
                 )
-                if signal.relationships:
-                    db_rels = _to_db_relationships(session, signal.relationships, person_id, "Person")
-                    for rel in db_rels:
-                        merge_relationship(session, rel)
-            return person_id
-
-        elif signal.source == "jira":
-            account_id = attrs.get("account_id", "")
-            # Populate stub names at the consumer by design: a mention-only
-            # user (no display name) falls back to the account_id so the Person
-            # node is never left with a blank name/label. Mirrors the
-            # Confluence handler below. merge_person still prevents the raw id
-            # from being written to ``name``.
-            name = attrs.get("full_name", "") or account_id
-            raw_email = attrs.get("email")
-            email = raw_email.lower() if raw_email else None
-
-            person_id, _ = person_cache.get_or_create_person(
-                session,
-                email=email if email else None,
-                name=name,
-                provider="jira",
-                external_id=account_id,
-                account_id=account_id,
-                observed_at=_sync_timestamp(signal),
+                _rehome_person_stub(session, signal_node_id, person_id)
+            identity_id = wba_format(mapping.provider, "IdentityMapping", external_id)
+            # username: GitHub uses the raw login handle; Jira/Confluence use
+            # the display name (falling back to external_id). The mapping's
+            # username_attr controls which attr key to read from attrs.
+            username = attrs.get(mapping.username_attr, "") or name
+            person_cache.queue_identity_mapping(
+                person_id=person_id,
+                identity_id=identity_id,
+                provider=mapping.identity_provider_label,
+                username=username,
+                email=email or "",
+                last_updated_at=datetime.now(timezone.utc).isoformat(),
             )
-            if person_id:
-                signal_node_id = wba_node_id(signal)
-                if person_id != signal_node_id:
-                    logger.info(
-                        f"Deduplicated Person signal source={signal.source} signal_id={signal.id} signal_node_id="
-                        f"{signal_node_id} canonical_id={person_id}"
-                    )
-                    _rehome_person_stub(session, signal_node_id, person_id)
-                identity_id = wba_format("jira", "IdentityMapping", account_id)
-                person_cache.queue_identity_mapping(
-                    person_id=person_id,
-                    identity_id=identity_id,
-                    provider="Jira",
-                    username=name,
-                    email=email or "",
-                    last_updated_at=datetime.now(timezone.utc).isoformat(),
-                )
-                if signal.relationships:
-                    db_rels = _to_db_relationships(session, signal.relationships, person_id, "Person")
-                    for rel in db_rels:
-                        merge_relationship(session, rel)
-            return person_id
-
-        elif signal.source == "confluence":
-            account_id = attrs.get("account_id", "")
-            name = attrs.get("full_name", "") or account_id
-            raw_email = attrs.get("email")
-            email = raw_email.lower() if raw_email else None
-            url = attrs.get("url")
-
-            person_id, _ = person_cache.get_or_create_person(
-                session,
-                email=email if email else None,
-                name=name,
-                provider="confluence",
-                external_id=account_id,
-                url=url,
-                account_id=account_id,
-                observed_at=_sync_timestamp(signal),
-            )
-            if person_id:
-                signal_node_id = wba_node_id(signal)
-                if person_id != signal_node_id:
-                    logger.info(
-                        f"Deduplicated Person signal source={signal.source} signal_id={signal.id} signal_node_id="
-                        f"{signal_node_id} canonical_id={person_id}"
-                    )
-                    _rehome_person_stub(session, signal_node_id, person_id)
-                identity_id = wba_format("confluence", "IdentityMapping", account_id)
-                person_cache.queue_identity_mapping(
-                    person_id=person_id,
-                    identity_id=identity_id,
-                    provider="Confluence",
-                    username=name,
-                    email=email or "",
-                    last_updated_at=datetime.now(timezone.utc).isoformat(),
-                )
-                if signal.relationships:
-                    db_rels = _to_db_relationships(session, signal.relationships, person_id, "Person")
-                    for rel in db_rels:
-                        merge_relationship(session, rel)
-            return person_id
+            if signal.relationships:
+                db_rels = _to_db_relationships(session, signal.relationships, person_id, "Person")
+                for rel in db_rels:
+                    merge_relationship(session, rel)
+        return person_id
 
     # Fallback: no PersonCache — original behaviour, no cross-provider dedup.
     raw_email = attrs.get("email")

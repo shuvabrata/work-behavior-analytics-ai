@@ -338,3 +338,160 @@ def test_rehome_person_stub_moves_relationships_and_deletes_stale_node() -> None
     delete_call = session.run.call_args_list[-1]
     assert delete_call.args[0] == "MATCH (stale:Person {id: $stale_id}) DETACH DELETE stale"
     assert delete_call.kwargs["stale_id"] == "confluence::Person::acc123"
+
+
+def test_handle_person_github_provider_kwargs() -> None:
+    """GitHub Person signal passes login as external_id, url, and no account_id."""
+    session = MagicMock()
+    signal = _signal(
+        "github",
+        PersonAttributes(
+            full_name="Alice Dev",
+            login="alice",
+            email="alice@example.com",
+            url="https://github.com/alice",
+        ),
+        signal_id="alice",
+    )
+    person_cache = MagicMock(spec=PersonCache)
+    person_cache.get_or_create_person.return_value = ("github::Person::alice", False)
+
+    with patch("connectors.consumers.sinks.neo4j_sink._rehome_person_stub") as mock_rehome:
+        canonical_id = upsert_signal(session, signal, person_cache=person_cache)
+
+    assert canonical_id == "github::Person::alice"
+    person_cache.get_or_create_person.assert_called_once_with(
+        session,
+        email="alice@example.com",
+        name="Alice Dev",
+        provider="github",
+        external_id="alice",
+        url="https://github.com/alice",
+        account_id=None,
+        observed_at=_INGESTION_TIME.isoformat(),
+    )
+    person_cache.queue_identity_mapping.assert_called_once()
+    _call_kwargs = person_cache.queue_identity_mapping.call_args.kwargs
+    assert _call_kwargs["username"] == "alice"
+    assert _call_kwargs["provider"] == "GitHub"
+    mock_rehome.assert_not_called()
+
+
+def test_handle_person_jira_provider_kwargs() -> None:
+    """Jira Person signal passes account_id as both external_id and account_id, no url."""
+    session = MagicMock()
+    signal = _signal(
+        "jira",
+        PersonAttributes(
+            full_name="Bob Smith",
+            account_id="bob123",
+            email="bob@example.com",
+        ),
+        signal_id="bob123",
+    )
+    person_cache = MagicMock(spec=PersonCache)
+    person_cache.get_or_create_person.return_value = ("jira::Person::bob123", False)
+
+    with patch("connectors.consumers.sinks.neo4j_sink._rehome_person_stub") as mock_rehome:
+        canonical_id = upsert_signal(session, signal, person_cache=person_cache)
+
+    assert canonical_id == "jira::Person::bob123"
+    person_cache.get_or_create_person.assert_called_once_with(
+        session,
+        email="bob@example.com",
+        name="Bob Smith",
+        provider="jira",
+        external_id="bob123",
+        url=None,
+        account_id="bob123",
+        observed_at=_INGESTION_TIME.isoformat(),
+    )
+    person_cache.queue_identity_mapping.assert_called_once()
+    _call_kwargs = person_cache.queue_identity_mapping.call_args.kwargs
+    assert _call_kwargs["username"] == "Bob Smith"
+    assert _call_kwargs["provider"] == "Jira"
+    mock_rehome.assert_not_called()
+
+
+def test_handle_person_confluence_provider_kwargs() -> None:
+    """Confluence Person signal passes account_id and url, username is display name."""
+    session = MagicMock()
+    signal = _signal(
+        "confluence",
+        PersonAttributes(
+            full_name="Carol Zhang",
+            account_id="carol456",
+            email="carol@example.com",
+            url="https://example.atlassian.net/wiki/people/carol456",
+        ),
+        signal_id="carol456",
+    )
+    person_cache = MagicMock(spec=PersonCache)
+    person_cache.get_or_create_person.return_value = ("confluence::Person::carol456", False)
+
+    with patch("connectors.consumers.sinks.neo4j_sink._rehome_person_stub") as mock_rehome:
+        canonical_id = upsert_signal(session, signal, person_cache=person_cache)
+
+    assert canonical_id == "confluence::Person::carol456"
+    person_cache.get_or_create_person.assert_called_once_with(
+        session,
+        email="carol@example.com",
+        name="Carol Zhang",
+        provider="confluence",
+        external_id="carol456",
+        url="https://example.atlassian.net/wiki/people/carol456",
+        account_id="carol456",
+        observed_at=_INGESTION_TIME.isoformat(),
+    )
+    person_cache.queue_identity_mapping.assert_called_once()
+    _call_kwargs = person_cache.queue_identity_mapping.call_args.kwargs
+    assert _call_kwargs["username"] == "Carol Zhang"
+    assert _call_kwargs["provider"] == "Confluence"
+    mock_rehome.assert_not_called()
+
+
+def test_handle_person_dedup_calls_rehome() -> None:
+    """When get_or_create_person returns a different canonical id, _rehome_person_stub is called."""
+    session = MagicMock()
+    signal = _signal(
+        "confluence",
+        PersonAttributes(
+            full_name="Alice Dev",
+            account_id="acc123",
+            email="alice@example.com",
+        ),
+        signal_id="acc123",
+    )
+    person_cache = MagicMock(spec=PersonCache)
+    # Return a Jira person id — different from confluence::Person::acc123
+    person_cache.get_or_create_person.return_value = ("jira::Person::acc123", False)
+
+    with patch("connectors.consumers.sinks.neo4j_sink._rehome_person_stub") as mock_rehome:
+        canonical_id = upsert_signal(session, signal, person_cache=person_cache)
+
+    assert canonical_id == "jira::Person::acc123"
+    mock_rehome.assert_called_once_with(
+        session,
+        "confluence::Person::acc123",
+        "jira::Person::acc123",
+    )
+
+
+def test_handle_person_unhandled_source_returns_none() -> None:
+    """An unknown signal.source returns None from _handle_person; get_or_create_person not called."""
+    session = MagicMock()
+    signal = _signal(
+        "slack",
+        PersonAttributes(
+            full_name="Unknown User",
+            account_id="unknown",
+        ),
+        signal_id="unknown",
+    )
+    person_cache = MagicMock(spec=PersonCache)
+
+    canonical_id = upsert_signal(session, signal, person_cache=person_cache)
+
+    # upsert_signal falls back to wba_node_id(signal) when _handle_person returns None
+    assert canonical_id == "slack::Person::unknown"
+    person_cache.get_or_create_person.assert_not_called()

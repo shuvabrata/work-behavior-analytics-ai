@@ -495,7 +495,7 @@ def _collect_overrides(
     nodes: dict[str, dict[str, Any]] = {}
     for value, input_id in zip(node_values, node_ids):
         if not isinstance(input_id, dict):
-            continue
+            continue  # type: ignore[unreachable]
         if value in (None, "", []):
             continue
         node_type = input_id["node_type"]
@@ -505,7 +505,7 @@ def _collect_overrides(
     edges: dict[str, Any] = {}
     for value, input_id in zip(edge_values, edge_ids):
         if not isinstance(input_id, dict):
-            continue
+            continue  # type: ignore[unreachable]
         if value in (None, "", []):
             continue
         edges[input_id["field"]] = value
@@ -513,7 +513,7 @@ def _collect_overrides(
     global_: dict[str, Any] = {}
     for value, input_id in zip(global_values, global_ids):
         if not isinstance(input_id, dict):
-            continue
+            continue  # type: ignore[unreachable]
         if value in (None, "", []):
             continue
         global_[input_id["field"]] = value

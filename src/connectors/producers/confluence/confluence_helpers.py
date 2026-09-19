@@ -2,7 +2,7 @@ import asyncio
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from atlassian import Confluence  # type: ignore[import-untyped]
+from atlassian import Confluence
 
 from common.logger import logger
 from connectors.producers.confluence.fetch_spaces import fetch_spaces

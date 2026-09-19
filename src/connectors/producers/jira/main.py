@@ -963,7 +963,7 @@ async def publish_signals(
         project_id = project_key_to_id.get(project_key) if project_key else None
 
         # Person: reporter
-        reporter_person_id: Optional[str] = None
+        reporter_person_id = None
         reporter_raw = i_raw.get("fields", {}).get("reporter")
         if reporter_raw and isinstance(reporter_raw, dict):
             user_data = map_jira_user(reporter_raw)
@@ -1028,7 +1028,7 @@ async def publish_signals(
         project_id = project_key_to_id.get(project_key) if project_key else None
 
         reporter_raw = e_raw.get("fields", {}).get("reporter")
-        reporter_person_id: Optional[str] = None
+        reporter_person_id = None
         if reporter_raw and isinstance(reporter_raw, dict):
             user_data = map_jira_user(reporter_raw)
             reporter_person_id = user_data.get("account_id", "")
@@ -1039,7 +1039,7 @@ async def publish_signals(
                         await _pub(build_person_signal(user_data, jira_base_url))
 
         # Person: assignee
-        assignee_person_id: Optional[str] = None
+        assignee_person_id = None
         assignee_raw = e_raw.get("fields", {}).get("assignee")
         if assignee_raw and isinstance(assignee_raw, dict):
             user_data = map_jira_user(assignee_raw)
@@ -1107,7 +1107,7 @@ async def publish_signals(
             fields = raw.get("fields", {})
 
             # Person: assignee
-            assignee_person_id: Optional[str] = None
+            assignee_person_id = None
             assignee_raw = fields.get("assignee")
             if assignee_raw and isinstance(assignee_raw, dict):
                 user_data = map_jira_user(assignee_raw)
@@ -1119,7 +1119,7 @@ async def publish_signals(
                             await _pub(build_person_signal(user_data, jira_base_url))
 
             # Person: reporter
-            reporter_person_id: Optional[str] = None
+            reporter_person_id = None
             reporter_raw = fields.get("reporter")
             if reporter_raw and isinstance(reporter_raw, dict):
                 user_data = map_jira_user(reporter_raw)

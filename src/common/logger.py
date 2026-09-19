@@ -145,12 +145,13 @@ class MyAppLogger(logging.Logger):
 
     def error(self, msg: Any, *args: Any, **kwargs: Any) -> None:
         super().error(msg, *args, **kwargs)
+        value: str
 
         if isinstance(msg, Exception):
             error_message: str = str(msg)
             stack_trace: str = ''.join(traceback.format_exception(type(msg), msg, msg.__traceback__))
             if LOG_FORMAT == "JSON":
-                value: str = json.dumps({
+                value = json.dumps({
                     "error": error_message,
                     "stack_trace": stack_trace,
                     "project_id": project_id_var.get(),
@@ -160,7 +161,7 @@ class MyAppLogger(logging.Logger):
             else:
                 value = f"Error: {error_message}\n\nStack Trace:\n{stack_trace}"
         else:
-            value: str = json.dumps(msg) if LOG_FORMAT == "JSON" else str(msg)
+            value = json.dumps(msg) if LOG_FORMAT == "JSON" else str(msg)
 
         if self.slack_webhook_url:
             try:

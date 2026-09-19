@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, Dict, List, cast
 
 import requests
-from atlassian import Confluence  # type: ignore[import-untyped]
+from atlassian import Confluence
 
 from common.logger import logger
 

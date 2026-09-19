@@ -8,6 +8,7 @@ import requests
 
 from app.common.timezone import now_in_app_timezone, humanize_duration
 from app.runtime_settings import runtime_settings
+from app.settings import settings
 from app.dash_app.components.common import create_diamond_icon, create_page_header
 from app.dash_app.styles import (
     FONT_SANS,

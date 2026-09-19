@@ -97,7 +97,7 @@ def render_scan_item(command: dict) -> html.Div:  # type: ignore[type-arg]
     created_str = _format_timestamp(command.get("created_at"))
     started_str = _format_timestamp(command.get("started_at"))
     completed_str = _format_timestamp(command.get("completed_at"))
-    error_message: str | None = command.get("error_message")  # type: ignore[type-arg]
+    error_message: str | None = command.get("error_message")
     result_summary = command.get("result_summary")
 
     # Duration calculation — only when the scan has finished

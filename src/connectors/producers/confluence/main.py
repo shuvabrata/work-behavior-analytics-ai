@@ -23,7 +23,7 @@ import os
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple
 
-from atlassian import Confluence  # type: ignore[import-untyped]
+from atlassian import Confluence
 
 from common.activity_signal.models import (
     ActivitySignal,
@@ -733,7 +733,7 @@ async def process_account(
         # only a small number of items fall within the since_date window.
         for content in space_items:
             if not isinstance(content, dict):
-                continue
+                continue  # type: ignore[unreachable]
             
             last_mod_str = _content_last_updated_at(content)
             last_mod_dt = _parse_datetime(last_mod_str)

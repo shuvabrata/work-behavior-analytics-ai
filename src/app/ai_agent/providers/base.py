@@ -108,7 +108,7 @@ class LLMProvider(ABC):
         )
         # Make this an async generator by yielding from the base — unreachable but
         # satisfies Python's requirement that async generators contain at least one yield.
-        yield  # type: ignore[misc]  # pragma: no cover
+        yield  # type: ignore[unreachable]  # pragma: no cover
 
     def chat_completion_with_tools(
         self,

@@ -128,7 +128,7 @@ def _resolve_source(
         if field.annotation is bool:
             return env_raw.lower() in ("1", "true", "yes"), "env"
         if field.annotation is int:
-            return int(env_raw), "env"
+            return int(env_raw), "env"  # type: ignore[unreachable]
         return env_raw, "env"
 
     # 3. Code default (from RuntimeConfig, or None for bootstrap-only keys)

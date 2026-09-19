@@ -537,7 +537,7 @@ class ActivitySignal(BaseModel):
         it in model_dump() output. Excluded from attributes serialization via
         Field(exclude=True) on each *Attributes.entity_type field.
         """
-        return cast(_AttributesUnion, self.attributes).entity_type  # type: ignore[union-attr]
+        return cast(_AttributesUnion, self.attributes).entity_type
 
     def with_ingestion_time(self, ts: Optional[datetime] = None) -> "ActivitySignal":
         """Return a copy of this signal with ``ingestion_time`` set.
@@ -558,4 +558,4 @@ class ActivitySignal(BaseModel):
             Use ``signal.attributes.model_dump()`` directly. This helper will
             be removed in Phase 13 of the ActivitySignal refactoring.
         """
-        return cast(_AttributesUnion, self.attributes).model_dump()  # type: ignore[union-attr]
+        return cast(_AttributesUnion, self.attributes).model_dump()

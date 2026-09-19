@@ -274,7 +274,7 @@ def search(request: SearchRequest) -> SearchResponse:
         logger.warning(f"[Search] Index not found: {index}")
         return SearchResponse(total=0, page=request.page, page_size=request.page_size, results=[])
     except BadRequestError as exc:
-        logger.warning(f"[Search] Bad request from Elasticsearch (offset={from_offset}): {exc}")
+        logger.warning(f"[Search] Bad request from Elasticsearch (offset={(request.page-1)*request.page_size}): {exc}")
         return SearchResponse(total=0, page=request.page, page_size=request.page_size, results=[])
     except Exception as exc:
         logger.exception(f"[Search] Elasticsearch query failed: {exc}")

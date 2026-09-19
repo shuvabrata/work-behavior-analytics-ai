@@ -1,0 +1,1 @@
+# Connectors package — producers, consumers, and Neo4j sync modules.

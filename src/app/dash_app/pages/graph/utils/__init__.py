@@ -6,18 +6,28 @@ This package contains pure utility functions organized by purpose:
 - formatters: Format property values for display
 """
 
+__all__ = [
+    "neo4j_to_cytoscape",
+    "parse_error_response",
+    "create_error_alert",
+    "create_table_display",
+    "create_graph_success_alert",
+    "create_performance_metrics",
+    "toggle_details_panel",
+]
+
 from .data_transform import neo4j_to_cytoscape, parse_error_response
 from .ui_components import (
     create_error_alert,
     create_table_display,
     create_graph_success_alert,
     create_performance_metrics,
-    toggle_details_panel,
     create_node_legend,
     create_expansion_success_alert,
     create_no_neighbors_alert,
-    create_expansion_error_alert
+    create_expansion_error_alert,
 )
+from app.dash_app.components.common import toggle_details_panel as toggle_details_panel
 from .formatters import format_property_value, build_property_items
 from .graph_operations import (
     get_graph_api_base_url,

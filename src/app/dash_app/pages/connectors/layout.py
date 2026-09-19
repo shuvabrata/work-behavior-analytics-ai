@@ -124,7 +124,7 @@ def get_detail_layout(connector_type: str) -> html.Div:
                         html.Div(
                             [
                                 html.I(className="fas fa-plus me-1", style={"fontSize": "11px"}),
-                                f"Add New {form_spec.get('item', {}).get('label', 'Item')}",
+                                f"Add New {form_spec.get('item', {}).get('label', 'Item')}",  # type: ignore[attr-defined]
                             ],
                             id="add-item-collapse-toggle",
                             className="collapse-toggle-subtle",
@@ -148,7 +148,7 @@ def get_detail_layout(connector_type: str) -> html.Div:
         )
 
     # 4. Connector Settings — connector-level settings, collapsed by default
-    connector_fields = form_spec.get("connector_config", [])
+    connector_fields = form_spec.get("connector_config", [])  # type: ignore[attr-defined]
     has_connector_settings = bool(connector_fields) or bool(producer_container)
 
     connector_settings_children = []

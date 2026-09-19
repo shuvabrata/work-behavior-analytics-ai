@@ -497,7 +497,7 @@ def render_items_list(store: Dict[str, Any] | None) -> List[Any]:
 
     items = store.get("items", [])
     connector_type = store.get("connector_type") or ""
-    item_spec = CONFIG_FORM_SPECS.get(connector_type, {}).get("item", {})
+    item_spec = CONFIG_FORM_SPECS.get(connector_type, {}).get("item", {})  # type: ignore[attr-defined]
     label = item_spec.get("label", "Item")
 
     if not items:
@@ -1260,8 +1260,8 @@ def _build_payload(
 def _get_spec_fields(connector_type: str, section: str) -> List[Dict[str, Any]]:
     form_spec = CONFIG_FORM_SPECS.get(connector_type, {})
     if section == "connector":
-        return form_spec.get("connector_config", [])
-    return form_spec.get("item", {}).get("fields", [])
+        return form_spec.get("connector_config", [])  # type: ignore[attr-defined]
+    return form_spec.get("item", {}).get("fields", [])  # type: ignore[attr-defined]
 
 
 def _coerce_field_value(spec: Dict[str, Any], value: Any) -> Any:

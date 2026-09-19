@@ -8,7 +8,7 @@ from .model import ProjectCreate, ProjectUpdate
 
 async def get_projects(db: AsyncSession) -> List[ProjectModel]:
     result = await db.execute(select(ProjectModel))
-    return result.scalars().all()
+    return list(result.scalars().all())
 
 async def get_project(db: AsyncSession, project_id: int) -> Optional[ProjectModel]:
     result = await db.execute(select(ProjectModel).where(ProjectModel.id == project_id))

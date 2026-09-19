@@ -3,6 +3,7 @@
 Callbacks for local graph refinement UI controls.
 """
 
+from typing import Any
 import dash_bootstrap_components as dbc
 from dash import Input, Output, State, callback, html
 from dash.exceptions import PreventUpdate
@@ -15,7 +16,7 @@ class FilteringDataValidationError(ValueError):
     """Raised when loaded graph elements violate callback assumptions."""
 
 
-def _split_elements(elements: list[dict] | None) -> tuple[list[dict], list[dict]]:
+def _split_elements(elements: list[dict[str, Any]] | None) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Return node and edge lists from a Cytoscape element collection."""
     nodes = []
     edges = []
@@ -30,7 +31,7 @@ def _split_elements(elements: list[dict] | None) -> tuple[list[dict], list[dict]
     return nodes, edges
 
 
-def _has_weighted_edges(elements: list[dict] | None) -> bool:
+def _has_weighted_edges(elements: list[dict[str, Any]] | None) -> bool:
     """Return True when the current graph contains edge weights."""
     for elem in elements or []:
         data = elem.get("data", {})
@@ -39,7 +40,7 @@ def _has_weighted_edges(elements: list[dict] | None) -> bool:
     return False
 
 
-def _require_element_ids(elements: list[dict] | None) -> None:
+def _require_element_ids(elements: list[dict[str, Any]] | None) -> None:
     """Validate that all nodes and edges carry stable ids."""
     for elem in elements or []:
         data = elem.get("data", {})
@@ -51,7 +52,7 @@ def _require_element_ids(elements: list[dict] | None) -> None:
             )
 
 
-def _format_counts_summary(filtered_elements: list[dict] | None, unfiltered_elements: list[dict] | None) -> str:
+def _format_counts_summary(filtered_elements: list[dict[str, Any]] | None, unfiltered_elements: list[dict[str, Any]] | None) -> str:
     """Build a compact before/after summary for the current filter state."""
     if not unfiltered_elements:
         return "Load a graph to refine it locally."
@@ -65,7 +66,7 @@ def _format_counts_summary(filtered_elements: list[dict] | None, unfiltered_elem
     )
 
 
-def _summarize_selection(selected_values, option_values, label):
+def _summarize_selection(selected_values: Any, option_values: Any, label: Any) -> Any:
     """Return a compact chip label for a checklist selection, or None if unfiltered."""
     available = option_values or []
     selected = selected_values or []
@@ -82,7 +83,7 @@ def _summarize_selection(selected_values, option_values, label):
     return f"{label}: {len(selected)}/{len(available)}"
 
 
-def _summarize_time_filter(range_value, full_range, label_prefix):
+def _summarize_time_filter(range_value: Any, full_range: Any, label_prefix: Any) -> Any:
     """Return a chip label string for a time filter, or None if slider is at full range.
 
     Parameters
@@ -108,19 +109,7 @@ def _summarize_time_filter(range_value, full_range, label_prefix):
     return f"{label_prefix}: {lo} – {hi}"
 
 
-def _build_active_filter_chips(
-    selected_node_types,
-    selected_rel_types,
-    weight_threshold,
-    top_n_mode,
-    node_type_options,
-    rel_type_options,
-    has_weighted_edges,
-    created_range=None,
-    updated_range=None,
-    seen_range=None,
-    full_ranges=None,
-):
+def _build_active_filter_chips(selected_node_types: Any, selected_rel_types: Any, weight_threshold: Any, top_n_mode: Any, node_type_options: Any, rel_type_options: Any, has_weighted_edges: Any, created_range: Any = None, updated_range: Any = None, seen_range: Any = None, full_ranges: Any = None) -> Any:
     """Return badge components for the currently active filters."""
     node_option_values = [opt["value"] for opt in (node_type_options or [])]
     rel_option_values = [opt["value"] for opt in (rel_type_options or [])]
@@ -160,7 +149,7 @@ def _build_active_filter_chips(
     ]
 
 
-def _filter_nodes_by_time(nodes, created_range=None, updated_range=None, seen_range=None, full_ranges=None):
+def _filter_nodes_by_time(nodes: Any, created_range: Any = None, updated_range: Any = None, seen_range: Any = None, full_ranges: Any = None) -> Any:
     """Filter a list of nodes by time-based filters.
 
     Returns the subset of nodes that pass all active time filters.
@@ -202,17 +191,7 @@ def _filter_nodes_by_time(nodes, created_range=None, updated_range=None, seen_ra
     return visible_nodes
 
 
-def _compute_filtered_graph(
-    selected_node_types,
-    selected_rel_types,
-    weight_threshold,
-    top_n_mode,
-    unfiltered_elements,
-    created_range=None,
-    updated_range=None,
-    seen_range=None,
-    full_ranges=None,
-):
+def _compute_filtered_graph(selected_node_types: Any, selected_rel_types: Any, weight_threshold: Any, top_n_mode: Any, unfiltered_elements: Any, created_range: Any = None, updated_range: Any = None, seen_range: Any = None, full_ranges: Any = None) -> Any:
     """Compute the visible graph subset from the loaded baseline.
 
     Parameters
@@ -311,8 +290,8 @@ def _compute_filtered_graph(
      State("time-filter-full-ranges", "data")],
     prevent_initial_call=True
 )
-def update_relationship_type_filter(unfiltered_elements, created_range, updated_range, seen_range,
-                                    current_values, previous_available, full_ranges):
+def update_relationship_type_filter(unfiltered_elements: Any, created_range: Any, updated_range: Any, seen_range: Any,
+                                    current_values: Any, previous_available: Any, full_ranges: Any) -> Any:
     """Dynamically populate relationship type checkboxes from the unfiltered graph.
 
     Called whenever the unfiltered baseline changes (new query or expansion)
@@ -408,8 +387,8 @@ def update_relationship_type_filter(unfiltered_elements, created_range, updated_
      State("time-filter-full-ranges", "data")],
     prevent_initial_call=True
 )
-def update_node_type_filter(unfiltered_elements, created_range, updated_range, seen_range,
-                            current_values, previous_available, full_ranges):
+def update_node_type_filter(unfiltered_elements: Any, created_range: Any, updated_range: Any, seen_range: Any,
+                            current_values: Any, previous_available: Any, full_ranges: Any) -> Any:
     """Dynamically populate node type checkboxes from the unfiltered graph.
 
     Called whenever the unfiltered baseline changes (new query or expansion)
@@ -514,18 +493,18 @@ def update_weight_threshold_label(threshold: float | int | None) -> str:
      Input("time-filter-full-ranges", "data")]
 )
 def update_filter_panel_feedback(
-    unfiltered_elements,
-    selected_node_types,
-    selected_rel_types,
-    weight_threshold,
-    top_n_mode,
-    node_type_options,
-    rel_type_options,
-    created_range,
-    updated_range,
-    seen_range,
-    full_ranges,
-):
+    unfiltered_elements: Any,
+    selected_node_types: Any,
+    selected_rel_types: Any,
+    weight_threshold: Any,
+    top_n_mode: Any,
+    node_type_options: Any,
+    rel_type_options: Any,
+    created_range: Any,
+    updated_range: Any,
+    seen_range: Any,
+    full_ranges: Any,
+) -> Any:
     """Update local-only filter feedback, chips, and weighted-control visibility."""
     filtered_graph = _compute_filtered_graph(
         selected_node_types,
@@ -583,7 +562,7 @@ def update_filter_panel_feedback(
      State("time-filter-full-ranges", "data")],
     prevent_initial_call=True
 )
-def clear_all_filters(n_clicks, node_type_options, rel_type_options, full_ranges):
+def clear_all_filters(n_clicks: Any, node_type_options: Any, rel_type_options: Any, full_ranges: Any) -> Any:
     """Reset all filters to default values"""
     if not n_clicks:
         raise PreventUpdate
@@ -621,16 +600,16 @@ def clear_all_filters(n_clicks, node_type_options, rel_type_options, full_ranges
     prevent_initial_call=True
 )
 def apply_relationship_filters(
-    selected_node_types,
-    selected_rel_types,
-    weight_threshold,
-    top_n_mode,
-    unfiltered_elements,
-    created_range,
-    updated_range,
-    seen_range,
-    full_ranges,
-):
+    selected_node_types: Any,
+    selected_rel_types: Any,
+    weight_threshold: Any,
+    top_n_mode: Any,
+    unfiltered_elements: Any,
+    created_range: Any,
+    updated_range: Any,
+    seen_range: Any,
+    full_ranges: Any,
+) -> Any:
     """Apply all filters (node types, relationship types, weight, top-N) to graph elements.
 
     ``unfiltered-elements-store`` is an **Input** (not State) so that this
@@ -712,7 +691,7 @@ def apply_relationship_filters(
     State("time-filters-collapse", "is_open"),
     prevent_initial_call=True
 )
-def toggle_time_filters_collapse(n_clicks: int | None, is_open: bool) -> tuple[bool, list]:
+def toggle_time_filters_collapse(n_clicks: int | None, is_open: bool) -> tuple[bool, list[Any]]:
     """Toggle the Time Filters collapsible section."""
     if not n_clicks:
         raise PreventUpdate
@@ -740,7 +719,7 @@ def toggle_time_filters_collapse(n_clicks: int | None, is_open: bool) -> tuple[b
      Input("time-slider-seen", "value")],
     prevent_initial_call=True,
 )
-def update_fine_slider_bounds(created_val, updated_val, seen_val):
+def update_fine_slider_bounds(created_val: Any, updated_val: Any, seen_val: Any) -> Any:
     """Sync fine slider bounds to match coarse slider extent.
 
     When the coarse slider moves, the fine slider resets to the full
@@ -751,7 +730,7 @@ def update_fine_slider_bounds(created_val, updated_val, seen_val):
             return 0, 1, [0, 1]
         return val[0], val[1], list(val)
 
-    outputs = []
+    outputs: list[Any] = []
     for val in (created_val, updated_val, seen_val):
         outputs.extend(_fine_outputs(val))
     return outputs
@@ -787,7 +766,7 @@ def update_fine_slider_bounds(created_val, updated_val, seen_val):
     State("time-filter-full-ranges", "data"),
     prevent_initial_call=True,
 )
-def update_time_filter_ranges(unfiltered_elements: list[dict] | None, previous_ranges: dict | None) -> tuple[dict, ...]:
+def update_time_filter_ranges(unfiltered_elements: list[dict[str, Any]] | None, previous_ranges: dict[str, Any] | None) -> tuple[dict[str, Any], ...]:
     """Compute slider ranges from all unfiltered nodes.
 
     Called whenever the unfiltered baseline changes (new query or expansion).
@@ -823,7 +802,7 @@ def update_time_filter_ranges(unfiltered_elements: list[dict] | None, previous_r
         value = prev if prev and prev == r else r
         return r[0], r[1], value, marks
 
-    outputs = []
+    outputs: list[Any] = []
     for prop in ("_created_at", "_last_updated_at", "_last_seen_at"):
         outputs.extend(_slider_outputs(prop))
 
@@ -839,7 +818,7 @@ def update_time_filter_ranges(unfiltered_elements: list[dict] | None, previous_r
      Input("time-slider-seen-fine", "value"),
      Input("time-filter-full-ranges", "data")],
 )
-def update_time_filter_labels(created_val, updated_val, seen_val, full_ranges):
+def update_time_filter_labels(created_val: Any, updated_val: Any, seen_val: Any, full_ranges: Any) -> Any:
     """Format the selected range as human-readable labels below each slider."""
     if not full_ranges:
         return "", "", ""

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any, Dict, List, Optional, Awaitable, Callable
+from typing import Any, Dict, List, Optional, Awaitable, Callable, cast
 from datetime import datetime, timezone
 
 
@@ -212,7 +212,7 @@ async def process_single_pr(pr: Any,
     if isinstance(_ir_results[0], Exception):
         logger.warning(f"Could not fetch issue comments for PR #{pr.number}: {_ir_results[0]}")
     else:
-        issue_comments_raw = _ir_results[0]
+        issue_comments_raw = cast(List[Any], _ir_results[0])
         logger.info(f"Fetched {len(issue_comments_raw)} issue comments for PR #{pr.number}")
 
     review_comments_raw: List[Any] = []
@@ -225,7 +225,7 @@ async def process_single_pr(pr: Any,
     if isinstance(_ir_results[1], Exception):
         logger.warning(f"Could not fetch review comments for PR #{pr.number}: {_ir_results[1]}")
     else:
-        review_comments_raw = _ir_results[1]
+        review_comments_raw = cast(List[Any], _ir_results[1])
         logger.info(f"Fetched {len(review_comments_raw)} review comments for PR #{pr.number}")
 
     # Commit comments: always returns a list (errors handled inside the helper).

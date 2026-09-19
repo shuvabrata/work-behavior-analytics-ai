@@ -1,4 +1,4 @@
-from typing import AsyncIterator
+from typing import AsyncIterator, Any
 
 from app.ai_agent.ai_agent import new_chat, end_chat, stream_chat, get_streaming_metrics, _chat_sessions
 from .model import ChatCreate, ChatSession, ChatDeleteResponse, ChatSessionStatus
@@ -6,7 +6,7 @@ from .model import ChatCreate, ChatSession, ChatDeleteResponse, ChatSessionStatu
 
 def create_chat_session(chat: ChatCreate) -> ChatSession:
     """Create a new chat session"""
-    session_id = new_chat(system_prompt=chat.system_prompt)
+    session_id = new_chat(system_prompt=chat.system_prompt or "")
     return ChatSession(session_id=session_id)
 
 
@@ -35,6 +35,6 @@ async def stream_chat_response(session_id: str, user_message: str) -> AsyncItera
         yield chunk
 
 
-def get_stream_metrics() -> dict:
+def get_stream_metrics() -> dict[str, Any]:
     """Return a copy of the current streaming metrics."""
     return get_streaming_metrics()

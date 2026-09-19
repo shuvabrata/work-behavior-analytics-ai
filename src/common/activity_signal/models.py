@@ -168,8 +168,8 @@ class InitiativeAttributes(BaseModel):
     project_id: Optional[str] = None
     updated_at: Optional[str] = None
     duedate: Optional[str] = None
-    labels: Optional[list] = None
-    components: Optional[list] = None
+    labels: Optional[list[Any]] = None
+    components: Optional[list[Any]] = None
     url: Optional[str] = None
     custom: Optional[Dict[str, Any]] = None
 
@@ -224,7 +224,7 @@ class IssueAttributes(BaseModel):
     story_points: Optional[float] = None
     assignee: Optional[str] = None
     reporter: Optional[str] = None
-    labels: Optional[list] = None
+    labels: Optional[list[Any]] = None
     url: Optional[str] = None
     custom: Optional[Dict[str, Any]] = None
 
@@ -286,7 +286,7 @@ class PullRequestAttributes(BaseModel):
     review_comments: Optional[int] = None
     head_branch_name: Optional[str] = None
     base_branch_name: Optional[str] = None
-    labels: Optional[list] = None
+    labels: Optional[list[Any]] = None
     mergeable_state: Optional[str] = None
     url: Optional[str] = None
     custom: Optional[Dict[str, Any]] = None
@@ -528,7 +528,7 @@ class ActivitySignal(BaseModel):
                 data = {**data, 'attributes': {**attrs, 'entity_type': entity_type}}
         return data
 
-    @computed_field
+    @computed_field  # type: ignore[prop-decorator]
     @property
     def entity_type(self) -> str:
         """Exposes entity_type at the root level of ActivitySignal.
@@ -537,7 +537,7 @@ class ActivitySignal(BaseModel):
         it in model_dump() output. Excluded from attributes serialization via
         Field(exclude=True) on each *Attributes.entity_type field.
         """
-        return cast(_AttributesUnion, self.attributes).entity_type  # type: ignore[union-attr]
+        return self.attributes.entity_type
 
     def with_ingestion_time(self, ts: Optional[datetime] = None) -> "ActivitySignal":
         """Return a copy of this signal with ``ingestion_time`` set.
@@ -558,4 +558,4 @@ class ActivitySignal(BaseModel):
             Use ``signal.attributes.model_dump()`` directly. This helper will
             be removed in Phase 13 of the ActivitySignal refactoring.
         """
-        return cast(_AttributesUnion, self.attributes).model_dump()  # type: ignore[union-attr]
+        return self.attributes.model_dump()

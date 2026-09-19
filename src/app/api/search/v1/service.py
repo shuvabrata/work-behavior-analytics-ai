@@ -167,7 +167,7 @@ def _extract_highlight(raw_highlight: Optional[Dict[str, Any]]) -> Optional[str]
     # Take the first fragment from the first field that has highlights.
     for fragments in raw_highlight.values():
         if fragments:
-            return fragments[0]
+            return fragments[0]  # type: ignore[no-any-return]
     return None
 
 
@@ -274,7 +274,7 @@ def search(request: SearchRequest) -> SearchResponse:
         logger.warning(f"[Search] Index not found: {index}")
         return SearchResponse(total=0, page=request.page, page_size=request.page_size, results=[])
     except BadRequestError as exc:
-        logger.warning(f"[Search] Bad request from Elasticsearch (offset={from_offset}): {exc}")
+        logger.warning(f"[Search] Bad request from Elasticsearch (offset={(request.page-1)*request.page_size}): {exc}")
         return SearchResponse(total=0, page=request.page, page_size=request.page_size, results=[])
     except Exception as exc:
         logger.exception(f"[Search] Elasticsearch query failed: {exc}")

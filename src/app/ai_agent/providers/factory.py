@@ -60,9 +60,9 @@ def get_provider(provider_name: str | None = None) -> LLMProvider:
     if provider_name == "openai":
         provider = OpenAIProvider()
     elif provider_name == "custom":
-        # Import here to avoid circular dependency and allow optional Custom
         try:
-            from app.ai_agent.providers.custom import CustomProvider
+            # Import here to avoid circular dependency and allow optional Custom
+            from app.ai_agent.providers.custom import CustomProvider  # type: ignore[attr-defined]  # pylint: disable=import-outside-toplevel
             provider = CustomProvider()
         except ImportError as e:
             raise ValueError(

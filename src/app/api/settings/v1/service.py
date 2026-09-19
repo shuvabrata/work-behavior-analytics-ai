@@ -128,7 +128,7 @@ def _resolve_source(
         if field.annotation is bool:
             return env_raw.lower() in ("1", "true", "yes"), "env"
         if field.annotation is int:
-            return int(env_raw), "env"
+            return int(env_raw), "env"  # type: ignore[unreachable]
         return env_raw, "env"
 
     # 3. Code default (from RuntimeConfig, or None for bootstrap-only keys)
@@ -298,12 +298,12 @@ async def bulk_update(
     candidate_overrides.update(updates)
 
     try:
-        RuntimeConfig(**candidate_overrides)
+        RuntimeConfig(**candidate_overrides)  # type: ignore[arg-type]
     except ValidationError as exc:
         # Re-raise with a readable message.
         raise ValidationError.from_exception_data(
             "Invalid settings update",
-            line_errors=exc.errors(),
+            line_errors=exc.errors(),  # type: ignore[arg-type]
         ) from exc
 
     # 4. Persist all changed values in one DB transaction.
@@ -357,11 +357,11 @@ async def update_single(
     }
     candidate_overrides[key] = value
     try:
-        RuntimeConfig(**candidate_overrides)
+        RuntimeConfig(**candidate_overrides)  # type: ignore[arg-type]
     except ValidationError as exc:
         raise ValidationError.from_exception_data(
             "Invalid settings update",
-            line_errors=exc.errors(),
+            line_errors=exc.errors(),  # type: ignore[arg-type]
         ) from exc
 
     # 3. Persist.

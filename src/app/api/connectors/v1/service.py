@@ -115,7 +115,7 @@ def _validate_connector_type(connector_type: str) -> Dict[str, str]:
     meta = CONNECTOR_REGISTRY.get(connector_type)
     if not meta:
         raise UnknownConnectorError("Unknown connector_type")
-    return meta
+    return meta  # type: ignore[return-value]
 
 
 def _require_config_items_support(connector_type: str) -> None:
@@ -134,7 +134,7 @@ def _require_config_items_support(connector_type: str) -> None:
 
 def _to_dict(item: Any) -> Dict[str, Any]:
     if hasattr(item, "dict"):
-        return item.dict(exclude_unset=True)
+        return item.dict(exclude_unset=True)  # type: ignore[no-any-return]
     return dict(item)
 
 
@@ -624,7 +624,7 @@ async def test_connector(
         f"{result.get('connected')} tool_count={result.get('tool_count')}"
     )
 
-    status = result.get("status")
+    status: str = str(result.get("status") or "")
     connected = bool(result.get("connected"))
     tool_count = result.get("tool_count")
     error = result.get("error")
@@ -646,7 +646,8 @@ async def test_connector(
             error=error,
         )
 
-    message = _test_result_message(connector_type, status, tool_count, error)
+    error_str: str = str(error) if error else ""
+    message = _test_result_message(connector_type, status, tool_count, error_str)
     return {
         "success": connected,
         "message": message,

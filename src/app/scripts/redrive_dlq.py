@@ -77,7 +77,7 @@ def _extract_routing_key(message: aio_pika.abc.AbstractIncomingMessage) -> Optio
     x_death = headers.get("x-death")
     if x_death and isinstance(x_death, list) and len(x_death) > 0:
         original_routing_key = x_death[0].get("routing-keys")
-        if original_routing_key and len(original_routing_key) > 0:
+        if original_routing_key and len(original_routing_key) > 0:  # type: ignore[arg-type]
             return str(original_routing_key[0])
     # Fall back to whatever routing key the DLQ message carries
     return message.routing_key or None
@@ -139,7 +139,7 @@ async def redrive(url: str, limit: Optional[int], dry_run: bool) -> None:
 
                 if not routing_key:
                     logger.warning(
-                        f"Cannot determine routing key for message — skipping. body_preview={message.body[:200]}"
+                        f"Cannot determine routing key for message — skipping. body_preview={message.body.decode('utf-8', errors='replace')[:200]}"
                     )
                     skipped += 1
                     await message.nack(requeue=False)

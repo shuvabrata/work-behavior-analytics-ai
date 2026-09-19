@@ -9,7 +9,7 @@ from app.db.models import connector_configs as config_models
 
 
 
-CONFIG_MODEL_MAP: Dict[str, Type] = {
+CONFIG_MODEL_MAP: Dict[str, Type[Any]] = {
     "github": config_models.GithubConfig,
     "jira": config_models.JiraConfig,
     "slack": config_models.SlackConfig,
@@ -27,7 +27,7 @@ async def get_all_connectors(db: AsyncSession) -> List[Connector]:
         result = await db.execute(select(Connector))
         connectors = result.scalars().all()
         logger.debug(f"[query.get_all_connectors] Retrieved {len(connectors)} rows")
-        return connectors
+        return list(connectors)
     except Exception as exc:
         logger.error(f"[query.get_all_connectors] Database error: {type(exc).__name__}: {exc}", exc_info=True)
         raise
@@ -80,7 +80,7 @@ async def get_configs(db: AsyncSession, connector_type: str) -> List[Any]:
     if not connector:
         return []
     result = await db.execute(select(model).where(model.connector_id == connector.id))
-    return result.scalars().all()
+    return list(result.scalars().all())
 
 
 async def upsert_config_item(

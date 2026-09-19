@@ -96,7 +96,7 @@ class _MCPClientBase:
     def _serialize_content_item(item: Any) -> dict[str, Any]:
         """Serialize MCP content union to plain dict for downstream consumers."""
         if hasattr(item, "model_dump"):
-            return item.model_dump()
+            return item.model_dump()  # type: ignore[no-any-return]
         return {"value": str(item)}
 
     def _run_list_tools_test(
@@ -180,7 +180,7 @@ class GithubMCPClientManager(_MCPClientBase):
             return {"server": "github", "status": "connected", "connected": True}
 
         try:
-            return self._run_sync(self._with_github_session, _check)
+            return self._run_sync(self._with_github_session, _check)  # type: ignore[no-any-return]
         except Exception as exc:  # noqa: BLE001 - return structured errors to caller
             return {
                 "server": "github",
@@ -219,7 +219,7 @@ class GithubMCPClientManager(_MCPClientBase):
             return [self._normalize_tool(tool) for tool in result.tools]
 
         try:
-            return self._run_sync(self._with_github_session, _list)
+            return self._run_sync(self._with_github_session, _list)  # type: ignore[no-any-return]
         except Exception as exc:
             logger.exception(f"Failed to list tools from GitHub MCP server: {exc}")
             return []
@@ -255,7 +255,7 @@ class GithubMCPClientManager(_MCPClientBase):
             }
 
         try:
-            return self._run_sync(self._with_github_session, _call)
+            return self._run_sync(self._with_github_session, _call)  # type: ignore[no-any-return]
         except Exception as exc:  # noqa: BLE001 - return structured errors to caller
             return {
                 "tool_name": tool_name,
@@ -324,7 +324,7 @@ class AtlassianMCPClientManager(_MCPClientBase):
             return {"server": "atlassian", "status": "connected", "connected": True}
 
         try:
-            return self._run_sync(self._with_atlassian_session, _check)
+            return self._run_sync(self._with_atlassian_session, _check)  # type: ignore[no-any-return]
         except Exception as exc:  # noqa: BLE001 - return structured errors to caller
             return {
                 "server": "atlassian",
@@ -382,7 +382,7 @@ class AtlassianMCPClientManager(_MCPClientBase):
             return [self._normalize_tool(tool) for tool in result.tools]
 
         try:
-            return self._run_sync(self._with_atlassian_session, _list)
+            return self._run_sync(self._with_atlassian_session, _list)  # type: ignore[no-any-return]
         except Exception as exc:
             logger.exception(f"Failed to list tools from Atlassian MCP server: {exc}")
             return []
@@ -418,7 +418,7 @@ class AtlassianMCPClientManager(_MCPClientBase):
             }
 
         try:
-            return self._run_sync(self._with_atlassian_session, _call)
+            return self._run_sync(self._with_atlassian_session, _call)  # type: ignore[no-any-return]
         except Exception as exc:  # noqa: BLE001 - return structured errors to caller
             return {
                 "tool_name": tool_name,

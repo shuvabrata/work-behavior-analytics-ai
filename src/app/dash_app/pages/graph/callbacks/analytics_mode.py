@@ -1,5 +1,6 @@
 """Callbacks for switching the generic graph page into analytics mode."""
 
+from typing import Any
 from urllib.parse import parse_qs
 
 from dash import Input, Output, callback
@@ -10,7 +11,7 @@ from dash import Input, Output, callback
     Output("right-tab-catalog-btn", "style"),
     [Input("url", "pathname"), Input("url", "search")],
 )
-def toggle_query_panel_for_analytics_mode(pathname: str | None, search: str | None) -> tuple[dict, dict]:
+def toggle_query_panel_for_analytics_mode(pathname: str | None, search: str | None) -> tuple[dict[str, Any], dict[str, Any]]:
     """Hide the Console and Catalog tabs when the graph page is in analytics mode."""
     if pathname != "/app/graph":
         return {}, {}

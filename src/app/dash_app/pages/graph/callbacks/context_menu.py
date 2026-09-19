@@ -3,6 +3,7 @@
 Callbacks for right-click context menu functionality.
 """
 
+from typing import Any
 import requests
 from dash import html, Input, Output, State, callback, clientside_callback, callback_context, no_update
 from dash.exceptions import PreventUpdate
@@ -28,7 +29,7 @@ TIMEOUT_SECONDS = runtime_settings.get_int("HTTP_REQUEST_TIMEOUT")
     Input("rightclicked-node-store", "data"),
     prevent_initial_call=True
 )
-def show_context_menu(rightclick_data: dict | None) -> dict:
+def show_context_menu(rightclick_data: dict[str, Any] | None) -> dict[str, Any]:
     """Show context menu at mouse position when node is right-clicked.
 
     Builds the style from scratch on every call so that React always sees a
@@ -64,7 +65,7 @@ def show_context_menu(rightclick_data: dict | None) -> dict:
      State("context-menu", "style")],
     prevent_initial_call=True
 )
-def context_menu_expand_modal(n_clicks, rightclick_data, menu_style):
+def context_menu_expand_modal(n_clicks: Any, rightclick_data: Any, menu_style: Any) -> Any:
     """Open expansion modal from context menu"""
     if not n_clicks or not rightclick_data:
         raise PreventUpdate
@@ -101,10 +102,10 @@ def context_menu_expand_modal(n_clicks, rightclick_data, menu_style):
      State("graph-layout-selector", "value")],
     prevent_initial_call=True
 )
-def context_menu_quick_expand(_n_clicks_incoming, _n_clicks_outgoing, rightclick_data,
-                              current_elements, current_unfiltered, loaded_node_ids, expanded_nodes,
-                              current_node_positions,
-                              menu_style, current_layout):
+def context_menu_quick_expand(_n_clicks_incoming: Any, _n_clicks_outgoing: Any, rightclick_data: Any,
+                              current_elements: Any, current_unfiltered: Any, loaded_node_ids: Any, expanded_nodes: Any,
+                              current_node_positions: Any,
+                              menu_style: Any, current_layout: Any) -> Any:
     """Handle quick expansion from context menu"""
     show_style = {"display": "block"}
     hide_style = {"display": "none"}
@@ -245,7 +246,7 @@ clientside_callback(
     State("context-menu", "style"),
     prevent_initial_call=True
 )
-def hide_menu_after_copy(n_clicks: int | None, menu_style: dict) -> dict:
+def hide_menu_after_copy(n_clicks: int | None, menu_style: dict[str, Any]) -> dict[str, Any]:
     """Hide menu after copying node ID"""
     if n_clicks:
         updated_style = menu_style.copy()
@@ -267,7 +268,7 @@ def hide_menu_after_copy(n_clicks: int | None, menu_style: dict) -> dict:
      State("context-menu", "style")],
     prevent_initial_call=True
 )
-def context_menu_remove_node(n_clicks, rightclick_data, current_elements, current_unfiltered, menu_style):
+def context_menu_remove_node(n_clicks: Any, rightclick_data: Any, current_elements: Any, current_unfiltered: Any, menu_style: Any) -> Any:
     """Permanently remove a node and its connected edges from the session.
 
     This is a **permanent session-level operation**: the node is removed from
@@ -345,8 +346,8 @@ def context_menu_remove_node(n_clicks, rightclick_data, current_elements, curren
      State("context-menu", "style")],
     prevent_initial_call=True
 )
-def context_menu_keep_neighbours(n_clicks, rightclick_data, current_elements,
-                                  current_unfiltered, loaded_node_ids, expanded_nodes, menu_style):
+def context_menu_keep_neighbours(n_clicks: Any, rightclick_data: Any, current_elements: Any,
+                              current_unfiltered: Any, loaded_node_ids: Any, expanded_nodes: Any, menu_style: Any) -> Any:
     """Keep only the focal node and its immediate (1-hop) spoke edges.
 
     Nodes that are not the focal node or a direct neighbour are removed from

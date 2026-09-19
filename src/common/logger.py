@@ -55,9 +55,9 @@ class LogContext:
         self.project_id: Optional[str] = project_id
         self.user_id: Optional[str] = user_id
         self.request_id: Optional[str] = request_id
-        self.project_id_token: Optional[contextvars.Token] = None
-        self.user_id_token: Optional[contextvars.Token] = None
-        self.request_id_token: Optional[contextvars.Token] = None
+        self.project_id_token: Optional[contextvars.Token[str]] = None
+        self.user_id_token: Optional[contextvars.Token[str]] = None
+        self.request_id_token: Optional[contextvars.Token[str]] = None
 
     def __enter__(self) -> 'LogContext':
         if self.project_id is not None:
@@ -145,12 +145,13 @@ class MyAppLogger(logging.Logger):
 
     def error(self, msg: Any, *args: Any, **kwargs: Any) -> None:
         super().error(msg, *args, **kwargs)
+        value: str
 
         if isinstance(msg, Exception):
             error_message: str = str(msg)
             stack_trace: str = ''.join(traceback.format_exception(type(msg), msg, msg.__traceback__))
             if LOG_FORMAT == "JSON":
-                value: str = json.dumps({
+                value = json.dumps({
                     "error": error_message,
                     "stack_trace": stack_trace,
                     "project_id": project_id_var.get(),
@@ -160,11 +161,11 @@ class MyAppLogger(logging.Logger):
             else:
                 value = f"Error: {error_message}\n\nStack Trace:\n{stack_trace}"
         else:
-            value: str = json.dumps(msg) if LOG_FORMAT == "JSON" else str(msg)
+            value = json.dumps(msg) if LOG_FORMAT == "JSON" else str(msg)
 
         if self.slack_webhook_url:
             try:
-                payload: dict = {
+                payload: dict[str, Any] = {
                     'channel': self.slack_channel,
                     'username': self.slack_username,
                     "text": "ERROR",
@@ -177,7 +178,7 @@ class MyAppLogger(logging.Logger):
                         }]
                     }]
                 }
-                headers: dict = {'Content-Type': 'application/json'}
+                headers: dict[str, Any] = {'Content-Type': 'application/json'}
                 requests.post(
                     self.slack_webhook_url,
                     data=json.dumps(payload),

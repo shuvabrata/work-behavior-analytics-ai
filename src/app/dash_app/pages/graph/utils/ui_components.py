@@ -64,6 +64,8 @@ def create_error_alert(
     }
     icon = icon_map.get(alert_type, 'fa-exclamation-triangle')
     
+    alert_content: list[Any]
+    
     if heading:
         alert_content = [
             html.H5([
@@ -77,7 +79,7 @@ def create_error_alert(
         # Add documentation link if provided
         if doc_link:
             alert_content.append(
-                html.Hr(style=ALERT_SEPARATOR_STYLE)
+                html.Hr(style=ALERT_SEPARATOR_STYLE),
             )
             alert_content.append(
                 html.Small([
@@ -101,7 +103,7 @@ def create_error_alert(
     ])
 
 
-def create_table_display(raw_results: list[dict] | None, result_count: int | None = None) -> html.Div:
+def create_table_display(raw_results: list[dict[str, Any]] | None, result_count: int | None = None) -> html.Div:
     """Create table-only content for tabular query results.
 
     Args:

@@ -1,5 +1,6 @@
 """Collaboration Network navigation callbacks — fit, fullwidth toggle, layout reset."""
 
+from typing import Any
 from dash import Input, Output, callback, clientside_callback
 
 from app.dash_app.components.common import register_fullwidth_callback, toggle_details_panel
@@ -8,7 +9,7 @@ from ..layout import _COLLABORATION_LAYOUT
 register_fullwidth_callback("collab")
 
 
-def toggle_collab_fullwidth(n_clicks: int, is_fullwidth: bool) -> tuple:
+def toggle_collab_fullwidth(n_clicks: int, is_fullwidth: bool) -> tuple[Any, ...]:
     """Toggle fullwidth mode for the collaboration network page.
 
     Args:
@@ -47,7 +48,7 @@ clientside_callback(
     Input("collab-reset-btn", "n_clicks"),
     prevent_initial_call=True,
 )
-def reset_collab_layout(n_clicks: int | None) -> dict:
+def reset_collab_layout(n_clicks: int | None) -> dict[str, Any]:
     """Re-apply the preset layout to restore default zoom and pan."""
     stop_value = 1000 if (n_clicks or 0) % 2 == 0 else 1001
     return {**_COLLABORATION_LAYOUT, "stop": stop_value}

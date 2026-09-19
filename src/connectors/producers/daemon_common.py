@@ -166,7 +166,7 @@ def _start_settings_listener(rabbitmq_url: str) -> None:
 
 # ── Module-level state (shared across daemon functions) ───────────────────
 _children: Dict[int, uuid.UUID] = {}  # pid → command_id
-_test_children: Dict[int, tuple[uuid.UUID, subprocess.Popen]] = {}  # pid → (command_id, Popen)
+_test_children: Dict[int, tuple[uuid.UUID, subprocess.Popen[Any]]] = {}  # pid → (command_id, Popen[Any])
 _max_scans: int = int(os.environ.get("MAX_CONCURRENT_SCANS", "5"))
 
 

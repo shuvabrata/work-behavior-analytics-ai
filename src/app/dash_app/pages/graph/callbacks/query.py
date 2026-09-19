@@ -3,6 +3,7 @@
 Callbacks for query validation and execution.
 """
 
+from typing import Any
 import time
 import requests
 import dash_bootstrap_components as dbc
@@ -30,7 +31,7 @@ from ..utils import (
 TIMEOUT_SECONDS = runtime_settings.get_int("HTTP_REQUEST_TIMEOUT")
 
 
-def _normalize_catalog_parameters(raw_params: dict | None) -> dict:
+def _normalize_catalog_parameters(raw_params: dict[str, Any] | None) -> dict[str, Any]:
     """Unwrap person-parameter dicts before sending to the API.
 
     Person pickers store ``{"wba": "...", "display": "..."}`` but the API
@@ -39,7 +40,7 @@ def _normalize_catalog_parameters(raw_params: dict | None) -> dict:
     """
     if not raw_params:
         return {}
-    normalized: dict = {}
+    normalized: dict[str, Any] = {}
     for key, value in raw_params.items():
         normalized[key] = value.get("wba") if isinstance(value, dict) else value
     return normalized
@@ -121,18 +122,10 @@ def validate_query(query_text: str | None) -> dbc.Alert | None:
      State("catalog-query-view-toggle", "value")],
     prevent_initial_call=True
 )
-def execute_query(
-    _raw_clicks,
-    _catalog_clicks,
-    store_cypher,
-    query_text,
-    selected_catalog_query,
-    catalog_parameters,
-    catalog_view,
-):
+def execute_query(_raw_clicks: Any, _catalog_clicks: Any, store_cypher: Any, query_text: Any, selected_catalog_query: Any, catalog_parameters: Any, catalog_view: Any, ) -> Any:
     """Execute raw console queries and catalog queries via the unified API."""
     # Default empty states
-    empty_elements = []
+    empty_elements: list[Any] = []
     hide_style = {"display": "none"}
     show_style = {"display": "block"}
     graph_visible_style = {"display": "block"}
@@ -140,21 +133,7 @@ def execute_query(
     default_container_style = {"minHeight": "400px", "padding": "20px"}
     panel_visible_style = GRAPH_DETAILS_PANEL_STYLE
 
-    def build_response(
-        graph_data,
-        elements,
-        graph_container_style,
-        status_children,
-        status_style,
-        table_children,
-        table_style,
-        results_children,
-        results_style,
-        details_style,
-        metrics_children,
-        metrics_style,
-        unfiltered_elements,
-    ):
+    def build_response(graph_data: Any, elements: Any, graph_container_style: Any, status_children: Any, status_style: Any, table_children: Any, table_style: Any, results_children: Any, results_style: Any, details_style: Any, metrics_children: Any, metrics_style: Any, unfiltered_elements: Any, ) -> Any:
         """Build execute-query callback response with a stable output contract."""
         return (
             graph_data,
@@ -183,7 +162,7 @@ def execute_query(
             "all",
         )
 
-    def error_response(error_display: html.Div | str | None) -> tuple:
+    def error_response(error_display: html.Div | str | None) -> tuple[Any, ...]:
         return build_response(
             None,
             empty_elements,
@@ -219,7 +198,7 @@ def execute_query(
             error_display = create_error_alert(
                 "Select a catalog query before running it.",
                 alert_type='warning',
-                heading=None
+                heading=None,  # type: ignore[arg-type]
             )
             return error_response(error_display)
 
@@ -237,7 +216,7 @@ def execute_query(
             error_display = create_error_alert(
                 "Please enter a Cypher query before executing.",
                 alert_type='warning',
-                heading=None
+                heading=None,  # type: ignore[arg-type]
             )
             return error_response(error_display)
 

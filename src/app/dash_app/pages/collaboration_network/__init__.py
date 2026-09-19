@@ -6,6 +6,8 @@ Importing this package also registers all Dash callbacks via the
 callbacks sub-package.
 """
 
-from app.dash_app.pages.collaboration_network.layout import get_layout  # noqa: F401
+__all__ = ["get_layout"]
+
+from app.dash_app.pages.collaboration_network.layout import get_layout
 
 from app.dash_app.pages.collaboration_network import callbacks  # noqa: F401

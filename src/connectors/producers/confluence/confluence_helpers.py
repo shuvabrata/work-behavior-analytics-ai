@@ -2,7 +2,7 @@ import asyncio
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from atlassian import Confluence  # type: ignore[import-untyped]
+from atlassian import Confluence
 
 from common.logger import logger
 from connectors.producers.confluence.fetch_spaces import fetch_spaces
@@ -66,7 +66,7 @@ def fetch_space_pages(
             # abort the space content fetch. Bind content_type/start as default
             # args to avoid late-binding closure issues in the lambda.
             response = retry_with_backoff(
-                lambda ct=content_type, st=start: confluence.get(
+                lambda ct=content_type, st=start: confluence.get(  # type: ignore[misc]
                     f"/rest/api/space/{space_key}/content/{ct}",
                     params={
                         "expand": "version,history,status,ancestors,space",

@@ -24,7 +24,7 @@ def fetch_page_comments(confluence: Confluence, page_id: str, content_type: str 
             # exponential backoff so a momentary connectivity loss does not
             # drop a page's comments.
             response = retry_with_backoff(
-                lambda: confluence.get_page_comments(
+                lambda: confluence.get_page_comments(  # type: ignore[no-untyped-call]
                     page_id,
                     expand='body.storage,history',
                     start=start,
@@ -53,7 +53,7 @@ def fetch_page_comments(confluence: Confluence, page_id: str, content_type: str 
 
 def _summarise_comments_by_author(comments: List[Dict[str, Any]]) -> None:
     """Print a breakdown of comment counts per author."""
-    author_counter: Counter = Counter()
+    author_counter: Counter[str] = Counter()
     for comment in comments:
         history = comment.get("history", {})
         created_by = history.get("createdBy", {})

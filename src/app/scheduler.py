@@ -91,7 +91,7 @@ async def _try_acquire_lease(
         .values(held_by=instance_id, expires_at=expires_at)
     )
     await db.commit()
-    return result.rowcount > 0
+    return result.rowcount > 0  # type: ignore[attr-defined, no-any-return]
 
 
 async def _get_due_connectors(
@@ -131,7 +131,7 @@ async def _get_due_connectors(
 
         interval = timedelta(hours=connector.scan_interval_hours)  # type: ignore[arg-type]
         if last_scan_at is None or (now - last_scan_at) >= interval:
-            due.append((connector.connector_type, producer))
+            due.append((connector.connector_type, producer))  # type: ignore[arg-type]
 
     return due
 

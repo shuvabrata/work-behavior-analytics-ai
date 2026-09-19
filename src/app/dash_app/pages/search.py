@@ -5,6 +5,7 @@ Pagination (Prev/Next) is wired in C1c.
 """
 
 from __future__ import annotations
+from typing import Any
 
 import math
 import os
@@ -156,7 +157,7 @@ _ENTITY_TYPE_BADGE_COLORS: dict[str, str] = {
 _DEFAULT_BADGE_COLOR = TOKENS["graph.node.default"]
 
 
-def _badge_colors_from_effective(effective: dict | None) -> dict[str, str]:
+def _badge_colors_from_effective(effective: dict[str, Any] | None) -> dict[str, str]:
     """Resolve nodeType → badge colour from an effective theme document.
 
     ``effective`` is the merged tokens returned by ``/api/v1/graph-themes/effective``
@@ -206,7 +207,7 @@ def _format_event_time(event_time_str: str | None) -> html.Span | str:
         return event_time_str
 
 
-def _extract_display_name(wba_id: str, attributes: dict | None) -> str:
+def _extract_display_name(wba_id: str, attributes: dict[str, Any] | None) -> str:
     """Return a human-readable display name for a search result.
 
     When full=True, prefer rich attribute fields in order of specificity.
@@ -222,7 +223,7 @@ def _extract_display_name(wba_id: str, attributes: dict | None) -> str:
     return parts[-1] if parts else wba_id
 
 
-def _build_attributes_table(attributes: dict) -> html.Table:
+def _build_attributes_table(attributes: dict[str, Any]) -> html.Table:
     """Render the attributes dict as a two-column table — matches graph Details Panel."""
     rows = []
     for key, value in sorted(attributes.items()):
@@ -248,7 +249,7 @@ def _build_attributes_table(attributes: dict) -> html.Table:
         if formatted_date:
             value_cell = formatted_date
         elif is_mono:
-            value_cell = html.Code(str_value, style=DETAILS_TABLE_VALUE_MONO_STYLE)
+            value_cell = html.Code(str_value, style=DETAILS_TABLE_VALUE_MONO_STYLE)  # type: ignore[assignment]
         else:
             value_cell = html.Span(str_value, style=DETAILS_TABLE_VALUE_STYLE)
             
@@ -325,7 +326,7 @@ def _build_person_activity_cypher(wba_id: str, duration: str) -> str:
     )
 
 
-def _build_person_activity_buttons(wba_id: str) -> list:
+def _build_person_activity_buttons(wba_id: str) -> list[Any]:
     """Build the three time-window deep-link buttons for a Person result.
 
     Parameters
@@ -362,13 +363,13 @@ def _build_person_activity_buttons(wba_id: str) -> list:
     return buttons
 
 
-def _parse_highlight(highlight: str) -> list:
+def _parse_highlight(highlight: str) -> list[Any]:
     """Split a highlight string with <em> tags into a list of Dash components.
 
     Matched terms are wrapped in html.Mark with a subtle yellow background;
     surrounding text is rendered as plain strings.
     """
-    parts: list = []
+    parts: list[Any] = []
     segments = re.split(r"(<em>|</em>)", highlight)
     in_em = False
     for segment in segments:
@@ -393,13 +394,13 @@ def _parse_highlight(highlight: str) -> list:
     return parts
 
 
-def _build_result_card(result: dict, full: bool, badge_colors: dict[str, str] | None = None) -> html.Div:
+def _build_result_card(result: dict[str, Any], full: bool, badge_colors: dict[str, str] | None = None) -> html.Div:
     """Build a single search result card."""
     wba_id: str = result.get("wba_id", "")
     url: str | None = result.get("url")
     event_time: str | None = result.get("event_time")
     highlight: str | None = result.get("highlight")
-    attributes: dict | None = result.get("attributes")
+    attributes: dict[str, Any] | None = result.get("attributes")
 
     # Parse entity type and source from wba_id: "{source}::{entity_type}::{id...}"
     parts = wba_id.split("::", 2)
@@ -480,7 +481,7 @@ def _build_result_card(result: dict, full: bool, badge_colors: dict[str, str] | 
     )
 
     # ── Display name (+ optional URL link) ────────────────────────────────
-    name_children: list = [
+    name_children: list[Any] = [
         html.Span(
             display_name,
             style={
@@ -574,7 +575,7 @@ def _build_result_card(result: dict, full: bool, badge_colors: dict[str, str] | 
             ]
         )
 
-    card_children: list = [header_row, name_row]
+    card_children: list[Any] = [header_row, name_row]
     if highlight_row:
         card_children.append(highlight_row)
     if time_row:
@@ -975,7 +976,7 @@ def _populate_url_q_store(search: str | None) -> str | None:
     Output("search-theme-store", "data"),
     Input("theme-store", "data"),
 )
-def _populate_search_theme_store(theme_name: str | None) -> dict | None:
+def _populate_search_theme_store(theme_name: str | None) -> dict[str, Any] | None:
     """Fetch the effective graph theme into the search theme store.
 
     Fires when the app theme changes (light/dark) and on page mount. Returns
@@ -1016,11 +1017,11 @@ _SEARCH_OUTPUTS = [
     prevent_initial_call="initial_duplicate",
 )
 def restore_search_on_navigate(
-    last_query_params: dict | None,
+    last_query_params: dict[str, Any] | None,
     current_page: int | None,
     full: bool,
-    effective_theme: dict | None,
-) -> tuple:
+    effective_theme: dict[str, Any] | None,
+) -> tuple[Any, ...]:
     """Re-execute the last search when the session store is restored on page load.
 
     Triggered by the session store restoring its value from sessionStorage when
@@ -1057,7 +1058,7 @@ def restore_search_on_navigate(
         return _no_restore
 
     total: int = data.get("total", 0)
-    results: list = data.get("results", [])
+    results: list[Any] = data.get("results", [])
     page = data.get("page", page)
     page_size: int = data.get("page_size", 20)
     total_pages = max(1, math.ceil(total / page_size))
@@ -1098,7 +1099,7 @@ def restore_search_on_navigate(
     State("search-filters-collapse", "is_open"),
     prevent_initial_call=True,
 )
-def toggle_filters_panel(_n_clicks: int | None, is_open: bool) -> tuple:
+def toggle_filters_panel(_n_clicks: int | None, is_open: bool) -> tuple[Any, ...]:
     """Open or close the advanced filters collapse panel."""
     new_open = not is_open
     chevron_class = (
@@ -1112,7 +1113,7 @@ def toggle_filters_panel(_n_clicks: int | None, is_open: bool) -> tuple:
     Input("search-person-only", "value"),
     prevent_initial_call=False,
 )
-def _toggle_entity_type_disabled(person_only_values: list | None) -> bool:
+def _toggle_entity_type_disabled(person_only_values: list[Any] | None) -> bool:
     """Disable the Entity Type dropdown while Person only is checked."""
     return bool(person_only_values)
 
@@ -1153,10 +1154,10 @@ def execute_search(
     priority: str | None,
     date_from: str | None,
     date_to: str | None,
-    last_query_params: dict | None,
-    person_only: list | None,
-    effective_theme: dict | None,
-) -> tuple:
+    last_query_params: dict[str, Any] | None,
+    person_only: list[Any] | None,
+    effective_theme: dict[str, Any] | None,
+) -> tuple[Any, ...]:
     """Fire a search request and render result cards."""
     triggered_id = ctx.triggered_id
 
@@ -1180,7 +1181,7 @@ def execute_search(
     badge_colors = _badge_colors_from_effective(effective_theme)
 
     # ── Build query params ─────────────────────────────────────────────────
-    params: dict = {
+    params: dict[str, Any] = {
         "page": 1,
         "page_size": 10,
         "full": "true" if full else "false",
@@ -1227,7 +1228,7 @@ def execute_search(
         )
 
     total: int = data.get("total", 0)
-    results: list = data.get("results", [])
+    results: list[Any] = data.get("results", [])
     page: int = data.get("page", 1)
     page_size: int = data.get("page_size", 20)
     total_pages = max(1, math.ceil(total / page_size))
@@ -1294,10 +1295,10 @@ def paginate_search(
     _prev_clicks: int | None,
     _next_clicks: int | None,
     current_page: int | None,
-    last_query_params: dict | None,
+    last_query_params: dict[str, Any] | None,
     full: bool,
-    effective_theme: dict | None,
-) -> tuple:
+    effective_theme: dict[str, Any] | None,
+) -> tuple[Any, ...]:
     """Navigate to the previous or next page of search results."""
     _empty_header = {**_RESULTS_HEADER_STYLE, "display": "none"}
     _empty_pagination = {**_PAGINATION_STYLE, "display": "none"}
@@ -1348,7 +1349,7 @@ def paginate_search(
         )
 
     total: int = data.get("total", 0)
-    results: list = data.get("results", [])
+    results: list[Any] = data.get("results", [])
     page = data.get("page", page)
     page_size: int = data.get("page_size", 20)
     total_pages = max(1, math.ceil(total / page_size))

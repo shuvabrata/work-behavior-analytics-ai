@@ -23,7 +23,7 @@ import os
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple
 
-from atlassian import Confluence  # type: ignore[import-untyped]
+from atlassian import Confluence
 
 from common.activity_signal.models import (
     ActivitySignal,
@@ -411,6 +411,7 @@ def build_content_signal(
         "status": content.get("status") if isinstance(content.get("status"), str) else None,
     }
 
+    attrs: PageAttributes | BlogpostAttributes
     if content_type == "blogpost":
         attrs = BlogpostAttributes(**common_kwargs)
     else:
@@ -718,7 +719,7 @@ async def process_account(
         # Fetch all pages/blogposts in this space modified since the cursor.
         # Uses the storage-layer content API (not CQL search) to avoid
         # Confluence Cloud index gaps that silently skip pages.
-        space_items = await get_space_pages(confluence, key, since_date)
+        space_items = await get_space_pages(confluence, str(key), since_date or datetime.min)
         logger.info(f"Space {key}: processing {len(space_items)} content items")
         
         # First assume that the body of pages was last synced at the 
@@ -733,7 +734,7 @@ async def process_account(
         # only a small number of items fall within the since_date window.
         for content in space_items:
             if not isinstance(content, dict):
-                continue
+                continue  # type: ignore[unreachable]
             
             last_mod_str = _content_last_updated_at(content)
             last_mod_dt = _parse_datetime(last_mod_str)

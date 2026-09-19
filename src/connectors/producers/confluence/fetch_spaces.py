@@ -17,7 +17,7 @@ def fetch_spaces(confluence: Confluence) -> List[Dict[str, Any]]:
         # exponential backoff so a momentary connectivity loss does not abort
         # the space fetch.
         spaces_response = retry_with_backoff(
-            lambda: confluence.get_all_spaces(start=start, limit=page_limit)
+            lambda: confluence.get_all_spaces(start=start, limit=page_limit)  # type: ignore[no-untyped-call]
         )
         results = spaces_response.get('results', [])
         fetched_count = len(results)

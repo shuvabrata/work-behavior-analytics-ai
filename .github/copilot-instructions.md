@@ -58,6 +58,19 @@ Never use relative imports like `from ..common.logger` across package boundaries
 Never use sys.path.insert(...) or similar hacks to modify the import path at runtime.
 Rely on PYTHONPATH and proper package structure for clean imports.
 
+### Re-exporting Symbols in `__init__.py`
+
+When a package's `__init__.py` re-exports a symbol from a submodule (e.g., `get_layout` from `layout.py`), mypy's strict mode treats plain imports as private. Use `__all__` to declare the public API:
+
+```python
+# ✅ Correct — __all__ declares the public API
+__all__ = ["get_layout"]
+
+from .layout import get_layout
+```
+
+This is preferred over the `as` alias pattern (`from .layout import get_layout as get_layout`) because it's more explicit and serves as documentation for the module's public surface.
+
 
 ## Project Structure
 

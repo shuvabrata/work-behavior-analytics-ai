@@ -1,5 +1,7 @@
 """Connectors pages."""
 
+__all__ = ["get_detail_layout", "get_layout"]
+
 from .layout import get_detail_layout
 from .layout import get_layout
 

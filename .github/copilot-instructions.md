@@ -25,13 +25,13 @@ Example: Use 'rtk git status' instead of 'git status'.
 - **UI Components**: dash-bootstrap-components
 - **Layout**: Left-side menu navigation with pages:
   - Chat: GenAI-like conversational interface
-  - People: Team member information and relationships
-  - Progress: Project progress tracking and visualization
+  - Search: Search across people, projects, and content
   - Graph: Neo4j graph visualization and query execution
   - Analytics: Collaboration analytics
-  - Collaboration Network: Team collaboration graph and network analysis
   - Connectors: Connector configuration and management
   - Settings: Application configuration
+  - Collaboration Network: Team collaboration graph and network analysis
+    (reachable via a deep-link from the Analytics page, not the sidebar)
 
 ### Infrastructure
 - **Containerization**: Docker with docker-compose

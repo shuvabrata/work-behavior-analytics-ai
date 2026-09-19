@@ -95,9 +95,9 @@ Access the services:
 ## Running Migrations Manually (Local Development)
 If running locally, you'll need to run migrations manually:
 ```bash
-cd app
+cd src/app
 alembic upgrade head
-cd ..
+cd ../..
 ```
 To create a new migration:
 ```bash

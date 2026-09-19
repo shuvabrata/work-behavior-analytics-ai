@@ -55,9 +55,9 @@ class LogContext:
         self.project_id: Optional[str] = project_id
         self.user_id: Optional[str] = user_id
         self.request_id: Optional[str] = request_id
-        self.project_id_token: Optional[contextvars.Token] = None
-        self.user_id_token: Optional[contextvars.Token] = None
-        self.request_id_token: Optional[contextvars.Token] = None
+        self.project_id_token: Optional[contextvars.Token[str]] = None
+        self.user_id_token: Optional[contextvars.Token[str]] = None
+        self.request_id_token: Optional[contextvars.Token[str]] = None
 
     def __enter__(self) -> 'LogContext':
         if self.project_id is not None:
@@ -164,7 +164,7 @@ class MyAppLogger(logging.Logger):
 
         if self.slack_webhook_url:
             try:
-                payload: dict = {
+                payload: dict[str, Any] = {
                     'channel': self.slack_channel,
                     'username': self.slack_username,
                     "text": "ERROR",
@@ -177,7 +177,7 @@ class MyAppLogger(logging.Logger):
                         }]
                     }]
                 }
-                headers: dict = {'Content-Type': 'application/json'}
+                headers: dict[str, Any] = {'Content-Type': 'application/json'}
                 requests.post(
                     self.slack_webhook_url,
                     data=json.dumps(payload),

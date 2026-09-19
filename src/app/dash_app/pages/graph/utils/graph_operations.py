@@ -4,6 +4,7 @@ These helpers centralize API URL resolution and expansion merge logic to
 keep callback functions focused on UI state updates.
 """
 
+from typing import Any
 import os
 import math
 import time
@@ -25,7 +26,7 @@ def get_graph_api_base_url() -> str:
     return os.getenv("API_BASE_URL", "http://localhost:8000")
 
 
-def fetch_effective_theme(base_theme: str) -> dict | None:
+def fetch_effective_theme(base_theme: str) -> dict[str, Any] | None:
     """Fetch the server-merged effective theme for a base mode.
 
     Returns the merged tokens on 200, or ``None`` on any error so callers fall
@@ -57,11 +58,11 @@ def execute_expansion_and_merge(
     direction: str,
     limit: int,
     loaded_node_ids: list[str] | None,
-    expanded_nodes: dict | None,
-    current_elements: list[dict],
-    current_node_positions: dict | None,
+    expanded_nodes: dict[str, Any] | None,
+    current_elements: list[dict[str, Any]],
+    current_node_positions: dict[str, Any] | None,
     timeout_seconds: int,
-) -> dict:
+) -> dict[str, Any]:
     """Execute expansion API call and merge returned elements.
 
     Returns a result dict with either:

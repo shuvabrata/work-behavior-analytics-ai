@@ -47,7 +47,7 @@ class PersonSuggestResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-def _extract_name(attrs: dict) -> str:
+def _extract_name(attrs: dict[str, Any]) -> str:
     """Extract the best display name from an ES Person document."""
     return (
         attrs.get("full_name")

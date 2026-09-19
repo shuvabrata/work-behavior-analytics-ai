@@ -1,6 +1,6 @@
 # FastAPI router for Chat endpoints (v1)
 import asyncio
-from typing import AsyncIterator
+from typing import AsyncIterator, Any
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
@@ -73,7 +73,7 @@ async def stream_message(session_id: str, message: StreamMessageCreate) -> Strea
 
 
 @router.get("/metrics/stream", tags=["metrics"])
-async def stream_metrics() -> dict:
+async def stream_metrics() -> dict[str, Any]:
     """
     Return current streaming metrics (starts, completions, errors, disconnects,
     total_duration_seconds).

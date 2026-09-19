@@ -1864,7 +1864,7 @@ def replace_snapshot_interaction_relationships(
         return
 
     # Group by (from_id, from_type, rel_type) and aggregate timestamps.
-    groups: Dict[tuple, List[Relationship]] = defaultdict(list)
+    groups: Dict[tuple[Any, ...], List[Relationship]] = defaultdict(list)
     for rel in interaction_rels:
         groups[(rel.from_id, rel.from_type, rel.type)].append(rel)
 

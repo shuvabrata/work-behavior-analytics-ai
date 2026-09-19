@@ -3,6 +3,7 @@
 Callbacks for graph display, layout management, and property details.
 """
 
+from typing import Any
 from dash import Input, Output, State, callback, callback_context
 
 from app.dash_app.components.common import build_element_properties_content, register_edge_hover_dimming_callback, register_fullwidth_callback
@@ -110,7 +111,7 @@ def update_layout(layout_name, reset_clicks, current_layout):
     Output("graph-cytoscape", "stylesheet"),
     Input("theme-store", "data")
 )
-def update_graph_stylesheet(theme_name: str | None) -> list[dict]:
+def update_graph_stylesheet(theme_name: str | None) -> list[dict[str, Any]]:
     """Update graph node/edge palette when the app theme changes.
 
     Fetches the server-merged effective theme (base tokens ⊕ default-theme

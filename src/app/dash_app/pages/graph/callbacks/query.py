@@ -3,6 +3,7 @@
 Callbacks for query validation and execution.
 """
 
+from typing import Any
 import time
 import requests
 import dash_bootstrap_components as dbc
@@ -30,7 +31,7 @@ from ..utils import (
 TIMEOUT_SECONDS = runtime_settings.get_int("HTTP_REQUEST_TIMEOUT")
 
 
-def _normalize_catalog_parameters(raw_params: dict | None) -> dict:
+def _normalize_catalog_parameters(raw_params: dict[str, Any] | None) -> dict[str, Any]:
     """Unwrap person-parameter dicts before sending to the API.
 
     Person pickers store ``{"wba": "...", "display": "..."}`` but the API
@@ -39,7 +40,7 @@ def _normalize_catalog_parameters(raw_params: dict | None) -> dict:
     """
     if not raw_params:
         return {}
-    normalized: dict = {}
+    normalized: dict[str, Any] = {}
     for key, value in raw_params.items():
         normalized[key] = value.get("wba") if isinstance(value, dict) else value
     return normalized
@@ -183,7 +184,7 @@ def execute_query(
             "all",
         )
 
-    def error_response(error_display: html.Div | str | None) -> tuple:
+    def error_response(error_display: html.Div | str | None) -> tuple[Any, ...]:
         return build_response(
             None,
             empty_elements,

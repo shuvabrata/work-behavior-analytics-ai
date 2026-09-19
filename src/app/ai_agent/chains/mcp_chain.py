@@ -55,7 +55,7 @@ def _enabled_backends() -> list[str]:
     return backends
 
 
-def _check_mcp_relevance(user_message: str, provider: Any, conversation_history: list[dict] | None = None) -> bool:
+def _check_mcp_relevance(user_message: str, provider: Any, conversation_history: list[dict[str, Any]] | None = None) -> bool:
     """Use the configured provider to decide if MCP tools are likely useful."""
     backends = _enabled_backends()
     if not backends:
@@ -101,8 +101,8 @@ Use YES only if the user asks about any of the following:
 async def augment_message_with_mcp_stream(
     user_message: str,
     provider: Any,
-    conversation_history: list[dict] | None = None,
-) -> AsyncIterator[dict]:
+    conversation_history: list[dict[str, Any]] | None = None,
+) -> AsyncIterator[dict[str, Any]]:
     """Async generator that augments a message with MCP context and yields thinking chunks.
 
     Follows the chain streaming generator contract:

@@ -85,7 +85,7 @@ def _build_schema_snapshot(graph: Any) -> str:
     return getattr(graph, "schema", "")
 
 
-def _format_history_block(conversation_history: list[dict] | None) -> str:
+def _format_history_block(conversation_history: list[dict[str, Any]] | None) -> str:
     """Format conversation history as a readable block for LLM prompts.
 
     Args:
@@ -109,7 +109,7 @@ def _query_neo4j_with_provider_pipeline(
     user_message: str,
     provider: Any,
     graph: Any,
-    conversation_history: list[dict] | None = None,
+    conversation_history: list[dict[str, Any]] | None = None,
 ) -> tuple[str | None, str | None]:
     """Provider-native Neo4j query flow (feature-flagged).
 
@@ -189,7 +189,7 @@ Rules:
 def check_neo4j_relevance(
     user_message: str,
     provider: Any = None,
-    conversation_history: list[dict] | None = None,
+    conversation_history: list[dict[str, Any]] | None = None,
 ) -> bool:
     """Check if user message is relevant to Neo4j graph database query.
     
@@ -236,7 +236,7 @@ Respond with only 'YES' if relevant to the above domains, or 'NO' if not."""
 def query_neo4j_with_chain(
     user_message: str,
     provider: Any = None,
-    _meta_out: dict | None = None,
+    _meta_out: dict[str, Any] | None = None,
 ) -> str | None:
     """Query Neo4j using LangChain's GraphCypherQAChain.
     
@@ -373,8 +373,8 @@ Cypher Query:"""
 def augment_message_with_neo4j(
     user_message: str,
     provider: Any = None,
-    _meta_out: dict | None = None,
-    conversation_history: list[dict] | None = None,
+    _meta_out: dict[str, Any] | None = None,
+    conversation_history: list[dict[str, Any]] | None = None,
 ) -> str | None:
     """Augment user message with Neo4j data if relevant.
     
@@ -427,8 +427,8 @@ def augment_message_with_neo4j(
 async def augment_message_with_neo4j_stream(
     user_message: str,
     provider: Any = None,
-    conversation_history: list[dict] | None = None,
-) -> AsyncIterator[dict]:
+    conversation_history: list[dict[str, Any]] | None = None,
+) -> AsyncIterator[dict[str, Any]]:
     """Async generator that augments a message with Neo4j context and yields thinking chunks.
 
     Follows the chain streaming generator contract:
@@ -448,7 +448,7 @@ async def augment_message_with_neo4j_stream(
         dict: SSE-compatible event dictionaries.
     """
     yield {"type": "thinking_chunk", "content": "Checking graph database for relevant context..."}
-    meta_out: dict = {}
+    meta_out: dict[str, Any] = {}
     try:
         result = await asyncio.wait_for(
             asyncio.to_thread(

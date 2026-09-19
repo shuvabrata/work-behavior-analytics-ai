@@ -67,7 +67,7 @@ _EM_TAG_RE = re.compile(r"</?em>")
 # ---------------------------------------------------------------------------
 
 def _format_history(
-    conversation_history: list[dict] | None,
+    conversation_history: list[dict[str, Any]] | None,
     max_turns: int | None = None,
 ) -> str:
     """Format conversation history as a readable block for LLM prompts.
@@ -101,7 +101,7 @@ def _format_history(
 def check_es_relevance(
     user_message: str,
     provider: Any,
-    conversation_history: list[dict] | None = None,
+    conversation_history: list[dict[str, Any]] | None = None,
 ) -> bool:
     """Return True if the user message is a search/discovery query.
 
@@ -139,7 +139,7 @@ def check_es_relevance(
 def generate_search_request(
     user_message: str,
     provider: Any,
-    conversation_history: list[dict] | None = None,
+    conversation_history: list[dict[str, Any]] | None = None,
 ) -> SearchRequest | None:
     """Convert a user message into a validated SearchRequest using the LLM.
 
@@ -287,8 +287,8 @@ def _format_results(response: SearchResponse) -> str:
 async def augment_message_with_es_stream(
     user_message: str,
     provider: Any,
-    conversation_history: list[dict] | None = None,
-) -> AsyncIterator[dict]:
+    conversation_history: list[dict[str, Any]] | None = None,
+) -> AsyncIterator[dict[str, Any]]:
     """Async generator that augments a message with Elasticsearch entity context.
 
     Follows the chain streaming generator contract:
@@ -308,7 +308,7 @@ async def augment_message_with_es_stream(
     Yields:
         dict: SSE-compatible event dictionaries.
     """
-    _not_applied: dict = {"source": "elasticsearch", "applied": False, "context": ""}
+    _not_applied: dict[str, Any] = {"source": "elasticsearch", "applied": False, "context": ""}
 
     if not settings.ELASTICSEARCH_ENABLED:
         yield {"type": "augmented_message", "content": _not_applied}

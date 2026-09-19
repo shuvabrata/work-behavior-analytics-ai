@@ -3,6 +3,7 @@
 Callbacks for node expansion (double-click and modal-based).
 """
 
+from typing import Any
 import requests
 from dash import Input, Output, State, callback, no_update
 
@@ -174,7 +175,7 @@ def execute_doubleclick_expansion(dblclick_data, current_elements, current_unfil
     [State("graph-cytoscape", "selectedNodeData")],
     prevent_initial_call=True
 )
-def open_expansion_modal(n_clicks: int | None, selected_nodes: list[dict] | None) -> tuple[bool, str | None]:
+def open_expansion_modal(n_clicks: int | None, selected_nodes: list[dict[str, Any]] | None) -> tuple[bool, str | None]:
     """Open the expansion modal and store the selected node ID"""
     if n_clicks and selected_nodes and len(selected_nodes) > 0:
         node_data = selected_nodes[0]

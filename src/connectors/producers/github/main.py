@@ -27,7 +27,7 @@ import os
 from datetime import datetime, timezone
 from typing import Any, Dict, List
 
-from github import Github, Auth  # type: ignore[import-untyped]
+from github import Github, Auth  
 
 from common.logger import LogContext, logger
 from common.messaging.rabbitmq import RabbitMQPublisher
@@ -39,7 +39,7 @@ from connectors.producers.github.github_config import (
     parse_repo_url,
 )
 
-from connectors.producers.github.get_all_repos_for_owner import get_all_repos_for_owner  # type: ignore[import]
+from connectors.producers.github.get_all_repos_for_owner import get_all_repos_for_owner  
 from connectors.producers.github.constants import _SOURCE
 from connectors.producers.github.process_repo_signals import (
     process_repo_signals,

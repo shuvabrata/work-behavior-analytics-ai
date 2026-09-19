@@ -3,6 +3,7 @@
 Callbacks for local graph refinement UI controls.
 """
 
+from typing import Any
 import dash_bootstrap_components as dbc
 from dash import Input, Output, State, callback, html
 from dash.exceptions import PreventUpdate
@@ -15,7 +16,7 @@ class FilteringDataValidationError(ValueError):
     """Raised when loaded graph elements violate callback assumptions."""
 
 
-def _split_elements(elements: list[dict] | None) -> tuple[list[dict], list[dict]]:
+def _split_elements(elements: list[dict[str, Any]] | None) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Return node and edge lists from a Cytoscape element collection."""
     nodes = []
     edges = []
@@ -30,7 +31,7 @@ def _split_elements(elements: list[dict] | None) -> tuple[list[dict], list[dict]
     return nodes, edges
 
 
-def _has_weighted_edges(elements: list[dict] | None) -> bool:
+def _has_weighted_edges(elements: list[dict[str, Any]] | None) -> bool:
     """Return True when the current graph contains edge weights."""
     for elem in elements or []:
         data = elem.get("data", {})
@@ -39,7 +40,7 @@ def _has_weighted_edges(elements: list[dict] | None) -> bool:
     return False
 
 
-def _require_element_ids(elements: list[dict] | None) -> None:
+def _require_element_ids(elements: list[dict[str, Any]] | None) -> None:
     """Validate that all nodes and edges carry stable ids."""
     for elem in elements or []:
         data = elem.get("data", {})
@@ -51,7 +52,7 @@ def _require_element_ids(elements: list[dict] | None) -> None:
             )
 
 
-def _format_counts_summary(filtered_elements: list[dict] | None, unfiltered_elements: list[dict] | None) -> str:
+def _format_counts_summary(filtered_elements: list[dict[str, Any]] | None, unfiltered_elements: list[dict[str, Any]] | None) -> str:
     """Build a compact before/after summary for the current filter state."""
     if not unfiltered_elements:
         return "Load a graph to refine it locally."
@@ -712,7 +713,7 @@ def apply_relationship_filters(
     State("time-filters-collapse", "is_open"),
     prevent_initial_call=True
 )
-def toggle_time_filters_collapse(n_clicks: int | None, is_open: bool) -> tuple[bool, list]:
+def toggle_time_filters_collapse(n_clicks: int | None, is_open: bool) -> tuple[bool, list[Any]]:
     """Toggle the Time Filters collapsible section."""
     if not n_clicks:
         raise PreventUpdate
@@ -787,7 +788,7 @@ def update_fine_slider_bounds(created_val, updated_val, seen_val):
     State("time-filter-full-ranges", "data"),
     prevent_initial_call=True,
 )
-def update_time_filter_ranges(unfiltered_elements: list[dict] | None, previous_ranges: dict | None) -> tuple[dict, ...]:
+def update_time_filter_ranges(unfiltered_elements: list[dict[str, Any]] | None, previous_ranges: dict[str, Any] | None) -> tuple[dict[str, Any], ...]:
     """Compute slider ranges from all unfiltered nodes.
 
     Called whenever the unfiltered baseline changes (new query or expansion).

@@ -202,7 +202,7 @@ def handle_card_click(_timestamps: List[int | None]) -> str | Any:
     Input("url", "pathname"),
     prevent_initial_call="initial_duplicate",
 )
-def load_connector_detail(pathname: str) -> tuple[dict | Any, dict | Any, None, None]:
+def load_connector_detail(pathname: str) -> tuple[dict[str, Any] | Any, dict[str, Any] | Any, None, None]:
     if not pathname or not pathname.startswith("/app/connectors/"):
         return no_update, no_update, no_update, no_update
 

@@ -53,7 +53,7 @@ def fetch_page_comments(confluence: Confluence, page_id: str, content_type: str 
 
 def _summarise_comments_by_author(comments: List[Dict[str, Any]]) -> None:
     """Print a breakdown of comment counts per author."""
-    author_counter: Counter = Counter()
+    author_counter: Counter[str] = Counter()
     for comment in comments:
         history = comment.get("history", {})
         created_by = history.get("createdBy", {})

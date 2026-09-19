@@ -101,7 +101,7 @@ def create_error_alert(
     ])
 
 
-def create_table_display(raw_results: list[dict] | None, result_count: int | None = None) -> html.Div:
+def create_table_display(raw_results: list[dict[str, Any]] | None, result_count: int | None = None) -> html.Div:
     """Create table-only content for tabular query results.
 
     Args:

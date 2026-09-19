@@ -9,7 +9,7 @@ from app.db.models import connector_configs as config_models
 
 
 
-CONFIG_MODEL_MAP: Dict[str, Type] = {
+CONFIG_MODEL_MAP: Dict[str, Type[Any]] = {
     "github": config_models.GithubConfig,
     "jira": config_models.JiraConfig,
     "slack": config_models.SlackConfig,

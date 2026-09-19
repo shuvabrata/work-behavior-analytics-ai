@@ -15,6 +15,7 @@ Exit codes:
   2  — no data found (graph is empty)
 """
 
+from typing import Any
 import os
 import sys
 import time
@@ -53,7 +54,7 @@ def _load_query() -> str:
         return f.read()
 
 
-def _run_query() -> list:
+def _run_query() -> list[Any]:
     query = _load_query()
     config = CollaborationNetworkConfig()
     driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USERNAME, NEO4J_PASSWORD))
@@ -87,7 +88,7 @@ def _section(title: str) -> None:
 # Diagnostic report
 # ---------------------------------------------------------------------------
 
-def run_diagnostics(records: list, verbose: bool = False) -> None:
+def run_diagnostics(records: list[Any], verbose: bool = False) -> None:
     """Print the full diagnostic report for a set of collaboration records."""
 
     import networkx as nx
@@ -123,7 +124,7 @@ def run_diagnostics(records: list, verbose: bool = False) -> None:
     hub_scores = compute_hub_scores(g)
     modularity = compute_modularity(g, partition)
 
-    community_members: dict = defaultdict(list)
+    community_members: dict[int, list[str]] = defaultdict(list)
     for node, cid in partition.items():
         community_members[cid].append(node)
 
@@ -168,7 +169,7 @@ def run_diagnostics(records: list, verbose: bool = False) -> None:
 
     for name, score in top_hubs:
         bar = _bar(score, max_hub)
-        cid = partition.get(name, "?")
+        cid = partition.get(name, -1)
         print(f"  C{cid:<2}  [{bar}]  {score:>6.0f}  {name}")
 
     # ---------------------------------------------------------------------------

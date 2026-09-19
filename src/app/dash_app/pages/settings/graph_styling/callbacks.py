@@ -197,7 +197,7 @@ def update_node_glyph(
 )
 def reset_node_row(
     _n_clicks: int, loaded_values: dict[str, Any] | None
-) -> tuple:
+) -> tuple[Any, ...]:
     """Restore a row's six fields to their loaded (effective) values.
 
     Reads the effective node values cached in ``gs-loaded-values`` when the
@@ -396,7 +396,7 @@ def _feedback_alert(content: str, color: str) -> list[Any]:
     State({"type": "gs-theme-select", "base_theme": MATCH}, "id"),
     prevent_initial_call="initial_duplicate",
 )
-def load_themes(pathname: str, select_id: dict[str, str]) -> tuple:
+def load_themes(pathname: str, select_id: dict[str, str]) -> tuple[Any, ...]:
     """Load themes for a base mode when the page is visited.
 
     Fires on navigation and on first render of the matched select components.
@@ -553,7 +553,7 @@ def save_theme(
     edge_ids: list[dict[str, str]],
     global_values: list[Any],
     global_ids: list[dict[str, str]],
-) -> tuple:
+) -> tuple[Any, ...]:
     """Save the current editor values via a full-document PATCH (pure overwrite).
 
     The theme name is never changed by Save; rename is not supported in-place.
@@ -626,7 +626,7 @@ def save_as_theme(
     edge_ids: list[dict[str, str]],
     global_values: list[Any],
     global_ids: list[dict[str, str]],
-) -> tuple:
+) -> tuple[Any, ...]:
     """Create a new theme from the current editor state under the given name.
 
     Collects the current field values as the overrides document, then POSTs to
@@ -725,7 +725,7 @@ def confirm_set_default(
 def execute_set_default(
     submit_n_clicks: int | None,
     pending: dict[str, Any] | None,
-) -> tuple:
+) -> tuple[Any, ...]:
     """Set the pending theme as default for its base mode."""
     if not submit_n_clicks or not pending:
         raise PreventUpdate
@@ -748,8 +748,8 @@ def execute_set_default(
         )
 
     # Re-fetch themes for both base modes.
-    all_options: list = []
-    all_data: list = []
+    all_options: list[Any] = []
+    all_data: list[Any] = []
     for bt in ("executive-dark", "executive-light"):
         themes = _list_themes(bt)
         all_options.append(_theme_options(themes))
@@ -803,7 +803,7 @@ def confirm_delete(
 def execute_delete(
     submit_n_clicks: int | None,
     pending: dict[str, Any] | None,
-) -> tuple:
+) -> tuple[Any, ...]:
     """Delete the pending theme."""
     if not submit_n_clicks or not pending:
         raise PreventUpdate
@@ -829,8 +829,8 @@ def execute_delete(
             [no_update, no_update],
         )
 
-    all_options: list = []
-    all_data: list = []
+    all_options: list[Any] = []
+    all_data: list[Any] = []
     for bt in ("executive-dark", "executive-light"):
         themes = _list_themes(bt)
         all_options.append(_theme_options(themes))

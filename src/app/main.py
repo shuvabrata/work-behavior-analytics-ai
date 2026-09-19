@@ -192,5 +192,5 @@ app.include_router(commands_v1_router, prefix="/api/v1")
 app.include_router(settings_v1_router, prefix="/api/v1")
 app.include_router(graph_themes_v1_router, prefix="/api/v1")
 
-dash_app = create_dash_app()  # type: ignore[no-untyped-call]
-app.mount("/app", WSGIMiddleware(dash_app.server))  # type: ignore[arg-type]
+dash_app = create_dash_app()  
+app.mount("/app", WSGIMiddleware(dash_app.server)) 

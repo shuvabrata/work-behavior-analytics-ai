@@ -168,8 +168,8 @@ class InitiativeAttributes(BaseModel):
     project_id: Optional[str] = None
     updated_at: Optional[str] = None
     duedate: Optional[str] = None
-    labels: Optional[list] = None
-    components: Optional[list] = None
+    labels: Optional[list[Any]] = None
+    components: Optional[list[Any]] = None
     url: Optional[str] = None
     custom: Optional[Dict[str, Any]] = None
 
@@ -224,7 +224,7 @@ class IssueAttributes(BaseModel):
     story_points: Optional[float] = None
     assignee: Optional[str] = None
     reporter: Optional[str] = None
-    labels: Optional[list] = None
+    labels: Optional[list[Any]] = None
     url: Optional[str] = None
     custom: Optional[Dict[str, Any]] = None
 
@@ -286,7 +286,7 @@ class PullRequestAttributes(BaseModel):
     review_comments: Optional[int] = None
     head_branch_name: Optional[str] = None
     base_branch_name: Optional[str] = None
-    labels: Optional[list] = None
+    labels: Optional[list[Any]] = None
     mergeable_state: Optional[str] = None
     url: Optional[str] = None
     custom: Optional[Dict[str, Any]] = None

@@ -10,7 +10,7 @@ from app.settings import settings
 from common.logger import logger
 
 
-def _compose_multi_source_message(user_message: str, envelopes: list[dict]) -> str:
+def _compose_multi_source_message(user_message: str, envelopes: list[dict[str, Any]]) -> str:
     """Compose one bounded prompt block from multiple augmentation sources."""
     sections = []
 
@@ -40,10 +40,10 @@ def _compose_multi_source_message(user_message: str, envelopes: list[dict]) -> s
 async def _augment_message_with_neo4j_stream(
     user_message: str,
     provider: Any,
-    conversation_history: list[dict] | None,
-    envelopes: list[dict],
-    sources_used: list[dict],
-) -> AsyncIterator[dict]:
+    conversation_history: list[dict[str, Any]] | None,
+    envelopes: list[dict[str, Any]],
+    sources_used: list[dict[str, Any]],
+) -> AsyncIterator[dict[str, Any]]:
     if not settings.NEO4J_ENABLED:
         logger.info("Neo4j not enabled")
         return
@@ -55,7 +55,7 @@ async def _augment_message_with_neo4j_stream(
             neo4j_envelope = event["content"]
             if isinstance(neo4j_envelope, dict) and neo4j_envelope.get("applied"):
                 envelopes.append(neo4j_envelope)
-                neo4j_source: dict = {"type": "neo4j", "applied": True}
+                neo4j_source: dict[str, Any] = {"type": "neo4j", "applied": True}
                 neo4j_source.update(event.get("meta") or {})
                 sources_used.append(neo4j_source)
             else:
@@ -67,10 +67,10 @@ async def _augment_message_with_neo4j_stream(
 async def _augment_message_with_elasticsearch_stream(
     user_message: str,
     provider: Any,
-    conversation_history: list[dict] | None,
-    envelopes: list[dict],
-    sources_used: list[dict],
-) -> AsyncIterator[dict]:
+    conversation_history: list[dict[str, Any]] | None,
+    envelopes: list[dict[str, Any]],
+    sources_used: list[dict[str, Any]],
+) -> AsyncIterator[dict[str, Any]]:
     if not settings.ELASTICSEARCH_ENABLED:
         logger.info("Elasticsearch not enabled")
         return
@@ -97,10 +97,10 @@ async def _augment_message_with_elasticsearch_stream(
 async def _augment_message_with_mcp_stream(
     user_message: str,
     provider: Any,
-    conversation_history: list[dict] | None,
-    envelopes: list[dict],
-    sources_used: list[dict],
-) -> AsyncIterator[dict]:
+    conversation_history: list[dict[str, Any]] | None,
+    envelopes: list[dict[str, Any]],
+    sources_used: list[dict[str, Any]],
+) -> AsyncIterator[dict[str, Any]]:
     async for event in augment_message_with_mcp_stream(
         user_message, provider=provider, conversation_history=conversation_history
     ):
@@ -124,8 +124,8 @@ async def _augment_message_with_mcp_stream(
 async def augment_message_stream(
     user_message: str,
     provider: Any = None,
-    conversation_history: list[dict] | None = None,
-) -> AsyncIterator[dict]:
+    conversation_history: list[dict[str, Any]] | None = None,
+) -> AsyncIterator[dict[str, Any]]:
     """Async generator that augments a user message and yields thinking chunks.
 
     This is the streaming counterpart of ``augment_message``.  It follows the
@@ -150,8 +150,8 @@ async def augment_message_stream(
     Yields:
         dict: SSE-compatible event dictionaries.
     """
-    envelopes: list[dict] = []
-    sources_used: list[dict] = []
+    envelopes: list[dict[str, Any]] = []
+    sources_used: list[dict[str, Any]] = []
 
     async for event in _augment_message_with_neo4j_stream(
         user_message, provider, conversation_history, envelopes, sources_used

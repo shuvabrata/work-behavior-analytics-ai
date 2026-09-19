@@ -1,3 +1,4 @@
+from typing import Any
 """Node sizing utilities shared between the analytics pipeline and the Dash UI.
 
 Kept in app/common to avoid circular imports: both the collaboration algorithm
@@ -28,7 +29,7 @@ BASE_NODE_DIMENSIONS: dict[str, tuple[float, float]] = {
 }
 
 
-def apply_node_size(element: dict) -> dict:
+def apply_node_size(element: dict[str, Any]) -> dict[str, Any]:
     """Pre-compute render dimensions from the _node_size multiplier on a node.
 
     If the element's data dict contains a ``_node_size`` float, this function

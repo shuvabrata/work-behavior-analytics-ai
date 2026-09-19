@@ -5,6 +5,7 @@ format days back to human-readable labels, and compute slider ranges
 from a collection of Cytoscape node elements.
 """
 
+from typing import Any
 from datetime import datetime, timedelta, timezone
 
 EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
@@ -39,7 +40,7 @@ def _format_day_label(days: int) -> str:
     return dt.strftime("%b %d, %Y")
 
 
-def compute_time_range(nodes: list, property_name: str) -> tuple[int, int]:
+def compute_time_range(nodes: list[Any], property_name: str) -> tuple[int, int]:
     """Scan a list of Cytoscape node element dicts for a time property.
 
     Returns ``(min_days, max_days)`` over all nodes that **have** the

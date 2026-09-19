@@ -1,5 +1,6 @@
 """Dash layouts for the Connectors pages."""
 
+from typing import Any
 from dash import dcc, html
 import dash_bootstrap_components as dbc
 
@@ -105,7 +106,7 @@ def get_detail_layout(connector_type: str) -> html.Div:
     producer_container = connector_meta.get("producer_container")
 
     # Build the sections list dynamically
-    sections: list = []
+    sections: list[Any] = []
 
     # 1. Top Action Bar — most-used actions
     sections.append(_section_container(_render_top_action_bar(connector_type, connector_meta)))
@@ -281,7 +282,7 @@ def get_detail_layout(connector_type: str) -> html.Div:
 # ── Top action bar ───────────────────────────────────────────────────────
 
 
-def _render_top_action_bar(connector_type: str, connector_meta: dict) -> html.Div:
+def _render_top_action_bar(connector_type: str, connector_meta: dict[str, Any]) -> html.Div:
     """Render the top action bar with Run Scan and Delete Configuration.
 
     Run Scan is only shown for connectors that have a ``producer_container``
@@ -335,7 +336,7 @@ def _render_top_action_bar(connector_type: str, connector_meta: dict) -> html.Di
 # ── Recent Actions section ───────────────────────────────────────────────
 
 
-def _render_recent_scans(_connector_type: str, connector_meta: dict) -> html.Div:
+def _render_recent_scans(_connector_type: str, connector_meta: dict[str, Any]) -> html.Div:
     """Render the Recent Actions section.
 
     Only shown for connectors that have a ``producer_container`` in the
@@ -477,7 +478,7 @@ def _render_scan_interval_input(connector_type: str) -> html.Div:
     )
 
 
-def _render_connector_config(form_spec: dict, connector_type: str) -> html.Div:
+def _render_connector_config(form_spec: dict[str, Any], connector_type: str) -> html.Div:
     fields = form_spec.get("connector_config", [])
     if not fields:
         return html.Div(
@@ -496,7 +497,7 @@ def _render_connector_config(form_spec: dict, connector_type: str) -> html.Div:
     return dbc.Row(field_components, className="g-3")
 
 
-def _render_item_form(form_spec: dict, connector_type: str) -> html.Div:
+def _render_item_form(form_spec: dict[str, Any], connector_type: str) -> html.Div:
     item_spec = form_spec.get("item", {})
     fields = item_spec.get("fields", [])
     if not fields:
@@ -676,7 +677,7 @@ def _render_search_filters_editor(connector_type: str) -> html.Div:
     )
 
 
-def _render_field(field: dict, connector_type: str, section: str) -> html.Div:
+def _render_field(field: dict[str, Any], connector_type: str, section: str) -> html.Div:
     field_id = {
         "type": "connector-field",
         "connector_type": connector_type,
@@ -755,7 +756,7 @@ def _render_field(field: dict, connector_type: str, section: str) -> html.Div:
     return html.Div([label, control])
 
 
-def _get_manual_setup_layout(connector_type: str, connector_meta: dict) -> html.Div:
+def _get_manual_setup_layout(connector_type: str, connector_meta: dict[str, Any]) -> html.Div:
     """Render a manual setup guidance page for connectors that are env/Docker-managed."""
     display_name = connector_meta.get("display_name", connector_type)
 

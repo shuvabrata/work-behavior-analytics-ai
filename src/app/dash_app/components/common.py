@@ -131,7 +131,7 @@ def create_alert(
     class_name: str = "mb-2",
     dismissable: bool = True,
     duration: int | None = None,
-    style: dict | None = None,
+    style: dict[str, Any] | None = None,
 ) -> dbc.Alert:
     """Create a standardized alert with consistent typography and behavior."""
     merged_style = {
@@ -173,7 +173,7 @@ def create_feature_card(title: str, description: str) -> html.Div:
     ], style=FEATURE_CARD_STYLE)
 
 
-def create_placeholder_section(message: str, features: list, icon: str = "📋") -> html.Div:
+def create_placeholder_section(message: str, features: list[Any], icon: str = "📋") -> html.Div:
     """
     Create a placeholder section with icon, message, and feature cards.
     
@@ -270,7 +270,7 @@ def create_empty_state(message: str, icon: str = "📭") -> html.Div:
 # Shared graph visualization helpers
 # ---------------------------------------------------------------------------
 
-def toggle_details_panel(is_fullwidth: bool) -> tuple:
+def toggle_details_panel(is_fullwidth: bool) -> tuple[Any, ...]:
     """Return (canvas_col_width, right_panel_style) for fullwidth toggle.
 
     Used by both the graph page and future visualization pages.
@@ -318,7 +318,7 @@ def register_fullwidth_callback(id_prefix: str) -> None:
         State(f"{id_prefix}-fullwidth-state", "data"),
         prevent_initial_call=True,
     )
-    def _toggle_fullwidth(_n_clicks: int, is_fullwidth: bool) -> tuple:
+    def _toggle_fullwidth(_n_clicks: int, is_fullwidth: bool) -> tuple[Any, ...]:
         new_state = not is_fullwidth
         viz_width, panel_style = toggle_details_panel(new_state)
         btn_label = "Exit" if new_state else "Full"
@@ -663,7 +663,7 @@ def _panel_is_visible_key(key: str) -> bool:
     return not str(key).startswith("_")
 
 
-def _panel_build_visible_properties(data: dict, exclude_keys: set) -> dict:
+def _panel_build_visible_properties(data: dict[str, Any], exclude_keys: set[Any]) -> dict[str, Any]:
     """Return a filtered property dict for the properties panel."""
     return {
         k: v
@@ -672,7 +672,7 @@ def _panel_build_visible_properties(data: dict, exclude_keys: set) -> dict:
     }
 
 
-def _panel_resolve_endpoint(edge_data: dict, endpoint: str) -> str:
+def _panel_resolve_endpoint(edge_data: dict[str, Any], endpoint: str) -> str:
     """Resolve an edge source/target using explicit *_id fields before Cytoscape id."""
     for key in (f"{endpoint}_id", f"{endpoint}Id", endpoint):
         value = edge_data.get(key)
@@ -692,7 +692,7 @@ def _panel_resolve_endpoint(edge_data: dict, endpoint: str) -> str:
 _DATE_TIME_KEYS = {"start_date", "created_at", "updated_at", "due_date"}
 
 
-def _panel_properties_table(items: list) -> html.Table:
+def _panel_properties_table(items: list[Any]) -> html.Table:
     """Render (key, value) pairs as an Executive Dashboard tabular layout."""
     rows = []
     for key, value in items:
@@ -796,7 +796,7 @@ def _panel_properties_table(items: list) -> html.Table:
 
 
 def build_element_properties_content(
-    data: dict,
+    data: dict[str, Any],
     *,
     expand_node_enabled: bool = True,
 ) -> html.Div:
@@ -836,13 +836,13 @@ def build_element_properties_content(
         ], className="mb-3")
 
         if sorted_items:
-            properties_section: list = [_panel_properties_table(sorted_items)]
+            properties_section: list[Any] = [_panel_properties_table(sorted_items)]
         else:
             properties_section = [
                 html.P("No properties", className="text-muted", style=DETAILS_MUTED_TEXT_STYLE)
             ]
 
-        btn_kwargs: dict = {
+        btn_kwargs: dict[str, Any] = {
             "color": "primary",
             "size": "sm",
             "outline": True,

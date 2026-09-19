@@ -528,7 +528,7 @@ class ActivitySignal(BaseModel):
                 data = {**data, 'attributes': {**attrs, 'entity_type': entity_type}}
         return data
 
-    @computed_field
+    @computed_field  # type: ignore[prop-decorator]
     @property
     def entity_type(self) -> str:
         """Exposes entity_type at the root level of ActivitySignal.

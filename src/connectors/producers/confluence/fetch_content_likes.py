@@ -43,6 +43,9 @@ def fetch_content_likes(
         # exponential backoff so a momentary connectivity loss does not abort
         # the likes fetch.
         response = retry_with_backoff(lambda: confluence.get(path, params=params))
+        if response is None:
+            logger.warning(f"Received None response from Confluence API for {path}")
+            break
         page_results = response.get("results", [])
         results.extend(page_results)
         

@@ -111,7 +111,7 @@ def build_graph(records: List[Dict[str, Any]]) -> nx.Graph:  # type: ignore[type
         An undirected NetworkX graph where node keys are wba_ids and each edge
         carries a 'weight' attribute equal to the collaboration score.
     """
-    g: nx.Graph = nx.Graph()
+    g: nx.Graph = nx.Graph()  # type: ignore[type-arg]
     for record in records:
         p1_id = record["person1_wba_id"]
         p2_id = record["person2_wba_id"]
@@ -209,7 +209,7 @@ def filter_top_edges_per_node(
         for source, target, _ in chosen:
             selected_edges.add(tuple(sorted((source, target))))
 
-    filtered: nx.Graph = nx.Graph()
+    filtered: nx.Graph = nx.Graph()  # type: ignore[type-arg]
     filtered.add_nodes_from(g.nodes(data=True))
 
     for source, target in selected_edges:

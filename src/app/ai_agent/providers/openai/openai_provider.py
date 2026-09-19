@@ -10,7 +10,7 @@ from typing import Any, AsyncIterator, cast, Dict, List, Optional
 
 import openai
 from dotenv import load_dotenv
-from openai.types.chat import ChatCompletionDeveloperMessageParam, ChatCompletionFunctionToolParam
+from openai.types.chat import ChatCompletionDeveloperMessageParam, ChatCompletionFunctionToolParam, ChatCompletionMessageFunctionToolCall
 
 from app.ai_agent.providers.base import LLMProvider
 from app.ai_agent.utils.token_utils import count_tokens
@@ -149,7 +149,7 @@ class OpenAIProvider(LLMProvider):
                     model=model_to_use,
                     messages=cast(list[ChatCompletionDeveloperMessageParam], messages)
                 )
-                ai_message = response.choices[0].message.content.strip()
+                ai_message = (response.choices[0].message.content or "").strip()
                 logger.debug(f"Received response from OpenAI: {len(ai_message)} characters")
                 return ai_message
             except Exception as e:
@@ -210,6 +210,8 @@ class OpenAIProvider(LLMProvider):
 
             tool_calls = []
             for tool_call in message.tool_calls or []:
+                if not isinstance(tool_call, ChatCompletionMessageFunctionToolCall):
+                    continue
                 raw_args = tool_call.function.arguments or "{}"
                 try:
                     parsed_args = json.loads(raw_args)

@@ -21,7 +21,7 @@ register_edge_hover_dimming_callback("graph-cytoscape")
      Input("theme-store", "data")],
     State("graph-cytoscape", "elements"),
 )
-def display_properties(selected_nodes, selected_edges, theme_name, elements):
+def display_properties(selected_nodes: Any, selected_edges: Any, theme_name: Any, elements: Any) -> Any:
     """Display detailed properties of selected node or edge"""
     # Extract unique node types from current graph elements
     node_types = set()
@@ -55,7 +55,7 @@ def display_properties(selected_nodes, selected_edges, theme_name, elements):
     [State("graph-cytoscape", "layout")],
     prevent_initial_call=True
 )
-def update_layout(layout_name, reset_clicks, current_layout):
+def update_layout(layout_name: Any, reset_clicks: Any, current_layout: Any) -> Any:
     """Update the Cytoscape graph layout algorithm or trigger layout reset"""
     # Determine which input triggered the callback
     if not callback_context.triggered:

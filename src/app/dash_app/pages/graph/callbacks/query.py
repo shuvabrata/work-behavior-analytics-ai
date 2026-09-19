@@ -122,15 +122,7 @@ def validate_query(query_text: str | None) -> dbc.Alert | None:
      State("catalog-query-view-toggle", "value")],
     prevent_initial_call=True
 )
-def execute_query(
-    _raw_clicks,
-    _catalog_clicks,
-    store_cypher,
-    query_text,
-    selected_catalog_query,
-    catalog_parameters,
-    catalog_view,
-):
+def execute_query(_raw_clicks: Any, _catalog_clicks: Any, store_cypher: Any, query_text: Any, selected_catalog_query: Any, catalog_parameters: Any, catalog_view: Any, ) -> Any:
     """Execute raw console queries and catalog queries via the unified API."""
     # Default empty states
     empty_elements = []
@@ -141,21 +133,7 @@ def execute_query(
     default_container_style = {"minHeight": "400px", "padding": "20px"}
     panel_visible_style = GRAPH_DETAILS_PANEL_STYLE
 
-    def build_response(
-        graph_data,
-        elements,
-        graph_container_style,
-        status_children,
-        status_style,
-        table_children,
-        table_style,
-        results_children,
-        results_style,
-        details_style,
-        metrics_children,
-        metrics_style,
-        unfiltered_elements,
-    ):
+    def build_response(graph_data: Any, elements: Any, graph_container_style: Any, status_children: Any, status_style: Any, table_children: Any, table_style: Any, results_children: Any, results_style: Any, details_style: Any, metrics_children: Any, metrics_style: Any, unfiltered_elements: Any, ) -> Any:
         """Build execute-query callback response with a stable output contract."""
         return (
             graph_data,

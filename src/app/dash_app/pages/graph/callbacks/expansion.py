@@ -42,10 +42,7 @@ TIMEOUT_SECONDS = runtime_settings.get_int("HTTP_REQUEST_TIMEOUT")
      State("graph-layout-selector", "value")],
     prevent_initial_call=True
 )
-def execute_doubleclick_expansion(dblclick_data, current_elements, current_unfiltered,
-                                  loaded_node_ids, expanded_nodes, debounce_store,
-                                  current_node_positions,
-                                  current_layout):
+def execute_doubleclick_expansion(dblclick_data: Any, current_elements: Any, current_unfiltered: Any, loaded_node_ids: Any, expanded_nodes: Any, debounce_store: Any, current_node_positions: Any, current_layout: Any) -> Any:
     """Execute immediate expansion on double-click with default parameters"""
     show_style = {"display": "block"}
     hide_style = {"display": "none"}
@@ -222,10 +219,7 @@ def close_expansion_modal(n_clicks: int | None) -> bool:
      State("graph-fit-trigger", "children")],
     prevent_initial_call=True
 )
-def execute_node_expansion(n_clicks, node_id, direction, limit, auto_fit, current_elements,
-                     current_unfiltered, loaded_node_ids, expanded_nodes,
-                     current_node_positions,
-                     current_layout, current_fit_count):
+def execute_node_expansion(n_clicks: Any, node_id: Any, direction: Any, limit: Any, auto_fit: Any, current_elements: Any, current_unfiltered: Any, loaded_node_ids: Any, expanded_nodes: Any, current_node_positions: Any, current_layout: Any, current_fit_count: Any) -> Any:
     """Execute node expansion by calling backend API and merging results"""
     show_style = {"display": "block"}
     hide_style = {"display": "none"}

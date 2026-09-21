@@ -95,7 +95,7 @@ MAX_COMMUNITY_STYLES = 20
 LOUVAIN_RANDOM_STATE = 42
 
 
-def build_graph(records: List[Dict[str, Any]]) -> nx.Graph:  # type: ignore[type-arg]  # networkx 3.6.1 doesn't support subscripting
+def build_graph(records: List[Dict[str, Any]]) -> nx.Graph:
     """Build a weighted, undirected NetworkX graph from collaboration query records.
 
     Each node uses the person's wba_id as its key. All Neo4j properties returned by
@@ -111,7 +111,7 @@ def build_graph(records: List[Dict[str, Any]]) -> nx.Graph:  # type: ignore[type
         An undirected NetworkX graph where node keys are wba_ids and each edge
         carries a 'weight' attribute equal to the collaboration score.
     """
-    g: nx.Graph = nx.Graph()  # type: ignore[type-arg]
+    g: nx.Graph = nx.Graph()
     for record in records:
         p1_id = record["person1_wba_id"]
         p2_id = record["person2_wba_id"]
@@ -136,7 +136,7 @@ def build_graph(records: List[Dict[str, Any]]) -> nx.Graph:  # type: ignore[type
     return g
 
 
-def detect_communities(g: nx.Graph) -> Dict[str, int]:  # type: ignore[type-arg]  # networkx 3.6.1 doesn't support subscripting
+def detect_communities(g: nx.Graph) -> Dict[str, int]:
     """Run Louvain community detection on a weighted graph.
 
     Args:
@@ -153,7 +153,7 @@ def detect_communities(g: nx.Graph) -> Dict[str, int]:  # type: ignore[type-arg]
     return community_louvain.best_partition(g, weight="weight", random_state=LOUVAIN_RANDOM_STATE)  # type: ignore[no-any-return]
 
 
-def compute_hub_scores(g: nx.Graph) -> Dict[str, float]:  # type: ignore[type-arg]  # networkx 3.6.1 doesn't support subscripting
+def compute_hub_scores(g: nx.Graph) -> Dict[str, float]:
     """Compute a hub score for each node (weighted degree).
 
     Higher score = more total collaboration weight across all edges.
@@ -169,10 +169,10 @@ def compute_hub_scores(g: nx.Graph) -> Dict[str, float]:  # type: ignore[type-ar
 
 
 def filter_top_edges_per_node(
-    g: nx.Graph,  # type: ignore[type-arg]  # networkx 3.6.1 doesn't support subscripting
+    g: nx.Graph,
     top_n: int,
     ensure_min_connection: bool = True,
-) -> nx.Graph:  # type: ignore[type-arg]
+) -> nx.Graph:
     """Return a graph filtered to strongest edges per node.
 
     For each node, keep only its top-N weighted edges. Final edge set is the union
@@ -209,7 +209,7 @@ def filter_top_edges_per_node(
         for source, target, _ in chosen:
             selected_edges.add(tuple(sorted((source, target))))
 
-    filtered: nx.Graph = nx.Graph()  # type: ignore[type-arg]
+    filtered: nx.Graph = nx.Graph()
     filtered.add_nodes_from(g.nodes(data=True))
 
     for source, target in selected_edges:
@@ -244,7 +244,7 @@ def _compact_label(display_name: str, max_chars: int) -> str:
 
 
 def to_cytoscape_elements(
-    g: nx.Graph,  # type: ignore[type-arg]  # networkx 3.6.1 doesn't support subscripting
+    g: nx.Graph,
     partition: Dict[str, int],
     hub_scores: Dict[str, float],
     community_gap_x: float = 1560.0,
@@ -405,7 +405,7 @@ def _compute_community_preset_positions(
     return positions
 
 
-def compute_modularity(g: nx.Graph, partition: Dict[str, int]) -> float:  # type: ignore[type-arg]  # networkx 3.6.1 doesn't support subscripting
+def compute_modularity(g: nx.Graph, partition: Dict[str, int]) -> float:
     """Return the Louvain modularity score for a given partition.
 
     Modularity ranges from -0.5 to 1.0.  Values > 0.3 generally indicate

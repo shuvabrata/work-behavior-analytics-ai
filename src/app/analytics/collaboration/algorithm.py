@@ -111,7 +111,7 @@ def build_graph(records: List[Dict[str, Any]]) -> nx.Graph:
         An undirected NetworkX graph where node keys are wba_ids and each edge
         carries a 'weight' attribute equal to the collaboration score.
     """
-    g = nx.Graph()
+    g: nx.Graph = nx.Graph()
     for record in records:
         p1_id = record["person1_wba_id"]
         p2_id = record["person2_wba_id"]
@@ -150,7 +150,7 @@ def detect_communities(g: nx.Graph) -> Dict[str, int]:
     """
     if g.number_of_nodes() == 0:
         return {}
-    return community_louvain.best_partition(g, weight="weight", random_state=LOUVAIN_RANDOM_STATE)
+    return community_louvain.best_partition(g, weight="weight", random_state=LOUVAIN_RANDOM_STATE)  # type: ignore[no-any-return]
 
 
 def compute_hub_scores(g: nx.Graph) -> Dict[str, float]:
@@ -209,7 +209,7 @@ def filter_top_edges_per_node(
         for source, target, _ in chosen:
             selected_edges.add(tuple(sorted((source, target))))
 
-    filtered = nx.Graph()
+    filtered: nx.Graph = nx.Graph()
     filtered.add_nodes_from(g.nodes(data=True))
 
     for source, target in selected_edges:
@@ -420,7 +420,7 @@ def compute_modularity(g: nx.Graph, partition: Dict[str, int]) -> float:
     """
     if g.number_of_nodes() == 0:
         return 0.0
-    return community_louvain.modularity(partition, g, weight="weight")
+    return community_louvain.modularity(partition, g, weight="weight")  # type: ignore[no-any-return]
 
 
 def process_collaboration_network(

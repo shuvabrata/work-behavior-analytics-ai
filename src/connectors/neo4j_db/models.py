@@ -1864,7 +1864,7 @@ def replace_snapshot_interaction_relationships(
         return
 
     # Group by (from_id, from_type, rel_type) and aggregate timestamps.
-    groups: Dict[tuple, List[Relationship]] = defaultdict(list)
+    groups: Dict[tuple[Any, ...], List[Relationship]] = defaultdict(list)
     for rel in interaction_rels:
         groups[(rel.from_id, rel.from_type, rel.type)].append(rel)
 
@@ -1891,8 +1891,8 @@ def replace_snapshot_interaction_relationships(
             if r.properties.get("timestamp") or r.properties.get("last_interaction_at")
         ]
         count = len(rels)
-        first_at = min(timestamps) if timestamps else None
-        last_at = max(timestamps) if timestamps else None
+        first_at = min(timestamps) if timestamps else None  # type: ignore[type-var]
+        last_at = max(timestamps) if timestamps else None  # type: ignore[type-var]
 
         set_clauses = ["r.count = $count"]
         params: Dict[str, Any] = {

@@ -19,6 +19,7 @@ ELASTIC_PASSWORD    Password for the ``elastic`` built-in user.
 """
 
 from __future__ import annotations
+from typing import Any
 
 import os
 import sys
@@ -73,7 +74,7 @@ def _index_name(source: str, entity_type: str) -> str:
 # ---------------------------------------------------------------------------
 
 # text (english analyser) + .keyword sub-field for sort/aggregation
-def _full_text_field(ignore_above: int = 512) -> dict:
+def _full_text_field(ignore_above: int = 512) -> dict[str, Any]:
     return {
         "type": "text",
         "analyzer": "english",
@@ -82,7 +83,7 @@ def _full_text_field(ignore_above: int = 512) -> dict:
 
 
 # text (standard analyser) + .keyword sub-field
-def _standard_text_field(ignore_above: int = 512) -> dict:
+def _standard_text_field(ignore_above: int = 512) -> dict[str, Any]:
     return {
         "type": "text",
         "analyzer": "standard",
@@ -90,7 +91,7 @@ def _standard_text_field(ignore_above: int = 512) -> dict:
     }
 
 
-_SHARED_MAPPINGS: dict = {
+_SHARED_MAPPINGS: dict[str, Any] = {
     "properties": {
         # --- Envelope fields ---
         "wba_id":        {"type": "keyword"},
@@ -179,7 +180,7 @@ _SHARED_MAPPINGS: dict = {
     }
 }
 
-_INDEX_SETTINGS: dict = {
+_INDEX_SETTINGS: dict[str, Any] = {
     "number_of_shards": 1,
     "number_of_replicas": 0,
 }

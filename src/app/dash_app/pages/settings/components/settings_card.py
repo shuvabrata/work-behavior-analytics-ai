@@ -4,6 +4,7 @@ A card used on the Settings hub page to navigate to sub-pages or show
 placeholder cards for upcoming features.
 """
 
+from typing import Any
 from dash import html
 import dash_bootstrap_components as dbc
 
@@ -47,7 +48,7 @@ def settings_card(
     """
     is_clickable = href is not None
 
-    children: list = [
+    children: list[Any] = [
         # Top row: icon + title + optional coming-soon badge
         html.Div(
             [
@@ -97,7 +98,7 @@ def settings_card(
         ),
     ]
 
-    card_props: dict = {
+    card_props: dict[str, Any] = {
         "id": {"type": "settings-card", "card_id": card_id},
         "className": "settings-card",
         "style": {

@@ -31,9 +31,9 @@ def get_or_create_person(
     session: Session,
     email: Optional[str],
     name: str,
-    provider: str = None,
-    external_id: str = None,
-    url: Optional[str] = None
+    provider: str | None = None,
+    external_id: str | None = None,
+    url: Optional[str] = None,
 ) -> Tuple[Optional[str], bool]:
     """
     Get or create a Person node using the provider-scoped id as the canonical key.

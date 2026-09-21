@@ -58,6 +58,19 @@ Never use relative imports like `from ..common.logger` across package boundaries
 Never use sys.path.insert(...) or similar hacks to modify the import path at runtime.
 Rely on PYTHONPATH and proper package structure for clean imports.
 
+### Re-exporting Symbols in `__init__.py`
+
+When a package's `__init__.py` re-exports a symbol from a submodule (e.g., `get_layout` from `layout.py`), mypy's strict mode treats plain imports as private. Use `__all__` to declare the public API:
+
+```python
+# ✅ Correct — __all__ declares the public API
+__all__ = ["get_layout"]
+
+from .layout import get_layout
+```
+
+This is preferred over the `as` alias pattern (`from .layout import get_layout as get_layout`) because it's more explicit and serves as documentation for the module's public surface.
+
 
 ## Project Structure
 
@@ -139,7 +152,13 @@ Feature flags: `GITHUB_MCP_ENABLED`, `ATLASSIAN_MCP_ENABLED`
 - **Transactions**: Service layer manages transaction boundaries
 
 ### Code Style
-- **Type Hints**: All function parameters and returns
+- **Type Hints**: All function parameters and returns must have type annotations. Follow these strict architectural rules:
+  1. **Standard Collections**: Use built-in types for collections (e.g., `list[str]`, `dict[str, int]`, `set[int]`) instead of importing from the legacy `typing` module.
+  2. **Union Types**: Use the pipe operator (`|`) for Unions and Optional values (e.g., `int | float`, `str | None`) instead of `Union` or `Optional`.
+  3. **Strict Accuracy**: Infer types strictly based on logic, variable names, default values, and control flow. Never use `Any` unless absolutely unavoidable.
+  4. **Generics & Callables**: Use `collections.abc.Callable`, `Iterable`, or `Sequence` where appropriate to keep functions flexible.
+  5. **Third-Party Types**: Where applicable, use appropriate types for common libraries (e.g., `pydantic.BaseModel`, `pandas.DataFrame`).
+  6. **Non-Destructive Refactoring**: Do not change, optimize, or alter any runtime logic, variable names, or function behaviors. Only add type annotations.
 - **Docstrings**: Modules, classes, and public functions
 - **Logging**: Use `from common.logger import logger` — never `print()`
 - **Error Handling**: Raise appropriate exceptions with clear messages

@@ -17,7 +17,7 @@ def fetch_user_details(confluence: Confluence, account_id: str) -> Dict[str, Any
             lambda: confluence.get(f"/rest/api/user?accountId={account_id}")
         )
         logger.debug(f"Fetched user details for account_id={account_id}")
-        return response
+        return response or {}
     except WbaRetryTimeoutError:
         raise
     except Exception as exc:

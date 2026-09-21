@@ -54,7 +54,7 @@ async def list_connectors(db: AsyncSession = Depends(get_async_db)) -> list[Conn
     try:
         result = await service.list_connectors(db)
         logger.debug(f"[router.list_connectors] Returning {len(result)} connectors")
-        return result
+        return result  # type: ignore[return-value]
     except Exception as exc:
         logger.error(f"[router.list_connectors] Error: {type(exc).__name__}: {exc}", exc_info=True)
         raise
@@ -67,7 +67,7 @@ async def get_connector(
     db: AsyncSession = Depends(get_async_db),
 ) -> ConnectorStatus:
     try:
-        return await service.get_connector(db, connector_type, include_secrets=include_secrets)
+        return await service.get_connector(db, connector_type, include_secrets=include_secrets)  # type: ignore[return-value]
     except ValueError as exc:
         raise HTTPException(status_code=_status_for_connector_error(exc), detail=str(exc)) from exc
 
@@ -79,7 +79,7 @@ async def update_connector_config(
     db: AsyncSession = Depends(get_async_db),
 ) -> ConnectorStatus:
     try:
-        return await service.update_connector_config(
+        return await service.update_connector_config(  # type: ignore[return-value]
             db,
             connector_type,
             payload.config,
@@ -96,7 +96,7 @@ async def clear_connector_config(
     db: AsyncSession = Depends(get_async_db),
 ) -> ConnectorStatus:
     try:
-        return await service.clear_connector_config(db, connector_type)
+        return await service.clear_connector_config(db, connector_type)  # type: ignore[return-value]
     except ValueError as exc:
         raise HTTPException(status_code=_status_for_connector_error(exc), detail=str(exc)) from exc
 
@@ -188,7 +188,7 @@ async def test_connector(
     Non-MCP connectors use the command-and-control API instead.
     """
     try:
-        return await service.test_connector(db, connector_type)
+        return await service.test_connector(db, connector_type)  # type: ignore[return-value]
     except service.UnknownConnectorError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except service.UnsupportedConnectorError as exc:

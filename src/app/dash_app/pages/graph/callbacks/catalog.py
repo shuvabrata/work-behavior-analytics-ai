@@ -1,6 +1,7 @@
 """Catalog workbench callbacks for the Graph page."""
 
 from __future__ import annotations
+from typing import Any
 
 from datetime import datetime, timezone
 from urllib.parse import parse_qs
@@ -31,7 +32,7 @@ ALL_NAMESPACES = "__all__"
 ALL_VIEWS = "__all__"
 
 
-def build_namespace_options(catalog_queries: list[dict]) -> list[dict]:
+def build_namespace_options(catalog_queries: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Build namespace filter options from loaded catalog queries."""
     options = [{"label": "All namespaces", "value": ALL_NAMESPACES}]
     namespaces: dict[str, tuple[int, str]] = {}
@@ -55,11 +56,11 @@ def build_namespace_options(catalog_queries: list[dict]) -> list[dict]:
 
 
 def filter_catalog_queries(
-    catalog_queries: list[dict],
+    catalog_queries: list[dict[str, Any]],
     namespace_filter: str | None,
     search_text: str | None,
     view_filter: str | None,
-) -> list[dict]:
+) -> list[dict[str, Any]]:
     """Filter catalog metadata client-side for the workbench."""
     filtered = catalog_queries
 
@@ -103,14 +104,14 @@ def _timestamp_ordinal(timestamp: str | None) -> float:
 
 
 def _sort_catalog_queries(
-    catalog_queries: list[dict],
-    metadata_store: dict | None,
-) -> list[dict]:
+    catalog_queries: list[dict[str, Any]],
+    metadata_store: dict[str, Any] | None,
+) -> list[dict[str, Any]]:
     """Sort favourites first, recent favourites before older ones, then name."""
     metadata_store = metadata_store or {}
 
-    def sort_key(query: dict) -> tuple[bool, float, str]:
-        catalog_id = query.get("id")
+    def sort_key(query: dict[str, Any]) -> tuple[bool, float, str]:
+        catalog_id = query.get("id") or ""
         metadata = metadata_store.get(catalog_id) or {}
         is_favourite = bool(metadata.get("is_favourite"))
         updated_at = (
@@ -131,7 +132,7 @@ def parse_catalog_deep_link(search: str | None) -> tuple[str | None, str | None]
     return catalog_id, requested_view
 
 
-def find_catalog_query(catalog_queries: list[dict], catalog_id: str | None) -> dict | None:
+def find_catalog_query(catalog_queries: list[dict[str, Any]], catalog_id: str | None) -> dict[str, Any] | None:
     """Find a catalog query by id."""
     if not catalog_id:
         return None
@@ -142,7 +143,7 @@ def find_catalog_query(catalog_queries: list[dict], catalog_id: str | None) -> d
 
 
 def determine_catalog_view(
-    catalog_query: dict,
+    catalog_query: dict[str, Any],
     requested_view: str | None,
     current_view: str | None,
 ) -> str | None:
@@ -163,7 +164,7 @@ def determine_catalog_view(
     return None
 
 
-def _extract_param_value(value: str | dict | None) -> str | None:
+def _extract_param_value(value: str | dict[str, Any] | None) -> str | None:
     """Normalize a catalog parameter value to its raw runtime form.
 
     Person parameters are stored as ``{"wba": "...", "display": "..."}``
@@ -175,7 +176,7 @@ def _extract_param_value(value: str | dict | None) -> str | None:
     return value
 
 
-def required_parameters_missing(catalog_query: dict, parameter_values: dict | None) -> list[str]:
+def required_parameters_missing(catalog_query: dict[str, Any], parameter_values: dict[str, Any] | None) -> list[str]:
     """Return names of required catalog parameters that are missing."""
     parameter_values = parameter_values or {}
     missing: list[str] = []
@@ -188,7 +189,7 @@ def required_parameters_missing(catalog_query: dict, parameter_values: dict | No
     return missing
 
 
-def _query_matches(query: dict, needle: str) -> bool:
+def _query_matches(query: dict[str, Any], needle: str) -> bool:
     namespace = query.get("namespace") or {}
     haystack = " ".join(
         [
@@ -230,16 +231,16 @@ def _build_status_badge(status: str | None) -> dbc.Badge | None:
     )
 
 
-def _parameter_label(parameter: dict) -> str:
+def _parameter_label(parameter: dict[str, Any]) -> str:
     return parameter.get("label") or parameter.get("name") or "Parameter"
 
 
-def _parameter_placeholder(parameter: dict) -> str:
+def _parameter_placeholder(parameter: dict[str, Any]) -> str:
     return parameter.get("placeholder") or parameter.get("env_var") or parameter.get("name") or ""
 
 
-def _build_parameter_help_text(parameter: dict) -> html.Div | None:
-    help_parts: list = []
+def _build_parameter_help_text(parameter: dict[str, Any]) -> html.Div | None:
+    help_parts: list[Any] = []
     description = parameter.get("description")
     env_var = parameter.get("env_var")
     parameter_type = parameter.get("type")
@@ -264,7 +265,7 @@ def _build_parameter_help_text(parameter: dict) -> html.Div | None:
     )
 
 
-def _build_person_picker(parameter: dict, current_value: str | dict | None) -> html.Div:
+def _build_person_picker(parameter: dict[str, Any], current_value: str | dict[str, Any] | None) -> html.Div:
     """Build a custom combobox for parameters with type='person_id'.
 
     Uses a plain ``dbc.Input`` so the user types directly without any popup
@@ -289,14 +290,14 @@ def _build_person_picker(parameter: dict, current_value: str | dict | None) -> h
         stored_wba = current_value.get("wba")
         stored_display = current_value.get("display") or stored_wba or "Unknown"
 
-    label_children: list = [label_base]
+    label_children: list[Any] = [label_base]
     if required:
         label_children.append(
             html.Span(" *", style={"color": "#dc3545", "fontWeight": 700})
         )
 
     # --- Chip (rendered when a stored value exists) ---
-    chip_children: list = []
+    chip_children: list[Any] = []
     if stored_wba:
         chip_children = [
             html.Div(
@@ -378,7 +379,7 @@ def _build_person_picker(parameter: dict, current_value: str | dict | None) -> h
     Output("catalog-metadata-store", "data"),
     Input("url", "pathname"),
 )
-def load_query_catalog(pathname: str | None) -> tuple[list[dict], html.Div | None, dict]:
+def load_query_catalog(pathname: str | None) -> tuple[list[dict[str, Any]], html.Div | None, dict[str, Any]]:
     """Fetch catalog metadata when the Graph page is opened."""
     if pathname != "/app/graph":
         return no_update, no_update, no_update
@@ -409,7 +410,7 @@ def load_query_catalog(pathname: str | None) -> tuple[list[dict], html.Div | Non
     return _sort_catalog_queries(items, metadata), None, metadata
 
 
-def _fetch_catalog_metadata(api_base: str) -> dict:
+def _fetch_catalog_metadata(api_base: str) -> dict[str, Any]:
     """Fetch favourite metadata and normalise it into a ``{catalog_id: {...}}`` map.
 
     Returns an empty dict on any error so the UI degrades gracefully (stars
@@ -422,7 +423,7 @@ def _fetch_catalog_metadata(api_base: str) -> dict:
         )
         response.raise_for_status()
         payload = response.json()
-        metadata: dict = {}
+        metadata: dict[str, Any] = {}
         for item in payload.get("items", []):
             metadata[item["catalog_id"]] = {
                 "is_favourite": item.get("is_favourite", False),
@@ -438,7 +439,7 @@ def _fetch_catalog_metadata(api_base: str) -> dict:
     Output("catalog-namespace-filter", "options"),
     Input("query-catalog-store", "data"),
 )
-def populate_namespace_filter(catalog_queries: list[dict] | None) -> list[dict]:
+def populate_namespace_filter(catalog_queries: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
     """Populate namespace options from loaded catalog metadata."""
     return build_namespace_options(catalog_queries or [])
 
@@ -454,9 +455,9 @@ def populate_namespace_filter(catalog_queries: list[dict] | None) -> list[dict]:
 def sync_selected_catalog_query(
     _clicks: list[int | None],
     search: str | None,
-    catalog_queries: list[dict] | None,
-    current_selection: dict | None,
-) -> dict | None:
+    catalog_queries: list[dict[str, Any]] | None,
+    current_selection: dict[str, Any] | None,
+) -> dict[str, Any] | None:
     """Select a query from button clicks or URL deep links."""
     catalog_queries = catalog_queries or []
     if not catalog_queries:
@@ -486,11 +487,11 @@ def sync_selected_catalog_query(
     Input("catalog-metadata-store", "data"),
 )
 def render_catalog_query_list(
-    catalog_queries: list[dict] | None,
+    catalog_queries: list[dict[str, Any]] | None,
     namespace_filter: str | None,
     search_text: str | None,
-    selected_query: dict | None,
-    metadata_store: dict | None,
+    selected_query: dict[str, Any] | None,
+    metadata_store: dict[str, Any] | None,
 ) -> html.Div:
     """Render the filtered query list."""
     catalog_queries = catalog_queries or []
@@ -520,7 +521,7 @@ def render_catalog_query_list(
         namespace = query.get("namespace") or {}
         subtitle = namespace.get("name", "")
         status_badge = _build_status_badge(query.get("status"))
-        catalog_id = query.get("id")
+        catalog_id = query.get("id") or ""
         is_favourite = bool((metadata_store.get(catalog_id) or {}).get("is_favourite"))
         items.append(
             dbc.ListGroupItem(
@@ -547,7 +548,7 @@ def render_catalog_query_list(
                                     else "graph-catalog-favourite-toggle"
                                 ),
                                 title="Mark as favourite" if not is_favourite else "Remove favourite",
-                                **{
+                                **{  # type: ignore[arg-type]
                                     "aria-label": (
                                         f"Remove {query.get('name', 'query')} from favourites"
                                         if is_favourite
@@ -586,9 +587,9 @@ def render_catalog_query_list(
 )
 def toggle_catalog_favourite(
     _clicks: list[int | None],
-    toggle_ids: list[dict] | None,
-    metadata_store: dict | None,
-) -> dict:
+    toggle_ids: list[dict[str, Any]] | None,
+    metadata_store: dict[str, Any] | None,
+) -> dict[str, Any]:
     """Toggle a query's favourite state and persist it via the API.
 
     Fires ``PUT /catalog-metadata/{catalog_id}`` with the flipped value, then
@@ -651,12 +652,12 @@ def toggle_catalog_favourite(
     State("catalog-query-view-toggle", "value"),
 )
 def render_catalog_query_detail(
-    selected_query: dict | None,
-    catalog_queries: list[dict] | None,
+    selected_query: dict[str, Any] | None,
+    catalog_queries: list[dict[str, Any]] | None,
     theme_name: str | None,
-    parameter_values: dict | None,
+    parameter_values: dict[str, Any] | None,
     current_view: str | None,
-) -> tuple[list, list[dict], str | None, list]:
+) -> tuple[list[Any], list[dict[str, Any]], str | None, list[Any]]:
     """Render selected query details, view toggle, and parameter inputs."""
     catalog_queries = catalog_queries or []
     parameter_values = parameter_values or {}
@@ -700,7 +701,7 @@ def render_catalog_query_detail(
     if description_text:
         icon_id = "query-detail-info-icon"
         summary_children.extend([
-            html.I(
+            html.I(  # type: ignore[list-item]
                 className="fas fa-info-circle",
                 id=icon_id,
                 style={"cursor": "help", "marginLeft": "8px", "color": COLOR_GRAY_MEDIUM},
@@ -755,7 +756,7 @@ def render_catalog_query_detail(
         else:
             parameter_help = _build_parameter_help_text(parameter)
             label_base = _parameter_label(parameter)
-            label_children: list = [label_base]
+            label_children: list[Any] = [label_base]
             if required:
                 label_children.append(
                     html.Span(" *", style={"color": "#dc3545", "fontWeight": 700})
@@ -795,9 +796,9 @@ def render_catalog_query_detail(
     prevent_initial_call=False,
 )
 def update_run_button_state(
-    parameter_values: dict | None,
-    selected_query: dict | None,
-    catalog_queries: list[dict] | None,
+    parameter_values: dict[str, Any] | None,
+    selected_query: dict[str, Any] | None,
+    catalog_queries: list[dict[str, Any]] | None,
     current_view: str | None,
 ) -> tuple[bool, bool]:
     """Drive the Run / Load-to-console button disabled state.
@@ -824,9 +825,9 @@ def update_run_button_state(
 )
 def sync_catalog_parameter_values(
     values: list[str],
-    ids: list[dict],
-    current_params: dict | None,
-) -> dict:
+    ids: list[dict[str, Any]],
+    current_params: dict[str, Any] | None,
+) -> dict[str, Any]:
     """Persist non-person parameter form state in the store.
 
     Merges into the existing store so that person picker wba_ids
@@ -856,12 +857,12 @@ def sync_catalog_parameter_values(
 )
 def load_catalog_query_into_console(
     _n_clicks: int,
-    _selected_query_input: dict | None,
+    _selected_query_input: dict[str, Any] | None,
     search: str | None,
-    selected_query: dict | None,
-    catalog_queries: list[dict] | None,
+    selected_query: dict[str, Any] | None,
+    catalog_queries: list[dict[str, Any]] | None,
     catalog_view: str | None,
-    catalog_parameters: dict | None,
+    catalog_parameters: dict[str, Any] | None,
 ) -> tuple[str | None, str | None]:
     """Populate the query console with the selected catalog query text.
 
@@ -929,8 +930,8 @@ clientside_callback(
 )
 def sync_person_suggestions(
     debounced_queries: list[str | None],
-    debounce_ids: list[dict],
-) -> tuple[list, list]:
+    debounce_ids: list[dict[str, Any]],
+) -> tuple[list[Any], list[Any]]:
     """Fetch person suggestions and render them into each picker's suggestions panel.
 
     Only the suggestions panel (a sibling of the input) is updated, so the
@@ -938,7 +939,7 @@ def sync_person_suggestions(
     """
     api_base = get_graph_api_base_url()
     _hidden = {"display": "none"}
-    _visible: dict = {
+    _visible: dict[str, Any] = {
         "display": "block",
         "position": "absolute",
         "top": "100%",
@@ -947,8 +948,8 @@ def sync_person_suggestions(
         "zIndex": "1050",
     }
 
-    all_children: list = []
-    all_styles: list = []
+    all_children: list[Any] = []
+    all_styles: list[Any] = []
 
     for query_text, debounce_id in zip(debounced_queries, debounce_ids):
         parameter_name = debounce_id.get("name") if isinstance(debounce_id, dict) else None
@@ -961,7 +962,7 @@ def sync_person_suggestions(
         try:
             response = requests.get(
                 f"{api_base}/api/v1/search/persons",
-                params={"q": query_text.strip(), "page_size": 10},
+                params={"q": query_text.strip(), "page_size": 10},  # type: ignore[arg-type]
                 timeout=TIMEOUT_SECONDS,
             )
             response.raise_for_status()
@@ -1037,7 +1038,7 @@ def sync_person_suggestions(
     Input({"type": "catalog-person-pick", "name": MATCH, "idx": ALL, "wba": ALL, "display": ALL}, "n_clicks"),
     prevent_initial_call=True,
 )
-def handle_person_pick(all_clicks: list[int]) -> tuple:
+def handle_person_pick(all_clicks: list[int]) -> tuple[Any, ...]:
     """Commit a suggestion selection for one person picker.
 
     Renders a chip showing the person's name + canonical wba_id, hides the
@@ -1088,7 +1089,7 @@ def handle_person_pick(all_clicks: list[int]) -> tuple:
     Input({"type": "catalog-person-chip-clear", "name": MATCH}, "n_clicks"),
     prevent_initial_call=True,
 )
-def handle_person_chip_clear(n_clicks: int | None) -> tuple:
+def handle_person_chip_clear(n_clicks: int | None) -> tuple[Any, ...]:
     """Clear the person selection and restore the search input."""
     if not n_clicks:
         raise PreventUpdate
@@ -1112,9 +1113,9 @@ def handle_person_chip_clear(n_clicks: int | None) -> tuple:
 )
 def sync_person_parameter_values(
     values: list[str | None],
-    ids: list[dict],
-    current_params: dict | None,
-) -> dict:
+    ids: list[dict[str, Any]],
+    current_params: dict[str, Any] | None,
+) -> dict[str, Any]:
     """Merge person picker selections into the shared catalog parameters store.
 
     Fires whenever any ``catalog-person-value`` store changes (pick or clear).

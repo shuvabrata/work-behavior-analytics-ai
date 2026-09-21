@@ -14,6 +14,7 @@ element data returned by the collaboration score query, so no ES round-trip is
 needed.
 """
 
+from typing import Any
 from dash import Input, Output, State, callback, clientside_callback
 from dash.exceptions import PreventUpdate
 
@@ -54,7 +55,7 @@ clientside_callback(
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _match_node(data: dict, query_lower: str) -> bool:
+def _match_node(data: dict[str, Any], query_lower: str) -> bool:
     """Return True if any searchable field in node data contains query_lower."""
     for field in _SEARCH_FIELDS:
         val = data.get(field)
@@ -63,7 +64,7 @@ def _match_node(data: dict, query_lower: str) -> bool:
     return False
 
 
-def _apply_spotlight_classes(elements: list[dict] | None, match_wba_ids: set[str] | None) -> list[dict]:
+def _apply_spotlight_classes(elements: list[dict[str, Any]] | None, match_wba_ids: set[str] | None) -> list[dict[str, Any]]:
     """Add spotlight-match / spotlight-dim classes to Cytoscape elements.
 
     When match_wba_ids is None, all spotlight-* classes are stripped (clear mode).
@@ -71,7 +72,7 @@ def _apply_spotlight_classes(elements: list[dict] | None, match_wba_ids: set[str
     Non-spotlight classes (e.g. dimmed, community) are preserved.
     """
     # Pass 1 (nodes only): collect Cytoscape element ids of matching nodes
-    matching_cyto_ids: set = set()
+    matching_cyto_ids: set[Any] = set()
     if match_wba_ids is not None:
         for elem in (elements or []):
             data = elem.get("data", {})
@@ -115,7 +116,7 @@ def _apply_spotlight_classes(elements: list[dict] | None, match_wba_ids: set[str
     State("collab-cytoscape", "elements"),
     prevent_initial_call=True,
 )
-def update_collab_spotlight(query: str | None, elements: list[dict] | None) -> tuple[list[dict], str]:
+def update_collab_spotlight(query: str | None, elements: list[dict[str, Any]] | None) -> tuple[list[dict[str, Any]], str]:
     """Apply spotlight highlighting to collab nodes using client-side field matching."""
     if not elements:
         raise PreventUpdate

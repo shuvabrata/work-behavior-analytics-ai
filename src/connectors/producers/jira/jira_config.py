@@ -13,7 +13,7 @@ import requests
 from pathlib import Path
 from typing import Any, Dict, cast
 
-from atlassian import Jira  # type: ignore[import-untyped]
+from atlassian import Jira
 
 from common.logger import logger
 
@@ -66,7 +66,7 @@ def create_jira_connection(config: Dict[str, Any]) -> Jira:
     )
 
     # Validate connection — raises if credentials are wrong
-    user = jira.myself()  # type: ignore[union-attr]
+    user = jira.myself()  # type: ignore[no-untyped-call]
     if not user:
         raise RuntimeError(
             "Failed to authenticate with Jira. Please check your API credentials."

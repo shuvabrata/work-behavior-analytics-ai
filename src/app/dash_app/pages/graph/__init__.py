@@ -6,6 +6,8 @@ This page allows users to:
 - Display tabular results for non-graph queries
 """
 
+__all__ = ["get_layout"]
+
 # Import layout
 from .layout import get_layout
 

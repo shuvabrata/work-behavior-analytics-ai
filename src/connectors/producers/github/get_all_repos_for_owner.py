@@ -1,4 +1,4 @@
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, cast
 from github import Github
 from github.Repository import Repository
 from common.logger import logger
@@ -42,7 +42,7 @@ def get_all_repos_for_owner(
             search_results = retry_with_backoff(
                 lambda: list(client.search_repositories(query=search_query))
             )
-            repos = search_results
+            repos = cast(List[Repository], search_results)
             logger.info(f"Found {len(repos)} repositories matching filters for {owner}")
             
         except Exception as e:

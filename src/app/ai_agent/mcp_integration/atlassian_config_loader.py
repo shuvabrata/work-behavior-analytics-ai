@@ -115,7 +115,7 @@ def load_atlassian_mcp_config() -> Optional[dict[str, Any]]:
             await _engine.dispose()
 
     try:
-        return _run_async_sync(_fetch)
+        return _run_async_sync(_fetch)  # type: ignore[no-any-return]
     except Exception:  # noqa: BLE001
         logger.debug(
             "Failed to load Atlassian MCP config from DB; will use env fallback",

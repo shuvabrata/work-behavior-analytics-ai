@@ -23,4 +23,4 @@ def parse_body_for_relations(html_body: str) -> Tuple[Set[str], Set[str]]:
         if key_param and key_param.text:
             jira_keys.add(key_param.text)
     logger.info(f"Parsed Confluence body relations: mentions={len(mentions)} jira_keys={len(jira_keys)}")
-    return mentions, jira_keys
+    return mentions, jira_keys  # type: ignore[return-value]

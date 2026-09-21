@@ -269,7 +269,7 @@ for _mode_tokens in THEME_TOKENS.values():
         _mode_tokens[f"{_key}.height"] = _height
 
 
-def get_theme_tokens(theme_name: str = ACTIVE_THEME) -> dict:
+def get_theme_tokens(theme_name: str = ACTIVE_THEME) -> dict[str, Any]:
     """Return semantic tokens for the requested theme."""
     if theme_name not in THEME_TOKENS:
         available = ", ".join(sorted(THEME_TOKENS.keys()))

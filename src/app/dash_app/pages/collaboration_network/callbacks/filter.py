@@ -35,7 +35,7 @@ from ..layout import (
     [Input("url", "search"),
      Input("url", "pathname")],
 )
-def load_collaboration_network(search: str | None, pathname: str | None) -> tuple[list[dict], dict, list, dict, dict, bool]:
+def load_collaboration_network(search: str | None, pathname: str | None) -> tuple[list[dict[str, Any]], dict[str, Any], list[Any], dict[str, Any], dict[str, Any], bool]:
     """Fetch raw elements into the store when this page is active.
 
     Note: prevent_initial_call is intentionally NOT set here.  In Dash's
@@ -135,18 +135,18 @@ def load_collaboration_network(search: str | None, pathname: str | None) -> tupl
      Input("collab-top-n-toggle",            "value")],
 )
 def apply_collab_filters(
-    elements: list[dict] | None,
+    elements: list[dict[str, Any]] | None,
     selected_communities: list[int] | None,
     weight_threshold: float | int | None,
     top_n_mode: str | None,
-) -> list[dict]:
+) -> list[dict[str, Any]]:
     """Translate raw store elements through the active filters \u2192 cytoscape."""
     if not elements:
         return []
     result = _compute_collab_filtered(
         elements,
         selected_communities or [],
-        weight_threshold or 0,
+        int(weight_threshold or 0),
         top_n_mode or "all",
     )
     logger.debug(
@@ -162,7 +162,7 @@ def apply_collab_filters(
      Output("collab-community-available-store", "data")],
     Input("collab-elements-store", "data"),
 )
-def update_collab_community_filter(elements: list[dict] | None) -> tuple[list[dict], list[int], list[int]]:
+def update_collab_community_filter(elements: list[dict[str, Any]] | None) -> tuple[list[dict[str, Any]], list[int], list[int]]:
     """Populate the community checklist when new data loads.
 
     Note: no prev-state guard here.  On re-navigation the
@@ -197,7 +197,7 @@ def update_collab_weight_label(value: float | int | None) -> str:
      Input("collab-top-n-toggle",            "value")],
 )
 def update_collab_filter_feedback(
-    elements: list[dict] | None,
+    elements: list[dict[str, Any]] | None,
     selected_communities: list[int] | None,
     weight_threshold: float | int | None,
     top_n_mode: str | None,
@@ -213,7 +213,7 @@ def update_collab_filter_feedback(
     filtered = _compute_collab_filtered(
         elements,
         selected_communities or [],
-        weight_threshold or 0,
+        int(weight_threshold or 0),
         top_n_mode or "all",
     )
     f_nodes, f_edges = _split_elements(filtered)
@@ -249,7 +249,7 @@ def update_collab_filter_feedback(
     State("collab-community-filter",  "options"),
     prevent_initial_call=True,
 )
-def clear_collab_filters(n_clicks: int | None, community_options: list[dict] | None) -> tuple[list[int], int, str]:
+def clear_collab_filters(n_clicks: int | None, community_options: list[dict[str, Any]] | None) -> tuple[list[int], int, str]:
     """Reset all filter controls to their defaults."""
     all_communities = [opt["value"] for opt in (community_options or [])]
     return all_communities, 0, "all"

@@ -36,13 +36,16 @@ def fetch_content_likes(
     while True:
         params = {"limit": page_size}
         if cursor:
-            params["cursor"] = cursor
+            params["cursor"] = cursor  # type: ignore[assignment]
 
         logger.debug(f"Calling Confluence API: {path} with params: {params}")
         # Retry rate-limit (HTTP 429) and transient network errors with
         # exponential backoff so a momentary connectivity loss does not abort
         # the likes fetch.
         response = retry_with_backoff(lambda: confluence.get(path, params=params))
+        if response is None:
+            logger.warning(f"Received None response from Confluence API for {path}")
+            break
         page_results = response.get("results", [])
         results.extend(page_results)
         

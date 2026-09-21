@@ -248,7 +248,7 @@ def _error_banner(message: str) -> dbc.Alert:
     return create_alert(message, color="danger", class_name="mb-0")
 
 
-def _split_elements(elements: list[dict]) -> tuple[list[dict], list[dict]]:
+def _split_elements(elements: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Split a Cytoscape element list into (nodes, edges)."""
     nodes = [
         e for e in elements
@@ -261,7 +261,7 @@ def _split_elements(elements: list[dict]) -> tuple[list[dict], list[dict]]:
     return nodes, edges
 
 
-def _get_communities(elements: list[dict]) -> list[int]:
+def _get_communities(elements: list[dict[str, Any]]) -> list[int]:
     """Return sorted list of unique community IDs present in elements."""
     seen: set[int] = set()
     for el in elements:
@@ -272,11 +272,11 @@ def _get_communities(elements: list[dict]) -> list[int]:
 
 
 def _compute_collab_filtered(
-    elements: list[dict],
+    elements: list[dict[str, Any]],
     selected_communities: list[Any],
     weight_threshold: int,
     top_n_mode: str,
-) -> list[dict]:
+) -> list[dict[str, Any]]:
     """Apply community, weight, and top-N filters to collaboration elements.
 
     Returns a list ready to assign to collab-cytoscape.elements.

@@ -17,7 +17,7 @@ import os
 import sys
 import time
 import uuid
-from typing import AsyncIterator
+from typing import AsyncIterator, Any
 
 from dotenv import load_dotenv
 
@@ -27,11 +27,11 @@ from app.ai_agent.chains import augment_message_stream
 from app.settings import settings
 
 # In-memory session store: {session_id: [messages]}
-_chat_sessions = {}
+_chat_sessions: dict[str, list[dict[str, Any]]] = {}
 
 # In-memory streaming metrics counters.
 # Keys: starts, completions, errors, disconnects, total_duration_seconds
-_streaming_metrics: dict = {
+_streaming_metrics: dict[str, Any] = {
     "starts": 0,
     "completions": 0,
     "errors": 0,
@@ -40,7 +40,7 @@ _streaming_metrics: dict = {
 }
 
 
-def get_streaming_metrics() -> dict:
+def get_streaming_metrics() -> dict[str, Any]:
     """Return a snapshot of the current streaming metrics.
 
     Returns:
@@ -65,14 +65,14 @@ LLM_MODEL = _provider.default_model
 MAX_TOKENS = int(os.getenv("MAX_TOKENS", "16000"))
 
 
-def _normalize_stream_metadata_payload(metadata_payload: dict) -> dict:
+def _normalize_stream_metadata_payload(metadata_payload: dict[str, Any]) -> dict[str, Any]:
     """Return a normalized metadata payload safe for logging/UI display.
 
     Keeps the wire schema stable while trimming noisy string fields so very long
     values (for example generated Cypher queries) do not bloat logs/UI.
     """
     safe_payload = dict(metadata_payload)
-    safe_sources: list[dict] = []
+    safe_sources: list[dict[str, Any]] = []
 
     for source in safe_payload.get("sources", []) or []:
         if not isinstance(source, dict):
@@ -102,8 +102,8 @@ def _build_and_log_stream_metadata(
     total_tokens: int,
     elapsed_seconds: float,
     model: str,
-    sources: list,
-) -> dict:
+    sources: list[Any],
+) -> dict[str, Any]:
     """Build per-response metadata, normalize it, then log and return it."""
     payload = {
         "tokens": {
@@ -135,12 +135,12 @@ def new_chat(system_prompt: str = "You are a helpful AI assistant.") -> str:
     return session_id
 
 
-async def _augument_user_message(session_id: str, user_message: str) -> AsyncIterator[tuple[str, str | tuple[str, list]]]:
+async def _augument_user_message(session_id: str, user_message: str) -> AsyncIterator[tuple[str, Any]]:
     """Handles the augmentation phase, yielding SSE strings and finally the resulting message."""
     yield "sse", f"data: {json.dumps({'type': 'thinking_start'})}\n\n"
 
     final_augmented_message = user_message
-    chain_sources: list = []
+    chain_sources: list[Any] = []
     
     try:
         raw_history = _chat_sessions.get(session_id, [])
@@ -176,7 +176,7 @@ def _build_message_list_for_llm_with_token_pruning(
     final_augmented_message: str,
     model: str,
     max_tokens: int,
-) -> tuple[list[dict], int]:
+) -> tuple[list[dict[str, Any]], int]:
     """Build message list with token pruning.
     
     Args:
@@ -258,8 +258,8 @@ async def stream_chat(
         
         try:
             # ── Phase 1: Augmentation (adding more info to user message) ───────────────
-            final_augmented_message = None
-            chain_sources = []       
+            final_augmented_message: str = user_message
+            chain_sources: list[Any] = []
             async for item_type, data in _augument_user_message(session_id, user_message):
                 if item_type == "sse":
                     yield data  # Forward the stream directly to the client

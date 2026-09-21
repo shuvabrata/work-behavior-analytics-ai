@@ -5,6 +5,7 @@ Callbacks for graph navigation, keyboard shortcuts, and viewport controls.
 
 from dash import Input, Output, State, callback, clientside_callback
 from dash.exceptions import PreventUpdate
+from typing import Any
 
 
 # Clientside callback to fit graph to screen when button clicked
@@ -386,7 +387,7 @@ clientside_callback(
      State("graph-fit-trigger", "children")],
     prevent_initial_call=True
 )
-def handle_keyboard_shortcuts(shortcut_data, selected_nodes, current_fit_count):
+def handle_keyboard_shortcuts(shortcut_data: Any, selected_nodes: Any, current_fit_count: Any) -> Any:
     """Handle keyboard shortcuts for expansion and navigation"""
     if not shortcut_data or not isinstance(shortcut_data, dict):
         raise PreventUpdate

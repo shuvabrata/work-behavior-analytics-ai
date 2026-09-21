@@ -8,6 +8,7 @@ import requests
 
 from app.common.timezone import now_in_app_timezone, humanize_duration
 from app.runtime_settings import runtime_settings
+from app.settings import settings
 from app.dash_app.components.common import create_diamond_icon, create_page_header
 from app.dash_app.styles import (
     FONT_SANS,
@@ -157,7 +158,7 @@ def get_layout() -> html.Div:
     Output("session-store", "data"),
     Input("session-store", "data")
 )
-def initialize_session(current_data: dict | None) -> dict:
+def initialize_session(current_data: dict[str, Any] | None) -> dict[str, Any]:
     """Initialize a new chat session if one doesn't exist or is invalid"""
     api_base = os.getenv("API_BASE_URL", "http://localhost:8000")
     
@@ -219,8 +220,8 @@ def initialize_session(current_data: dict | None) -> dict:
 def queue_message(
     n_clicks: int | None,
     user_message: str | None,
-    session_data: dict | None,
-) -> tuple[list, str, dict, Any, dict, str]:
+    session_data: dict[str, Any] | None,
+) -> tuple[list[Any], str, dict[str, Any], Any, dict[str, Any], str]:
     """Queue a message for sending and update UI optimistically"""
     if session_data is None:
         session_data = {"session_id": None, "messages": []}
@@ -299,7 +300,7 @@ clientside_callback(
     State("session-store", "data"),
     prevent_initial_call=True,
 )
-def render_from_session(streaming_active: bool, session_data: dict | None) -> list | Any:
+def render_from_session(streaming_active: bool, session_data: dict[str, Any] | None) -> list[Any] | Any:
     """Re-render chat messages from session-store after the JS stream bridge finishes."""
     if streaming_active:
         return no_update
@@ -314,12 +315,12 @@ def render_from_session(streaming_active: bool, session_data: dict | None) -> li
      Output("send-button", "disabled")],
     Input("sending-store", "data")
 )
-def toggle_sending_state(sending_data: dict | None) -> tuple[bool, bool]:
+def toggle_sending_state(sending_data: dict[str, Any] | None) -> tuple[bool, bool]:
     sending = bool(sending_data and sending_data.get("sending"))
     return sending, sending
 
 
-def _render_response_meta(meta: dict) -> list:
+def _render_response_meta(meta: dict[str, Any]) -> list[Any]:
     """Build a compact metadata bar for an assistant message.
 
     Returns a list with a single Div (or empty list if nothing to show).
@@ -376,7 +377,7 @@ def _render_response_meta(meta: dict) -> list:
     ]
 
 
-def render_messages(messages: list[dict] | None) -> list[html.Div]:
+def render_messages(messages: list[dict[str, Any]] | None) -> list[html.Div]:
     """Render the message history with Executive Dashboard aesthetic"""
     if not messages:
         return [html.Div([

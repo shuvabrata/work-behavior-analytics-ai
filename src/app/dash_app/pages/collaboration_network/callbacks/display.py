@@ -1,5 +1,6 @@
 """Collaboration Network display callbacks — properties panel + stylesheet."""
 
+from typing import Any
 from dash import Input, Output, callback, html
 
 from app.dash_app.components.common import build_element_properties_content, register_edge_hover_dimming_callback
@@ -14,7 +15,7 @@ register_edge_hover_dimming_callback("collab-cytoscape")
     Output("collab-cytoscape", "stylesheet"),
     Input("theme-store", "data"),
 )
-def update_collab_stylesheet(theme_name: str | None) -> list[dict]:
+def update_collab_stylesheet(theme_name: str | None) -> list[dict[str, Any]]:
     """Update the collab graph palette when the app theme changes.
 
     Fetches the server-merged effective theme (base tokens ⊕ default-theme
@@ -37,7 +38,7 @@ _PLACEHOLDER = html.P(
     [Input("collab-cytoscape", "selectedNodeData"),
      Input("collab-cytoscape", "selectedEdgeData")],
 )
-def display_collab_properties(selected_nodes: list[dict] | None, selected_edges: list[dict] | None) -> html.Div | html.P:
+def display_collab_properties(selected_nodes: list[dict[str, Any]] | None, selected_edges: list[dict[str, Any]] | None) -> html.Div | html.P:
     """Show properties for a selected node or edge.
 
     Expand Node is disabled (expand_node_enabled=False) because the

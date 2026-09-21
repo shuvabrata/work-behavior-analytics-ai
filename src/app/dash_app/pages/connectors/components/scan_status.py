@@ -4,6 +4,7 @@ Renders a single scan command row with status icon, timestamp, duration,
 and result summary.
 """
 
+from typing import Any
 import json
 from datetime import datetime
 
@@ -96,7 +97,7 @@ def render_scan_item(command: dict) -> html.Div:  # type: ignore[type-arg]
     created_str = _format_timestamp(command.get("created_at"))
     started_str = _format_timestamp(command.get("started_at"))
     completed_str = _format_timestamp(command.get("completed_at"))
-    error_message: str | None = command.get("error_message")  # type: ignore[type-arg]
+    error_message: str | None = command.get("error_message")
     result_summary = command.get("result_summary")
 
     # Duration calculation — only when the scan has finished
@@ -149,7 +150,7 @@ def render_scan_item(command: dict) -> html.Div:  # type: ignore[type-arg]
 
     # Raw result_summary hover — expose the full JSON for any scan result
     # that carries one (completed, failed, cancelled, test, etc.).
-    raw_summary_part: list = []
+    raw_summary_part: list[Any] = []
     if result_summary is not None:
         tooltip_id = f"scan-summary-json-{command_id}"
         try:

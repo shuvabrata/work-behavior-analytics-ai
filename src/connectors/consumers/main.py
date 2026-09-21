@@ -152,7 +152,9 @@ async def consume_queue(
     )
 
     def _open_dump() -> Any:
-        return dump_path.open("w", encoding="utf-8") if signal_dumps_enabled else contextlib.nullcontext()
+        if dump_path is None:
+            return contextlib.nullcontext()
+        return dump_path.open("w", encoding="utf-8")
 
     try:
         consumer = RabbitMQConsumer(rabbitmq_url, queue=queue_name)

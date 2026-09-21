@@ -3,7 +3,7 @@
 # First time dev setup
 Setup python environment
 ```
-pyenv local 3.12.12 # optional
+pyenv local 3.14.2 # optional
 python -m venv .venv
 source .venv/bin/activate
 for i in `ls requirements*.txt`

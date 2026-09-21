@@ -10,7 +10,7 @@ from typing import Any, AsyncIterator, cast, Dict, List, Optional
 
 import openai
 from dotenv import load_dotenv
-from openai.types.chat import ChatCompletionDeveloperMessageParam, ChatCompletionFunctionToolParam, ChatCompletionMessageFunctionToolCall
+from openai.types.chat import ChatCompletionDeveloperMessageParam, ChatCompletionFunctionToolParam
 
 from app.ai_agent.providers.base import LLMProvider
 from app.ai_agent.utils.token_utils import count_tokens
@@ -210,9 +210,10 @@ class OpenAIProvider(LLMProvider):
 
             tool_calls = []
             for tool_call in message.tool_calls or []:
-                if not isinstance(tool_call, ChatCompletionMessageFunctionToolCall):
+                func = getattr(tool_call, "function", None)
+                if func is None:
                     continue
-                raw_args = tool_call.function.arguments or "{}"
+                raw_args = func.arguments or "{}"
                 try:
                     parsed_args = json.loads(raw_args)
                 except json.JSONDecodeError:
@@ -221,7 +222,7 @@ class OpenAIProvider(LLMProvider):
                 tool_calls.append(
                     {
                         "id": tool_call.id,
-                        "name": tool_call.function.name,
+                        "name": func.name,
                         "arguments": parsed_args,
                     }
                 )

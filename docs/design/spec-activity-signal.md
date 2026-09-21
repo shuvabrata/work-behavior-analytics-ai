@@ -162,8 +162,8 @@ The `entity_type` discriminator field is internal and excluded from these tables
 | `project_id` | `Optional[str]` |  |  |
 | `updated_at` | `Optional[str]` |  |  |
 | `duedate` | `Optional[str]` |  |  |
-| `labels` | `Optional[list]` |  |  |
-| `components` | `Optional[list]` |  |  |
+| `labels` | `Optional[list[Any]]` |  |  |
+| `components` | `Optional[list[Any]]` |  |  |
 | `url` | `Optional[str]` |  |  |
 | `custom` | `Optional[Dict[str, Any]]` |  |  |
 
@@ -215,7 +215,7 @@ The `entity_type` discriminator field is internal and excluded from these tables
 | `story_points` | `Optional[float]` |  |  |
 | `assignee` | `Optional[str]` |  |  |
 | `reporter` | `Optional[str]` |  |  |
-| `labels` | `Optional[list]` |  |  |
+| `labels` | `Optional[list[Any]]` |  |  |
 | `url` | `Optional[str]` |  |  |
 | `custom` | `Optional[Dict[str, Any]]` |  |  |
 
@@ -274,7 +274,7 @@ The `entity_type` discriminator field is internal and excluded from these tables
 | `review_comments` | `Optional[int]` |  |  |
 | `head_branch_name` | `Optional[str]` |  |  |
 | `base_branch_name` | `Optional[str]` |  |  |
-| `labels` | `Optional[list]` |  |  |
+| `labels` | `Optional[list[Any]]` |  |  |
 | `mergeable_state` | `Optional[str]` |  |  |
 | `url` | `Optional[str]` |  |  |
 | `custom` | `Optional[Dict[str, Any]]` |  |  |

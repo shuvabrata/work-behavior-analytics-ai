@@ -1,0 +1,30 @@
+name: Top N Mentioned Person
+description: |-
+  **What it is:** Ranks people by how frequently they are @mentioned across all platforms — Jira Issues, Epics, Initiatives, and Confluence Pages.
+
+  **How it helps:** @mentions reveal who is being pulled into conversations as an owner, expert, or decision-maker, regardless of platform. High cross-platform mention counts identify informal knowledge hubs and potential single points of failure.
+
+  **What-If Impact:** Over-mentioned individuals become attention bottlenecks. Their cognitive bandwidth is fragmented across discussions disconnected from their core delivery work, quietly eroding their throughput.
+summary: "Top 10 most @mentioned people across Jira and Confluence."
+default_view: tabular
+owner: hall-of-fame-analytics
+status: draft
+queries:
+  tabular: |-
+    MATCH (entity)-[:MENTIONS]->(person:Person)
+    WHERE entity:Issue OR entity:Epic OR entity:Initiative OR entity:Page
+    RETURN coalesce(person._display_name, person.name, person.id) AS person,
+           count(DISTINCT entity) AS entities_mentioning,
+           count(*) AS total_mentions,
+           sum(CASE WHEN entity:Issue OR entity:Epic OR entity:Initiative THEN 1 ELSE 0 END) AS jira_mentions,
+           sum(CASE WHEN entity:Page THEN 1 ELSE 0 END) AS confluence_mentions
+    ORDER BY total_mentions DESC
+    LIMIT 10
+  graph: |-
+    MATCH p1=(entity)-[:MENTIONS]->(person:Person)
+    WHERE entity:Issue OR entity:Epic OR entity:Initiative OR entity:Page
+    RETURN p1
+    LIMIT 100
+tags:
+- table
+- graph

@@ -173,7 +173,7 @@ async def test_execute_catalog_query_rejects_auto_view(monkeypatch):
     response = await _post_execute(
         {
             "source": "catalog",
-            "catalog_id": "github/top_contributors",
+            "catalog_id": "hall_of_fame/top_n_committers",
             "view": "auto",
         }
     )

@@ -2,6 +2,8 @@
 # Defines the directory structure and namespaces for all graph queries.
 
 namespaces:
+- name: Hall of Fame
+  directory: hall_of_fame
 - name: Schema
   directory: schema
 - name: Cross-Domain

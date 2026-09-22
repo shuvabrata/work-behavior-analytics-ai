@@ -18,6 +18,7 @@ def test_load_namespaces_from_master_catalog():
     namespaces = load_namespaces(CATALOG_DIR)
 
     assert [namespace.directory for namespace in namespaces] == [
+        "hall_of_fame",
         "schema",
         "cross_domain",
         "confluence",
@@ -27,14 +28,14 @@ def test_load_namespaces_from_master_catalog():
         "person",
         "person_to_person",
     ]
-    assert namespaces[0].name == "Schema"
+    assert namespaces[0].name == "Hall of Fame"
     assert namespaces[0].order == 0
 
 
 def test_load_catalog_normalizes_all_existing_entries():
     queries = load_catalog(CATALOG_DIR)
 
-    assert len(queries) == 127
+    assert len(queries) == 140
     assert len({query.id for query in queries}) == len(queries)
     assert all(query.available_views for query in queries)
     assert all(query.namespace.name for query in queries)
@@ -46,11 +47,11 @@ def test_load_catalog_normalizes_all_existing_entries():
 
 
 def test_get_catalog_query_by_stable_id():
-    query = get_catalog_query("github/top_contributors", CATALOG_DIR)
+    query = get_catalog_query("hall_of_fame/top_n_committers", CATALOG_DIR)
 
-    assert query.name == "Top Contributors"
-    assert query.namespace.directory == "github"
-    assert query.slug == "top_contributors"
+    assert query.name == "Top N Code Committer"
+    assert query.namespace.directory == "hall_of_fame"
+    assert query.slug == "top_n_committers"
     assert query.available_views == ["tabular", "graph"]
     assert "LIMIT 10" in query.queries["tabular"]
 

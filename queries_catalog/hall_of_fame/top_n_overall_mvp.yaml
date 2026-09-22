@@ -1,0 +1,69 @@
+name: Top N Overall MVP
+description: |-
+  **What it is:** A unified cross-domain leaderboard that ranks people by a composite MVP score combining activity across GitHub (commits, PRs created, reviews given) and Jira (issues resolved) and Confluence (pages authored).
+
+  **Score formula**: `commits + (prs_created × 2) + reviews_given + jira_resolved + pages_authored`
+
+  PRs are weighted 2× because they represent a higher-level, integrated contribution compared to individual commits.
+
+  **How it helps:** Provides the most holistic view of individual contribution in the organisation. Surfaces well-rounded engineers and PMs who contribute across code, delivery, and documentation — not just those who optimise a single dimension.
+
+  **What-If Impact:** Relying on single-domain metrics (e.g., commit counts alone) systematically penalises the engineers doing the most cross-cutting, high-leverage work. This query corrects for that blind spot.
+summary: "Top 10 overall contributors by a cross-domain MVP score (commits + PRs×2 + reviews + Jira resolved + Confluence pages)."
+default_view: tabular
+owner: hall-of-fame-analytics
+status: draft
+queries:
+  tabular: |-
+    MATCH (p:Person)
+    CALL {
+      WITH p
+      OPTIONAL MATCH (p)-[:AUTHORED_BY]-(c:Commit)
+      RETURN count(DISTINCT c) AS commits
+    }
+    CALL {
+      WITH p
+      OPTIONAL MATCH (p)<-[:CREATED_BY]-(pr:PullRequest)
+      RETURN count(DISTINCT pr) AS prs_created
+    }
+    CALL {
+      WITH p
+      OPTIONAL MATCH (pr2:PullRequest)-[:REVIEWED_BY]->(p)
+      RETURN count(DISTINCT pr2) AS reviews_given
+    }
+    CALL {
+      WITH p
+      OPTIONAL MATCH (i:Issue)-[:ASSIGNED_TO]-(p)
+      WHERE i.status IN ['Done','Closed','Resolved'] AND i.id STARTS WITH 'jira::'
+      RETURN count(DISTINCT i) AS jira_resolved
+    }
+    CALL {
+      WITH p
+      OPTIONAL MATCH (page:Page)-[:AUTHORED_BY]-(p)
+      RETURN count(DISTINCT page) AS pages_authored
+    }
+    WITH p, commits, prs_created, reviews_given, jira_resolved, pages_authored,
+         (commits + prs_created * 2 + reviews_given + jira_resolved + pages_authored) AS mvp_score
+    WHERE mvp_score > 0
+    RETURN coalesce(p._display_name, p.name, p.id) AS person,
+           p.title AS title,
+           commits,
+           prs_created,
+           reviews_given,
+           jira_resolved,
+           pages_authored,
+           mvp_score
+    ORDER BY mvp_score DESC
+    LIMIT 10
+  graph: |-
+    MATCH (p:Person)
+    OPTIONAL MATCH p1=(p)-[:AUTHORED_BY]-(c:Commit)
+    OPTIONAL MATCH p2=(p)<-[:CREATED_BY]-(pr:PullRequest)
+    OPTIONAL MATCH p3=(pr2:PullRequest)-[:REVIEWED_BY]->(p)
+    OPTIONAL MATCH p4=(i:Issue)-[:ASSIGNED_TO]-(p)
+    OPTIONAL MATCH p5=(page:Page)-[:AUTHORED_BY]-(p)
+    RETURN p1, p2, p3, p4, p5
+    LIMIT 100
+tags:
+- table
+- graph

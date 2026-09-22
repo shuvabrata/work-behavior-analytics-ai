@@ -676,6 +676,16 @@ def render_catalog_query_detail(
             [],
         )
 
+    # When the user switches to a different query the selected-catalog-query-store fires.
+    # In that case the radio button still holds the *previous* query's view value, so we
+    # must not carry it forward — reset to None so determine_catalog_view falls through
+    # to the new query's declared default_view.
+    try:
+        if ctx.triggered_id == "selected-catalog-query-store":
+            current_view = None
+    except Exception:  # noqa: BLE001 — MissingCallbackContextException outside Dash runtime
+        pass
+
     selected_view = determine_catalog_view(
         query,
         (selected_query or {}).get("preferred_view"),

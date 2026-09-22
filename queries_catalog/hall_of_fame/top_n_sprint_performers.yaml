@@ -1,0 +1,33 @@
+name: Top N Sprint Performers
+description: |-
+  **What it is:** Ranks people by the number of issues they have resolved within closed sprints, alongside the number of distinct sprints they participated in.
+
+  **How it helps:** Sprint completion is a direct measure of delivery consistency. Engineers who close the most issues within sprint boundaries are the most reliable delivery contributors, not just the most active ones.
+
+  **What-If Impact:** Consistently completing sprint work is the foundation of team predictability. If the top sprint performers leave or are pulled into non-sprint work, velocity forecasts become unreliable almost immediately.
+summary: "Top 10 sprint performers by issues resolved within closed sprints."
+default_view: tabular
+owner: hall-of-fame-analytics
+status: draft
+queries:
+  tabular: |-
+    MATCH (i:Issue)-[:IN_SPRINT]->(s:Sprint)
+    MATCH (i)-[:ASSIGNED_TO]-(p:Person)
+    WHERE i.status IN ['Done', 'Closed', 'Resolved']
+      AND s.state = 'closed'
+    RETURN coalesce(p._display_name, p.name, p.id) AS performer,
+           p.title AS title,
+           count(DISTINCT i) AS issues_completed_in_sprint,
+           count(DISTINCT s) AS sprints_participated
+    ORDER BY issues_completed_in_sprint DESC
+    LIMIT 10
+  graph: |-
+    MATCH p1=(i:Issue)-[:IN_SPRINT]->(s:Sprint)
+    MATCH p2=(i)-[:ASSIGNED_TO]-(p:Person)
+    WHERE i.status IN ['Done', 'Closed', 'Resolved']
+      AND s.state = 'closed'
+    RETURN p1, p2
+    LIMIT 100
+tags:
+- table
+- graph

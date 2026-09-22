@@ -25,18 +25,18 @@ async def test_catalog_list_endpoint_returns_normalized_catalog():
     assert response.status_code == 200
     data = response.json()
 
-    assert data["count"] == 127
-    assert len(data["items"]) == 127
+    assert data["count"] == 140
+    assert len(data["items"]) == 140
 
     first_item = data["items"][0]
-    assert first_item["id"] == "schema/view_all_node_types"
-    assert first_item["slug"] == "view_all_node_types"
-    assert first_item["namespace"]["directory"] == "schema"
+    assert first_item["id"] == "hall_of_fame/top_n_blockers"
+    assert first_item["slug"] == "top_n_blockers"
+    assert first_item["namespace"]["directory"] == "hall_of_fame"
     assert set(first_item["queries"]) == {"tabular", "graph"}
     assert first_item["available_views"] == ["tabular", "graph"]
-    assert first_item["summary"] == "Count all nodes by type."
+    assert first_item["summary"] == "Top 10 people whose assigned issues are blocking the most other work."
     assert first_item["default_view"] == "tabular"
-    assert first_item["owner"] == "graph-platform"
+    assert first_item["owner"] == "hall-of-fame-analytics"
     assert first_item["status"] in {"active", "draft", "deprecated"}
     assert all(item["summary"] for item in data["items"])
     assert all(item["default_view"] in {"tabular", "graph"} for item in data["items"])
@@ -50,8 +50,9 @@ async def test_catalog_namespaces_endpoint_returns_display_order():
     assert response.status_code == 200
     data = response.json()
 
-    assert data["count"] == 8
+    assert data["count"] == 9
     assert [item["directory"] for item in data["items"]] == [
+        "hall_of_fame",
         "schema",
         "cross_domain",
         "confluence",
@@ -61,7 +62,7 @@ async def test_catalog_namespaces_endpoint_returns_display_order():
         "person",
         "person_to_person",
     ]
-    assert [item["order"] for item in data["items"]] == list(range(8))
+    assert [item["order"] for item in data["items"]] == list(range(9))
 
 
 @pytest.mark.parametrize("namespace", ["github", "GitHub"])
@@ -71,7 +72,7 @@ async def test_catalog_list_endpoint_filters_by_namespace_directory_or_display_n
     assert response.status_code == 200
     data = response.json()
 
-    assert data["count"] == 31
+    assert data["count"] == 28
     assert all(item["namespace"]["directory"] == "github" for item in data["items"])
     response = await _get(
         "/api/v1/queries/catalog",
@@ -131,7 +132,7 @@ async def test_catalog_list_endpoint_searches_namespace_owner_and_status_metadat
     assert response.status_code == 200
     data = response.json()
 
-    assert data["count"] == 31
+    assert data["count"] == 28
     assert all(item["namespace"]["directory"] == "github" for item in data["items"])
     assert all(item["owner"] == "github-analytics" for item in data["items"])
 
@@ -142,7 +143,7 @@ async def test_catalog_list_endpoint_filters_by_view():
     assert response.status_code == 200
     data = response.json()
 
-    assert data["count"] == 126
+    assert data["count"] == 139
     assert all("graph" in item["available_views"] for item in data["items"])
 
 

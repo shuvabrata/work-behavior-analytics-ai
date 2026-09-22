@@ -1,0 +1,30 @@
+name: Top N Jira Commenters
+description: |-
+  **What it is:** Ranks people by the total number of comments they have left on Jira Issues, Epics, and Initiatives. Uses the aggregated `count` property on `COMMENTED_ON` edges.
+
+  **How it helps:** Comments represent active engagement — clarifying requirements, unblocking teammates, or raising concerns. High comment counts identify collaborative team members whose participation keeps work moving.
+
+  **What-If Impact:** People who comment heavily are often informal glue for their teams. If they disengage, discussions stall and decision latency increases noticeably across the team.
+summary: "Top 10 commenters on Jira issues, epics, and initiatives."
+default_view: tabular
+owner: hall-of-fame-analytics
+status: draft
+queries:
+  tabular: |-
+    MATCH (p:Person)-[r:COMMENTED_ON]->(entity)
+    WHERE (entity:Issue OR entity:Epic OR entity:Initiative)
+      AND entity.id STARTS WITH 'jira::'
+    RETURN coalesce(p._display_name, p.name, p.id) AS commenter,
+           count(DISTINCT entity) AS entities_commented_on,
+           sum(r.count) AS total_comments
+    ORDER BY total_comments DESC
+    LIMIT 10
+  graph: |-
+    MATCH p1=(p:Person)-[r:COMMENTED_ON]->(entity)
+    WHERE (entity:Issue OR entity:Epic OR entity:Initiative)
+      AND entity.id STARTS WITH 'jira::'
+    RETURN p1
+    LIMIT 100
+tags:
+- table
+- graph

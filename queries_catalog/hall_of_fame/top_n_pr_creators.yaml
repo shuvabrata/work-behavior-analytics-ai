@@ -1,0 +1,29 @@
+name: Top N PR Creator
+description: |-
+  **What it is:** Ranks individual developers by the volume of Pull Requests they have authored and opened, with a breakdown of merge rate and total lines changed.
+
+  **How it helps:** Provides a high-level view of throughput for Tech Leads, highlighting highly prolific engineers or potential automated bot accounts.
+
+  **What-If Impact:** Focusing solely on PR volume without context can inadvertently incentivise breaking single logical changes into artificially small PRs to game the metrics.
+summary: "Top 10 PR creators by pull request count."
+default_view: tabular
+owner: hall-of-fame-analytics
+status: draft
+queries:
+  tabular: |-
+    MATCH (pr:PullRequest)-[:CREATED_BY]->(p:Person)
+    RETURN coalesce(p._display_name, p.name) AS developer,
+           p.title AS title,
+           count(pr) AS prs_created,
+           sum(CASE WHEN pr.state = 'merged' THEN 1 ELSE 0 END) AS merged,
+           sum(pr.additions) AS total_additions,
+           sum(pr.deletions) AS total_deletions
+    ORDER BY prs_created DESC
+    LIMIT 10
+  graph: |-
+    MATCH p1=(pr:PullRequest)-[:CREATED_BY]->(p:Person)
+    RETURN p1
+    LIMIT 100
+tags:
+- table
+- graph

@@ -1,0 +1,32 @@
+name: Top N Jira Reporter
+description: |-
+  **What it is:** Ranks people by the number of Jira work items they have reported — spanning Issues, Epics, and Initiatives.
+
+  **How it helps:** Heavy reporters are often frontline engineers, QA leads, or product managers who actively track problems and ideas. A spike in reporting activity can be an early signal of technical debt accumulation or incoming scope expansion.
+
+  **What-If Impact:** Under-recognising reporters causes triage backlogs to grow silently. The people filing the most issues are often the ones closest to the real pain points in the product.
+summary: "Top 10 Jira reporters by issues, epics, and initiatives filed."
+default_view: tabular
+owner: hall-of-fame-analytics
+status: draft
+queries:
+  tabular: |-
+    MATCH (entity)-[:REPORTED_BY]-(p:Person)
+    WHERE (entity:Issue OR entity:Epic OR entity:Initiative)
+      AND entity.id STARTS WITH 'jira::'
+    RETURN coalesce(p._display_name, p.name, p.id) AS reporter,
+           count(DISTINCT entity) AS items_reported,
+           sum(CASE WHEN entity:Issue THEN 1 ELSE 0 END) AS issues,
+           sum(CASE WHEN entity:Epic THEN 1 ELSE 0 END) AS epics,
+           sum(CASE WHEN entity:Initiative THEN 1 ELSE 0 END) AS initiatives
+    ORDER BY items_reported DESC
+    LIMIT 10
+  graph: |-
+    MATCH p1=(entity)-[:REPORTED_BY]-(p:Person)
+    WHERE (entity:Issue OR entity:Epic OR entity:Initiative)
+      AND entity.id STARTS WITH 'jira::'
+    RETURN p1
+    LIMIT 100
+tags:
+- table
+- graph

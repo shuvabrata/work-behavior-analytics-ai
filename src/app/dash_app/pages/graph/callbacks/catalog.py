@@ -683,8 +683,8 @@ def render_catalog_query_detail(
     try:
         if ctx.triggered_id == "selected-catalog-query-store":
             current_view = None
-    except Exception:  # noqa: BLE001 — MissingCallbackContextException outside Dash runtime
-        pass
+    except MissingCallbackContextException:
+        pass  # ctx is unavailable outside a Dash callback (e.g. unit tests)
 
     selected_view = determine_catalog_view(
         query,

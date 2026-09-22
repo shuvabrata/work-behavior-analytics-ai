@@ -1,0 +1,32 @@
+name: Top N Jira Assignee
+description: |-
+  **What it is:** Ranks people by the total number of Jira Issues and Epics assigned to them, with a breakdown of completed versus in-progress work.
+
+  **How it helps:** Highlights the heaviest workload carriers in the organisation. The completed count provides a signal of delivery throughput, not just raw assignment volume.
+
+  **What-If Impact:** Assigning too much to a single person creates a concentration of risk. If their completion rate is declining relative to assignment rate, burnout or scope creep is imminent.
+summary: "Top 10 Jira assignees by total work assigned."
+default_view: tabular
+owner: hall-of-fame-analytics
+status: draft
+queries:
+  tabular: |-
+    MATCH (entity)-[:ASSIGNED_TO]-(p:Person)
+    WHERE (entity:Issue OR entity:Epic)
+      AND entity.id STARTS WITH 'jira::'
+    RETURN coalesce(p._display_name, p.name, p.id) AS assignee,
+           count(DISTINCT entity) AS total_assigned,
+           sum(CASE WHEN entity.status IN ['Done','Closed','Resolved'] THEN 1 ELSE 0 END) AS completed,
+           sum(CASE WHEN entity:Issue THEN 1 ELSE 0 END) AS issues,
+           sum(CASE WHEN entity:Epic THEN 1 ELSE 0 END) AS epics
+    ORDER BY total_assigned DESC
+    LIMIT 10
+  graph: |-
+    MATCH p1=(entity)-[:ASSIGNED_TO]-(p:Person)
+    WHERE (entity:Issue OR entity:Epic)
+      AND entity.id STARTS WITH 'jira::'
+    RETURN p1
+    LIMIT 100
+tags:
+- table
+- graph

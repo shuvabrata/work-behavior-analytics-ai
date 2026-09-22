@@ -153,15 +153,17 @@ def determine_catalog_view(
         return current_view
     if requested_view in available_views:
         return requested_view
-    # Product preference: default to Graph whenever it is available.
-    if "graph" in available_views:
-        return "graph"
+    # Respect the query's declared default_view before falling back to graph.
     default_view = catalog_query.get("default_view")
     if default_view in available_views:
         return default_view
+    # Final fallback: prefer graph if available, then first available view.
+    if "graph" in available_views:
+        return "graph"
     if available_views:
         return available_views[0]
     return None
+
 
 
 def _extract_param_value(value: str | dict[str, Any] | None) -> str | None:
@@ -673,6 +675,16 @@ def render_catalog_query_detail(
             None,
             [],
         )
+
+    # When the user switches to a different query the selected-catalog-query-store fires.
+    # In that case the radio button still holds the *previous* query's view value, so we
+    # must not carry it forward — reset to None so determine_catalog_view falls through
+    # to the new query's declared default_view.
+    try:
+        if ctx.triggered_id == "selected-catalog-query-store":
+            current_view = None
+    except MissingCallbackContextException:
+        pass  # ctx is unavailable outside a Dash callback (e.g. unit tests)
 
     selected_view = determine_catalog_view(
         query,

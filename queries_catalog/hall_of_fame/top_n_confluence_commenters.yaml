@@ -1,0 +1,26 @@
+name: Top N Confluence Commenters
+description: |-
+  **What it is:** Ranks people by the total number of comments they have left on Confluence Pages. Uses the aggregated `count` property on `COMMENTED_ON` edges.
+
+  **How it helps:** Confluence comments reflect active document review — surfacing errors, suggesting improvements, or requesting clarification. High comment counts identify the most engaged readers and reviewers of team documentation.
+
+  **What-If Impact:** Documentation without active commenters can drift out of date or contain silent inaccuracies. The top commenters are the informal quality-control layer for written knowledge.
+summary: "Top 10 commenters on Confluence pages."
+default_view: tabular
+owner: hall-of-fame-analytics
+status: draft
+queries:
+  tabular: |-
+    MATCH (p:Person)-[r:COMMENTED_ON]->(page:Page)
+    RETURN coalesce(p._display_name, p.name, p.id) AS commenter,
+           count(DISTINCT page) AS pages_commented_on,
+           sum(r.count) AS total_comments
+    ORDER BY total_comments DESC
+    LIMIT 10
+  graph: |-
+    MATCH p1=(p:Person)-[r:COMMENTED_ON]->(page:Page)
+    RETURN p1
+    LIMIT 100
+tags:
+- table
+- graph

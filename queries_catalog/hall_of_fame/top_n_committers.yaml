@@ -1,0 +1,26 @@
+name: Top N Code Committer
+description: |-
+  **What it is:** Identifies the top engineers based on total commit count.
+
+  **How it helps:** Gives Engineering Managers a rudimentary pulse on raw developer output. Primarily useful as a baseline signal rather than a direct performance metric.
+
+  **What-If Impact:** Using commit counts alone to judge performance incentivises trivial code changes while penalising engineers who focus on complex, high-value problem solving.
+summary: "Top 10 contributors by commit count."
+default_view: tabular
+owner: hall-of-fame-analytics
+status: draft
+queries:
+  tabular: |-
+    MATCH (p:Person)-[:AUTHORED_BY]-(c:Commit)
+    RETURN coalesce(p._display_name, p.name) AS name,
+           p.title AS title,
+           count(c) AS commits
+    ORDER BY commits DESC
+    LIMIT 10
+  graph: |-
+    MATCH p1=(p:Person)-[:AUTHORED_BY]-(c:Commit)
+    RETURN p1
+    LIMIT 100
+tags:
+- table
+- graph

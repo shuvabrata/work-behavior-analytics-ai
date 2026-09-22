@@ -1,0 +1,26 @@
+name: Top N Confluence Author
+description: |-
+  **What it is:** Ranks people by the number of Confluence pages they have authored, broken down by the number of spaces they are active in.
+
+  **How it helps:** Surfaces the most prolific documentation contributors in the organisation. High page counts combined with high space diversity indicate engineers or PMs who actively contribute to cross-team knowledge sharing.
+
+  **What-If Impact:** When top authors leave or disengage, documentation entropy grows rapidly. Identifying them early helps prioritise knowledge transfer and succession planning.
+summary: "Top 10 Confluence page authors."
+default_view: tabular
+owner: hall-of-fame-analytics
+status: draft
+queries:
+  tabular: |-
+    MATCH (page:Page)-[:AUTHORED_BY]-(p:Person)
+    RETURN coalesce(p._display_name, p.name, p.id) AS author,
+           count(DISTINCT page) AS pages_authored,
+           count(DISTINCT page.space_key) AS spaces_active_in
+    ORDER BY pages_authored DESC
+    LIMIT 10
+  graph: |-
+    MATCH p1=(page:Page)-[:AUTHORED_BY]-(p:Person)
+    RETURN p1
+    LIMIT 100
+tags:
+- table
+- graph

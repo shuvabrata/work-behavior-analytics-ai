@@ -13,13 +13,13 @@ async def test_list_catalog_queries():
     response = await router.list_catalog_queries(namespace=None, tag=None, q=None, view=None)
     data = response.model_dump()
 
-    assert data["count"] == 127
-    assert len(data["items"]) == 127
-    assert data["items"][0]["id"] == "schema/view_all_node_types"
+    assert data["count"] == 140
+    assert len(data["items"]) == 140
+    assert data["items"][0]["id"] == "hall_of_fame/top_n_blockers"
     assert set(data["items"][0]["queries"]) == {"tabular", "graph"}
-    assert data["items"][0]["summary"] == "Count all nodes by type."
+    assert data["items"][0]["summary"] == "Top 10 people whose assigned issues are blocking the most other work."
     assert data["items"][0]["default_view"] == "tabular"
-    assert data["items"][0]["owner"] == "graph-platform"
+    assert data["items"][0]["owner"] == "hall-of-fame-analytics"
     assert data["items"][0]["status"] in {"active", "draft", "deprecated"}
 
 
@@ -27,7 +27,7 @@ async def test_filter_catalog_by_namespace():
     response = await router.list_catalog_queries(namespace="github", tag=None, q=None, view=None)
     data = response.model_dump()
 
-    assert data["count"] == 31
+    assert data["count"] == 28
     assert all(item["namespace"]["directory"] == "github" for item in data["items"])
 
 
@@ -35,14 +35,14 @@ async def test_filter_catalog_by_namespace_display_name():
     response = await router.list_catalog_queries(namespace="GitHub", tag=None, q=None, view=None)
     data = response.model_dump()
 
-    assert data["count"] == 31
+    assert data["count"] == 28
 
 
 async def test_filter_catalog_by_view():
     response = await router.list_catalog_queries(namespace=None, tag=None, q=None, view="graph")
     data = response.model_dump()
 
-    assert data["count"] == 126
+    assert data["count"] == 139
     assert all("graph" in item["available_views"] for item in data["items"])
 
 
@@ -95,16 +95,16 @@ async def test_search_catalog_queries_by_owner_and_status_metadata():
 
 
 async def test_get_catalog_query_detail():
-    response = await router.get_catalog_query("github", "top_contributors")
+    response = await router.get_catalog_query("hall_of_fame", "top_n_committers")
     data = response.model_dump()
 
-    assert data["id"] == "github/top_contributors"
-    assert data["name"] == "Top Contributors"
-    assert data["namespace"]["name"] == "GitHub"
+    assert data["id"] == "hall_of_fame/top_n_committers"
+    assert data["name"] == "Top N Code Committer"
+    assert data["namespace"]["name"] == "Hall of Fame"
     assert "LIMIT 10" in data["queries"]["tabular"]
     assert data["summary"] == "Top 10 contributors by commit count."
     assert data["default_view"] == "tabular"
-    assert data["owner"] == "github-analytics"
+    assert data["owner"] == "hall-of-fame-analytics"
     assert data["status"] in {"active", "draft", "deprecated"}
 
 
@@ -133,8 +133,9 @@ async def test_list_catalog_namespaces():
     response = await router.list_catalog_namespaces()
     data = response.model_dump()
 
-    assert data["count"] == 8
+    assert data["count"] == 9
     assert [item["directory"] for item in data["items"]] == [
+        "hall_of_fame",
         "schema",
         "cross_domain",
         "confluence",

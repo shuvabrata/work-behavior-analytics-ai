@@ -1,0 +1,28 @@
+name: Top N Multi-Repo Contributors
+description: |-
+  **What it is:** Ranks engineers by the number of distinct repositories they have contributed to (via `COLLABORATOR` edges), alongside their total commit count.
+
+  **How it helps:** Multi-repository contributors are the engineers with the broadest codebase footprint. They are often the most versatile team members, capable of delivering across service boundaries without needing context hand-offs.
+
+  **What-If Impact:** Engineers with a wide repository footprint are high-value but also high-risk: if they are the only person who has contributed to multiple critical repos, they represent a multi-dimensional bus factor risk.
+summary: "Top 10 engineers by number of distinct repositories contributed to."
+default_view: tabular
+owner: hall-of-fame-analytics
+status: draft
+queries:
+  tabular: |-
+    MATCH (p:Person)-[:COLLABORATOR]-(repo:Repository)
+    OPTIONAL MATCH (p)-[:AUTHORED_BY]-(c:Commit)
+    RETURN coalesce(p._display_name, p.name, p.id) AS contributor,
+           p.title AS title,
+           count(DISTINCT repo) AS repositories_contributed_to,
+           count(DISTINCT c) AS total_commits
+    ORDER BY repositories_contributed_to DESC
+    LIMIT 10
+  graph: |-
+    MATCH p1=(p:Person)-[:COLLABORATOR]-(repo:Repository)
+    RETURN p1
+    LIMIT 100
+tags:
+- table
+- graph

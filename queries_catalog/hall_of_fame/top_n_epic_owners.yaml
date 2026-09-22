@@ -1,0 +1,27 @@
+name: Top N Epic Owners
+description: |-
+  **What it is:** Ranks people by the number of Jira Epics assigned to them, with a breakdown of completed versus open epics.
+
+  **How it helps:** Epic ownership represents program-level accountability. This query surfaces who is carrying the most strategic delivery weight, and whether their epics are being completed or are accumulating as open commitments.
+
+  **What-If Impact:** An engineer or PM carrying ten open epics simultaneously is almost certainly not delivering them at full quality. Epic concentration is a leading indicator of strategic delivery risk.
+summary: "Top 10 epic owners by epics assigned."
+default_view: tabular
+owner: hall-of-fame-analytics
+status: draft
+queries:
+  tabular: |-
+    MATCH (e:Epic)-[:ASSIGNED_TO]-(p:Person)
+    RETURN coalesce(p._display_name, p.name, p.id) AS epic_owner,
+           p.title AS title,
+           count(DISTINCT e) AS epics_owned,
+           sum(CASE WHEN e.status IN ['Done','Closed'] THEN 1 ELSE 0 END) AS completed_epics
+    ORDER BY epics_owned DESC
+    LIMIT 10
+  graph: |-
+    MATCH p1=(e:Epic)-[:ASSIGNED_TO]-(p:Person)
+    RETURN p1
+    LIMIT 100
+tags:
+- table
+- graph

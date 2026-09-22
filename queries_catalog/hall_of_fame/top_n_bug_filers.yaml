@@ -1,0 +1,29 @@
+name: Top N Bug Filers
+description: |-
+  **What it is:** Ranks people by the number of Bug-type Jira issues they have reported.
+
+  **How it helps:** Bug filers are often the first line of quality defence — QA engineers, observant developers, or engaged users who surface defects before they become incidents. High bug-filer counts signal who is most engaged in product quality.
+
+  **What-If Impact:** If a handful of people are responsible for the majority of bug reports, a gap in their coverage (vacation, offboarding) can leave significant defects unreported until they escalate to production incidents.
+summary: "Top 10 bug reporters in Jira."
+default_view: tabular
+owner: hall-of-fame-analytics
+status: draft
+queries:
+  tabular: |-
+    MATCH (i:Issue)-[:REPORTED_BY]-(p:Person)
+    WHERE i.issue_type = 'Bug'
+      AND i.id STARTS WITH 'jira::'
+    RETURN coalesce(p._display_name, p.name, p.id) AS bug_filer,
+           count(DISTINCT i) AS bugs_filed
+    ORDER BY bugs_filed DESC
+    LIMIT 10
+  graph: |-
+    MATCH p1=(i:Issue)-[:REPORTED_BY]-(p:Person)
+    WHERE i.issue_type = 'Bug'
+      AND i.id STARTS WITH 'jira::'
+    RETURN p1
+    LIMIT 100
+tags:
+- table
+- graph

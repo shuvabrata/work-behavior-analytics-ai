@@ -1,0 +1,27 @@
+name: Top N Cross-Platform Commenters
+description: |-
+  **What it is:** Ranks people by their total comment volume across all platforms — Jira Issues/Epics/Initiatives, Confluence Pages, and GitHub Issues — in a single unified leaderboard.
+
+  **How it helps:** Captures the most communicative team members regardless of where they work. These are the people who consistently drive conversations forward across tool boundaries, often acting as bridges between engineering, product, and documentation workflows.
+
+  **What-If Impact:** Cross-platform commenters are the connective tissue of distributed teams. Losing them quietly reduces inter-team coordination and increases the risk of context silos forming across platforms.
+summary: "Top 10 commenters across Jira, Confluence, and GitHub combined."
+default_view: tabular
+owner: hall-of-fame-analytics
+status: draft
+queries:
+  tabular: |-
+    MATCH (p:Person)-[r:COMMENTED_ON]->(entity)
+    RETURN coalesce(p._display_name, p.name, p.id) AS commenter,
+           sum(r.count) AS total_comments,
+           sum(CASE WHEN entity:Issue OR entity:Epic OR entity:Initiative THEN r.count ELSE 0 END) AS jira_comments,
+           sum(CASE WHEN entity:Page THEN r.count ELSE 0 END) AS confluence_comments
+    ORDER BY total_comments DESC
+    LIMIT 10
+  graph: |-
+    MATCH p1=(p:Person)-[r:COMMENTED_ON]->(entity)
+    RETURN p1
+    LIMIT 100
+tags:
+- table
+- graph

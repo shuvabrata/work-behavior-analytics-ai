@@ -1,0 +1,27 @@
+name: Top N Blockers
+description: |-
+  **What it is:** Ranks people whose assigned issues are blocking the largest number of other Jira issues. Shows how many of their issues are acting as blockers, and the total number of issues waiting on them.
+
+  **How it helps:** Blockers create hidden critical paths. This query makes the implicit dependency bottleneck visible — surfacing who, by virtue of their work not being completed, is holding up the most downstream work.
+
+  **What-If Impact:** Unresolved blockers cascade silently through a project. A single engineer with five blocking issues can stall an entire squad's sprint delivery without anyone having a full picture.
+summary: "Top 10 people whose assigned issues are blocking the most other work."
+default_view: tabular
+owner: hall-of-fame-analytics
+status: draft
+queries:
+  tabular: |-
+    MATCH (blocked:Issue)-[:BLOCKS]->(blocker_issue:Issue)-[:ASSIGNED_TO]-(p:Person)
+    RETURN coalesce(p._display_name, p.name, p.id) AS person,
+           p.title AS title,
+           count(DISTINCT blocker_issue) AS issues_blocking_others,
+           count(DISTINCT blocked) AS total_blocked_issues
+    ORDER BY total_blocked_issues DESC
+    LIMIT 10
+  graph: |-
+    MATCH p1=(blocked:Issue)-[:BLOCKS]->(blocker_issue:Issue)-[:ASSIGNED_TO]-(p:Person)
+    RETURN p1
+    LIMIT 100
+tags:
+- table
+- graph

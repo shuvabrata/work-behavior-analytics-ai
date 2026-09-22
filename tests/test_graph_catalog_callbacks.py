@@ -80,13 +80,19 @@ def test_parse_catalog_deep_link_ignores_invalid_view():
     assert view is None
 
 
-def test_determine_catalog_view_prefers_current_then_requested_then_graph_default():
+def test_determine_catalog_view_prefers_current_then_requested_then_default_view():
     catalog_query = {"available_views": ["tabular", "graph"], "default_view": "tabular"}
 
+    # current_view wins when it is valid
     assert catalog_callbacks.determine_catalog_view(catalog_query, "graph", "tabular") == "tabular"
+    # requested_view wins when current_view is absent
     assert catalog_callbacks.determine_catalog_view(catalog_query, "graph", None) == "graph"
-    assert catalog_callbacks.determine_catalog_view(catalog_query, None, None) == "graph"
+    # default_view from the YAML wins when neither current nor requested is set
+    assert catalog_callbacks.determine_catalog_view(catalog_query, None, None) == "tabular"
+    # only-tabular query returns tabular
     assert catalog_callbacks.determine_catalog_view({"available_views": ["tabular"]}, None, None) == "tabular"
+    # no default_view declared → fall back to graph when it is available
+    assert catalog_callbacks.determine_catalog_view({"available_views": ["tabular", "graph"]}, None, None) == "graph"
 
 
 def test_required_parameters_missing_reports_only_unfilled_required_inputs():
@@ -233,7 +239,7 @@ def test_render_catalog_query_detail_uses_rich_metadata_and_default_view():
 
     assert view_options[0]["value"] == "graph"
     assert view_options[1]["value"] == "tabular"
-    assert selected_view == "graph"
+    assert selected_view == "tabular"  # default_view: tabular is declared in the fixture
     assert "Compare two people by direct code review activity." in detail_text
     assert "Active" not in detail_text
     # Label is now a list: ["First person", Span(" *", style={color: red})]

@@ -65,7 +65,7 @@ async def test_execute_catalog_tabular_query_against_neo4j():
     response = await _post_execute(
         {
             "source": "catalog",
-            "catalog_id": "github/top_contributors",
+            "catalog_id": "hall_of_fame/top_n_committers",
             "view": "tabular",
         }
     )

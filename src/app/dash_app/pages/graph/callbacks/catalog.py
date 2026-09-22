@@ -153,15 +153,17 @@ def determine_catalog_view(
         return current_view
     if requested_view in available_views:
         return requested_view
-    # Product preference: default to Graph whenever it is available.
-    if "graph" in available_views:
-        return "graph"
+    # Respect the query's declared default_view before falling back to graph.
     default_view = catalog_query.get("default_view")
     if default_view in available_views:
         return default_view
+    # Final fallback: prefer graph if available, then first available view.
+    if "graph" in available_views:
+        return "graph"
     if available_views:
         return available_views[0]
     return None
+
 
 
 def _extract_param_value(value: str | dict[str, Any] | None) -> str | None:

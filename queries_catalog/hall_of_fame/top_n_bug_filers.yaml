@@ -12,18 +12,23 @@ status: draft
 queries:
   tabular: |-
     MATCH (i:Issue)-[:REPORTED_BY]-(p:Person)
-    WHERE i.issue_type = 'Bug'
+    WHERE i.type = 'Bug'
       AND i.id STARTS WITH 'jira::'
     RETURN coalesce(p._display_name, p.name, p.id) AS bug_filer,
            count(DISTINCT i) AS bugs_filed
     ORDER BY bugs_filed DESC
     LIMIT 10
   graph: |-
-    MATCH p1=(i:Issue)-[:REPORTED_BY]-(p:Person)
-    WHERE i.issue_type = 'Bug'
+    MATCH (i:Issue)-[:REPORTED_BY]-(p:Person)
+    WHERE i.type = 'Bug'
       AND i.id STARTS WITH 'jira::'
+    WITH p, count(DISTINCT i) AS bugs_filed
+    ORDER BY bugs_filed DESC
+    LIMIT 10
+    MATCH p1=(i2:Issue)-[:REPORTED_BY]-(p)
+    WHERE i2.issue_type = 'Bug'
+      AND i2.id STARTS WITH 'jira::'
     RETURN p1
-    LIMIT 100
 tags:
 - table
 - graph

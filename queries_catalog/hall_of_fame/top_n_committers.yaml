@@ -18,9 +18,12 @@ queries:
     ORDER BY commits DESC
     LIMIT 10
   graph: |-
-    MATCH p1=(p:Person)-[:AUTHORED_BY]-(c:Commit)
+    MATCH (p:Person)-[:AUTHORED_BY]-(c:Commit)
+    WITH p, count(c) AS commits
+    ORDER BY commits DESC
+    LIMIT 10
+    MATCH p1=(p)-[:AUTHORED_BY]-(c2:Commit)
     RETURN p1
-    LIMIT 100
 tags:
 - table
 - graph

@@ -20,9 +20,12 @@ queries:
     ORDER BY repositories_contributed_to DESC
     LIMIT 10
   graph: |-
-    MATCH p1=(p:Person)-[:COLLABORATOR]-(repo:Repository)
+    MATCH (p:Person)-[:COLLABORATOR]-(repo:Repository)
+    WITH p, count(DISTINCT repo) AS repositories_contributed_to
+    ORDER BY repositories_contributed_to DESC
+    LIMIT 10
+    MATCH p1=(p)-[:COLLABORATOR]-(repo2:Repository)
     RETURN p1
-    LIMIT 100
 tags:
 - table
 - graph

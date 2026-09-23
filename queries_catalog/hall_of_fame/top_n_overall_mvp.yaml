@@ -57,13 +57,42 @@ queries:
     LIMIT 10
   graph: |-
     MATCH (p:Person)
-    OPTIONAL MATCH p1=(p)-[:AUTHORED_BY]-(c:Commit)
-    OPTIONAL MATCH p2=(p)<-[:CREATED_BY]-(pr:PullRequest)
-    OPTIONAL MATCH p3=(pr2:PullRequest)-[:REVIEWED_BY]->(p)
-    OPTIONAL MATCH p4=(i:Issue)-[:ASSIGNED_TO]-(p)
-    OPTIONAL MATCH p5=(page:Page)-[:AUTHORED_BY]-(p)
+    CALL {
+      WITH p
+      OPTIONAL MATCH (p)-[:AUTHORED_BY]-(c:Commit)
+      RETURN count(DISTINCT c) AS commits
+    }
+    CALL {
+      WITH p
+      OPTIONAL MATCH (p)<-[:CREATED_BY]-(pr:PullRequest)
+      RETURN count(DISTINCT pr) AS prs_created
+    }
+    CALL {
+      WITH p
+      OPTIONAL MATCH (pr2:PullRequest)-[:REVIEWED_BY]->(p)
+      RETURN count(DISTINCT pr2) AS reviews_given
+    }
+    CALL {
+      WITH p
+      OPTIONAL MATCH (i:Issue)-[:ASSIGNED_TO]-(p)
+      WHERE i.status IN ['Done','Closed','Resolved'] AND i.id STARTS WITH 'jira::'
+      RETURN count(DISTINCT i) AS jira_resolved
+    }
+    CALL {
+      WITH p
+      OPTIONAL MATCH (page:Page)-[:AUTHORED_BY]-(p)
+      RETURN count(DISTINCT page) AS pages_authored
+    }
+    WITH p, (commits + prs_created * 2 + reviews_given + jira_resolved + pages_authored) AS mvp_score
+    WHERE mvp_score > 0
+    ORDER BY mvp_score DESC
+    LIMIT 10
+    OPTIONAL MATCH p1=(p)-[:AUTHORED_BY]-(c2:Commit)
+    OPTIONAL MATCH p2=(p)<-[:CREATED_BY]-(pr3:PullRequest)
+    OPTIONAL MATCH p3=(pr4:PullRequest)-[:REVIEWED_BY]->(p)
+    OPTIONAL MATCH p4=(i2:Issue)-[:ASSIGNED_TO]-(p)
+    OPTIONAL MATCH p5=(page2:Page)-[:AUTHORED_BY]-(p)
     RETURN p1, p2, p3, p4, p5
-    LIMIT 100
 tags:
 - table
 - graph

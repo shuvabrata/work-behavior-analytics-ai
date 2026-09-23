@@ -21,9 +21,12 @@ queries:
     ORDER BY prs_created DESC
     LIMIT 10
   graph: |-
-    MATCH p1=(pr:PullRequest)-[:CREATED_BY]->(p:Person)
+    MATCH (pr:PullRequest)-[:CREATED_BY]->(p:Person)
+    WITH p, count(pr) AS prs_created
+    ORDER BY prs_created DESC
+    LIMIT 10
+    MATCH p1=(pr2:PullRequest)-[:CREATED_BY]->(p)
     RETURN p1
-    LIMIT 100
 tags:
 - table
 - graph

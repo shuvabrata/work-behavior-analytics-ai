@@ -20,11 +20,16 @@ queries:
     ORDER BY total_comments DESC
     LIMIT 10
   graph: |-
-    MATCH p1=(p:Person)-[r:COMMENTED_ON]->(entity)
+    MATCH (p:Person)-[r:COMMENTED_ON]->(entity)
     WHERE (entity:Issue OR entity:Epic OR entity:Initiative)
       AND entity.id STARTS WITH 'jira::'
+    WITH p, sum(r.count) AS total_comments
+    ORDER BY total_comments DESC
+    LIMIT 10
+    MATCH p1=(p)-[r2:COMMENTED_ON]->(entity2)
+    WHERE (entity2:Issue OR entity2:Epic OR entity2:Initiative)
+      AND entity2.id STARTS WITH 'jira::'
     RETURN p1
-    LIMIT 100
 tags:
 - table
 - graph

@@ -22,11 +22,16 @@ queries:
     ORDER BY items_reported DESC
     LIMIT 10
   graph: |-
-    MATCH p1=(entity)-[:REPORTED_BY]-(p:Person)
+    MATCH (entity)-[:REPORTED_BY]-(p:Person)
     WHERE (entity:Issue OR entity:Epic OR entity:Initiative)
       AND entity.id STARTS WITH 'jira::'
+    WITH p, count(DISTINCT entity) AS items_reported
+    ORDER BY items_reported DESC
+    LIMIT 10
+    MATCH p1=(entity2)-[:REPORTED_BY]-(p)
+    WHERE (entity2:Issue OR entity2:Epic OR entity2:Initiative)
+      AND entity2.id STARTS WITH 'jira::'
     RETURN p1
-    LIMIT 100
 tags:
 - table
 - graph

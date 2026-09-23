@@ -22,12 +22,18 @@ queries:
     ORDER BY issues_completed_in_sprint DESC
     LIMIT 10
   graph: |-
-    MATCH p1=(i:Issue)-[:IN_SPRINT]->(s:Sprint)
-    MATCH p2=(i)-[:ASSIGNED_TO]-(p:Person)
+    MATCH (i:Issue)-[:IN_SPRINT]->(s:Sprint)
+    MATCH (i)-[:ASSIGNED_TO]-(p:Person)
     WHERE i.status IN ['Done', 'Closed', 'Resolved']
       AND s.state = 'closed'
+    WITH p, count(DISTINCT i) AS issues_completed_in_sprint
+    ORDER BY issues_completed_in_sprint DESC
+    LIMIT 10
+    MATCH p1=(i2:Issue)-[:IN_SPRINT]->(s2:Sprint)
+    MATCH p2=(i2)-[:ASSIGNED_TO]-(p)
+    WHERE i2.status IN ['Done', 'Closed', 'Resolved']
+      AND s2.state = 'closed'
     RETURN p1, p2
-    LIMIT 100
 tags:
 - table
 - graph

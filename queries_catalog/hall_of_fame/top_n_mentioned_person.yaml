@@ -21,10 +21,14 @@ queries:
     ORDER BY total_mentions DESC
     LIMIT 10
   graph: |-
-    MATCH p1=(entity)-[:MENTIONS]->(person:Person)
+    MATCH (entity)-[:MENTIONS]->(person:Person)
     WHERE entity:Issue OR entity:Epic OR entity:Initiative OR entity:Page
+    WITH person, count(*) AS total_mentions
+    ORDER BY total_mentions DESC
+    LIMIT 10
+    MATCH p1=(entity2)-[:MENTIONS]->(person)
+    WHERE entity2:Issue OR entity2:Epic OR entity2:Initiative OR entity2:Page
     RETURN p1
-    LIMIT 100
 tags:
 - table
 - graph

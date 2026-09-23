@@ -19,9 +19,12 @@ queries:
     ORDER BY reviews_given DESC
     LIMIT 10
   graph: |-
-    MATCH p1=(pr:PullRequest)-[:REVIEWED_BY]->(p:Person)
+    MATCH (pr:PullRequest)-[:REVIEWED_BY]->(p:Person)
+    WITH p, count(pr) AS reviews_given
+    ORDER BY reviews_given DESC
+    LIMIT 10
+    MATCH p1=(pr2:PullRequest)-[:REVIEWED_BY]->(p)
     RETURN p1
-    LIMIT 100
 tags:
 - table
 - graph

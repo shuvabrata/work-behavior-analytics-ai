@@ -11,16 +11,19 @@ owner: hall-of-fame-analytics
 status: draft
 queries:
   tabular: |-
-    MATCH (page:Page)-[:AUTHORED_BY]-(p:Person)
+    MATCH (page:Page)-[:CREATED]-(p:Person)
     RETURN coalesce(p._display_name, p.name, p.id) AS author,
            count(DISTINCT page) AS pages_authored,
            count(DISTINCT page.space_key) AS spaces_active_in
     ORDER BY pages_authored DESC
     LIMIT 10
   graph: |-
-    MATCH p1=(page:Page)-[:AUTHORED_BY]-(p:Person)
+    MATCH (page:Page)-[:CREATED]-(p:Person)
+    WITH p, count(DISTINCT page) AS pages_authored
+    ORDER BY pages_authored DESC
+    LIMIT 10
+    MATCH p1=(page2:Page)-[:CREATED]-(p)
     RETURN p1
-    LIMIT 100
 tags:
 - table
 - graph

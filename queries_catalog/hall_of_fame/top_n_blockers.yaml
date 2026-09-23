@@ -11,7 +11,7 @@ owner: hall-of-fame-analytics
 status: draft
 queries:
   tabular: |-
-    MATCH (blocked:Issue)-[:BLOCKS]->(blocker_issue:Issue)-[:ASSIGNED_TO]-(p:Person)
+    MATCH (blocked:Issue)<-[:BLOCKS]-(blocker_issue:Issue)-[:ASSIGNED_TO]-(p:Person)
     RETURN coalesce(p._display_name, p.name, p.id) AS person,
            p.title AS title,
            count(DISTINCT blocker_issue) AS issues_blocking_others,
@@ -19,9 +19,12 @@ queries:
     ORDER BY total_blocked_issues DESC
     LIMIT 10
   graph: |-
-    MATCH p1=(blocked:Issue)-[:BLOCKS]->(blocker_issue:Issue)-[:ASSIGNED_TO]-(p:Person)
+    MATCH (blocked:Issue)<-[:BLOCKS]-(blocker_issue:Issue)-[:ASSIGNED_TO]-(p:Person)
+    WITH p, count(DISTINCT blocked) AS total_blocked_issues
+    ORDER BY total_blocked_issues DESC
+    LIMIT 10
+    MATCH p1=(blocked2:Issue)-[:BLOCKS]->(blocker_issue2:Issue)-[:ASSIGNED_TO]-(p)
     RETURN p1
-    LIMIT 100
 tags:
 - table
 - graph

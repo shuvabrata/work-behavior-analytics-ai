@@ -22,11 +22,16 @@ queries:
     ORDER BY total_assigned DESC
     LIMIT 10
   graph: |-
-    MATCH p1=(entity)-[:ASSIGNED_TO]-(p:Person)
+    MATCH (entity)-[:ASSIGNED_TO]-(p:Person)
     WHERE (entity:Issue OR entity:Epic)
       AND entity.id STARTS WITH 'jira::'
+    WITH p, count(DISTINCT entity) AS total_assigned
+    ORDER BY total_assigned DESC
+    LIMIT 10
+    MATCH p1=(entity2)-[:ASSIGNED_TO]-(p)
+    WHERE (entity2:Issue OR entity2:Epic)
+      AND entity2.id STARTS WITH 'jira::'
     RETURN p1
-    LIMIT 100
 tags:
 - table
 - graph

@@ -18,7 +18,7 @@ queries:
     MATCH (p:Person)
     CALL {
       WITH p
-      OPTIONAL MATCH (p)-[:AUTHORED_BY]-(c:Commit)
+      OPTIONAL MATCH (p)<-[:CREATED_BY]-(c:Commit)
       RETURN count(DISTINCT c) AS commits
     }
     CALL {
@@ -39,7 +39,7 @@ queries:
     }
     CALL {
       WITH p
-      OPTIONAL MATCH (page:Page)-[:AUTHORED_BY]-(p)
+      OPTIONAL MATCH (page:Page)-[:CREATED_BY]->(p)
       RETURN count(DISTINCT page) AS pages_authored
     }
     WITH p, commits, prs_created, reviews_given, jira_resolved, pages_authored,
@@ -59,7 +59,7 @@ queries:
     MATCH (p:Person)
     CALL {
       WITH p
-      OPTIONAL MATCH (p)-[:AUTHORED_BY]-(c:Commit)
+      OPTIONAL MATCH (p)<-[:CREATED_BY]-(c:Commit)
       RETURN count(DISTINCT c) AS commits
     }
     CALL {
@@ -80,18 +80,18 @@ queries:
     }
     CALL {
       WITH p
-      OPTIONAL MATCH (page:Page)-[:AUTHORED_BY]-(p)
+      OPTIONAL MATCH (page:Page)-[:CREATED_BY]->(p)
       RETURN count(DISTINCT page) AS pages_authored
     }
     WITH p, (commits + prs_created * 2 + reviews_given + jira_resolved + pages_authored) AS mvp_score
     WHERE mvp_score > 0
     ORDER BY mvp_score DESC
     LIMIT 10
-    OPTIONAL MATCH p1=(p)-[:AUTHORED_BY]-(c2:Commit)
+    OPTIONAL MATCH p1=(p)<-[:CREATED_BY]-(c2:Commit)
     OPTIONAL MATCH p2=(p)<-[:CREATED_BY]-(pr3:PullRequest)
     OPTIONAL MATCH p3=(pr4:PullRequest)-[:REVIEWED_BY]->(p)
     OPTIONAL MATCH p4=(i2:Issue)-[:ASSIGNED_TO]-(p)
-    OPTIONAL MATCH p5=(page2:Page)-[:AUTHORED_BY]-(p)
+    OPTIONAL MATCH p5=(page2:Page)-[:CREATED_BY]->(p)
     RETURN p1, p2, p3, p4, p5
 tags:
 - table

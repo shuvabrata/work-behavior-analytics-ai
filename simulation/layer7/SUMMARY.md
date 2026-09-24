@@ -9,7 +9,7 @@
 
 ### Relationships Created
 - **PART_OF** (Commit → Branch): 500
-- **AUTHORED_BY** (Commit ↔ Person, undirected): 500
+- **CREATED_BY** (Commit → Person, directed): 500
 - **MODIFIES** (Commit → File): 1,088
 - **REFERENCES** (Commit → Issue): 400
 - **Total Relationships**: 2,488

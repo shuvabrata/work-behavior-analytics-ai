@@ -41,7 +41,7 @@ CALL () {
   UNION ALL
   
   // 3. Find Shared Commits on same File (Weight: 5)
-  MATCH (dev1:Person)<-[:AUTHORED_BY]-(c1:Commit)-[:MODIFIES]->(f:File)<-[:MODIFIES]-(c2:Commit)-[:AUTHORED_BY]->(dev2:Person)
+  MATCH (dev1:Person)<-[:CREATED_BY]-(c1:Commit)-[:MODIFIES]->(f:File)<-[:MODIFIES]-(c2:Commit)-[:CREATED_BY]->(dev2:Person)
   WHERE $include_shared_file_commits
     AND elementId(dev1) <> elementId(dev2)
     AND c1.created_at >= datetime() - duration({days: $lookback_days})

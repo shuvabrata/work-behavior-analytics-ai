@@ -11,18 +11,18 @@ owner: hall-of-fame-analytics
 status: draft
 queries:
   tabular: |-
-    MATCH (p:Person)-[:AUTHORED_BY]-(c:Commit)
+    MATCH (p:Person)<-[:CREATED_BY]-(c:Commit)
     RETURN coalesce(p._display_name, p.name) AS name,
            p.title AS title,
            count(c) AS commits
     ORDER BY commits DESC
     LIMIT 10
   graph: |-
-    MATCH (p:Person)-[:AUTHORED_BY]-(c:Commit)
+    MATCH (p:Person)<-[:CREATED_BY]-(c:Commit)
     WITH p, count(c) AS commits
     ORDER BY commits DESC
     LIMIT 10
-    MATCH p1=(p)-[:AUTHORED_BY]-(c2:Commit)
+    MATCH p1=(p)<-[:CREATED_BY]-(c2:Commit)
     RETURN p1
 tags:
 - table

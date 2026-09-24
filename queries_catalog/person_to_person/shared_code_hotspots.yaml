@@ -25,7 +25,7 @@ parameters:
 queries:
   tabular: |-
     MATCH (p1:Person {id: $person1_id}), (p2:Person {id: $person2_id})
-    MATCH (p1)-[:AUTHORED_BY]-(c1:Commit)-[:MODIFIES]->(f:File)<-[:MODIFIES]-(c2:Commit)-[:AUTHORED_BY]-(p2)
+    MATCH (p1)<-[:CREATED_BY]-(c1:Commit)-[:MODIFIES]->(f:File)<-[:MODIFIES]-(c2:Commit)-[:CREATED_BY]->(p2)
     RETURN f.path as shared_file,
            f.language as language,
            count(DISTINCT c1) as person1_commits,
@@ -34,7 +34,7 @@ queries:
     ORDER BY total_shared_churn DESC LIMIT 100
   graph: |-
     MATCH (p1:Person {id: $person1_id}), (p2:Person {id: $person2_id})
-    MATCH path = (p1)-[:AUTHORED_BY]-(c1:Commit)-[:MODIFIES]->(f:File)<-[:MODIFIES]-(c2:Commit)-[:AUTHORED_BY]-(p2)
+    MATCH path = (p1)<-[:CREATED_BY]-(c1:Commit)-[:MODIFIES]->(f:File)<-[:MODIFIES]-(c2:Commit)-[:CREATED_BY]->(p2)
     RETURN path
     LIMIT 100
 tags:

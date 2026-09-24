@@ -72,12 +72,12 @@ Links a commit to the branch it belongs to.
 (:Commit)-[:PART_OF]->(:Branch {name: "main", is_default: true})
 ```
 
-### AUTHORED_BY: Commit ↔ Person (undirected)
+### CREATED_BY: Commit → Person (directed)
 Links a commit to the developer who authored it.
 
 **Example:**
 ```cypher
-(:Commit)-[:AUTHORED_BY]-(:Person {name: "Alice Johnson", role: "Engineer"})
+(:Commit)-[:CREATED_BY]->(:Person {name: "Alice Johnson", role: "Engineer"})
 ```
 
 ### MODIFIES: Commit → File
@@ -128,7 +128,7 @@ python generate_data.py
 This will create `../data/layer7_commits.json` containing:
 - 500 Commit nodes
 - 286 File nodes
-- 2488 relationships (PART_OF, AUTHORED_BY, MODIFIES, REFERENCES)
+- 2488 relationships (PART_OF, CREATED_BY, MODIFIES, REFERENCES)
 
 ### Load to Neo4j
 ```bash
@@ -147,7 +147,7 @@ This will:
 
 ### Top Contributors
 ```cypher
-MATCH (p:Person)-[:AUTHORED_BY]-(c:Commit)
+MATCH (p:Person)<-[:CREATED_BY]-(c:Commit)
 RETURN p.name as name, p.title as title, count(c) as commits
 ORDER BY commits DESC
 LIMIT 10
@@ -179,7 +179,7 @@ LIMIT 10
 
 ### Developer Activity by Language
 ```cypher
-MATCH (p:Person)-[:AUTHORED_BY]-(c:Commit)-[:MODIFIES]->(f:File)
+MATCH (p:Person)<-[:CREATED_BY]-(c:Commit)-[:MODIFIES]->(f:File)
 RETURN p.name as developer, f.language as language, 
        count(DISTINCT c) as commits, count(f) as files_touched
 ORDER BY commits DESC

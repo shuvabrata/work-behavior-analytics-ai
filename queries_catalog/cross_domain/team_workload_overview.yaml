@@ -13,7 +13,7 @@ queries:
   tabular: |-
     MATCH (t:Team)-[:MEMBER_OF]-(p:Person)
         OPTIONAL MATCH (p)-[:ASSIGNED_TO]-(i:Issue)
-        OPTIONAL MATCH (p)-[:AUTHORED_BY]-(c:Commit)
+        OPTIONAL MATCH (p)<-[:CREATED_BY]-(c:Commit)
         RETURN t.name as team,
                count(DISTINCT p) as members,
                count(DISTINCT i) as assigned_issues,
@@ -25,7 +25,7 @@ queries:
         RETURN path
         LIMIT 50
     UNION
-    MATCH path=(t:Team)-[:MEMBER_OF]-(p:Person)-[:AUTHORED_BY]-(c:Commit)
+    MATCH path=(t:Team)-[:MEMBER_OF]-(p:Person)<-[:CREATED_BY]-(c:Commit)
         RETURN path
         LIMIT 50
 tags:

@@ -54,8 +54,8 @@ def build_commit_signal(
 
         rels: List[Relationship] = [
             Relationship(
-                type="AUTHORED_BY",
-                direction=None,
+                type="CREATED_BY",
+                direction="OUT",
                 target=RelationshipTarget(
                     source=_SOURCE,
                     entity_type="Person",

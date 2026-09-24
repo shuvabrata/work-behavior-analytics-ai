@@ -31,7 +31,7 @@ queries:
     }
     CALL {
       WITH p
-      OPTIONAL MATCH (p)-[:AUTHORED_BY]-(c:Commit)
+      OPTIONAL MATCH (p)<-[:CREATED_BY]-(c:Commit)
       RETURN count(DISTINCT c) AS commit_count
     }
     CALL {

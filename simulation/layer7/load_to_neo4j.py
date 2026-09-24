@@ -5,7 +5,7 @@ This loads Layer 7 of the graph: Commit and File nodes with their relationships.
 Key differences from previous layers:
 - Two node types: Commit and File
 - MODIFIES relationships have properties (additions, deletions)
-- Multiple relationship types: PART_OF, AUTHORED_BY, MODIFIES, REFERENCES
+- Multiple relationship types: PART_OF, CREATED_BY, MODIFIES, REFERENCES
 - Follows the same pattern: merge nodes one at a time, caller may/may not have relationships
 """
 
@@ -108,7 +108,7 @@ def load_relationships():
     
     Relationships:
     - PART_OF: Commit → Branch (no properties)
-    - AUTHORED_BY: Commit ↔ Person (undirected, no properties)
+    - CREATED_BY: Commit → Person (directed, no properties)
     - MODIFIES: Commit → File (with additions/deletions properties)
     - REFERENCES: Commit → Issue (no properties)
     """
@@ -184,7 +184,7 @@ def validate_layer7():
             # 2. Commits by author (top 10)
             print("\n2. Top 10 Commit Authors:")
             result = session.run("""
-                MATCH (c:Commit)-[:AUTHORED_BY]-(p:Person)
+                MATCH (c:Commit)-[:CREATED_BY]-(p:Person)
                 RETURN p.name, count(c) as commits
                 ORDER BY commits DESC
                 LIMIT 10

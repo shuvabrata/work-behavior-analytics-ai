@@ -118,7 +118,7 @@ python load_to_neo4j.py
 **What this creates:**
 - 500 commits (default branches only)
 - 286 files across repositories
-- 2,488 relationships (PART_OF, AUTHORED_BY, MODIFIES, REFERENCES)
+- 2,488 relationships (PART_OF, CREATED_BY, MODIFIES, REFERENCES)
 - 80% of commits reference Jira issues
 
 ### Layer 8: Pull Requests
@@ -240,7 +240,7 @@ After loading all 8 layers, your graph contains:
 | 4 | Story, Bug, Issue, Sprint | 88 | 80 (epic) + 80 (sprint) + 72 (assigned) |
 | 5 | Repository | 8 | 34 (collaborators) |
 | 6 | Branch | 37 | 37 (branch_of) |
-| 7 | Commit, File | 786 | 2,488 (PART_OF, AUTHORED_BY, MODIFIES, REFERENCES) |
+| 7 | Commit, File | 786 | 2,488 (PART_OF, CREATED_BY, MODIFIES, REFERENCES) |
 | 8 | PullRequest | 100 | 1,033 (INCLUDES, TARGETS, CREATED_BY, REVIEWED_BY, etc.) |
 | **Total** | **11 node types** | **~1,100 nodes** | **~3,900 relationships** |
 

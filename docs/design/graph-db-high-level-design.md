@@ -66,7 +66,7 @@ RETURN proj, count(issue) as junior_assigned_count
 
 // Identify code hotspots: high churn + many authors + bug fixes
 MATCH (file:File)-[:HAS_COMMIT]->(commit:Commit)
-MATCH (commit)-[:AUTHORED_BY]-(author:Person)
+MATCH (commit)-[:CREATED_BY]->(author:Person)
 MATCH (commit)-[:REFERENCES]->(issue:Issue {type: 'Bug'})
 WHERE commit.timestamp > date('2025-10-01')
 RETURN file.path, 
@@ -104,7 +104,7 @@ Relationships:
 See class definition: [Commit](../db/models.py#L482)
 
 Relationships:
-  - AUTHORED_BY ↔ Person (undirected)
+  - CREATED_BY → Person (directed; also used for PullRequest authorship)
   - COMMITTED_BY → Person (can differ from author)
   - PARENT → Commit (for commit history)
   - MODIFIES → File
@@ -553,7 +553,7 @@ Grand Total Nodes: ~393,640
 Estimated: 5-10× node count = 2-4 million edges
 
 Key relationships:
-  - Commit ↔ Person (AUTHORED_BY, undirected): 250K
+  - Commit → Person (CREATED_BY, directed): 250K
   - Commit → File (MODIFIES): 1M (4 files per commit avg)
   - Issue ↔ Person (ASSIGNED_TO, undirected): 50K
   - Person ↔ Team (MEMBER_OF, undirected): 500

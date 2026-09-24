@@ -50,7 +50,6 @@ These relationships use the **exact same name** and are **stored once** because 
 | `TEAM` | Team ownership | Epic ↔ Team, Issue ↔ Team |
 | `COLLABORATOR` | Repository access | Person/Team ↔ Repository |
 | `REPORTED_BY` | Issue/work reporting | Issue/Initiative ↔ Person |
-| `AUTHORED_BY` | Code authorship | Commit ↔ Person |
 | `MAPS_TO` | Identity mapping | IdentityMapping ↔ Person |
 | `RELATES_TO` | Related issues | Issue ↔ Issue (inherently symmetric) |
 | `MENTIONS` | @-mention in content | Issue/Epic/Initiative/Page ↔ Person |
@@ -71,7 +70,7 @@ These relationships maintain different names because they represent clear hierar
 | `REFERENCES` | `REFERENCED_BY` | Issue references |
 | `INCLUDES` | `INCLUDED_IN` | PR commits |
 | `TARGETS` | `TARGETED_BY` | PR base branch |
-| `CREATED_BY` | `CREATED` | PR creation |
+| `CREATED_BY` | `CREATED` | Commit or PullRequest creation |
 | `REVIEWED_BY` | `REVIEWED` | PR reviews |
 | `REQUESTED_REVIEWER` | `REVIEW_REQUESTED_BY` | Review requests |
 | `MERGED_BY` | `MERGED` | PR merge action |
@@ -124,7 +123,7 @@ These relationships exist in only one direction:
 
 ### Layer 7: Commits & Files
 - `PART_OF` / `CONTAINS` - Commit ↔ Branch (different names for hierarchy)
-- `AUTHORED_BY` - Commit ↔ Person (same name, undirected)
+- `CREATED_BY` / `CREATED` - Commit → Person (directed; same pair as PullRequest authorship)
 - `MODIFIES` / `MODIFIED_BY` - Commit ↔ File (different names for directionality)
 - `REFERENCES` / `REFERENCED_BY` - Commit ↔ Issue (different names for directionality)
 
@@ -139,10 +138,10 @@ These relationships exist in only one direction:
 
 ## Total Relationships Summary
 
-- **Same-name undirected**: 8 relationship types (stored once)
-- **Different-name bidirectional**: 13 relationship pairs (26 unique names total)
+- **Same-name undirected**: 7 relationship types (stored once)
+- **Different-name bidirectional**: 14 relationship pairs (28 unique names total)
 - **Unidirectional**: 2 relationship types (stored in one direction only)
-- **Total unique relationship names**: 36 (8 + 26 + 2)
+- **Total unique relationship names**: 37 (7 + 28 + 2)
 
 ## Query Examples
 
@@ -188,16 +187,16 @@ RETURN collaborator
 **Natural language**: "What did Alice author?"
 
 ```cypher
-// Undirected traversal between Person and Commit
-MATCH (p:Person {name: "Alice"})-[:AUTHORED_BY]-(commit:Commit)
+// Person-centric: traverse the directed CREATED_BY edge in reverse
+MATCH (p:Person {name: "Alice"})<-[:CREATED_BY]-(commit:Commit)
 RETURN commit
 ```
 
 **Natural language**: "Who authored commit abc123?"
 
 ```cypher
-// Undirected traversal between Commit and Person
-MATCH (c:Commit {sha: "abc123"})-[:AUTHORED_BY]-(person:Person)
+// Commit-centric: follow the directed CREATED_BY edge forward
+MATCH (c:Commit {sha: "abc123"})-[:CREATED_BY]->(person:Person)
 RETURN person
 ```
 
@@ -250,7 +249,7 @@ When using Large Language Models (LLMs) to convert natural language to Cypher:
 ### Comparison: Traditional vs Same-Name Approach
 
 **Traditional Unidirectional Approach (70+ names)**:
-- AI must learn: `ASSIGNED_TO`, `HAS_ASSIGNEE`, `AUTHORED_BY`, `HAS_AUTHOR`, `REVIEWED_BY`, `HAS_REVIEWER`, etc.
+- AI must learn: `ASSIGNED_TO`, `HAS_ASSIGNEE`, `CREATED_BY`, `CREATED`, `REVIEWED_BY`, `HAS_REVIEWER`, etc.
 - AI must decide: "Does user want ASSIGNED_TO or HAS_ASSIGNEE?"
 - Risk: Using wrong direction requires fallback query logic or query fails
 

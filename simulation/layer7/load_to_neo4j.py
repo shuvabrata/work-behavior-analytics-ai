@@ -184,7 +184,7 @@ def validate_layer7():
             # 2. Commits by author (top 10)
             print("\n2. Top 10 Commit Authors:")
             result = session.run("""
-                MATCH (c:Commit)-[:CREATED_BY]-(p:Person)
+                MATCH (c:Commit)-[:CREATED_BY]->(p:Person)
                 RETURN p.name, count(c) as commits
                 ORDER BY commits DESC
                 LIMIT 10

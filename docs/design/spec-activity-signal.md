@@ -316,7 +316,6 @@ The set is fixed; add new types by updating `models.py` and re-running this scri
 | Relationship Type |
 |-------------------|
 | `ASSIGNED_TO` |
-| `AUTHORED_BY` |
 | `BELONGS_TO` |
 | `BLOCKS` |
 | `CHILD_OF` |

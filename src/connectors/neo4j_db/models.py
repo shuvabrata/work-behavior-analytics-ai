@@ -530,8 +530,8 @@ class Commit(GraphNode):
             to_type="Branch"
         )
 
-        authored_by_rel = Relationship(
-            type="AUTHORED_BY",
+        created_by_rel = Relationship(
+            type="CREATED_BY",
             from_id=commit.id,
             to_id="person_alice",
             from_type="Commit",
@@ -877,7 +877,7 @@ UNDIRECTED_RELATIONSHIPS = {
     # Layer 6
 
     # Layer 7
-    "AUTHORED_BY",      # Commit ↔ Person
+    # (Commits now use CREATED_BY, which is directional — see DIRECTIONAL_RELATIONSHIPS)
 }
 
 # Directional relationships that should create explicit reverse edges.

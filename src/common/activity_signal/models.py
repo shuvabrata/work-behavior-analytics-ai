@@ -57,7 +57,6 @@ class RelationshipTarget(BaseModel):
 SUPPORTED_RELATIONSHIP_TYPES: frozenset[str] = frozenset(
     {
         "ASSIGNED_TO",
-        "AUTHORED_BY",
         "BELONGS_TO",
         "BLOCKS",
         "CHILD_OF",
@@ -108,7 +107,7 @@ class Relationship(BaseModel):
                    and queryable from either end without specifying direction.
                    Use this for Category-1 relationships defined in
                    ``docs/RELATIONSHIPS_DESIGN.md`` (e.g. ``ASSIGNED_TO``,
-                   ``AUTHORED_BY``, ``MEMBER_OF``).
+                   ``CREATED_BY``, ``MEMBER_OF``).
     """
 
     type: str = Field(..., description="One of SUPPORTED_RELATIONSHIP_TYPES.")

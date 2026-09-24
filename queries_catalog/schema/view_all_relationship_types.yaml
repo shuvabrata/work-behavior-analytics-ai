@@ -1,6 +1,6 @@
 name: View All Relationship Types
 description: |-
-  **What it is:** Counts all relationships in the database grouped by their type (e.g., BLOCKS, AUTHORED_BY).
+  **What it is:** Counts all relationships in the database grouped by their type (e.g., BLOCKS, CREATED_BY).
   
   **How it helps:** Helps administrators and leads verify the integrity and completeness of connections between ingested entities across tools.
   

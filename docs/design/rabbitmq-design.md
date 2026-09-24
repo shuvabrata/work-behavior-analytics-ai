@@ -186,7 +186,7 @@ Key fields carried in every message:
 | Relationship | Emitted By | Direction | Neo4j Pattern |
 |---|---|---|---|
 | `PART_OF` | GitHub, Jira | `OUT` | `(node)-[:PART_OF]->(target)` |
-| `AUTHORED_BY` | GitHub | `None` (undirected) | `-[:AUTHORED_BY]-` |
+| `CREATED_BY` | GitHub | `OUT` | `(commit)-[:CREATED_BY]->(person)` |
 | `MERGED_INTO` | GitHub | `OUT` | `(node)-[:MERGED_INTO]->(target)` |
 | `REVIEWS` | GitHub | `None` (undirected) | `-[:REVIEWS]-` |
 | `ASSIGNED_TO` | Jira | `None` (undirected) | `-[:ASSIGNED_TO]-` |

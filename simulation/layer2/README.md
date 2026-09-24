@@ -205,7 +205,7 @@ ORDER BY i.due_date
 ```cypher
 MATCH (p:Person {name: 'Alice Johnson'})-[:MAPS_TO]-(identity:IdentityMapping)
 OPTIONAL MATCH (identity)-[:ASSIGNED_TO]-(initiative:Initiative)
-OPTIONAL MATCH (identity)-[:AUTHORED_BY]-(commit:Commit)
+OPTIONAL MATCH (identity)<-[:CREATED_BY]-(commit:Commit)
 RETURN identity.provider,
        collect(DISTINCT initiative.key) as initiatives,
        count(DISTINCT commit) as commits

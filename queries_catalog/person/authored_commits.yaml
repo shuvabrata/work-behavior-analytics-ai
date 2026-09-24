@@ -17,7 +17,7 @@ parameters:
   description: "WBA canonical Person ID. Format: github::Person::<login> or jira::Person::<account_id>"
 queries:
   tabular: |-
-    MATCH (p:Person {id: $person_id})-[:AUTHORED_BY]-(c:Commit)
+    MATCH (p:Person {id: $person_id})<-[:CREATED_BY]-(c:Commit)
     OPTIONAL MATCH (c)-[:MODIFIES]->(f:File)
     WITH c, count(f) AS files_changed
     RETURN c.sha AS sha,
@@ -27,7 +27,7 @@ queries:
     ORDER BY c.created_at DESC
     LIMIT 100
   graph: |-
-    MATCH path = (p:Person {id: $person_id})-[:AUTHORED_BY]-(c:Commit)
+    MATCH path = (p:Person {id: $person_id})<-[:CREATED_BY]-(c:Commit)
     RETURN path
     LIMIT 100
 tags:

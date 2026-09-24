@@ -375,6 +375,6 @@ def test_supported_relationship_types_includes_phase_c_types() -> None:
 @pytest.mark.unit
 def test_supported_relationship_types_retains_legacy_types() -> None:
     """Types still emitted by producers must remain supported."""
-    required = {"ASSIGNED_TO", "AUTHORED_BY", "PART_OF", "MEMBER_OF"}
+    required = {"ASSIGNED_TO", "CREATED_BY", "PART_OF", "MEMBER_OF"}
     missing = required - SUPPORTED_RELATIONSHIP_TYPES
     assert not missing, f"Missing legacy types: {missing}"

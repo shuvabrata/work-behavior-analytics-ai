@@ -19,7 +19,7 @@ queries:
     }
     CALL {
       WITH p
-      OPTIONAL MATCH (p)-[:AUTHORED_BY]-(c:Commit)
+      OPTIONAL MATCH (p)<-[:CREATED_BY]-(c:Commit)
       RETURN count(DISTINCT c) AS commit_count
     }
     CALL {
@@ -37,7 +37,7 @@ queries:
   graph: |-
     MATCH p1=(p:Person)
         OPTIONAL MATCH p2=(p)<-[:CREATED_BY]-(pr:PullRequest)
-        OPTIONAL MATCH p3=(p)-[:AUTHORED_BY]-(c:Commit)
+        OPTIONAL MATCH p3=(p)<-[:CREATED_BY]-(c:Commit)
         OPTIONAL MATCH p4=(p)-[:ASSIGNED_TO]-(i:Issue)
         RETURN p1, p2, p3, p4
         LIMIT 100

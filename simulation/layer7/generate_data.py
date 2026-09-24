@@ -352,9 +352,9 @@ def build_relationships(commits, issues):
             "to_type": "Branch"
         })
         
-        # AUTHORED_BY: Commit ↔ Person (undirected)
+        # CREATED_BY: Commit → Person (directed)
         relationships.append({
-            "type": "AUTHORED_BY",
+            "type": "CREATED_BY",
             "from_id": commit["id"],
             "to_id": commit["author_id"],
             "from_type": "Commit",
@@ -422,12 +422,12 @@ def main():
     relationships = build_relationships(commits, issues)
     
     part_of = len([r for r in relationships if r["type"] == "PART_OF"])
-    authored_by = len([r for r in relationships if r["type"] == "AUTHORED_BY"])
+    created_by = len([r for r in relationships if r["type"] == "CREATED_BY"])
     modifies = len([r for r in relationships if r["type"] == "MODIFIES"])
     references = len([r for r in relationships if r["type"] == "REFERENCES"])
     
     print(f"   ✓ {part_of} PART_OF")
-    print(f"   ✓ {authored_by} AUTHORED_BY")
+    print(f"   ✓ {created_by} CREATED_BY")
     print(f"   ✓ {modifies} MODIFIES")
     print(f"   ✓ {references} REFERENCES\n")
     

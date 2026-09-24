@@ -475,7 +475,7 @@ Properties:
 
 #### Relationships
 - `PART_OF`: Commit → Branch (always to the default/main branch)
-- `AUTHORED_BY`: Commit ↔ Person (undirected)
+- `CREATED_BY`: Commit → Person (directed)
 - `MODIFIES`: Commit → File (tracks all files changed in the commit)
   - Properties: `{additions, deletions}` - per-file change stats from Git API
 - `REFERENCES`: Commit → Issue (if Jira key pattern exists in commit message)
@@ -513,7 +513,7 @@ Track **all files** modified in commits across repositories:
 #### Validation Queries
 ```cypher
 // Top contributors
-MATCH (p:Person)-[:AUTHORED_BY]-(c:Commit)
+MATCH (p:Person)<-[:CREATED_BY]-(c:Commit)
 RETURN p.name, p.title, count(c) as commit_count
 ORDER BY commit_count DESC
 LIMIT 10
@@ -530,7 +530,7 @@ MATCH (c:Commit)-[:REFERENCES]->(i:Issue)
 RETURN i.type, count(c) as linked_commits
 
 // Find hotspot files (high churn + many authors)
-MATCH (f:File)<-[:MODIFIES]-(c:Commit)-[:AUTHORED_BY]-(p:Person)
+MATCH (f:File)<-[:MODIFIES]-(c:Commit)-[:CREATED_BY]->(p:Person)
 WHERE c.timestamp >= datetime() - duration({days: 60})
 RETURN f.path, 
        count(DISTINCT c) as commit_count,

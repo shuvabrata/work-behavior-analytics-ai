@@ -17,7 +17,7 @@ parameters:
   description: "WBA canonical Person ID. Format: github::Person::<login> or jira::Person::<account_id>"
 queries:
   tabular: |-
-    MATCH (p:Person {id: $person_id})-[:COMMENTED_ON|AUTHORED_BY|REVIEWED|MERGED|ASSIGNED_TO|REPORTED_BY]-(x)-[:COMMENTED_ON|AUTHORED_BY|REVIEWED|MERGED|ASSIGNED_TO|REPORTED_BY]-(other:Person)
+    MATCH (p:Person {id: $person_id})-[:COMMENTED_ON|CREATED_BY|CREATED|REVIEWED|MERGED|ASSIGNED_TO|REPORTED_BY]-(x)-[:COMMENTED_ON|CREATED_BY|CREATED|REVIEWED|MERGED|ASSIGNED_TO|REPORTED_BY]-(other:Person)
     WHERE other <> p
     WITH other, count(DISTINCT x) AS shared_artifacts, collect(DISTINCT labels(x)[0]) AS artifact_types
     RETURN other.name AS collaborator,
@@ -27,12 +27,12 @@ queries:
     ORDER BY shared_artifacts DESC
     LIMIT 50
   graph: |-
-    MATCH (p:Person {id: $person_id})-[:COMMENTED_ON|AUTHORED_BY|REVIEWED|MERGED|ASSIGNED_TO|REPORTED_BY]-(x)-[:COMMENTED_ON|AUTHORED_BY|REVIEWED|MERGED|ASSIGNED_TO|REPORTED_BY]-(other:Person)
+    MATCH (p:Person {id: $person_id})-[:COMMENTED_ON|CREATED_BY|CREATED|REVIEWED|MERGED|ASSIGNED_TO|REPORTED_BY]-(x)-[:COMMENTED_ON|CREATED_BY|CREATED|REVIEWED|MERGED|ASSIGNED_TO|REPORTED_BY]-(other:Person)
     WHERE other <> p
     WITH p, other, count(DISTINCT x) AS strength
     ORDER BY strength DESC
     LIMIT 20
-    MATCH path = (p)-[:COMMENTED_ON|AUTHORED_BY|REVIEWED|MERGED|ASSIGNED_TO|REPORTED_BY*..2]-(other)
+    MATCH path = (p)-[:COMMENTED_ON|CREATED_BY|CREATED|REVIEWED|MERGED|ASSIGNED_TO|REPORTED_BY*..2]-(other)
     RETURN path
     LIMIT 100
 tags:

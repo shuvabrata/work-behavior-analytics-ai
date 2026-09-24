@@ -17,18 +17,18 @@ parameters:
   description: "WBA canonical Person ID. Format: github::Person::<login> or jira::Person::<account_id>"
 queries:
   tabular: |-
-    MATCH (p:Person {id: $person_id})-[:AUTHORED_BY]-(c:Commit)-[:MODIFIES]->(f:File)
+    MATCH (p:Person {id: $person_id})<-[:CREATED_BY]-(c:Commit)-[:MODIFIES]->(f:File)
     RETURN f.path AS file_path,
            count(DISTINCT c) AS commit_count,
            max(c.created_at) AS last_modified
     ORDER BY commit_count DESC
     LIMIT 50
   graph: |-
-    MATCH (p:Person {id: $person_id})-[:AUTHORED_BY]-(c:Commit)-[:MODIFIES]->(f:File)
+    MATCH (p:Person {id: $person_id})<-[:CREATED_BY]-(c:Commit)-[:MODIFIES]->(f:File)
     WITH p, f, count(c) AS commit_count
     ORDER BY commit_count DESC
     LIMIT 20
-    MATCH path1 = (p)-[:AUTHORED_BY]-(c:Commit)-[:MODIFIES]->(f)
+    MATCH path1 = (p)<-[:CREATED_BY]-(c:Commit)-[:MODIFIES]->(f)
     RETURN path1
     LIMIT 100
 tags:

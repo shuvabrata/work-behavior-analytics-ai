@@ -13,7 +13,7 @@ relationships that do not exist in the graph:
 |---|---|
 | `queries_catalog/github/hotspot_files.yaml` | `(f:File)<-[:MODIFIES]-(c:Commit)` |
 | `queries_catalog/github/code_churn.yaml` | `(f:File)<-[m:MODIFIES]-(c:Commit)` |
-| `queries_catalog/github/developer_activity_by_language.yaml` | `(p:Person)-[:AUTHORED_BY]-(c:Commit)-[:MODIFIES]->(f:File)` |
+| `queries_catalog/github/developer_activity_by_language.yaml` | `(p:Person)<-[:CREATED_BY]-(c:Commit)-[:MODIFIES]->(f:File)` |
 | `queries_catalog/github/test_vs_production_code.yaml` | `(f:File)<-[:MODIFIES]-(c:Commit)` |
 | `queries_catalog/person_to_person/shared_code_hotspots.yaml` | `(c1:Commit)-[:MODIFIES]->(f:File)<-[:MODIFIES]-(c2:Commit)` |
 

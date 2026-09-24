@@ -316,7 +316,6 @@ The set is fixed; add new types by updating `models.py` and re-running this scri
 | Relationship Type |
 |-------------------|
 | `ASSIGNED_TO` |
-| `AUTHORED_BY` |
 | `BELONGS_TO` |
 | `BLOCKS` |
 | `CHILD_OF` |
@@ -361,7 +360,7 @@ The `direction` field on `Relationship` controls how the edge is stored in Neo4j
 
 | `direction` value | Neo4j edge stored | When to use |
 |-------------------|-------------------|-------------|
-| `None` *(default)* | undirected `(a)-[:REL]-(b)` — stored once, queried from either end | Default for most relationships: `ASSIGNED_TO`, `AUTHORED_BY`, `MEMBER_OF`, `PART_OF`, etc. |
+| `None` *(default)* | undirected `(a)-[:REL]-(b)` — stored once, queried from either end | Default for most relationships: `ASSIGNED_TO`, `MEMBER_OF`, `PART_OF`, etc. Note: `CREATED_BY` uses `"OUT"` (directed) even for commits — it is no longer undirected. |
 | `"OUT"` | `(signal_node)-[:REL]->(target)` | When directionality is semantically required (e.g. `TARGETS` for PR → base branch) |
 | `"IN"` | `(signal_node)<-[:REL]-(target)` | Rare; consumer swaps from/to before writing |
 

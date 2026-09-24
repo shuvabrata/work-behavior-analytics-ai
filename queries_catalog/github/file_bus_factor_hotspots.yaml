@@ -11,7 +11,7 @@ owner: github-analytics
 status: draft
 queries:
   tabular: |-
-    MATCH (f:File)<-[:MODIFIES]-(c:Commit)-[:AUTHORED_BY]->(p:Person)
+    MATCH (f:File)<-[:MODIFIES]-(c:Commit)-[:CREATED_BY]->(p:Person)
         WITH f,
              count(DISTINCT c) as commit_count,
              count(DISTINCT p) as author_count,
@@ -26,7 +26,7 @@ queries:
         ORDER BY author_count ASC, churn DESC
         LIMIT 100
   graph: |-
-    MATCH p1=(f:File)<-[:MODIFIES]-(c:Commit)-[:AUTHORED_BY]->(p:Person)
+    MATCH p1=(f:File)<-[:MODIFIES]-(c:Commit)-[:CREATED_BY]->(p:Person)
         RETURN p1
         LIMIT 100
 tags:

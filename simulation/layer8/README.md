@@ -365,7 +365,7 @@ LIMIT 15
 
 ### Commit-to-PR Traceability (Merged PRs Only)
 ```cypher
-MATCH (pr:PullRequest)-[:INCLUDES]->(c:Commit)-[:AUTHORED_BY]-(author:Person)
+MATCH (pr:PullRequest)-[:INCLUDES]->(c:Commit)-[:CREATED_BY]->(author:Person)
 MATCH (pr)-[:TARGETS]->(b:Branch)-[:BRANCH_OF]-(r:Repository)
 RETURN r.name as repository,
        pr.number as pr_num,

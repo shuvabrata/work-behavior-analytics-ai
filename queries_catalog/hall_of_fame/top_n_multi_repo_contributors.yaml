@@ -12,7 +12,7 @@ status: draft
 queries:
   tabular: |-
     MATCH (p:Person)-[:COLLABORATOR]-(repo:Repository)
-    OPTIONAL MATCH (p)-[:AUTHORED_BY]-(c:Commit)
+    OPTIONAL MATCH (p)<-[:CREATED_BY]-(c:Commit)
     RETURN coalesce(p._display_name, p.name, p.id) AS contributor,
            p.title AS title,
            count(DISTINCT repo) AS repositories_contributed_to,

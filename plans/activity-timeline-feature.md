@@ -122,11 +122,12 @@ One row per relationship in a signal. Used for "activity involving entity Y."
 CREATE TABLE activity_actions (
     id BIGSERIAL PRIMARY KEY,
     signal_id UUID NOT NULL,               -- FK to activity_events.signal_id
+    source VARCHAR(32) NOT NULL,           -- data integration source: github, jira, confluence
     event_time TIMESTAMPTZ NOT NULL,
 
-    -- Who/what performed the action
-    source_entity_type VARCHAR(32) NOT NULL,
-    source_entity_id VARCHAR(255) NOT NULL,
+    -- Who/what performed the action ("actor" = the entity initiating the relationship)
+    actor_entity_type VARCHAR(32) NOT NULL,
+    actor_entity_id VARCHAR(255) NOT NULL,
 
     -- What relationship
     relationship_type VARCHAR(32) NOT NULL, -- CREATED, REVIEWED, COMMENTED_ON, etc.
@@ -139,15 +140,15 @@ CREATE TABLE activity_actions (
     summary VARCHAR(512),                   -- e.g. PR title, page title
     url VARCHAR(1024),                      -- link to the source system
 
-    -- Time-based index for timeline queries
     FOREIGN KEY (signal_id) REFERENCES activity_events(signal_id)
 );
 
-CREATE INDEX idx_activity_actions_source
-    ON activity_actions (source_entity_type, source_entity_id, event_time DESC);
+-- source is the leading column so queries scoped to a WBA ID (source+type+id) hit one index.
+CREATE INDEX idx_activity_actions_actor
+    ON activity_actions (source, actor_entity_type, actor_entity_id, event_time DESC);
 
 CREATE INDEX idx_activity_actions_target
-    ON activity_actions (target_entity_type, target_entity_id, event_time DESC);
+    ON activity_actions (source, target_entity_type, target_entity_id, event_time DESC);
 ```
 
 ### Write-time decomposition flow
@@ -164,10 +165,10 @@ Signal arrives → compute content_hash from attributes + relationships
 
 | Scenario | Query | Index used |
 |----------|-------|------------|
-| History of Page X | `activity_events WHERE entity_type='Page' AND entity_id='X' ORDER BY event_time DESC` | `idx_activity_events_lookup` |
-| Everything Alice did | `activity_actions WHERE source_entity_type='Person' AND source_entity_id='alice' ORDER BY event_time DESC` | `idx_activity_actions_source` |
-| Everything involving Alice | `activity_actions WHERE source_entity_type='Person' AND source_entity_id='alice' OR target_entity_type='Person' AND target_entity_id='alice' ORDER BY event_time DESC` | Both source + target indexes |
-| Who interacted with Issue Y | `activity_actions WHERE target_entity_type='Issue' AND target_entity_id='Y' ORDER BY event_time DESC` | `idx_activity_actions_target` |
+| History of Page X | `activity_events WHERE source='github' AND entity_type='Page' AND entity_id='X' ORDER BY event_time DESC` | `idx_activity_events_lookup` |
+| Everything Alice did | `activity_actions WHERE source='github' AND actor_entity_type='Person' AND actor_entity_id='alice' ORDER BY event_time DESC` | `idx_activity_actions_actor` |
+| Everything involving Alice | `activity_actions WHERE source='github' AND (actor_entity_type='Person' AND actor_entity_id='alice' OR target_entity_type='Person' AND target_entity_id='alice') ORDER BY event_time DESC` | Both actor + target indexes |
+| Who interacted with Issue Y | `activity_actions WHERE source='jira' AND target_entity_type='Issue' AND target_entity_id='Y' ORDER BY event_time DESC` | `idx_activity_actions_target` |
 
 ## 5. API Design
 

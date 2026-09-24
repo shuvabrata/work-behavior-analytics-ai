@@ -59,16 +59,17 @@ write and apply the Alembic migration.
 - [ ] **2. SQLAlchemy model: `ActivityAction`** (`src/app/db/models/activity_action.py`)
   - `id` (BIGSERIAL PK)
   - `signal_id` (UUID, FK to `activity_events.signal_id`, not null)
+  - `source` (VARCHAR 32, not null) — data integration source: github, jira, confluence
   - `event_time` (TIMESTAMPTZ, not null)
-  - `source_entity_type` (VARCHAR 32, not null)
-  - `source_entity_id` (VARCHAR 255, not null)
+  - `actor_entity_type` (VARCHAR 32, not null) — entity type of the actor (Person, Issue, …)
+  - `actor_entity_id` (VARCHAR 255, not null) — raw ID of the actor within that source
   - `relationship_type` (VARCHAR 32, not null)
   - `target_entity_type` (VARCHAR 32, not null)
   - `target_entity_id` (VARCHAR 255, not null)
   - `summary` (VARCHAR 512, nullable)
   - `url` (VARCHAR 1024, nullable)
-  - Index: `idx_activity_actions_source` on `(source_entity_type, source_entity_id, event_time.desc())`
-  - Index: `idx_activity_actions_target` on `(target_entity_type, target_entity_id, event_time.desc())`
+  - Index: `idx_activity_actions_actor` on `(source, actor_entity_type, actor_entity_id, event_time.desc())`
+  - Index: `idx_activity_actions_target` on `(source, target_entity_type, target_entity_id, event_time.desc())`
   - FK constraint with `ON DELETE CASCADE`
 
 - [ ] **3. Register models in** `src/app/db/models/__init__.py`
@@ -154,9 +155,15 @@ with hybrid batching, dedup, and non-fatal failure semantics.
   - Background task `_writer_loop`:
     - Collects signals from queue up to `100` items OR `5` seconds of inactivity
     - For each signal: compute `content_hash = sha256(json(attributes) + json(relationships))`
-    - Perform dedup check: `SELECT content_hash FROM activity_events WHERE (source, entity_type, entity_id) = $1, $2, $3 ORDER BY event_time DESC LIMIT 1`
-    - If hash differs → `INSERT INTO activity_events ...; decompose relationships into activity_actions rows`
-    - If hash matches → skip
+    - Write using `INSERT … ON CONFLICT (source, entity_type, entity_id, event_time, content_hash) DO NOTHING`
+      — **do not use SELECT-then-INSERT**. The design doc describes the conceptual dedup flow;
+      `ON CONFLICT DO NOTHING` is the correct implementation. A SELECT-before-INSERT is a
+      TOCTOU race: concurrent consumer instances (horizontal scaling is explicitly supported)
+      can both SELECT, both see no match, and both attempt an INSERT — the second will hit
+      the unique constraint and log a spurious error. `ON CONFLICT DO NOTHING` is atomic and
+      race-safe.
+    - If the INSERT wrote a row (i.e., `result.rowcount == 1`) → decompose relationships into `activity_actions` rows
+    - If `rowcount == 0` → duplicate, skip decomposition
     - Wrap in try/except — on failure log warning and continue
   - `close()`: drain queue, close pool
   - Use `asyncpg` (no SQLAlchemy dependency — consumer doesn't have app deps)
@@ -173,8 +180,9 @@ with hybrid batching, dedup, and non-fatal failure semantics.
   ```
 
 - [ ] **3. Relationship decomposition** — utility to flatten `signal.relationships[]` into `activity_actions` rows
-               "source_entity_type": signal.entity_type,
-               "source_entity_id": signal.id,
+               "source": signal.source,
+               "actor_entity_type": signal.entity_type,
+               "actor_entity_id": signal.id,
                "relationship_type": rel.type,
                "target_entity_type": rel.target.entity_type or "",
                "target_entity_id": rel.target.id or "",
@@ -292,23 +300,24 @@ with hybrid batching, dedup, and non-fatal failure semantics.
   - `fetch_actions_for_entity(source, entity_type, entity_id, from_time, to_time, cursor, limit)`:
     ```sql
     SELECT * FROM activity_actions
-    WHERE (
-      (source_entity_type = $1 AND source_entity_id = $2)
-      OR (target_entity_type = $1 AND target_entity_id = $2)
+    WHERE source = $1
+    AND (
+      (actor_entity_type = $2 AND actor_entity_id = $3)
+      OR (target_entity_type = $2 AND target_entity_id = $3)
     )
-    AND event_time >= $3 AND event_time <= $4
-    AND (event_time, id) < ($5, $6)   -- cursor
+    AND event_time >= $4 AND event_time <= $5
+    AND (event_time, id) < ($6, $7)   -- cursor
     ORDER BY event_time DESC, id DESC
-    LIMIT $7;
+    LIMIT $8;
     ```
   - `fetch_event_history(source, entity_type, entity_id, from_time, to_time, cursor, limit)`:
     ```sql
     SELECT * FROM activity_events
-    WHERE entity_type = $1 AND entity_id = $2
-    AND event_time >= $3 AND event_time <= $4
-    AND (event_time, id) < ($5, $6)
+    WHERE source = $1 AND entity_type = $2 AND entity_id = $3
+    AND event_time >= $4 AND event_time <= $5
+    AND (event_time, id) < ($6, $7)
     ORDER BY event_time DESC, id DESC
-    LIMIT $7;
+    LIMIT $8;
     ```
   - Use SQLAlchemy `text()` + async execution (reuse `ASYNC_SESSION_LOCAL`)
 
@@ -412,12 +421,40 @@ with hybrid batching, dedup, and non-fatal failure semantics.
   - Theme-aware: lane colors adapt to light/dark theme tokens
 
 - [ ] **4. Register in Analytics gallery**
-  - `registry.py`: add `TimelineAnalytic(key="activity_timeline", ...)` alongside `COLLABORATION_NETWORK_ANALYTIC`
-  - `analytics.py`:
-    - Import `TIMELINE_ANALYTICS` from registry
-    - Render card with "Open Visualization" button (`href="/app/analytics/timeline"`)
-    - "Show Options" button toggles entity selector and time range controls
-    - Reuse the same collapsible pattern from the collab network card
+  - **`registry.py`** — create a new `TimelineAnalytic` dataclass. Do **not** reuse `GraphAnalytic`:
+    `GraphAnalytic.href` generates `/app/graph?mode=<key>`, which is wrong for the timeline page.
+    ```python
+    @dataclass(frozen=True)
+    class TimelineAnalytic:
+        """Metadata for the activity timeline visualization."""
+        key: str
+        title: str
+        description: str
+        icon: str
+
+        @property
+        def href(self) -> str:
+            return "/app/analytics/timeline"
+
+    TIMELINE_ANALYTIC = TimelineAnalytic(
+        key="activity_timeline",
+        title="Activity Timeline",
+        description=(
+            "Visualize the chronological activity of persons and objects "
+            "across GitHub, Jira, and Confluence in a side-by-side swimlane view."
+        ),
+        icon="fas fa-timeline",
+    )
+    ```
+  - **`analytics.py`**:
+    - Import `TIMELINE_ANALYTIC` from `app.analytics.registry`
+    - The existing `_create_analytic_card()` has a hardcoded `if is_collaboration` branch.
+      Add a parallel `elif is_timeline` branch (check `analytic.key == "activity_timeline"`).
+      Create a `_create_timeline_controls()` function (can be a stub returning an
+      "Open Visualization" button for now — full entity selector wires up in Phase 3 Task 3).
+    - Add `TIMELINE_ANALYTIC` to the list rendered by `get_layout()`. Do **not** add it to
+      `GRAPH_ANALYTICS` (that list drives graph-mode analytics); instead pass it separately
+      or extend the gallery loop to also render `[TIMELINE_ANALYTIC]`.
 
 - [ ] **5. Register route** in `layout.py`:
   ```python

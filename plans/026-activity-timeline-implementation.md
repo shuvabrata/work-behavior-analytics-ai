@@ -137,6 +137,16 @@ with hybrid batching, dedup, and non-fatal failure semantics.
 
 #### Tasks
 
+- [ ] **0. Add `asyncpg` to consumer dependencies**
+  - In `requirements.signal-consumer.txt`, add:
+    ```
+    asyncpg==0.31.0
+    ```
+    (pin to the same version already used by the app layer in `requirements.app.txt`)
+  - Verify `Dockerfile.signal-consumer` installs from that file (it should already; confirm with
+    `grep requirements Dockerfile.signal-consumer`).
+  - No new env vars or docker-compose changes needed — this is a library-only addition.
+
 - [ ] **1. Create `activity_writer.py`** in `src/common/activity_signal/`
   - Class `ActivityWriter` using `asyncpg` pool
   - `__init__`: accept DATABASE_URL, create connection pool
@@ -174,13 +184,28 @@ with hybrid batching, dedup, and non-fatal failure semantics.
        return actions
    ```
 
-4. **Modify `signal-consumer/main.py`**
-   - On startup: initialize `ActivityWriter(pool)`
-   - After successful Neo4j upsert (line ~170): `await activity_writer.enqueue(signal)`
-   - On shutdown: `await activity_writer.close()`
+- [ ] **4. Modify `src/connectors/consumers/main.py`**
+  - On startup (in `main()`, after `rabbitmq_url` is resolved): initialize
+    `activity_writer = ActivityWriter(os.environ["DATABASE_URL"])`
+    and start its background writer task.
+  - Insertion point for the enqueue call: **after the closing `except` of the
+    Elasticsearch sink block (currently ~line 193), still inside the
+    `async for signal, message` loop body** — not inside the Neo4j try/except.
+    This preserves the ack-before-enqueue order and keeps the timeline write
+    fully non-fatal.
+    ```python
+    # Timeline write — non-fatal; never nack on timeline failure.
+    await activity_writer.enqueue(signal)
+    ```
+  - On shutdown (in the `finally` block of `main()`): `await activity_writer.close()`
 
-5. **Environment variable**: `DATABASE_URL` is already available in the consumer container
-   (set by docker-compose). No new env vars needed.
+- [ ] **5. Verify `DATABASE_URL` is available in the consumer container**
+  - Run: `docker compose config | grep -A 20 signal-consumer | grep DATABASE_URL`
+  - Expected: the variable is present and points to the same Postgres instance used
+    by the `app` service.
+  - If absent: add it to the `signal-consumer` service in `docker-compose.yml`,
+    copying the `DATABASE_URL` value from the `app` service definition.
+  - No new env var name is introduced — `DATABASE_URL` is the existing convention.
 
 - [ ] **6. Automated tests:**
   - Unit tests for content hash consistency (same input → same hash)

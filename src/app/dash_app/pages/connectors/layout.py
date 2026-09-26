@@ -22,6 +22,7 @@ from app.dash_app.styles import (
     FONT_SIZE_SMALL,
     FONT_WEIGHT_MEDIUM,
     FONT_WEIGHT_SEMIBOLD,
+    SPACING_XXXSMALL,
     SPACING_XSMALL,
     SPACING_SMALL,
 )
@@ -379,8 +380,8 @@ def _section_container(children: html.Div) -> html.Div:
         children,
         style={
             "padding": SPACING_SMALL,
-            "paddingTop": SPACING_XSMALL,
-            "paddingBottom": SPACING_XSMALL,
+            "paddingTop": SPACING_XXXSMALL,
+            "paddingBottom": SPACING_XXXSMALL,
             "backgroundColor": COLOR_BACKGROUND_LIGHT,
             "border": f"1px solid {COLOR_BORDER}",
             "borderLeft": f"3px solid {COLOR_NAVY}",

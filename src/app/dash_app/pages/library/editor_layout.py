@@ -191,7 +191,11 @@ def _render_metadata_section() -> html.Div:
                                 [
                                     html.Div(
                                         [
-                                            dbc.Label("Description", html_for="editor-description"),
+                                            dbc.Label(
+                                                "Description",
+                                                html_for="editor-description",
+                                                style={"lineHeight": "1"},
+                                            ),
                                             html.I(
                                                 className="fas fa-info-circle",
                                                 id="editor-description-help",
@@ -199,6 +203,8 @@ def _render_metadata_section() -> html.Div:
                                                     "cursor": "help",
                                                     "marginLeft": "6px",
                                                     "color": COLOR_GRAY_MEDIUM,
+                                                    "display": "inline-flex",
+                                                    "alignItems": "center",
                                                 },
                                             ),
                                             dbc.Popover(

@@ -234,7 +234,16 @@ from . import callbacks  # noqa: F401
 
 ## Steps
 
-### Step 1: Add `is_user_defined` to `CatalogNamespace` and user-defined merge logic to `loader.py`
+> **Progress**: Check each phase gate before proceeding to the next phase.
+> - [ ] Phase A: Backend (Steps 1–5) — merge logic, write model, service, routes, API tests
+> - [ ] Phase B: UI (Steps 6–8) — Library listing, editor, sidebar nav + routing
+> - [ ] Phase C: Polish (Steps 9–10) — UI callback tests, full regression
+
+---
+
+### Phase A: Backend — merge logic, write model, service, routes, API tests
+
+#### Step 1: Add `is_user_defined` to `CatalogNamespace` and user-defined merge logic to `loader.py`
 
 Modify `src/app/query_catalog/model.py` and `src/app/query_catalog/loader.py`:
 
@@ -447,6 +456,44 @@ when user-defined queries exist.
 - `source .venv/bin/activate && PYTHONPATH=src pytest -m unit tests/test_query_catalog_merge.py -q` → all pass
 - `source .venv/bin/activate && PYTHONPATH=src pytest -m unit tests/test_query_catalog_api.py -q` → all pass
 
+**Phase A gate** — STOP here and manually verify before proceeding to UI work:
+
+1. Start the app: `PYTHONPATH=src uvicorn app.main:app --reload` (in a separate terminal).
+2. Create a test override:
+   ```bash
+   curl -s -X PUT http://localhost:8000/api/v1/queries/catalog/github/test_smoke \
+     -H "Content-Type: application/json" \
+     -d '{"name":"Smoke Test","description":"Phase A gate smoke test","queries":{"tabular":"MATCH (n) RETURN n LIMIT 1"},"tags":["smoke"]}'
+   ```
+   → 200 with the saved query (verify `source_path` contains `user_defined/`).
+3. Verify the merged catalog includes it:
+   ```bash
+   curl -s http://localhost:8000/api/v1/queries/catalog/github/test_smoke | python -c "import sys,json; d=json.load(sys.stdin); assert 'user_defined' in d['source_path']; print('OK: source_path=' + d['source_path'])"
+   ```
+   → `OK: source_path=queries_catalog/user_defined/github/test_smoke.yaml`
+4. Verify the listing count increased:
+   ```bash
+   curl -s http://localhost:8000/api/v1/queries/catalog | python -c "import sys,json; d=json.load(sys.stdin); assert d['count'] == 141; print('OK: count=' + str(d['count']))"
+   ```
+   → `OK: count=141`
+5. Delete the test override:
+   ```bash
+   curl -s -X DELETE http://localhost:8000/api/v1/queries/catalog/github/test_smoke
+   ```
+   → 200 with `{"message":"Query override deleted"}`
+6. Verify count is back to 140:
+   ```bash
+   curl -s http://localhost:8000/api/v1/queries/catalog | python -c "import sys,json; d=json.load(sys.stdin); assert d['count'] == 140; print('OK: count=' + str(d['count']))"
+   ```
+   → `OK: count=140`
+7. Stop the app.
+
+If any assertion fails, fix the issue before moving to Phase B.
+
+---
+
+### Phase B: UI — Library listing, editor, sidebar nav + routing
+
 ### Step 6: Library listing page (`/app/library`)
 
 Create `src/app/dash_app/pages/library/` with `__init__.py`, `layout.py`,
@@ -565,6 +612,31 @@ In `src/app/dash_app/layout.py`:
 **Verify**:
 - `source .venv/bin/activate && mypy src/app/dash_app/layout.py` → exit 0
 - `source .venv/bin/activate && PYTHONPATH=src python -c "from app.dash_app.layout import create_dash_app; print('ok')"` → `ok`
+
+**Phase B gate** — STOP here and manually verify the UI before writing callback tests:
+
+1. Start the app: `PYTHONPATH=src uvicorn app.main:app --reload`.
+2. Open `http://localhost:8000/app/library` in a browser.
+   - Confirm the "Library" nav link appears in the sidebar between Analytics and Connectors.
+   - Confirm the table renders with 140+ rows.
+   - Confirm the namespace dropdown and search input are present.
+3. Click "New Query" → confirm the editor opens at `/app/library/new` with blank fields and editable slug/namespace.
+4. Fill in a name, description, a tabular query (`MATCH (n) RETURN n LIMIT 1`), and click Save.
+   - Confirm a success alert appears.
+   - Navigate back to `/app/library` → confirm the new query appears in the table with a "Delete" button (not "Reset to factory").
+5. Click "Delete" on the new query → confirm the `ConfirmDialog` appears with the correct message → confirm deletion → confirm the row disappears.
+6. Edit an existing system query (e.g. `hall_of_fame/top_n_committers`):
+   - Click "Edit" → confirm the editor loads with populated fields.
+   - Change the name, click Save → confirm success.
+   - Navigate back to `/app/library` → confirm the row now shows "Reset to factory" (since it's an override).
+   - Click "Reset to factory" → confirm the `ConfirmDialog` → confirm reset → confirm the original name is restored.
+7. Stop the app.
+
+If any step fails, fix the issue before moving to Phase C.
+
+---
+
+### Phase C: Polish — UI callback tests, full regression
 
 ### Step 9: UI callback tests
 

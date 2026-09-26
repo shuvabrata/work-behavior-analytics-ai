@@ -95,34 +95,35 @@ def get_layout() -> html.Div:
     )
 
 
-def _status_badge(status: str | None) -> html.Span:
-    """Render a status badge with semantic colouring."""
+def _status_badge(status: str | None) -> html.Span | None:
+    """Render a status badge matching the Graph Query Catalog.
+
+    ``draft`` → warning (amber), ``deprecated`` → secondary (gray). Unlike the
+    Graph page, ``active`` is also shown (as success/green) so the Library
+    table surfaces the active state. Returns ``None`` for unknown/empty status.
+    """
     color_map = {
         "active": "success",
-        "draft": "secondary",
-        "deprecated": "warning",
+        "draft": "warning",
+        "deprecated": "secondary",
     }
-    color = color_map.get(status or "", "secondary")
+    if not status:
+        return None
+    status_lower = status.strip().lower()
+    color = color_map.get(status_lower)
+    if color is None:
+        return None
     return html.Span(
-        status or "—",
+        status_lower.title(),
         className=f"badge text-bg-{color}",
         style={"fontSize": FONT_SIZE_XSMALL},
     )
 
 
 def _tag_chips(tags: list[str]) -> html.Div:
-    """Render tags as small theme-aware chips."""
+    """Render tags as badges matching the Graph Query Catalog."""
     chips = [
-        html.Span(
-            tag,
-            className="badge border",
-            style={
-                "fontSize": FONT_SIZE_XSMALL,
-                "marginRight": SPACING_XXSMALL,
-                "backgroundColor": "var(--color-background-pale)",
-                "color": "var(--color-charcoal-medium)",
-            },
-        )
+        dbc.Badge(tag, color="light", text_color="dark", className="me-1")
         for tag in tags
     ]
     return html.Div(chips, style={"display": "flex", "flexWrap": "wrap", "gap": SPACING_XXSMALL})
@@ -358,7 +359,7 @@ def _render_row(
             html.Td(query.get("name") or query.get("id") or ""),
             html.Td(query.get("summary") or "—"),
             html.Td(_tag_chips(query.get("tags") or [])),
-            html.Td(_status_badge(query.get("status"))),
+            html.Td(_status_badge(query.get("status")) or "—"),
             html.Td(_default_view_label(query.get("default_view"))),
             html.Td(_parameters_label(query.get("parameters"))),
             html.Td(_view_icons(query.get("available_views") or [])),

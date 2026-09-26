@@ -180,6 +180,31 @@ def test_d1b_table_renders_all_columns_except_description_and_query():
     assert "Owner" not in rendered
 
 
+def test_d1c_tags_and_status_match_graph_catalog():
+    """Tags render as borderless badges; status colors match Graph catalog."""
+    from app.dash_app.pages.library.layout import _status_badge, _tag_chips
+
+    # Tags: dbc.Badge with light/dark colors, no border class.
+    tags_div = _tag_chips(["urgent", "graph"])
+    badges = tags_div.children
+    assert len(badges) == 2
+    for badge in badges:
+        assert badge.color == "light"
+        assert badge.text_color == "dark"
+        assert "border" not in (badge.className or "")
+
+    # Status: active → success, draft → warning, deprecated → secondary.
+    active = str(_status_badge("active"))
+    assert "text-bg-success" in active
+    draft = str(_status_badge("draft"))
+    assert "text-bg-warning" in draft
+    deprecated = str(_status_badge("deprecated"))
+    assert "text-bg-secondary" in deprecated
+    # Unknown/empty status → None (renders as em-dash in the row).
+    assert _status_badge(None) is None
+    assert _status_badge("unknown") is None
+
+
 def _table_rows(table):
     """Extract the Tr components from a rendered library table."""
     table_el = table.children[0]

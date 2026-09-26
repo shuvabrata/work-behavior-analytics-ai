@@ -187,6 +187,16 @@ Feature flags: `GITHUB_MCP_ENABLED`, `ATLASSIAN_MCP_ENABLED`
 - **Dialog Message**: Include the scope of destruction and the phrase "This cannot be undone."
 - **Reference Implementation**: The "Reset All to Default" button in `src/app/dash_app/pages/settings/runtime.py` is the canonical example of both the `outline-danger` style and the `ConfirmDialog` pattern.
 
+### Large Table Rendering (Performance)
+Dash instantiates a component tree for every server callback output. For tables with many rows (e.g. 100+), this per-component instantiation dominates load time — a 140-row table can take ~10s to render even when the backend is fast. To avoid this:
+
+- **Render the table body in JavaScript, not as a Dash component tree.** Use a `clientside_callback` that reads the raw data from a `dcc.Store` and builds the `<tr>`/`<td>` HTML directly in the browser (string concatenation + `innerHTML`). This bypasses Dash's component-instantiation cost entirely.
+- **Keep the table skeleton (header + empty `<tbody id="...">`) in the layout** so the header renders instantly; the clientside callback fills the body.
+- **Keep search/filter client-side** in the same JS pass — no server round-trip, instant filtering.
+- **Escape all user data** in the JS (`&`, `<`, `>`, quotes) to avoid HTML injection.
+- **Reference Implementation**: The Library page (`src/app/dash_app/pages/library/`) — `layout.py` renders the static skeleton; `callbacks.py` has the clientside callback that builds rows from `library-store`.
+- **Trade-off**: Row-building logic moves to JS, so Python unit tests cover the data flow and skeleton rather than the rendered rows. Use this pattern for large, read-only, or frequently-filtered datasets; keep small tables as normal Dash components.
+
 ### Testing
 Tests are in `tests/`. Markers are defined in `pytest.ini`: `unit`, `integration`, `server`, `neo4j`, `rabbitmq`.
 

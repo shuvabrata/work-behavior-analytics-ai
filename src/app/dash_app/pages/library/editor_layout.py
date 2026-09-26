@@ -138,6 +138,7 @@ def _render_metadata_section() -> html.Div:
                                         options=STATUS_OPTIONS,
                                         clearable=True,
                                         placeholder="Status",
+                                        searchable=False,
                                     ),
                                 ],
                                 md=3,

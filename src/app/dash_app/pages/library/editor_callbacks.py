@@ -137,9 +137,6 @@ def init_editor(pathname: str | None) -> tuple[str, Any]:
 
 @callback(
     Output("editor-store", "data"),
-    Output("editor-id-display", "children"),
-    Output("editor-namespace-display", "children"),
-    Output("editor-slug-display", "children"),
     Output("editor-name", "value"),
     Output("editor-description", "value"),
     Output("editor-summary", "value"),
@@ -170,9 +167,6 @@ def load_query(
             {"mode": "new"},
             "",
             "",
-            "",
-            "",
-            "",
             None,
             None,
             None,
@@ -189,9 +183,6 @@ def load_query(
     if not namespace or not slug:
         return (
             {"mode": "edit"},
-            "",
-            "",
-            "",
             "",
             "",
             None,
@@ -220,9 +211,6 @@ def load_query(
                 {"mode": "edit"},
                 "",
                 "",
-                "",
-                "",
-                "",
                 None,
                 None,
                 None,
@@ -243,9 +231,6 @@ def load_query(
             {"mode": "edit"},
             "",
             "",
-            "",
-            "",
-            "",
             None,
             None,
             None,
@@ -264,9 +249,6 @@ def load_query(
 
     return (
         {"mode": "edit", "id": query.get("id"), "namespace": namespace, "slug": slug},
-        query.get("id") or "",
-        namespace,
-        slug,
         query.get("name") or "",
         query.get("description") or "",
         query.get("summary"),
@@ -651,9 +633,6 @@ def confirm_reset(
 
 @callback(
     Output("editor-store", "data", allow_duplicate=True),
-    Output("editor-id-display", "children", allow_duplicate=True),
-    Output("editor-namespace-display", "children", allow_duplicate=True),
-    Output("editor-slug-display", "children", allow_duplicate=True),
     Output("editor-name", "value", allow_duplicate=True),
     Output("editor-description", "value", allow_duplicate=True),
     Output("editor-summary", "value", allow_duplicate=True),
@@ -695,9 +674,6 @@ def reset_query(
             no_update,
             no_update,
             no_update,
-            no_update,
-            no_update,
-            no_update,
             create_alert(
                 "Cannot reset: missing namespace or slug.", color="danger", class_name="mb-3"
             ),
@@ -724,18 +700,12 @@ def reset_query(
                 no_update,
                 no_update,
                 no_update,
-                no_update,
-                no_update,
-                no_update,
                 create_alert(
                     f"Reset failed: {detail}", color="danger", class_name="mb-3"
                 ),
             )
     except requests.exceptions.RequestException as exc:
         return (
-            no_update,
-            no_update,
-            no_update,
             no_update,
             no_update,
             no_update,
@@ -771,9 +741,6 @@ def reset_query(
                 no_update,
                 no_update,
                 no_update,
-                no_update,
-                no_update,
-                no_update,
                 create_alert(
                     "Override reset. Reload the page to see factory defaults.",
                     color="success",
@@ -797,9 +764,6 @@ def reset_query(
             no_update,
             no_update,
             no_update,
-            no_update,
-            no_update,
-            no_update,
             create_alert(f"Reset failed: {exc}", color="danger", class_name="mb-3"),
         )
 
@@ -809,9 +773,6 @@ def reset_query(
 
     return (
         {"mode": "edit", "id": query.get("id"), "namespace": namespace, "slug": slug},
-        query.get("id") or "",
-        namespace,
-        slug,
         query.get("name") or "",
         query.get("description") or "",
         query.get("summary"),

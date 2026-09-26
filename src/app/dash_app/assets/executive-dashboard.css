@@ -22,6 +22,7 @@
     --color-background-white: #ffffff;
     --color-background-light: #f7fafc;
     --color-surface-active: #edf2f7;
+    --color-input-background: #ffffff;
 
     /* Colors - Border */
     --color-border: #e2e8f0;
@@ -96,6 +97,7 @@
     --color-background-white: #1f262f;
     --color-background-light: #252f3a;
     --color-surface-active: #2f3b49;
+    --color-input-background: #2f3b49;
 
     --color-border: #3a4653;
     --color-border-light: #445262;
@@ -244,6 +246,14 @@
     font-weight: var(--font-weight-medium);
 }
 
+/* Editable fields get a distinct background by default (not only on focus),
+   so they read as editable against the section-card background. */
+.form-control,
+.form-select,
+textarea {
+    background-color: var(--color-input-background) !important;
+}
+
 .form-control::placeholder,
 textarea::placeholder,
 input::placeholder {
@@ -261,7 +271,7 @@ input::placeholder {
 .form-select:focus {
     border-color: var(--color-navy) !important;
     box-shadow: 0 0 0 2px var(--color-focus-ring) !important;
-    background-color: var(--color-background-white) !important;
+    background-color: var(--color-input-background) !important;
 }
 
 /* ============================================================================= */
@@ -315,12 +325,12 @@ input::placeholder {
 
 .theme-executive-dark .form-control,
 .theme-executive-dark .form-select {
-    background-color: var(--color-background-light) !important;
+    background-color: var(--color-input-background) !important;
     border-color: var(--color-border-light) !important;
 }
 
 .theme-executive-dark .form-select option {
-    background-color: var(--color-background-light) !important;
+    background-color: var(--color-input-background) !important;
     color: var(--color-text-dark) !important;
 }
 
@@ -449,7 +459,7 @@ input::placeholder {
 }
 
 .theme-executive-dark .form-control:focus {
-    background-color: var(--color-background-light) !important;
+    background-color: var(--color-input-background) !important;
 }
 
 /* ============================================================================= */
@@ -1658,14 +1668,14 @@ input::placeholder {
 /* Form controls inside modals */
 .theme-executive-dark .modal .form-control,
 .theme-executive-dark .modal .form-select {
-    background-color: var(--color-background-light) !important;
+    background-color: var(--color-input-background) !important;
     color: var(--color-text-dark) !important;
     border-color: var(--color-border) !important;
 }
 
 .theme-executive-dark .modal .form-control:focus,
 .theme-executive-dark .modal .form-select:focus {
-    background-color: var(--color-background-light) !important;
+    background-color: var(--color-input-background) !important;
     color: var(--color-text-dark) !important;
     border-color: var(--color-navy) !important;
     box-shadow: 0 0 0 0.2rem rgba(44, 82, 130, 0.25);

@@ -122,7 +122,7 @@ def test_e1_editor_loads_query(monkeypatch):
     assert fake.get_calls[0]["url"].endswith(
         "/api/v1/queries/catalog/github/top_committers"
     )
-    # (store, id, ns, slug, name, description, summary, owner, status, tags,
+    # (store, name, description, summary, owner, status, tags,
     #  tabular, graph, default_view, param_count, params, feedback)
     assert result[0] == {
         "mode": "edit",
@@ -130,8 +130,8 @@ def test_e1_editor_loads_query(monkeypatch):
         "namespace": "github",
         "slug": "top_committers",
     }
-    assert result[4] == "Top Committers"
-    assert result[10] == "MATCH (n) RETURN n LIMIT 10"
+    assert result[1] == "Top Committers"
+    assert result[7] == "MATCH (n) RETURN n LIMIT 10"
 
 
 def test_e1b_new_route_leaves_form_blank(monkeypatch):
@@ -143,7 +143,7 @@ def test_e1b_new_route_leaves_form_blank(monkeypatch):
 
     assert fake.get_calls == []
     assert result[0] == {"mode": "new"}
-    assert result[4] == ""
+    assert result[1] == ""
 
 
 # ── E2: Save → PUT ─────────────────────────────────────────────────────
@@ -360,5 +360,5 @@ def test_e8_reset_deletes_and_reloads(monkeypatch):
     assert fake.get_calls[0]["url"].endswith(
         "/api/v1/queries/catalog/github/top_committers"
     )
-    assert result[4] == "Top Committers"
-    assert "reset to factory" in str(result[15]).lower()
+    assert result[1] == "Top Committers"
+    assert "reset to factory" in str(result[12]).lower()

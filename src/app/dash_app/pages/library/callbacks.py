@@ -12,7 +12,6 @@ from dash import (
     State,
     callback,
     clientside_callback,
-    html,
     no_update,
 )
 from dash.exceptions import PreventUpdate
@@ -168,7 +167,13 @@ clientside_callback(
             var destructiveBtn = destructiveLabel
                 ? '<button class="btn btn-outline-danger btn-sm" data-action="destructive" data-id="' + esc(q.id) + '">' + esc(destructiveLabel) + '</button>'
                 : '';
-            var editBtn = '<button class="btn btn-primary btn-sm me-1" data-action="edit" data-id="' + esc(q.id) + '">Edit</button>';
+            // The Edit button navigates directly via onclick. It is a plain
+            // HTML button (not a Dash component), so Dash has no n_clicks for
+            // it — relying on a children-input callback would never fire
+            // because the table body is set via innerHTML and the children
+            // output returns no_update. q.id is a path-safe "namespace/slug",
+            // so embedding it in the URL is safe.
+            var editBtn = '<button class="btn btn-primary btn-sm me-1" data-action="edit" data-id="' + esc(q.id) + '" onclick="window.location.href=&quot;/app/library/edit/' + q.id + '&quot;">Edit</button>';
 
             rows.push(
                 '<tr data-namespace="' + esc(ns) + '" data-search="' + esc(searchable(q)) + '"' +
@@ -195,25 +200,6 @@ clientside_callback(
     Input("library-system-ids-store", "data"),
     Input("library-search-input", "value"),
     Input("library-namespace-filter", "value"),
-    prevent_initial_call=True,
-)
-
-
-# Edit button clicks (plain HTML buttons with data-action="edit").
-clientside_callback(
-    """
-    function(_n) {
-        var btn = document.querySelector('[data-action="edit"]');
-        if (!btn) return window.dash_clientside.no_update;
-        var id = btn.getAttribute('data-id') || '';
-        if (!id) return window.dash_clientside.no_update;
-        var parts = id.split('/');
-        if (parts.length < 2) return window.dash_clientside.no_update;
-        return '/app/library/edit/' + parts[0] + '/' + parts[1];
-    }
-    """,
-    Output("url", "pathname", allow_duplicate=True),
-    Input("library-table-container", "children"),
     prevent_initial_call=True,
 )
 

@@ -8,12 +8,11 @@ import dash_bootstrap_components as dbc
 from app.dash_app.components.common import create_page_header
 from app.dash_app.styles import (
     CARD_CONTAINER_STYLE,
-    COLOR_BORDER,
-    COLOR_GRAY_MEDIUM,
+    FEATURE_CARD_STYLE,
+    FEATURE_CARD_TITLE_STYLE,
     FONT_SANS,
     FONT_SIZE_SMALL,
     FONT_SIZE_XSMALL,
-    FONT_WEIGHT_MEDIUM,
     SPACING_XXSMALL,
     SPACING_XSMALL,
     SPACING_SMALL,
@@ -74,11 +73,8 @@ def get_editor_layout() -> html.Div:
             ),
             html.Div(
                 [
-                    _render_info_bar(),
-                    _render_metadata_fields(),
-                    _render_query_editors(),
-                    _render_parameters_section(),
-                    _render_default_view(),
+                    _render_metadata_section(),
+                    _render_queries_section(),
                     _render_action_bar(),
                     _render_save_as_modal(),
                     _render_test_results(),
@@ -89,58 +85,11 @@ def get_editor_layout() -> html.Div:
     )
 
 
-def _render_info_bar() -> html.Div:
-    """Read-only info bar showing id and namespace."""
+def _render_metadata_section() -> html.Div:
+    """Metadata section card (name, description, summary, owner, status, tags)."""
     return html.Div(
         [
-            html.Div(
-                [
-                    html.Span("ID", style={"fontWeight": FONT_WEIGHT_MEDIUM}),
-                    html.Span(
-                        id="editor-id-display",
-                        style={"color": COLOR_GRAY_MEDIUM, "marginLeft": SPACING_XSMALL},
-                    ),
-                ],
-                className="me-3",
-            ),
-            html.Div(
-                [
-                    html.Span("Namespace", style={"fontWeight": FONT_WEIGHT_MEDIUM}),
-                    html.Span(
-                        id="editor-namespace-display",
-                        style={"color": COLOR_GRAY_MEDIUM, "marginLeft": SPACING_XSMALL},
-                    ),
-                ],
-                className="me-3",
-            ),
-            html.Div(
-                [
-                    html.Span("Slug", style={"fontWeight": FONT_WEIGHT_MEDIUM}),
-                    html.Span(
-                        id="editor-slug-display",
-                        style={"color": COLOR_GRAY_MEDIUM, "marginLeft": SPACING_XSMALL},
-                    ),
-                ],
-            ),
-        ],
-        style={
-            "display": "flex",
-            "alignItems": "center",
-            "flexWrap": "wrap",
-            "fontFamily": FONT_SANS,
-            "fontSize": FONT_SIZE_SMALL,
-            "borderBottom": f"1px solid {COLOR_BORDER}",
-            "paddingBottom": SPACING_XSMALL,
-            "marginBottom": SPACING_SMALL,
-        },
-    )
-
-
-def _render_metadata_fields() -> html.Div:
-    """Editable metadata fields (name, description, summary, owner, status, tags)."""
-    return html.Div(
-        [
-            html.H6("Metadata", className="mt-2"),
+            html.Div("Metadata", style=FEATURE_CARD_TITLE_STYLE),
             dbc.Row(
                 [
                     dbc.Col(
@@ -216,15 +165,15 @@ def _render_metadata_fields() -> html.Div:
                 className="g-2 mt-2",
             ),
         ],
-        style={"fontFamily": FONT_SANS, "fontSize": FONT_SIZE_SMALL},
+        style=FEATURE_CARD_STYLE,
     )
 
 
-def _render_query_editors() -> html.Div:
-    """Two monospace Cypher editors (Tabular and Graph)."""
+def _render_queries_section() -> html.Div:
+    """Queries section card: Cypher editors, Test buttons, parameters, default view."""
     return html.Div(
         [
-            html.H6("Queries", className="mt-3"),
+            html.Div("Queries", style=FEATURE_CARD_TITLE_STYLE),
             dbc.Row(
                 [
                     dbc.Col(
@@ -235,6 +184,14 @@ def _render_query_editors() -> html.Div:
                                 placeholder="MATCH (n) RETURN n LIMIT 25",
                                 rows=8,
                                 style={"fontFamily": FONT_MONO, "fontSize": FONT_SIZE_XSMALL},
+                            ),
+                            dbc.Button(
+                                "Test Tabular",
+                                id="editor-test-tabular",
+                                color="secondary",
+                                outline=True,
+                                size="sm",
+                                className="mt-2",
                             ),
                         ],
                         md=6,
@@ -248,77 +205,61 @@ def _render_query_editors() -> html.Div:
                                 rows=8,
                                 style={"fontFamily": FONT_MONO, "fontSize": FONT_SIZE_XSMALL},
                             ),
+                            dbc.Button(
+                                "Test Graph",
+                                id="editor-test-graph",
+                                color="secondary",
+                                outline=True,
+                                size="sm",
+                                className="mt-2",
+                            ),
                         ],
                         md=6,
                     ),
                 ],
                 className="g-2",
             ),
-        ],
-        style={"fontFamily": FONT_SANS, "fontSize": FONT_SIZE_SMALL},
-    )
-
-
-def _render_parameters_section() -> html.Div:
-    """Parameter list with Add/Remove controls."""
-    return html.Div(
-        [
-            html.H6("Parameters", className="mt-3"),
+            html.Hr(style={"marginTop": SPACING_SMALL}),
             html.Div(
                 [
-                    dbc.Button(
-                        "Add Parameter",
-                        id="editor-param-add",
-                        color="primary",
-                        outline=True,
-                        size="sm",
+                    html.Div(
+                        [
+                            dbc.Button(
+                                "Add Parameter",
+                                id="editor-param-add",
+                                color="primary",
+                                outline=True,
+                                size="sm",
+                            ),
+                        ],
+                        style={"marginBottom": SPACING_XSMALL},
+                    ),
+                    html.Div(id="editor-params-container"),
+                ],
+                style={"fontFamily": FONT_SANS, "fontSize": FONT_SIZE_SMALL},
+            ),
+            html.Div(
+                [
+                    html.Div("Default View", style=FEATURE_CARD_TITLE_STYLE),
+                    dcc.RadioItems(
+                        id="editor-default-view",
+                        options=VIEW_OPTIONS,
+                        inline=True,
                     ),
                 ],
-                style={"marginBottom": SPACING_XSMALL},
-            ),
-            html.Div(id="editor-params-container"),
-        ],
-        style={"fontFamily": FONT_SANS, "fontSize": FONT_SIZE_SMALL},
-    )
-
-
-def _render_default_view() -> html.Div:
-    """Default-view radio (only views with non-empty Cypher)."""
-    return html.Div(
-        [
-            html.H6("Default View", className="mt-3"),
-            dcc.RadioItems(
-                id="editor-default-view",
-                options=VIEW_OPTIONS,
-                inline=True,
+                style={"fontFamily": FONT_SANS, "fontSize": FONT_SIZE_SMALL, "marginTop": SPACING_SMALL},
             ),
         ],
-        style={"fontFamily": FONT_SANS, "fontSize": FONT_SIZE_SMALL},
+        style=FEATURE_CARD_STYLE,
     )
 
 
 def _render_action_bar() -> html.Div:
-    """Action buttons: Save, Save As, Test Tabular, Test Graph, Reset to Factory."""
+    """Action buttons: Save, Save As, Reset to Factory."""
     return html.Div(
         [
             dbc.Button("Save", id="editor-save", color="primary", size="sm", className="me-2"),
             dbc.Button("Save As", id="editor-save-as", color="primary", outline=True, size="sm", className="me-2"),
-            dbc.Button(
-                "Test Tabular",
-                id="editor-test-tabular",
-                color="secondary",
-                outline=True,
-                size="sm",
-                className="me-2",
-            ),
-            dbc.Button(
-                "Test Graph",
-                id="editor-test-graph",
-                color="secondary",
-                outline=True,
-                size="sm",
-                className="me-2",
-            ),
             dbc.Button(
                 "Reset to Factory",
                 id="editor-reset",

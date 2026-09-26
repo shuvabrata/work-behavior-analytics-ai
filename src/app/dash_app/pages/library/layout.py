@@ -243,7 +243,7 @@ def render_library_table(
                 ]
             ),
         ],
-        bordered=True,
+        bordered=False,
         hover=True,
         size="sm",
         className="align-middle executive-table",

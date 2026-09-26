@@ -179,6 +179,67 @@ clientside_callback(
 )
 
 
+# Attach draggable column-resize handles to the table header cells.
+# Widths persist in localStorage so adjustments survive page reloads.
+clientside_callback(
+    """
+    function(children) {
+        var table = document.querySelector('.executive-table');
+        if (!table) return window.dash_clientside.no_update;
+        var headers = Array.from(table.querySelectorAll('thead th'));
+        var STORAGE_KEY = 'library-table-col-widths';
+        var saved = {};
+        try { saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); } catch(e) { saved = {}; }
+
+        // Restore saved widths (keyed by header text).
+        for (var i = 0; i < headers.length; i++) {
+            var th = headers[i];
+            var key = th.textContent.trim();
+            if (saved[key]) {
+                th.style.width = saved[key] + 'px';
+                th.style.minWidth = saved[key] + 'px';
+            }
+            if (th.querySelector('.col-resize-handle')) continue;
+            th.style.position = 'relative';
+            var handle = document.createElement('div');
+            handle.className = 'col-resize-handle';
+            th.appendChild(handle);
+            var startX = 0, startWidth = 0;
+            handle.addEventListener('mousedown', function(e) {
+                startX = e.clientX;
+                startWidth = th.getBoundingClientRect().width;
+                document.body.style.cursor = 'col-resize';
+                document.body.style.userSelect = 'none';
+                e.preventDefault();
+                var onMove = function(ev) {
+                    var delta = ev.clientX - startX;
+                    var newWidth = Math.max(40, startWidth + delta);
+                    th.style.width = newWidth + 'px';
+                    th.style.minWidth = newWidth + 'px';
+                };
+                var onUp = function() {
+                    document.body.style.cursor = '';
+                    document.body.style.userSelect = '';
+                    document.removeEventListener('mousemove', onMove);
+                    document.removeEventListener('mouseup', onUp);
+                    // Persist the final width.
+                    var key = th.textContent.trim();
+                    saved[key] = Math.round(th.getBoundingClientRect().width);
+                    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(saved)); } catch(e) {}
+                };
+                document.addEventListener('mousemove', onMove);
+                document.addEventListener('mouseup', onUp);
+            });
+        }
+        return window.dash_clientside.no_update;
+    }
+    """,
+    Output("library-table-container", "children", allow_duplicate=True),
+    Input("library-table-container", "children"),
+    prevent_initial_call=True,
+)
+
+
 @callback(
     Output("url", "pathname", allow_duplicate=True),
     Input({"type": "library-edit-btn", "id": ALL}, "n_clicks"),

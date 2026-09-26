@@ -7,12 +7,10 @@ from typing import Any
 
 import requests
 from dash import (
-    ALL,
     Input,
     Output,
     State,
     callback,
-    callback_context,
     clientside_callback,
     html,
     no_update,
@@ -21,7 +19,6 @@ from dash.exceptions import PreventUpdate
 
 from app.runtime_settings import runtime_settings
 from app.dash_app.components.common import create_alert
-from .layout import render_library_table
 
 TIMEOUT_SECONDS = runtime_settings.get_int("HTTP_REQUEST_TIMEOUT")
 
@@ -112,84 +109,113 @@ def populate_namespace_dropdown(
     return options, "__all__"
 
 
-@callback(
-    Output("library-table-container", "children"),
-    Input("library-store", "data"),
-    State("library-system-ids-store", "data"),
-)
-def render_table(
-    queries: list[dict[str, Any]] | None,
-    system_ids: list[str] | None,
-) -> Any:
-    """Render the full catalog table once.
-
-    Namespace/search filtering is applied client-side by the
-    ``filter_library_table`` clientside callback, so typing in the search box
-    does not trigger a server round-trip or a full table rebuild.
-    """
-    if queries is None:
-        return html.Div(
-            "Loading catalog…",
-            style={"color": "var(--color-gray-medium)", "fontFamily": "'Inter', sans-serif"},
-        )
-    return render_library_table(
-        queries,
-        set(system_ids or []),
-    )
-
-
-# Client-side row filtering: toggles row visibility without a server call.
+# Build the table body rows entirely in JavaScript from the raw catalog data.
+# This avoids Dash's per-component instantiation cost for 140+ rows (the
+# source of the multi-second page-load delay) and keeps search/namespace
+# filtering fully client-side and instant.
 clientside_callback(
     """
-    function(searchValue, namespaceValue) {
+    function(queries, systemIds, searchValue, namespaceValue) {
+        var tbody = document.getElementById('library-table-body');
+        var empty = document.getElementById('library-empty-row');
+        if (!tbody) return window.dash_clientside.no_update;
         var search = (searchValue || '').trim().toLowerCase();
         var namespace = namespaceValue || '__all__';
-        var table = document.querySelector('.executive-table');
-        if (!table) return window.dash_clientside.no_update;
-        var rows = Array.from(table.querySelectorAll('tbody tr'));
+        var systemSet = {};
+        for (var i = 0; i < (systemIds || []).length; i++) systemSet[systemIds[i]] = true;
+
+        function esc(s) {
+            return String(s == null ? '' : s)
+                .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+        }
+        function searchable(q) {
+            var parts = [
+                q.name, q.id, q.summary, q.owner, q.status, q.default_view,
+                (q.tags || []).join(' '),
+                (q.source_path || '').indexOf('user_defined/') !== -1 ? 'User' : 'System'
+            ];
+            return parts.join(' ').toLowerCase();
+        }
+
+        var rows = [];
         var anyVisible = false;
-        for (var i = 0; i < rows.length; i++) {
-            var row = rows[i];
-            var rowNs = row.getAttribute('data-namespace') || '';
-            var nsMatch = (namespace === '__all__') || (rowNs === namespace);
-            var searchMatch = !search || (row.getAttribute('data-search') || '').indexOf(search) !== -1;
+        for (var i = 0; i < (queries || []).length; i++) {
+            var q = queries[i];
+            var ns = (q.namespace || {}).directory || '';
+            var nsMatch = (namespace === '__all__') || (ns === namespace);
+            var searchMatch = !search || searchable(q).indexOf(search) !== -1;
             var visible = nsMatch && searchMatch;
-            row.style.display = visible ? '' : 'none';
             if (visible) anyVisible = true;
+
+            var isUser = (q.source_path || '').indexOf('user_defined/') !== -1;
+            var statusColor = {active: 'success', draft: 'warning', deprecated: 'secondary'}[q.status];
+            var statusHtml = statusColor
+                ? '<span class="badge text-bg-' + statusColor + '" style="font-size:12px">' + esc(q.status) + '</span>'
+                : '&mdash;';
+            var tagHtml = (q.tags || []).map(function(t) {
+                return '<span class="badge text-bg-light me-1" style="font-size:12px">' + esc(t) + '</span>';
+            }).join('');
+            var viewsHtml = '';
+            var views = q.available_views || [];
+            if (views.indexOf('tabular') !== -1) viewsHtml += '<i class="fas fa-table me-1" title="Tabular"></i>';
+            if (views.indexOf('graph') !== -1) viewsHtml += '<i class="fas fa-project-diagram" title="Graph"></i>';
+            if (!viewsHtml) viewsHtml = '&mdash;';
+            var paramCount = (q.parameters || []).length;
+            var defaultView = q.default_view || '&mdash;';
+            var source = isUser ? 'User' : 'System';
+            var destructiveLabel = isUser ? (systemSet[q.id] ? 'Reset to factory' : 'Delete') : '';
+            var destructiveBtn = destructiveLabel
+                ? '<button class="btn btn-outline-danger btn-sm" data-action="destructive" data-id="' + esc(q.id) + '">' + esc(destructiveLabel) + '</button>'
+                : '';
+            var editBtn = '<button class="btn btn-primary btn-sm me-1" data-action="edit" data-id="' + esc(q.id) + '">Edit</button>';
+
+            rows.push(
+                '<tr data-namespace="' + esc(ns) + '" data-search="' + esc(searchable(q)) + '"' +
+                (visible ? '' : ' style="display:none"') + '>' +
+                '<td>' + esc(q.name || q.id) + '</td>' +
+                '<td>' + esc(q.summary || '&mdash;') + '</td>' +
+                '<td>' + tagHtml + '</td>' +
+                '<td>' + statusHtml + '</td>' +
+                '<td>' + esc(defaultView) + '</td>' +
+                '<td>' + paramCount + '</td>' +
+                '<td>' + viewsHtml + '</td>' +
+                '<td>' + esc(source) + '</td>' +
+                '<td>' + editBtn + destructiveBtn + '</td>' +
+                '</tr>'
+            );
         }
-        var empty = document.getElementById('library-empty-row');
-        if (empty) {
-            empty.style.display = anyVisible ? 'none' : '';
-        }
+        tbody.innerHTML = rows.join('');
+        if (empty) empty.style.display = anyVisible ? 'none' : '';
         return window.dash_clientside.no_update;
     }
     """,
     Output("library-table-container", "children", allow_duplicate=True),
+    Input("library-store", "data"),
+    Input("library-system-ids-store", "data"),
     Input("library-search-input", "value"),
     Input("library-namespace-filter", "value"),
     prevent_initial_call=True,
 )
 
 
-@callback(
+# Edit button clicks (plain HTML buttons with data-action="edit").
+clientside_callback(
+    """
+    function(_n) {
+        var btn = document.querySelector('[data-action="edit"]');
+        if (!btn) return window.dash_clientside.no_update;
+        var id = btn.getAttribute('data-id') || '';
+        if (!id) return window.dash_clientside.no_update;
+        var parts = id.split('/');
+        if (parts.length < 2) return window.dash_clientside.no_update;
+        return '/app/library/edit/' + parts[0] + '/' + parts[1];
+    }
+    """,
     Output("url", "pathname", allow_duplicate=True),
-    Input({"type": "library-edit-btn", "id": ALL}, "n_clicks"),
+    Input("library-table-container", "children"),
     prevent_initial_call=True,
 )
-def handle_edit_click(n_clicks_list: list[int | None]) -> Any:
-    """Navigate to the editor for the clicked query."""
-    if not callback_context.triggered:
-        raise PreventUpdate
-    if not any(n is not None for n in n_clicks_list):
-        raise PreventUpdate
-    triggered = callback_context.triggered_id
-    if not isinstance(triggered, dict):
-        raise PreventUpdate
-    query_id = triggered.get("id")
-    if not query_id:
-        raise PreventUpdate
-    namespace, slug = _parse_id(query_id)
-    return f"/app/library/edit/{namespace}/{slug}"
 
 
 @callback(
@@ -204,54 +230,41 @@ def handle_new_click(n_clicks: int | None) -> Any:
     return "/app/library/new"
 
 
-@callback(
+# Destructive button clicks (plain HTML buttons with data-action="destructive").
+# Determines override vs addition and shows the confirm dialog.
+clientside_callback(
+    """
+    function(_n, queries, systemIds) {
+        var btn = document.querySelector('[data-action="destructive"]');
+        if (!btn) return window.dash_clientside.no_update;
+        var id = btn.getAttribute('data-id') || '';
+        if (!id) return window.dash_clientside.no_update;
+        var query = null;
+        for (var i = 0; i < (queries || []).length; i++) {
+            if (queries[i].id === id) { query = queries[i]; break; }
+        }
+        if (!query) return window.dash_clientside.no_update;
+        var name = query.name || id;
+        var systemSet = {};
+        for (var j = 0; j < (systemIds || []).length; j++) systemSet[systemIds[j]] = true;
+        var message;
+        if (systemSet[id]) {
+            message = "Are you sure you want to reset '" + name + "' to factory defaults? " +
+                "This will discard all user edits for this query. This cannot be undone.";
+        } else {
+            message = "Are you sure you want to delete '" + name + "'? This cannot be undone.";
+        }
+        return [message, true, {id: id}];
+    }
+    """,
     Output("library-delete-confirm", "message"),
     Output("library-delete-confirm", "displayed"),
     Output("library-pending-delete", "data"),
-    Input({"type": "library-destructive-btn", "id": ALL}, "n_clicks"),
+    Input("library-table-container", "children"),
     State("library-store", "data"),
     State("library-system-ids-store", "data"),
     prevent_initial_call=True,
 )
-def handle_destructive_click(
-    n_clicks_list: list[int | None],
-    queries: list[dict[str, Any]] | None,
-    system_ids: list[str] | None,
-) -> tuple[str, bool, dict[str, str]]:
-    """Show the confirm dialog for a destructive action.
-
-    Override rows (id present in the system catalog) reset to factory;
-    addition rows (new id) are deleted outright.
-    """
-    if not callback_context.triggered:
-        raise PreventUpdate
-    if not any(n is not None for n in n_clicks_list):
-        raise PreventUpdate
-    triggered = callback_context.triggered_id
-    if not isinstance(triggered, dict):
-        raise PreventUpdate
-    query_id = triggered.get("id")
-    if not query_id:
-        raise PreventUpdate
-
-    query = next(
-        (q for q in (queries or []) if q.get("id") == query_id),
-        None,
-    )
-    if not query:
-        raise PreventUpdate
-
-    name = query.get("name") or query_id
-    system_ids_set = set(system_ids or [])
-    if query_id in system_ids_set:
-        message = (
-            f"Are you sure you want to reset '{name}' to factory defaults? "
-            "This will discard all user edits for this query. This cannot be undone."
-        )
-    else:
-        message = f"Are you sure you want to delete '{name}'? This cannot be undone."
-
-    return message, True, {"id": query_id}
 
 
 @callback(

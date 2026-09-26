@@ -16,6 +16,7 @@ class CatalogNamespace(BaseModel):
     name: str = Field(..., min_length=1)
     directory: str = Field(..., min_length=1)
     order: int = Field(..., ge=0)
+    is_user_defined: bool = False
 
     model_config = ConfigDict(extra="forbid")
 
@@ -75,6 +76,44 @@ class CatalogQuery(BaseModel):
         expected_views = list(self.queries.keys())
         if self.available_views != expected_views:
             raise ValueError("available_views must match query variant order")
+
+        if self.default_view is not None and self.default_view not in self.queries:
+            raise ValueError("default_view must match an available query variant")
+
+        return self
+
+
+class CatalogQueryWrite(BaseModel):
+    """Write-side model for creating or updating a catalog query.
+
+    Unlike :class:`CatalogQuery`, this model is the PUT request body: it does
+    not require derived fields (``id``, ``slug``, ``namespace``,
+    ``available_views``, ``source_path``) which the loader derives at load
+    time.
+    """
+
+    name: str = Field(..., min_length=1)
+    description: str = Field(..., min_length=1)
+    summary: str | None = Field(default=None, min_length=1)
+    queries: dict[CatalogView, str]
+    parameters: list[CatalogParameter] = Field(default_factory=list)
+    tags: list[str] = Field(default_factory=list)
+    owner: str | None = Field(default=None, min_length=1)
+    status: CatalogStatus | None = None
+    default_view: CatalogView | None = None
+
+    model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="after")
+    def validate_queries(self) -> "CatalogQueryWrite":
+        if not self.queries:
+            raise ValueError("catalog query must define at least one query variant")
+
+        for view, query_text in self.queries.items():
+            if view not in ("tabular", "graph"):
+                raise ValueError(f"unsupported query view: {view}")
+            if not query_text or not query_text.strip():
+                raise ValueError(f"{view} query cannot be empty")
 
         if self.default_view is not None and self.default_view not in self.queries:
             raise ValueError("default_view must match an available query variant")

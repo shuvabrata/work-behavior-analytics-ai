@@ -1,14 +1,16 @@
 """FastAPI router for YAML-backed query catalog metadata."""
 
+import asyncio
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_async_db
-from app.query_catalog import CatalogQuery
+from app.query_catalog import CatalogQuery, CatalogQueryWrite
 
 from . import service
+from . import user_defined_service
 from .model import (
     CatalogMetadataListResponse,
     CatalogMetadataPatch,
@@ -47,6 +49,30 @@ async def get_catalog_query(namespace: str, slug: str) -> CatalogQuery:
     if catalog_query is None:
         raise HTTPException(status_code=404, detail="Catalog query not found")
     return catalog_query
+
+
+@router.put("/catalog/{namespace}/{slug}", response_model=CatalogQuery, response_model_exclude_none=True)
+async def put_catalog_query(
+    namespace: str, slug: str, payload: CatalogQueryWrite
+) -> CatalogQuery:
+    """Create or update a user-defined query override."""
+    try:
+        return await asyncio.to_thread(
+            user_defined_service.save_query, namespace, slug, payload
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.delete("/catalog/{namespace}/{slug}", response_model=None)
+async def delete_catalog_query(namespace: str, slug: str) -> dict | Response:
+    """Delete a user-defined query override, if one exists."""
+    deleted = await asyncio.to_thread(
+        user_defined_service.delete_query, namespace, slug
+    )
+    if deleted:
+        return {"message": "Query override deleted"}
+    return Response(status_code=204)
 
 
 # ── Catalog metadata (favourites) ─────────────────────────────────────

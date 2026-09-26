@@ -45,20 +45,16 @@ def get_layout() -> html.Div:
                     dbc.Row(
                         [
                             dbc.Col(
-                                dbc.Button(
-                                    "New Query",
-                                    id="library-new-btn",
-                                    color="primary",
-                                    size="sm",
-                                    className="me-2",
-                                ),
-                                width="auto",
-                            ),
-                            dbc.Col(
-                                dcc.Dropdown(
+                                dbc.Select(
                                     id="library-namespace-filter",
-                                    placeholder="All namespaces",
-                                    clearable=True,
+                                    options=[
+                                        {
+                                            "label": "All namespaces",
+                                            "value": "__all__",
+                                        }
+                                    ],
+                                    value="__all__",
+                                    size="sm",
                                 ),
                                 width=3,
                             ),
@@ -68,8 +64,20 @@ def get_layout() -> html.Div:
                                     type="text",
                                     placeholder="Search by name, tags, or id…",
                                     debounce=True,
+                                    className="library-search-input",
                                 ),
                                 width=True,
+                            ),
+                            dbc.Col(
+                                dbc.Button(
+                                    "New Query",
+                                    id="library-new-btn",
+                                    color="primary",
+                                    size="sm",
+                                    className="ms-2",
+                                ),
+                                width="auto",
+                                className="text-end",
                             ),
                         ],
                         className="g-2 align-items-center",
@@ -150,6 +158,40 @@ def _is_user_row(query: dict[str, Any]) -> bool:
     return "user_defined/" in (query.get("source_path") or "")
 
 
+def _source_label(query: dict[str, Any]) -> html.Span:
+    """Render a source badge: 'User' for overrides, 'System' otherwise."""
+    if _is_user_row(query):
+        return html.Span(
+            "User",
+            className="badge border",
+            style={
+                "fontSize": FONT_SIZE_XSMALL,
+                "backgroundColor": "var(--color-navy)",
+                "color": "var(--color-background-white)",
+            },
+        )
+    return html.Span(
+        "System",
+        className="badge border",
+        style={
+            "fontSize": FONT_SIZE_XSMALL,
+            "backgroundColor": "var(--color-background-pale)",
+            "color": "var(--color-charcoal-medium)",
+        },
+    )
+
+
+def _default_view_label(default_view: str | None) -> str:
+    """Render the default view as a short label or an em-dash."""
+    return default_view or "—"
+
+
+def _parameters_label(parameters: list[dict[str, Any]] | None) -> str:
+    """Render the parameter count, or an em-dash when there are none."""
+    count = len(parameters or [])
+    return str(count) if count else "—"
+
+
 def _destructive_label(query: dict[str, Any], system_ids: set[str]) -> str:
     """Label the destructive button: override rows reset, additions delete."""
     if query.get("id") in system_ids:
@@ -182,10 +224,13 @@ def render_library_table(
                 html.Tr(
                     [
                         html.Th("Name"),
-                        html.Th("Namespace"),
+                        html.Th("Summary"),
                         html.Th("Tags"),
                         html.Th("Status"),
+                        html.Th("Default View"),
+                        html.Th("Parameters"),
                         html.Th("Views"),
+                        html.Th("Source"),
                         html.Th("Actions"),
                     ]
                 )
@@ -213,7 +258,7 @@ def _filter_queries(
 ) -> list[dict[str, Any]]:
     """Filter queries by namespace directory and free-text search."""
     filtered = queries
-    if namespace:
+    if namespace and namespace != "__all__":
         filtered = [
             q
             for q in filtered
@@ -272,10 +317,13 @@ def _render_row(
     return html.Tr(
         [
             html.Td(query.get("name") or query.get("id") or ""),
-            html.Td((query.get("namespace") or {}).get("directory") or ""),
+            html.Td(query.get("summary") or "—"),
             html.Td(_tag_chips(query.get("tags") or [])),
             html.Td(_status_badge(query.get("status"))),
+            html.Td(_default_view_label(query.get("default_view"))),
+            html.Td(_parameters_label(query.get("parameters"))),
             html.Td(_view_icons(query.get("available_views") or [])),
+            html.Td(_source_label(query)),
             html.Td(actions),
         ]
     )

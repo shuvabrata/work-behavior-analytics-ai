@@ -84,26 +84,30 @@ def load_library(pathname: str | None) -> tuple[Any, Any, Any]:
 
 @callback(
     Output("library-namespace-filter", "options"),
+    Output("library-namespace-filter", "value"),
     Input("library-namespaces-store", "data"),
 )
 def populate_namespace_dropdown(
     namespaces: list[dict[str, Any]] | None,
-) -> list[dict[str, str]]:
-    """Populate the namespace filter dropdown from the namespaces store."""
-    if not namespaces:
-        return []
-    options: list[dict[str, str]] = []
-    for ns in namespaces:
-        directory = ns.get("directory")
-        if not isinstance(directory, str):
-            continue
-        options.append(
-            {
-                "label": str(ns.get("name") or directory),
-                "value": directory,
-            }
-        )
-    return options
+) -> tuple[list[dict[str, str]], str]:
+    """Populate the namespace filter from the namespaces store.
+
+    Mirrors the Graph page's Query Library filter: an "All namespaces"
+    (``__all__``) default followed by each namespace, ordered by ``order``.
+    """
+    options: list[dict[str, str]] = [{"label": "All namespaces", "value": "__all__"}]
+    if namespaces:
+        for ns in namespaces:
+            directory = ns.get("directory")
+            if not isinstance(directory, str):
+                continue
+            options.append(
+                {
+                    "label": str(ns.get("name") or directory),
+                    "value": directory,
+                }
+            )
+    return options, "__all__"
 
 
 @callback(

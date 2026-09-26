@@ -135,6 +135,51 @@ def test_d1_table_renders_rows():
     assert "Query B" in rendered
 
 
+def test_d1b_table_renders_all_columns_except_description_and_query():
+    """The table shows all model columns except Description and the Cypher."""
+    query = {
+        "id": "github/a",
+        "name": "Query A",
+        "namespace": {"directory": "github"},
+        "source_path": "queries_catalog/user_defined/github/a.yaml",
+        "tags": ["urgent"],
+        "status": "active",
+        "available_views": ["tabular", "graph"],
+        "owner": "alice",
+        "summary": "A short summary.",
+        "default_view": "tabular",
+        "parameters": [{"name": "p1"}],
+    }
+    table = render_library_table([query], set())
+    rendered = str(table)
+
+    # Headers present
+    for header in (
+        "Name",
+        "Summary",
+        "Tags",
+        "Status",
+        "Default View",
+        "Parameters",
+        "Views",
+        "Source",
+        "Actions",
+    ):
+        assert header in rendered
+
+    # Row data present
+    assert "A short summary." in rendered
+    assert "tabular" in rendered
+    assert "1" in rendered  # parameter count
+    assert "User" in rendered  # source badge for user-defined row
+
+    # Description, the query Cypher, Namespace, and Owner must NOT be columns
+    assert "Description" not in rendered
+    assert "MATCH" not in rendered
+    assert "Namespace" not in rendered
+    assert "Owner" not in rendered
+
+
 def test_d2_namespace_filter():
     """Namespace filter narrows the rendered rows."""
     queries = [
@@ -145,6 +190,31 @@ def test_d2_namespace_filter():
     rendered = str(table)
     assert "Query A" in rendered
     assert "Query B" not in rendered
+
+
+def test_d2b_all_namespaces_shows_all_rows():
+    """The ``__all__`` sentinel (default) shows every row."""
+    queries = [
+        _query("github/a", "Query A"),
+        _query("jira/b", "Query B"),
+    ]
+    table = render_library_table(queries, set(), namespace="__all__")
+    rendered = str(table)
+    assert "Query A" in rendered
+    assert "Query B" in rendered
+
+
+def test_d2c_populate_namespace_dropdown_includes_all_default():
+    """The namespace filter defaults to ``__all__`` with namespaces listed."""
+    namespaces = [
+        {"name": "GitHub", "directory": "github", "order": 0},
+        {"name": "Jira", "directory": "jira", "order": 1},
+    ]
+    options, value = library_callbacks.populate_namespace_dropdown(namespaces)
+    assert value == "__all__"
+    assert options[0] == {"label": "All namespaces", "value": "__all__"}
+    assert {"label": "GitHub", "value": "github"} in options
+    assert {"label": "Jira", "value": "jira"} in options
 
 
 def test_d3_search_filter():

@@ -9,6 +9,7 @@ changes to the read path are needed here.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import yaml
 
@@ -25,7 +26,7 @@ from app.query_catalog import (
 from app.query_catalog.loader import SAFE_ID_SEGMENT, USER_DEFINED_DIR
 
 # Fields the loader derives at load time — never written to the YAML file.
-_DERIVED_FIELDS = ("id", "slug", "namespace", "available_views", "source_path")
+_DERIVED_FIELDS = {"id", "slug", "namespace", "available_views", "source_path"}
 
 
 def save_query(namespace: str, slug: str, payload: CatalogQueryWrite) -> CatalogQuery:
@@ -125,7 +126,7 @@ def _ensure_namespace_declared(root: Path, namespace: str) -> None:
     logger.info("Declared new user-defined namespace %s", namespace)
 
 
-def _load_yaml_mapping(path: Path) -> dict:
+def _load_yaml_mapping(path: Path) -> dict[str, Any]:
     with path.open("r", encoding="utf-8") as handle:
         data = yaml.safe_load(handle)
     if not isinstance(data, dict):

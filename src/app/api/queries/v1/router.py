@@ -65,7 +65,7 @@ async def put_catalog_query(
 
 
 @router.delete("/catalog/{namespace}/{slug}", response_model=None)
-async def delete_catalog_query(namespace: str, slug: str) -> dict | Response:
+async def delete_catalog_query(namespace: str, slug: str) -> dict[str, str] | Response:
     """Delete a user-defined query override, if one exists."""
     deleted = await asyncio.to_thread(
         user_defined_service.delete_query, namespace, slug

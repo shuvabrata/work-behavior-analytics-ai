@@ -123,7 +123,13 @@ def _status_badge(status: str | None) -> html.Span | None:
 def _tag_chips(tags: list[str]) -> html.Div:
     """Render tags as badges matching the Graph Query Catalog."""
     chips = [
-        dbc.Badge(tag, color="light", text_color="dark", className="me-1")
+        dbc.Badge(
+            tag,
+            color="light",
+            text_color="dark",
+            className="me-1",
+            style={"fontSize": FONT_SIZE_XSMALL},
+        )
         for tag in tags
     ]
     return html.Div(chips, style={"display": "flex", "flexWrap": "wrap", "gap": SPACING_XXSMALL})

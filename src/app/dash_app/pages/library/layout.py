@@ -62,8 +62,7 @@ def get_layout() -> html.Div:
                                 dbc.Input(
                                     id="library-search-input",
                                     type="text",
-                                    placeholder="Search by name, tags, or id…",
-                                    debounce=True,
+                                    placeholder="Search all columns…",
                                     className="library-search-input",
                                 ),
                                 width=True,
@@ -275,12 +274,17 @@ def _filter_queries(
 
 
 def _matches_search(query: dict[str, Any], needle: str) -> bool:
-    """Match a query against name, tags, and id."""
+    """Match a query against all loaded columns (name, summary, tags, etc.)."""
     haystack = " ".join(
         [
             query.get("name") or "",
             query.get("id") or "",
+            query.get("summary") or "",
+            query.get("owner") or "",
+            query.get("status") or "",
+            query.get("default_view") or "",
             " ".join(query.get("tags") or []),
+            "User" if _is_user_row(query) else "System",
         ]
     ).lower()
     return needle in haystack

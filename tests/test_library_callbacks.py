@@ -229,6 +229,36 @@ def test_d3_search_filter():
     assert "Query Beta" not in rendered
 
 
+def test_d3b_search_matches_summary():
+    """Search filter also matches the summary column."""
+    queries = [
+        {
+            "id": "github/a",
+            "name": "Query Alpha",
+            "namespace": {"directory": "github"},
+            "source_path": "queries_catalog/github/a.yaml",
+            "tags": [],
+            "status": "active",
+            "available_views": ["tabular"],
+            "summary": "Compares comments and reactions across blogposts.",
+        },
+        {
+            "id": "github/b",
+            "name": "Query Beta",
+            "namespace": {"directory": "github"},
+            "source_path": "queries_catalog/github/b.yaml",
+            "tags": [],
+            "status": "active",
+            "available_views": ["tabular"],
+            "summary": "Lists open pull requests.",
+        },
+    ]
+    table = render_library_table(queries, set(), search="blogposts")
+    rendered = str(table)
+    assert "Query Alpha" in rendered
+    assert "Query Beta" not in rendered
+
+
 # ── Callbacks (D4, D5, D8, D9) ─────────────────────────────────────────
 
 

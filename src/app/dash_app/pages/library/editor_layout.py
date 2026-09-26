@@ -151,22 +151,22 @@ def _render_metadata_section() -> html.Div:
                         [
                             dbc.Col(
                                 [
-                                    dbc.Label("Description", html_for="editor-description"),
+                                    dbc.Label("Summary", html_for="editor-summary"),
                                     dbc.Textarea(
-                                        id="editor-description",
-                                        placeholder="Short description",
-                                        rows=2,
+                                        id="editor-summary",
+                                        placeholder="Optional summary",
+                                        rows=1,
                                     ),
                                 ],
                                 md=6,
                             ),
                             dbc.Col(
                                 [
-                                    dbc.Label("Summary", html_for="editor-summary"),
-                                    dbc.Textarea(
-                                        id="editor-summary",
-                                        placeholder="Optional summary",
-                                        rows=2,
+                                    dbc.Label("Tags (comma-separated)", html_for="editor-tags"),
+                                    dbc.Input(
+                                        id="editor-tags",
+                                        type="text",
+                                        placeholder="analytics, github, …",
                                     ),
                                 ],
                                 md=6,
@@ -178,11 +178,11 @@ def _render_metadata_section() -> html.Div:
                         [
                             dbc.Col(
                                 [
-                                    dbc.Label("Tags (comma-separated)", html_for="editor-tags"),
-                                    dbc.Input(
-                                        id="editor-tags",
-                                        type="text",
-                                        placeholder="analytics, github, …",
+                                    dbc.Label("Description", html_for="editor-description"),
+                                    dbc.Textarea(
+                                        id="editor-description",
+                                        placeholder="Short description",
+                                        rows=4,
                                     ),
                                 ],
                                 md=12,

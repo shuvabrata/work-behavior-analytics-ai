@@ -11,12 +11,14 @@ from app.dash_app.styles import (
     COLOR_BACKGROUND_WHITE,
     COLOR_BORDER,
     COLOR_GRAY_DARK,
+    COLOR_GRAY_MEDIUM,
     FEATURE_CARD_STYLE,
     FEATURE_CARD_TITLE_STYLE,
     FONT_SANS,
     FONT_SIZE_SMALL,
     FONT_SIZE_XSMALL,
     FONT_WEIGHT_SEMIBOLD,
+    SPACING_XXXSMALL,
     SPACING_XSMALL,
     SPACING_SMALL,
 )
@@ -54,6 +56,15 @@ VIEW_OPTIONS = [
     {"label": "Tabular", "value": "tabular"},
     {"label": "Graph", "value": "graph"},
 ]
+
+# Collapsible section cards use tighter vertical padding than the shared
+# FEATURE_CARD_STYLE so that a collapsed section (title only) does not waste
+# vertical space above and below the header.
+SECTION_CARD_STYLE = {
+    **FEATURE_CARD_STYLE,
+    "paddingTop": SPACING_XXXSMALL,
+    "paddingBottom": SPACING_XXXSMALL,
+}
 
 
 def get_editor_layout() -> html.Div:
@@ -178,7 +189,31 @@ def _render_metadata_section() -> html.Div:
                         [
                             dbc.Col(
                                 [
-                                    dbc.Label("Description", html_for="editor-description"),
+                                    html.Div(
+                                        [
+                                            dbc.Label("Description", html_for="editor-description"),
+                                            html.I(
+                                                className="fas fa-info-circle",
+                                                id="editor-description-help",
+                                                style={
+                                                    "cursor": "help",
+                                                    "marginLeft": "6px",
+                                                    "color": COLOR_GRAY_MEDIUM,
+                                                },
+                                            ),
+                                            dbc.Popover(
+                                                dbc.PopoverBody(
+                                                    "Markdown is supported in the description.",
+                                                    style={"maxWidth": "320px"},
+                                                ),
+                                                target="editor-description-help",
+                                                trigger="hover focus",
+                                                placement="top",
+                                                class_name="popover-inverted",
+                                            ),
+                                        ],
+                                        style={"display": "flex", "alignItems": "center"},
+                                    ),
                                     dbc.Textarea(
                                         id="editor-description",
                                         placeholder="Short description",
@@ -193,7 +228,7 @@ def _render_metadata_section() -> html.Div:
                 ],
             ),
         ],
-        style=FEATURE_CARD_STYLE,
+        style=SECTION_CARD_STYLE,
     )
 
 
@@ -302,7 +337,7 @@ def _render_queries_section() -> html.Div:
                 ],
             ),
         ],
-        style=FEATURE_CARD_STYLE,
+        style=SECTION_CARD_STYLE,
     )
 
 

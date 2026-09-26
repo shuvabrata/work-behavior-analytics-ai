@@ -874,13 +874,11 @@ input::placeholder {
 .executive-table thead th {
     background-color: var(--color-background-light) !important;
     color: var(--color-charcoal) !important;
-    border-bottom: 1px solid var(--color-border) !important;
     font-size: 11px;
     font-weight: var(--font-weight-semibold);
     letter-spacing: 0.4px;
     text-transform: uppercase;
     white-space: nowrap;
-    position: relative;
 }
 
 .executive-table tbody td {
@@ -902,33 +900,6 @@ input::placeholder {
 .executive-table.table-hover > tbody > tr:hover > * {
     background-color: var(--color-surface-active) !important;
     color: var(--color-charcoal) !important;
-}
-
-/* Draggable column-resize handle on header cells */
-.executive-table thead th .col-resize-handle {
-    position: absolute;
-    top: 0;
-    right: 0;
-    width: 6px;
-    height: 100%;
-    cursor: col-resize;
-    user-select: none;
-    -webkit-user-select: none;
-    z-index: 1;
-}
-
-.executive-table thead th .col-resize-handle::after {
-    content: '';
-    position: absolute;
-    top: 0;
-    right: 3px;
-    width: 1px;
-    height: 100%;
-    background-color: var(--color-border);
-}
-
-.executive-table thead th .col-resize-handle:hover::after {
-    background-color: var(--color-navy);
 }
 
 /* ============================================================================= */

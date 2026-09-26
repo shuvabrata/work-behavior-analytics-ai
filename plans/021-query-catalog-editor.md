@@ -8,10 +8,15 @@
 > maintain the index.
 >
 > **Drift check (run first)**:
-> `git diff --stat 6e620e0..HEAD -- src/app/query_catalog src/app/api/queries src/app/api/graph/v1 src/app/dash_app/layout.py src/app/dash_app/pages`
+> `git diff --stat 6e620e0..HEAD -- src/app/query_catalog src/app/api/queries src/app/api/graph/v1 src/app/dash_app/layout.py src/app/dash_app/pages .gitignore tests/test_query_catalog_api.py tests/test_query_catalog_api_integration.py tests/test_query_catalog_loader.py`
 > If any in-scope file changed since this plan was written, compare the
 > "Current state" excerpts against the live code before proceeding; on a
 > mismatch, treat it as a STOP condition.
+>
+> The drift check includes `src/app/query_catalog/__init__.py` (via the
+> `src/app/query_catalog` path), `.gitignore`, and the three test files that
+> hold the `count == 140` assertions this plan depends on. If any of those
+> changed, re-verify the relevant excerpts before proceeding.
 >
 > `src/app/api/graph/v1` is included in the drift check because this plan
 > depends on `validate_read_only_query` (in `query.py`) and the
@@ -127,7 +132,7 @@ merge logic in `loader.py` propagates automatically — **no changes needed in
 
 ### The graph execute endpoint (used by the editor "Test" button)
 
-- `POST /api/v1/graph/execute` — `src/app/api/graph/v1/router.py:23`. Request
+- `POST /api/v1/graph/execute` — `src/app/api/graph/v1/router.py:22`. Request
   model `GraphExecuteRequest` (`src/app/api/graph/v1/model.py`): `source`
   (`"raw"|"catalog"`, default `"raw"`), `query`, `catalog_id`, `view`
   (`"auto"|"graph"|"tabular"`), `parameters`. `source="raw"` requires `query`
@@ -285,18 +290,38 @@ Update the one internal reference in `_load_query_file` (the `fullmatch` call).
 
 **1d. Load user queries in `load_catalog()`**:
 
-After loading system queries, load user queries:
+`load_catalog()` already calls `load_namespaces(base_dir)` at the top. After
+Step 1c, that call returns the **merged** namespace list (system + user). So
+the user namespaces you iterate here come from that same `namespaces`
+variable — do NOT call `load_namespaces()` again or re-read the user
+`catalog.yaml` separately. The flow is:
+
+1. `namespaces = load_namespaces(base_dir)` — now includes user namespaces.
+2. Load system queries exactly as today (the existing loop over all
+   namespaces, including the `seen_ids` dedup guard).
+3. Then load user queries and merge them over the system list.
+
+**CRITICAL — the existing `seen_ids` guard must NOT reject user overrides.**
+The current `load_catalog()` raises `CatalogLoadError("Duplicate catalog
+query id: ...")` on any duplicate id. But the core feature of this plan is
+that a user query **replaces** a system query with the same id (test B3). If
+you leave the existing guard as-is, the first override will raise. Restructure
+so the system-loading loop keeps its `seen_ids` guard, and the user merge is a
+separate post-pass:
+
 - If `base_dir / USER_DEFINED_DIR` does not exist or is empty, return the
   system list unchanged (tests B1, B2).
-- Otherwise, iterate namespaces where `namespace.is_user_defined is True`.
-  For each, load `*.yaml` from
+- Otherwise, iterate the namespaces from step 1 where
+  `namespace.is_user_defined is True`. For each, load `*.yaml` from
   `base_dir / USER_DEFINED_DIR / namespace.directory /` via `_load_query_file`
   with `base_dir` still the catalog root (so `source_path` becomes
   `queries_catalog/user_defined/{ns}/{slug}.yaml`).
 - Merge: build a dict keyed by `query.id` from the system queries. For each
   user query, if the id exists in the dict, **replace** that entry; if new,
-  **append**. Detect duplicate ids *within* the user set and raise
-  `CatalogLoadError` (tests B7, EC2).
+  **append**. Detect duplicate ids *within* the user set (two user files with
+  the same id) and raise `CatalogLoadError` (tests B7, EC2). The system
+  `seen_ids` guard must not run against user ids — the replace semantics
+  supersede it.
 - Return the merged list **sorted exactly as today**:
   `sorted(queries, key=lambda q: (q.namespace.order, q.name.lower()))`.
   Do NOT try to force user queries to the end of their namespace — the
@@ -359,8 +384,16 @@ router via `asyncio.to_thread` — match the graph router's pattern):
   - Validate every query variant with `validate_read_only_query` (import from
     `app.api.graph.v1.query`); on failure raise `ValueError` with message
     `f"{view} query contains write operations"` (→ 422).
-  - Build the target path `queries_catalog/user_defined/{namespace}/{slug}.yaml`
-    (resolve the catalog root via `get_default_catalog_dir()` from `loader.py`).
+  - Build the target path from `get_default_catalog_dir()` from `loader.py`:
+    `root = get_default_catalog_dir()` then
+    `target = root / "user_defined" / namespace / f"{slug}.yaml"`. Do NOT
+    hardcode a `queries_catalog/` prefix — `get_default_catalog_dir()` may
+    return `Path.cwd()/queries_catalog` OR a `__file__`-relative path
+    depending on how the app is launched. The `source_path` the loader
+    derives is relative to `base_dir.parent`, so it will read
+    `queries_catalog/user_defined/{ns}/{slug}.yaml` regardless of which root
+    was resolved — but the write path must use the resolved root, not a
+    literal string.
   - Serialize the payload to YAML using `yaml.dump()` with
     `default_flow_style=False` and `sort_keys=False`. Write only: name,
     description, summary, queries, parameters, tags, owner, status,
@@ -444,10 +477,16 @@ or two namespace dirs. Cover B1–B10 from the design doc (see Test plan below).
 
 Extend `tests/test_query_catalog_api.py` and
 `tests/test_query_catalog_api_integration.py` with PUT/DELETE cases (C1–C9).
-**Important**: the integration tests run against the real `queries_catalog/`.
-They must write only under `user_defined/` and clean up after themselves
-(delete the files they create) so the hardcoded `count == 140` assertions in
-the existing tests stay valid. Add a note to
+**Important — BOTH files hit the real `queries_catalog/`.**
+`tests/test_query_catalog_api.py` is a unit test but it calls the router
+directly with NO mocking — `test_list_catalog_queries` asserts
+`data["count"] == 140` against the real catalog (line 16). So the new PUT
+cases in that file must also write only under `user_defined/` and clean up
+after themselves (delete the files they create), exactly like the integration
+tests. If they leave residue, the plan's own Step 5 verify
+(`pytest -m unit tests/test_query_catalog_api.py`) fails. The only test file
+that is safe from this is `tests/test_query_catalog_merge.py`, which uses
+`tmp_path`. Add a note to
 `test_catalog_list_endpoint_returns_normalized_catalog` and
 `test_load_catalog_normalizes_all_existing_entries` that the count may change
 when user-defined queries exist.
@@ -530,14 +569,20 @@ from . import editor_callbacks  # noqa: F401
     Shows a `dcc.ConfirmDialog` with message "Are you sure you want to delete
     '{name}'? This cannot be undone." On confirm, `DELETE
     /api/v1/queries/catalog/{ns}/{slug}` → refresh table → success alert.
-  To distinguish overrides from additions, the callback compares the merged
-  catalog (which includes user overrides) against the system-only catalog
-  (loaded by calling `load_catalog()` with a temporary catalog dir that has no
-  `user_defined/` subdirectory, or by filtering the merged list to rows where
-  `source_path` does NOT contain `user_defined/`). If a row's `id` appears in
-  the system-only list, it's an override; otherwise it's an addition.
-  The destructive button is only rendered when the row's `source_path`
-  contains `user_defined/`.
+  These are TWO distinct checks — do not conflate them:
+  - **Button rendering** (whether a destructive button shows at all): the row
+    is a user row iff its `source_path` contains `user_defined/`. Only render
+    the destructive button for such rows.
+  - **Button label** (override vs addition): an **override** is a user row
+    whose `id` also exists in the system-only catalog; an **addition** is a
+    user row with a new `id`. Determine this by loading the system-only
+    catalog (call `load_catalog()` with a temporary catalog dir that has no
+    `user_defined/` subdirectory) and checking id-membership. Do NOT use the
+    `source_path` filter for this — it identifies *all* user rows, not
+    overrides specifically.
+  So: render the button when `source_path` contains `user_defined/`; label it
+  "Reset to factory" when the id is in the system-only list, otherwise
+  "Delete".
 - `callbacks.py` — register with Dash:
   - `dcc.Location` pathname == `/app/library` → fetch `GET /api/v1/queries/catalog`
     and `GET /api/v1/queries/catalog/namespaces`, render table + dropdown.
@@ -568,11 +613,17 @@ Create `editor_layout.py` and `editor_callbacks.py` in the same package.
   The two dedicated test buttons eliminate ambiguity about which query variant
   is being tested — each button always tests its own textarea.
 - `editor_callbacks.py`:
-  - On mount, parse `{namespace}/{slug}` from the pathname:
-    `pathname.rstrip("/").split("/app/library/edit/")[-1]` (the `.rstrip`
-    handles trailing slashes). Then `GET
-    /api/v1/queries/catalog/{ns}/{slug}`, populate the form. For `/app/library/new`,
-    leave fields blank and make slug/namespace editable.
+  - On mount, branch on the pathname FIRST:
+    - If `pathname.rstrip("/") == "/app/library/new"` → this is a new query:
+      leave all fields blank and make slug/namespace editable. Do NOT attempt
+      a `GET` of an existing query.
+    - Otherwise it is an edit route. Parse `{namespace}/{slug}` with
+      `pathname.rstrip("/").split("/app/library/edit/")[-1]` (the `.rstrip`
+      handles trailing slashes), then `GET
+      /api/v1/queries/catalog/{ns}/{slug}` and populate the form.
+    The `split("/app/library/edit/")[-1]` on `/app/library/new` returns the
+    whole path (no match), so you MUST branch on the `new` case before
+    attempting to parse an id.
   - **Save** → `PUT /api/v1/queries/catalog/{ns}/{slug}` with the form data →
     success alert.
   - **Save As** → modal with a namespace dropdown (populated from
@@ -725,6 +776,13 @@ Stop and report back (do not improvise) if:
   false (i.e. some consumer reads the catalog another way).
 - The `user_defined/` directory already exists in `queries_catalog/` with
   content — reconcile with the merge logic before proceeding.
+- The existing `seen_ids` dedup guard in `load_catalog()` raises
+  "Duplicate catalog query id" on the first user override (i.e. the merge
+  logic in Step 1d conflicts with it). If you cannot restructure the merge as
+  a separate post-pass that bypasses the guard for user ids, STOP and report.
+- A `count == 140` assertion fails because a prior PUT test left residue in
+  the real `queries_catalog/user_defined/` (see Step 5). Clean up the residue
+  and ensure the new tests clean up after themselves before continuing.
 
 ## Maintenance notes
 
@@ -733,10 +791,13 @@ Stop and report back (do not improvise) if:
   consumer that reads YAML files directly (bypassing `load_catalog()`) will
   NOT. Watch for that in review.
 - The hardcoded `count == 140` assertions in
-  `test_catalog_list_endpoint_returns_normalized_catalog` and
-  `test_load_catalog_normalizes_all_existing_entries` will break if a
-  `user_defined/` override exists at test time. The integration tests must
-  clean up after themselves; the unit test uses `tmp_path` so it is safe.
+  `test_catalog_list_endpoint_returns_normalized_catalog`,
+  `test_load_catalog_normalizes_all_existing_entries`, AND
+  `test_list_catalog_queries` (in `tests/test_query_catalog_api.py:16`) will
+  break if a `user_defined/` override exists at test time. The integration
+  tests AND the unit API tests in `test_query_catalog_api.py` both hit the
+  real catalog with no mocking, so BOTH must clean up after themselves. Only
+  `tests/test_query_catalog_merge.py` uses `tmp_path` and is safe.
 - The editor "Test" button depends on live Neo4j at runtime. If Neo4j is down,
   the button surfaces a 400/500 — the UI should show a clear error, not crash.
 - `save_query` writes files synchronously. If concurrency is ever added to the

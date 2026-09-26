@@ -8,11 +8,13 @@ import dash_bootstrap_components as dbc
 from app.dash_app.components.common import create_page_header
 from app.dash_app.styles import (
     CARD_CONTAINER_STYLE,
+    COLOR_GRAY_DARK,
     FEATURE_CARD_STYLE,
     FEATURE_CARD_TITLE_STYLE,
     FONT_SANS,
     FONT_SIZE_SMALL,
     FONT_SIZE_XSMALL,
+    FONT_WEIGHT_SEMIBOLD,
     SPACING_XXSMALL,
     SPACING_XSMALL,
     SPACING_SMALL,
@@ -86,83 +88,107 @@ def get_editor_layout() -> html.Div:
 
 
 def _render_metadata_section() -> html.Div:
-    """Metadata section card (name, description, summary, owner, status, tags)."""
+    """Metadata section card (name, description, summary, owner, status, tags).
+
+    Collapsible via the ``collapse-toggle-subtle`` header, open by default.
+    """
     return html.Div(
         [
-            html.Div("Metadata", style=FEATURE_CARD_TITLE_STYLE),
-            dbc.Row(
+            html.Div(
                 [
-                    dbc.Col(
-                        [
-                            dbc.Label("Name", html_for="editor-name"),
-                            dbc.Input(id="editor-name", type="text", placeholder="Query name"),
-                        ],
-                        md=6,
-                    ),
-                    dbc.Col(
-                        [
-                            dbc.Label("Owner", html_for="editor-owner"),
-                            dbc.Input(id="editor-owner", type="text", placeholder="Owner"),
-                        ],
-                        md=3,
-                    ),
-                    dbc.Col(
-                        [
-                            dbc.Label("Status", html_for="editor-status"),
-                            dcc.Dropdown(
-                                id="editor-status",
-                                options=STATUS_OPTIONS,
-                                clearable=True,
-                                placeholder="Status",
-                            ),
-                        ],
-                        md=3,
-                    ),
+                    html.I(className="fas fa-chevron-down me-1", style={"fontSize": "11px"}),
+                    "Metadata",
                 ],
-                className="g-2",
+                id="editor-metadata-collapse-toggle",
+                className="collapse-toggle-subtle",
+                style={
+                    "fontSize": "11px",
+                    "fontWeight": FONT_WEIGHT_SEMIBOLD,
+                    "color": COLOR_GRAY_DARK,
+                    "marginBottom": SPACING_XSMALL,
+                    "cursor": "pointer",
+                    "userSelect": "none",
+                },
             ),
-            dbc.Row(
-                [
-                    dbc.Col(
+            dbc.Collapse(
+                id="editor-metadata-collapse",
+                is_open=True,
+                children=[
+                    dbc.Row(
                         [
-                            dbc.Label("Description", html_for="editor-description"),
-                            dbc.Textarea(
-                                id="editor-description",
-                                placeholder="Short description",
-                                rows=2,
+                            dbc.Col(
+                                [
+                                    dbc.Label("Name", html_for="editor-name"),
+                                    dbc.Input(id="editor-name", type="text", placeholder="Query name"),
+                                ],
+                                md=6,
+                            ),
+                            dbc.Col(
+                                [
+                                    dbc.Label("Owner", html_for="editor-owner"),
+                                    dbc.Input(id="editor-owner", type="text", placeholder="Owner"),
+                                ],
+                                md=3,
+                            ),
+                            dbc.Col(
+                                [
+                                    dbc.Label("Status", html_for="editor-status"),
+                                    dcc.Dropdown(
+                                        id="editor-status",
+                                        options=STATUS_OPTIONS,
+                                        clearable=True,
+                                        placeholder="Status",
+                                    ),
+                                ],
+                                md=3,
                             ),
                         ],
-                        md=6,
+                        className="g-2",
                     ),
-                    dbc.Col(
+                    dbc.Row(
                         [
-                            dbc.Label("Summary", html_for="editor-summary"),
-                            dbc.Textarea(
-                                id="editor-summary",
-                                placeholder="Optional summary",
-                                rows=2,
+                            dbc.Col(
+                                [
+                                    dbc.Label("Description", html_for="editor-description"),
+                                    dbc.Textarea(
+                                        id="editor-description",
+                                        placeholder="Short description",
+                                        rows=2,
+                                    ),
+                                ],
+                                md=6,
+                            ),
+                            dbc.Col(
+                                [
+                                    dbc.Label("Summary", html_for="editor-summary"),
+                                    dbc.Textarea(
+                                        id="editor-summary",
+                                        placeholder="Optional summary",
+                                        rows=2,
+                                    ),
+                                ],
+                                md=6,
                             ),
                         ],
-                        md=6,
+                        className="g-2 mt-2",
+                    ),
+                    dbc.Row(
+                        [
+                            dbc.Col(
+                                [
+                                    dbc.Label("Tags (comma-separated)", html_for="editor-tags"),
+                                    dbc.Input(
+                                        id="editor-tags",
+                                        type="text",
+                                        placeholder="analytics, github, …",
+                                    ),
+                                ],
+                                md=12,
+                            ),
+                        ],
+                        className="g-2 mt-2",
                     ),
                 ],
-                className="g-2 mt-2",
-            ),
-            dbc.Row(
-                [
-                    dbc.Col(
-                        [
-                            dbc.Label("Tags (comma-separated)", html_for="editor-tags"),
-                            dbc.Input(
-                                id="editor-tags",
-                                type="text",
-                                placeholder="analytics, github, …",
-                            ),
-                        ],
-                        md=12,
-                    ),
-                ],
-                className="g-2 mt-2",
             ),
         ],
         style=FEATURE_CARD_STYLE,
@@ -170,84 +196,108 @@ def _render_metadata_section() -> html.Div:
 
 
 def _render_queries_section() -> html.Div:
-    """Queries section card: Cypher editors, Test buttons, parameters, default view."""
+    """Queries section card: Cypher editors, Test buttons, parameters, default view.
+
+    Collapsible via the ``collapse-toggle-subtle`` header, open by default.
+    """
     return html.Div(
         [
-            html.Div("Queries", style=FEATURE_CARD_TITLE_STYLE),
-            dbc.Row(
-                [
-                    dbc.Col(
-                        [
-                            dbc.Label("Tabular Query", html_for="editor-query-tabular"),
-                            dbc.Textarea(
-                                id="editor-query-tabular",
-                                placeholder="MATCH (n) RETURN n LIMIT 25",
-                                rows=8,
-                                style={"fontFamily": FONT_MONO, "fontSize": FONT_SIZE_XSMALL},
-                            ),
-                            dbc.Button(
-                                "Test Tabular",
-                                id="editor-test-tabular",
-                                color="secondary",
-                                outline=True,
-                                size="sm",
-                                className="mt-2",
-                            ),
-                        ],
-                        md=6,
-                    ),
-                    dbc.Col(
-                        [
-                            dbc.Label("Graph Query", html_for="editor-query-graph"),
-                            dbc.Textarea(
-                                id="editor-query-graph",
-                                placeholder="MATCH (n)-[r]->(m) RETURN n, r, m LIMIT 25",
-                                rows=8,
-                                style={"fontFamily": FONT_MONO, "fontSize": FONT_SIZE_XSMALL},
-                            ),
-                            dbc.Button(
-                                "Test Graph",
-                                id="editor-test-graph",
-                                color="secondary",
-                                outline=True,
-                                size="sm",
-                                className="mt-2",
-                            ),
-                        ],
-                        md=6,
-                    ),
-                ],
-                className="g-2",
-            ),
-            html.Hr(style={"marginTop": SPACING_SMALL}),
             html.Div(
                 [
+                    html.I(className="fas fa-chevron-down me-1", style={"fontSize": "11px"}),
+                    "Queries",
+                ],
+                id="editor-queries-collapse-toggle",
+                className="collapse-toggle-subtle",
+                style={
+                    "fontSize": "11px",
+                    "fontWeight": FONT_WEIGHT_SEMIBOLD,
+                    "color": COLOR_GRAY_DARK,
+                    "marginBottom": SPACING_XSMALL,
+                    "cursor": "pointer",
+                    "userSelect": "none",
+                },
+            ),
+            dbc.Collapse(
+                id="editor-queries-collapse",
+                is_open=True,
+                children=[
+                    dbc.Row(
+                        [
+                            dbc.Col(
+                                [
+                                    dbc.Label("Tabular Query", html_for="editor-query-tabular"),
+                                    dbc.Textarea(
+                                        id="editor-query-tabular",
+                                        placeholder="MATCH (n) RETURN n LIMIT 25",
+                                        rows=8,
+                                        style={"fontFamily": FONT_MONO, "fontSize": FONT_SIZE_XSMALL},
+                                    ),
+                                    dbc.Button(
+                                        "Test Tabular",
+                                        id="editor-test-tabular",
+                                        color="secondary",
+                                        outline=True,
+                                        size="sm",
+                                        className="mt-2",
+                                    ),
+                                ],
+                                md=6,
+                            ),
+                            dbc.Col(
+                                [
+                                    dbc.Label("Graph Query", html_for="editor-query-graph"),
+                                    dbc.Textarea(
+                                        id="editor-query-graph",
+                                        placeholder="MATCH (n)-[r]->(m) RETURN n, r, m LIMIT 25",
+                                        rows=8,
+                                        style={"fontFamily": FONT_MONO, "fontSize": FONT_SIZE_XSMALL},
+                                    ),
+                                    dbc.Button(
+                                        "Test Graph",
+                                        id="editor-test-graph",
+                                        color="secondary",
+                                        outline=True,
+                                        size="sm",
+                                        className="mt-2",
+                                    ),
+                                ],
+                                md=6,
+                            ),
+                        ],
+                        className="g-2",
+                    ),
+                    html.Hr(style={"marginTop": SPACING_SMALL}),
                     html.Div(
                         [
-                            dbc.Button(
-                                "Add Parameter",
-                                id="editor-param-add",
-                                color="primary",
-                                outline=True,
-                                size="sm",
+                            html.Div(
+                                [
+                                    dbc.Button(
+                                        "Add Parameter",
+                                        id="editor-param-add",
+                                        color="primary",
+                                        outline=True,
+                                        size="sm",
+                                    ),
+                                ],
+                                style={"marginBottom": SPACING_XSMALL},
+                            ),
+                            html.Div(id="editor-params-container"),
+                        ],
+                        style={"fontFamily": FONT_SANS, "fontSize": FONT_SIZE_SMALL},
+                    ),
+                    html.Div(
+                        [
+                            html.Div("Default View", style=FEATURE_CARD_TITLE_STYLE),
+                            dcc.RadioItems(
+                                id="editor-default-view",
+                                options=VIEW_OPTIONS,
+                                inline=True,
                             ),
                         ],
-                        style={"marginBottom": SPACING_XSMALL},
-                    ),
-                    html.Div(id="editor-params-container"),
-                ],
-                style={"fontFamily": FONT_SANS, "fontSize": FONT_SIZE_SMALL},
-            ),
-            html.Div(
-                [
-                    html.Div("Default View", style=FEATURE_CARD_TITLE_STYLE),
-                    dcc.RadioItems(
-                        id="editor-default-view",
-                        options=VIEW_OPTIONS,
-                        inline=True,
+                        style={"fontFamily": FONT_SANS, "fontSize": FONT_SIZE_SMALL, "marginTop": SPACING_SMALL},
                     ),
                 ],
-                style={"fontFamily": FONT_SANS, "fontSize": FONT_SIZE_SMALL, "marginTop": SPACING_SMALL},
             ),
         ],
         style=FEATURE_CARD_STYLE,

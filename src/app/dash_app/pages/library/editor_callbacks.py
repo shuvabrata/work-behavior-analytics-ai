@@ -136,6 +136,32 @@ def init_editor(pathname: str | None) -> tuple[str, Any]:
 
 
 @callback(
+    Output("editor-metadata-collapse", "is_open"),
+    Input("editor-metadata-collapse-toggle", "n_clicks"),
+    State("editor-metadata-collapse", "is_open"),
+    prevent_initial_call=True,
+)
+def toggle_metadata_collapse(n_clicks: int | None, is_open: bool) -> bool:
+    """Toggle the Metadata collapsible section."""
+    if not n_clicks:
+        raise PreventUpdate
+    return not is_open
+
+
+@callback(
+    Output("editor-queries-collapse", "is_open"),
+    Input("editor-queries-collapse-toggle", "n_clicks"),
+    State("editor-queries-collapse", "is_open"),
+    prevent_initial_call=True,
+)
+def toggle_queries_collapse(n_clicks: int | None, is_open: bool) -> bool:
+    """Toggle the Queries collapsible section."""
+    if not n_clicks:
+        raise PreventUpdate
+    return not is_open
+
+
+@callback(
     Output("editor-store", "data"),
     Output("editor-name", "value"),
     Output("editor-description", "value"),

@@ -204,14 +204,16 @@ def render_library_table(
     namespace: str | None = None,
     search: str | None = None,
 ) -> html.Div:
-    """Render the catalog table, applying namespace and search filters.
+    """Render the catalog table.
 
-    This is a pure function so it can be unit-tested directly and reused by
-    the callback layer.
+    All rows are rendered once; the namespace/search filtering is applied
+    client-side (see the ``filter_library_table`` clientside callback) so
+    typing in the search box does not trigger a server round-trip or a full
+    table rebuild. The ``namespace``/``search`` arguments are accepted for
+    backward compatibility with the pure-function tests but are not applied
+    here.
     """
-    filtered = _filter_queries(queries, namespace=namespace, search=search)
-
-    if not filtered:
+    if not queries:
         return html.Div(
             "No queries match the current filters.",
             style={"color": COLOR_GRAY_MEDIUM, "fontFamily": FONT_SANS},
@@ -237,7 +239,7 @@ def render_library_table(
             html.Tbody(
                 [
                     _render_row(index, query, system_ids)
-                    for index, query in enumerate(filtered)
+                    for index, query in enumerate(queries)
                 ]
             ),
         ],
@@ -247,7 +249,20 @@ def render_library_table(
         className="align-middle executive-table",
         style={"fontFamily": FONT_SANS, "fontSize": FONT_SIZE_SMALL},
     )
-    return html.Div(header)
+    return html.Div(
+        [
+            header,
+            html.Div(
+                "No queries match the current filters.",
+                id="library-empty-row",
+                style={
+                    "display": "none",
+                    "color": COLOR_GRAY_MEDIUM,
+                    "fontFamily": FONT_SANS,
+                },
+            ),
+        ]
+    )
 
 
 def _filter_queries(
@@ -290,6 +305,26 @@ def _matches_search(query: dict[str, Any], needle: str) -> bool:
     return needle in haystack
 
 
+def _searchable_text(query: dict[str, Any]) -> str:
+    """Build the lowercased searchable text for a row's ``data-search`` attr.
+
+    Mirrors :func:`_matches_search` so the client-side filter and the
+    pure-function tests agree on what is searchable.
+    """
+    return " ".join(
+        [
+            query.get("name") or "",
+            query.get("id") or "",
+            query.get("summary") or "",
+            query.get("owner") or "",
+            query.get("status") or "",
+            query.get("default_view") or "",
+            " ".join(query.get("tags") or []),
+            "User" if _is_user_row(query) else "System",
+        ]
+    ).lower()
+
+
 def _render_row(
     index: int,
     query: dict[str, Any],
@@ -329,5 +364,9 @@ def _render_row(
             html.Td(_view_icons(query.get("available_views") or [])),
             html.Td(_source_label(query)),
             html.Td(actions),
-        ]
+        ],
+        **{  # type: ignore[arg-type]  # Dash data-* attributes are untyped
+            "data-search": _searchable_text(query),
+            "data-namespace": (query.get("namespace") or {}).get("directory") or "",
+        },
     )

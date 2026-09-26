@@ -9,7 +9,17 @@ import tempfile
 from typing import Any
 
 import requests
-from dash import ALL, Input, Output, State, callback, callback_context, html, no_update
+from dash import (
+    ALL,
+    Input,
+    Output,
+    State,
+    callback,
+    callback_context,
+    clientside_callback,
+    html,
+    no_update,
+)
 from dash.exceptions import PreventUpdate
 
 from app.runtime_settings import runtime_settings
@@ -113,17 +123,18 @@ def populate_namespace_dropdown(
 @callback(
     Output("library-table-container", "children"),
     Input("library-store", "data"),
-    Input("library-namespace-filter", "value"),
-    Input("library-search-input", "value"),
     State("library-system-ids-store", "data"),
 )
 def render_table(
     queries: list[dict[str, Any]] | None,
-    namespace: str | None,
-    search: str | None,
     system_ids: list[str] | None,
 ) -> Any:
-    """Render the catalog table, applying namespace and search filters."""
+    """Render the full catalog table once.
+
+    Namespace/search filtering is applied client-side by the
+    ``filter_library_table`` clientside callback, so typing in the search box
+    does not trigger a server round-trip or a full table rebuild.
+    """
     if queries is None:
         return html.Div(
             "Loading catalog…",
@@ -132,9 +143,40 @@ def render_table(
     return render_library_table(
         queries,
         set(system_ids or []),
-        namespace=namespace,
-        search=search,
     )
+
+
+# Client-side row filtering: toggles row visibility without a server call.
+clientside_callback(
+    """
+    function(searchValue, namespaceValue) {
+        var search = (searchValue || '').trim().toLowerCase();
+        var namespace = namespaceValue || '__all__';
+        var table = document.querySelector('.executive-table');
+        if (!table) return window.dash_clientside.no_update;
+        var rows = Array.from(table.querySelectorAll('tbody tr'));
+        var anyVisible = false;
+        for (var i = 0; i < rows.length; i++) {
+            var row = rows[i];
+            var rowNs = row.getAttribute('data-namespace') || '';
+            var nsMatch = (namespace === '__all__') || (rowNs === namespace);
+            var searchMatch = !search || (row.getAttribute('data-search') || '').indexOf(search) !== -1;
+            var visible = nsMatch && searchMatch;
+            row.style.display = visible ? '' : 'none';
+            if (visible) anyVisible = true;
+        }
+        var empty = document.getElementById('library-empty-row');
+        if (empty) {
+            empty.style.display = anyVisible ? 'none' : '';
+        }
+        return window.dash_clientside.no_update;
+    }
+    """,
+    Output("library-table-container", "children", allow_duplicate=True),
+    Input("library-search-input", "value"),
+    Input("library-namespace-filter", "value"),
+    prevent_initial_call=True,
+)
 
 
 @callback(

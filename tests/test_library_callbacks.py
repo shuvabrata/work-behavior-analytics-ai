@@ -180,25 +180,41 @@ def test_d1b_table_renders_all_columns_except_description_and_query():
     assert "Owner" not in rendered
 
 
-def test_d2_namespace_filter():
-    """Namespace filter narrows the rendered rows."""
+def _table_rows(table):
+    """Extract the Tr components from a rendered library table."""
+    table_el = table.children[0]
+    tbody = table_el.children[1]
+    return list(tbody.children)
+
+
+def _row_search(row) -> str:
+    """Read a row's ``data-search`` attribute (hyphenated prop)."""
+    return getattr(row, "data-search") or ""
+
+
+def _row_namespace(row) -> str:
+    """Read a row's ``data-namespace`` attribute (hyphenated prop)."""
+    return getattr(row, "data-namespace") or ""
+
+
+def test_d2_namespace_filter_data_attribute():
+    """Each row carries a ``data-namespace`` attribute for client-side filter."""
     queries = [
         _query("github/a", "Query A"),
         _query("jira/b", "Query B"),
     ]
-    table = render_library_table(queries, set(), namespace="github")
-    rendered = str(table)
-    assert "Query A" in rendered
-    assert "Query B" not in rendered
+    table = render_library_table(queries, set())
+    rows = _table_rows(table)
+    assert [_row_namespace(row) for row in rows] == ["github", "jira"]
 
 
 def test_d2b_all_namespaces_shows_all_rows():
-    """The ``__all__`` sentinel (default) shows every row."""
+    """All rows are rendered; filtering is applied client-side."""
     queries = [
         _query("github/a", "Query A"),
         _query("jira/b", "Query B"),
     ]
-    table = render_library_table(queries, set(), namespace="__all__")
+    table = render_library_table(queries, set())
     rendered = str(table)
     assert "Query A" in rendered
     assert "Query B" in rendered
@@ -217,20 +233,32 @@ def test_d2c_populate_namespace_dropdown_includes_all_default():
     assert {"label": "Jira", "value": "jira"} in options
 
 
-def test_d3_search_filter():
-    """Search filter matches name, tags, and id."""
-    queries = [
-        _query("github/a", "Query Alpha", tags=["urgent"]),
-        _query("github/b", "Query Beta"),
-    ]
-    table = render_library_table(queries, set(), search="urgent")
-    rendered = str(table)
-    assert "Query Alpha" in rendered
-    assert "Query Beta" not in rendered
+def test_d3_search_data_attribute_includes_all_columns():
+    """The ``data-search`` attribute covers name, summary, tags, and more."""
+    query = {
+        "id": "github/a",
+        "name": "Query Alpha",
+        "namespace": {"directory": "github"},
+        "source_path": "queries_catalog/github/a.yaml",
+        "tags": ["urgent"],
+        "status": "active",
+        "available_views": ["tabular"],
+        "summary": "Compares comments and reactions across blogposts.",
+        "owner": "alice",
+        "default_view": "tabular",
+    }
+    table = render_library_table([query], set())
+    row = _table_rows(table)[0]
+    search_text = _row_search(row)
+    assert "blogposts" in search_text  # summary
+    assert "alice" in search_text  # owner
+    assert "urgent" in search_text  # tags
+    assert "query alpha" in search_text  # name
+    assert "system" in search_text  # source
 
 
-def test_d3b_search_matches_summary():
-    """Search filter also matches the summary column."""
+def test_d3b_search_matches_summary_via_data_attribute():
+    """Summary text is part of the searchable data attribute."""
     queries = [
         {
             "id": "github/a",
@@ -253,10 +281,10 @@ def test_d3b_search_matches_summary():
             "summary": "Lists open pull requests.",
         },
     ]
-    table = render_library_table(queries, set(), search="blogposts")
-    rendered = str(table)
-    assert "Query Alpha" in rendered
-    assert "Query Beta" not in rendered
+    table = render_library_table(queries, set())
+    rows = _table_rows(table)
+    assert "blogposts" in _row_search(rows[0])
+    assert "pull requests" in _row_search(rows[1])
 
 
 # ── Callbacks (D4, D5, D8, D9) ─────────────────────────────────────────

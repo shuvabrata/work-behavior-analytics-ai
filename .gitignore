@@ -240,3 +240,6 @@ tests/neo4j_queries/results/
 tests/z_collab_validation/results/
 pytest_report.html
 bandit-report.html
+
+# User-defined query catalog overrides (local only)
+queries_catalog/user_defined/

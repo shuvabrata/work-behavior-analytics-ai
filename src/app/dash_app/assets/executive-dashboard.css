@@ -869,8 +869,6 @@ input::placeholder {
     color: var(--color-charcoal-medium) !important;
     border-color: var(--color-border) !important;
     border-collapse: collapse;
-    table-layout: fixed;
-    width: 100%;
 }
 
 .executive-table thead th {
@@ -883,8 +881,6 @@ input::placeholder {
     text-transform: uppercase;
     white-space: nowrap;
     position: relative;
-    overflow: hidden;
-    text-overflow: ellipsis;
 }
 
 .executive-table tbody td {
@@ -892,8 +888,6 @@ input::placeholder {
     color: var(--color-charcoal-medium);
     border-bottom: 1px solid var(--color-border) !important;
     font-size: 12px;
-    overflow: hidden;
-    text-overflow: ellipsis;
 }
 
 .executive-table tbody tr:last-child td {

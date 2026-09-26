@@ -370,6 +370,8 @@ router via `asyncio.to_thread` — match the graph router's pattern):
   - Write the query file (create parent dirs). Return the merged `CatalogQuery`
     by calling `get_catalog_query(f"{namespace}/{slug}")` from
     `app.query_catalog` (imported as `from app.query_catalog import get_catalog_query`).
+    If `get_catalog_query` raises `CatalogLoadError` (e.g. the written YAML is
+    malformed), let it propagate — the router will map it to a 500.
 - `delete_query(namespace: str, slug: str) -> bool`
   - Delete `queries_catalog/user_defined/{namespace}/{slug}.yaml` if it exists.
   - Return `True` if a file was deleted, `False` if no override existed.
@@ -519,8 +521,9 @@ Create `editor_layout.py` and `editor_callbacks.py` in the same package.
   The two dedicated test buttons eliminate ambiguity about which query variant
   is being tested — each button always tests its own textarea.
 - `editor_callbacks.py`:
-  - On mount, parse `{namespace}/{slug}` from the pathname
-    (`pathname.split("/app/library/edit/")[-1]`), `GET
+  - On mount, parse `{namespace}/{slug}` from the pathname:
+    `pathname.rstrip("/").split("/app/library/edit/")[-1]` (the `.rstrip`
+    handles trailing slashes). Then `GET
     /api/v1/queries/catalog/{ns}/{slug}`, populate the form. For `/app/library/new`,
     leave fields blank and make slug/namespace editable.
   - **Save** → `PUT /api/v1/queries/catalog/{ns}/{slug}` with the form data →

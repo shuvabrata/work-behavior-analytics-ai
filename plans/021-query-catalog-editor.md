@@ -89,8 +89,8 @@ def load_catalog(catalog_dir=None, *, validate_cypher: bool = True) -> list[Cata
 ```
 
 Key facts:
-- `_load_query_file` derives `slug = query_file.stem`, `catalog_id = f"{namespace.directory}/{slug}"`, and `source_path = str(query_file.relative_to(base_dir.parent))`. So a user file at `queries_catalog/user_defined/hall_of_fame/top_n_committers.yaml` yields `source_path = "queries_catalog/user_defined/hall_of_fame/top_n_committers.yaml"` — this is what the UI checks to decide whether "Reset to factory" is shown.
-- `_SAFE_ID_SEGMENT = re.compile(r"^[a-z0-9][a-z0-9_]*$")` (module-level) validates slugs and namespace directories. **Note**: this regex is also defined in `model.py:10` — always import it from `loader.py`, not `model.py`, to avoid circular imports.
+- `_load_query_file` derives `slug = query_file.stem`, `catalog_id = f"{namespace.directory}/{slug}"`, and `source_path = str(query_file.relative_to(base_dir.parent))`. So a user file at `queries_catalog/user_defined/hall_of_fame/top_n_committers.yaml` yields `source_path = "queries_catalog/user_defined/hall_of_fame/top_n_committers.yaml"` — this is what the UI checks to decide whether a user-defined row is shown.
+- `SAFE_ID_SEGMENT = re.compile(r"^[a-z0-9][a-z0-9_]*$")` (module-level) validates slugs and namespace directories. **Note**: this regex is also defined in `model.py:10` as `_SAFE_ID_SEGMENT` — the loader's copy is the canonical one; import it from `loader.py`, not `model.py`, to avoid circular imports. The loader's copy is renamed from `_SAFE_ID_SEGMENT` to `SAFE_ID_SEGMENT` (drop the underscore) so it can be cleanly imported by `user_defined_service.py`.
 - `_load_query_file` calls `validate_read_only_query(query_text)` from `app.api.graph.v1.query` when `validate_cypher=True`. Reuse this for PUT validation.
 - `load_namespaces` **raises** if the namespaces list is empty — the user-defined merge must not trip this path (see Step 1).
 
@@ -99,10 +99,16 @@ Key facts:
 `CatalogQuery` has `model_config = ConfigDict(extra="forbid")` and **requires**
 `id`, `slug`, `namespace`, `available_views`, `source_path` — all derived or
 read-only. **It cannot be reused as the PUT request body.** A dedicated write
-model is required (Step 3). `CatalogParameter` fields: `name` (required),
+model is required (Step 2). `CatalogParameter` fields: `name` (required),
 `env_var`, `required` (required bool), `label`, `type`, `placeholder`,
 `description`. `CatalogStatus = Literal["active", "draft", "deprecated"]`.
 `CatalogView = Literal["tabular", "graph"]`.
+
+`CatalogNamespace` currently has `name`, `directory`, `order`. This plan adds
+`is_user_defined: bool = False` — system namespaces keep the default `False`;
+user-defined namespaces loaded from `user_defined/catalog.yaml` set `True`.
+This flag is the single discriminator for whether a namespace is system or
+user-defined, used by `save_query` (Step 3) and available to API consumers.
 
 ### The API layer — `src/app/api/queries/v1/`
 
@@ -228,39 +234,68 @@ from . import callbacks  # noqa: F401
 
 ## Steps
 
-### Step 1: Add user-defined merge logic to `loader.py`
+### Step 1: Add `is_user_defined` to `CatalogNamespace` and user-defined merge logic to `loader.py`
 
-Modify `src/app/query_catalog/loader.py`:
+Modify `src/app/query_catalog/model.py` and `src/app/query_catalog/loader.py`:
+
+**1a. Add `is_user_defined` to `CatalogNamespace`** (in `model.py`):
+
+```python
+class CatalogNamespace(BaseModel):
+    """A top-level query catalog namespace."""
+
+    name: str = Field(..., min_length=1)
+    directory: str = Field(..., min_length=1)
+    order: int = Field(..., ge=0)
+    is_user_defined: bool = False
+```
+
+System namespaces keep the default `False`. User-defined namespaces loaded
+from `user_defined/catalog.yaml` set `True`. This flag is the single
+discriminator — no need for a separate private helper to load system-only
+namespaces.
+
+**1b. Rename `_SAFE_ID_SEGMENT` to `SAFE_ID_SEGMENT`** (in `loader.py`):
+
+Drop the leading underscore so the regex can be cleanly imported by
+`user_defined_service.py` without violating Python's private-name convention.
+Update the one internal reference in `_load_query_file` (the `fullmatch` call).
+
+**1c. Merge user-defined namespaces in `load_namespaces()`** (in `loader.py`):
 
 1. Add a module constant `USER_DEFINED_DIR = "user_defined"`.
-2. In `load_namespaces()`, after the existing loop builds `namespaces` from the
-   system `catalog.yaml`, check for `base_dir / USER_DEFINED_DIR / "catalog.yaml"`.
+2. After the existing loop builds `namespaces` from the system `catalog.yaml`,
+   check for `base_dir / USER_DEFINED_DIR / "catalog.yaml"`.
    If it exists, load it with `_load_yaml_mapping`, read its `namespaces` list,
    and append each as a `CatalogNamespace` with `order` continuing from the
-   current `len(namespaces)`. Reuse the same duplicate-directory check. If the
-   user `catalog.yaml` references a directory that does not exist under
-   `user_defined/`, raise `CatalogLoadError` with a clear message (edge case EC1).
-   If `user_defined/` does not exist at all, return system namespaces unchanged.
-3. In `load_catalog()`, after loading system queries, load user queries:
-   - If `base_dir / USER_DEFINED_DIR` does not exist or is empty, return the
-     system list unchanged (tests B1, B2).
-   - Otherwise, iterate the **user** namespaces (from the merged
-     `load_namespaces` result, filtered to those whose directory lives under
-     `user_defined/`), load each `*.yaml` via `_load_query_file` with
-     `base_dir` still the catalog root (so `source_path` becomes
-     `queries_catalog/user_defined/{ns}/{slug}.yaml`).
-   - Merge: build a dict keyed by `query.id` from the system queries. For each
-     user query, if the id exists in the dict, **replace** that entry; if new,
-     **append**. Detect duplicate ids *within* the user set and raise
-     `CatalogLoadError` (tests B7, EC2).
-   - Return the merged list **sorted exactly as today**:
-     `sorted(queries, key=lambda q: (q.namespace.order, q.name.lower()))`.
-     Do NOT try to force user queries to the end of their namespace — the
-     existing sort interleaves by name, and that is the accepted behavior.
+   current `len(namespaces)` and `is_user_defined=True`. Reuse the same
+   duplicate-directory check. If the user `catalog.yaml` references a directory
+   that does not exist under `user_defined/`, raise `CatalogLoadError` with a
+   clear message (edge case EC1). If `user_defined/` does not exist at all,
+   return system namespaces unchanged.
+
+**1d. Load user queries in `load_catalog()`**:
+
+After loading system queries, load user queries:
+- If `base_dir / USER_DEFINED_DIR` does not exist or is empty, return the
+  system list unchanged (tests B1, B2).
+- Otherwise, iterate namespaces where `namespace.is_user_defined is True`.
+  For each, load `*.yaml` from
+  `base_dir / USER_DEFINED_DIR / namespace.directory /` via `_load_query_file`
+  with `base_dir` still the catalog root (so `source_path` becomes
+  `queries_catalog/user_defined/{ns}/{slug}.yaml`).
+- Merge: build a dict keyed by `query.id` from the system queries. For each
+  user query, if the id exists in the dict, **replace** that entry; if new,
+  **append**. Detect duplicate ids *within* the user set and raise
+  `CatalogLoadError` (tests B7, EC2).
+- Return the merged list **sorted exactly as today**:
+  `sorted(queries, key=lambda q: (q.namespace.order, q.name.lower()))`.
+  Do NOT try to force user queries to the end of their namespace — the
+  existing sort interleaves by name, and that is the accepted behavior.
 
 **Verify**:
-- `source .venv/bin/activate && PYTHONPATH=src python -c "from app.query_catalog import load_catalog, load_namespaces; print(len(load_catalog()), len(load_namespaces()))"`
-  → `140 9` (no `user_defined/` dir exists yet, so counts are unchanged).
+- `source .venv/bin/activate && PYTHONPATH=src python -c "from app.query_catalog import load_catalog, load_namespaces; ns = load_namespaces(); print(len(load_catalog()), len(ns), all(hasattr(n, 'is_user_defined') for n in ns))"`
+  → `140 9 True` (no `user_defined/` dir exists yet, so counts are unchanged; all namespaces have the new field).
 
 ### Step 2: Add `CatalogQueryWrite` to `model.py`
 
@@ -309,7 +344,7 @@ for the `user_defined/` tree. Functions (all synchronous, called from the async
 router via `asyncio.to_thread` — match the graph router's pattern):
 
 - `save_query(namespace: str, slug: str, payload: CatalogQueryWrite) -> CatalogQuery`
-  - Validate `namespace` and `slug` against `_SAFE_ID_SEGMENT` (import from
+  - Validate `namespace` and `slug` against `SAFE_ID_SEGMENT` (import from
     `app.query_catalog.loader`); on failure raise `ValueError` with message
     `f"Invalid namespace or slug: {namespace}/{slug}"` (→ 422).
   - Validate every query variant with `validate_read_only_query` (import from
@@ -323,12 +358,15 @@ router via `asyncio.to_thread` — match the graph router's pattern):
     default_view. Do NOT write `id`, `slug`, `namespace`, `available_views`,
     or `source_path` — the loader derives them.
   - Determine whether `namespace` is a system namespace: call
-    `load_namespaces()` and check if any system namespace has
-    `directory == namespace`. A namespace is "system" if it appears in the
-    system `catalog.yaml` (not under `user_defined/`). If `namespace` is NOT
-    a system namespace, ensure `queries_catalog/user_defined/catalog.yaml`
-    exists and contains the namespace entry (append if missing), then write
-    the updated `catalog.yaml`.
+    `load_namespaces()` and check `namespace.is_user_defined` on the matching
+    entry. If `is_user_defined` is `False`, the namespace is a system namespace
+    — no `catalog.yaml` update needed. If `is_user_defined` is `True`, the
+    namespace is already declared in `user_defined/catalog.yaml` — no update
+    needed. If no matching namespace exists at all, this is a brand-new custom
+    namespace: ensure `queries_catalog/user_defined/catalog.yaml` exists and
+    contains the namespace entry with `name` set to the directory with
+    underscores replaced by spaces and title-cased (e.g. `my_queries` →
+    `"My Queries"`), then write the updated `catalog.yaml`.
   - Write the query file (create parent dirs). Return the merged `CatalogQuery`
     by calling `get_catalog_query(f"{namespace}/{slug}")` from
     `app.query_catalog` (imported as `from app.query_catalog import get_catalog_query`).
@@ -430,8 +468,27 @@ from . import editor_callbacks  # noqa: F401
 - `layout.py` — `get_layout()` returns the listing page: top bar with "New
   Query" button, namespace dropdown, search input; a table with columns Name,
   Namespace, Tags (chips), Status (badge), Views (tabular/graph icons); per-row
-  "Edit" and "Reset to factory" buttons. "Reset to factory" is only rendered
-  when the row's `source_path` contains `user_defined/`.
+  "Edit" and a destructive action button. The destructive button label and
+  behavior depend on whether the row is an **override** (a user query whose
+  `id` matches an existing system query) or an **addition** (a user query with
+  a new `id`):
+  - **Override** → button labeled "Reset to factory". Shows a
+    `dcc.ConfirmDialog` with message "Are you sure you want to reset '{name}'
+    to factory defaults? This will discard all user edits for this query.
+    This cannot be undone." On confirm, `DELETE
+    /api/v1/queries/catalog/{ns}/{slug}` → refresh table → success alert.
+  - **Addition** → button labeled "Delete" with `color="outline-danger"`.
+    Shows a `dcc.ConfirmDialog` with message "Are you sure you want to delete
+    '{name}'? This cannot be undone." On confirm, `DELETE
+    /api/v1/queries/catalog/{ns}/{slug}` → refresh table → success alert.
+  To distinguish overrides from additions, the callback compares the merged
+  catalog (which includes user overrides) against the system-only catalog
+  (loaded by calling `load_catalog()` with a temporary catalog dir that has no
+  `user_defined/` subdirectory, or by filtering the merged list to rows where
+  `source_path` does NOT contain `user_defined/`). If a row's `id` appears in
+  the system-only list, it's an override; otherwise it's an addition.
+  The destructive button is only rendered when the row's `source_path`
+  contains `user_defined/`.
 - `callbacks.py` — register with Dash:
   - `dcc.Location` pathname == `/app/library` → fetch `GET /api/v1/queries/catalog`
     and `GET /api/v1/queries/catalog/namespaces`, render table + dropdown.
@@ -439,10 +496,8 @@ from . import editor_callbacks  # noqa: F401
   - Search input change → client-side filter by name/tags/id.
   - "Edit" click → `window.open("/app/library/edit/{ns}/{slug}")` (clientside).
   - "New Query" click → `window.open("/app/library/new")` (clientside).
-  - "Reset to factory" click → `dcc.ConfirmDialog` (message: "Are you sure you
-    want to reset '{name}' to factory defaults? This will discard all user
-    edits for this query. This cannot be undone.") → on confirm, `DELETE
-    /api/v1/queries/catalog/{ns}/{slug}` → refresh table → success alert.
+  - Destructive button ("Reset to factory" or "Delete") → see `layout.py`
+    description above for the two-variant logic.
 
 Use the `collapse-toggle-subtle` class for any collapsible filter section, and
 the design tokens from `src/app/dash_app/styles.py`.
@@ -460,7 +515,9 @@ Create `editor_layout.py` and `editor_callbacks.py` in the same package.
   `dbc.Textarea` editors ("Tabular Query" / "Graph Query"), a parameter list
   (rows of name/label/type/required/placeholder/description/env_var with
   Add/Remove), default-view radio (only views with non-empty Cypher), and
-  action buttons: Save, Save As, Test, Reset to Factory.
+  action buttons: Save, Save As, Test Tabular, Test Graph, Reset to Factory.
+  The two dedicated test buttons eliminate ambiguity about which query variant
+  is being tested — each button always tests its own textarea.
 - `editor_callbacks.py`:
   - On mount, parse `{namespace}/{slug}` from the pathname
     (`pathname.split("/app/library/edit/")[-1]`), `GET
@@ -472,12 +529,15 @@ Create `editor_layout.py` and `editor_callbacks.py` in the same package.
     `GET /api/v1/queries/catalog/namespaces`) plus a "+ New namespace…" option
     that reveals a custom text input, and a slug input. On submit, `PUT` to the
     new id → success.
-  - **Test** → `POST /api/v1/graph/execute` with `{"source": "raw", "query":
-    <Cypher from the currently selected view's Textarea>, "view": "auto"}`.
-    The "currently selected view" is the one chosen in the default-view radio
-    group — if the user has "Graph" selected, test the Graph Query textarea;
-    if "Tabular", test the Tabular Query textarea. Render results in an inline
-    pane. Note: the endpoint returns **400** (not 422) for validation errors —
+  - **Test Tabular** → `POST /api/v1/graph/execute` with `{"source": "raw",
+    "query": <Cypher from the Tabular Query textarea>, "view": "auto"}`.
+    Render results in an inline pane. Disabled (greyed out) when the Tabular
+    Query textarea is empty.
+  - **Test Graph** → `POST /api/v1/graph/execute` with `{"source": "raw",
+    "query": <Cypher from the Graph Query textarea>, "view": "auto"}`.
+    Render results in an inline pane. Disabled (greyed out) when the Graph
+    Query textarea is empty.
+    Note: the endpoint returns **400** (not 422) for validation errors —
     handle both statuses and display the error message.
   - **Reset to Factory** → `dcc.ConfirmDialog` (message: "Reset '{name}' to
     factory defaults? All user edits will be lost. This cannot be undone.") →
@@ -532,8 +592,10 @@ New test files (all `@pytest.mark.unit` unless noted):
   (assert count = system count + 1, **not** a hardcoded 141); B5 new query in
   custom namespace (assert namespace count = system + 1, **not** hardcoded 10);
   B6 multiple overrides across namespaces; B7 duplicate slug in user set →
-  `CatalogLoadError`; B10 namespace listing includes custom user ns with correct
-  `order`.
+  `CatalogLoadError`; B8 user namespace has `is_user_defined=True`;
+  B9 system namespace has `is_user_defined=False`;
+  B10 namespace listing includes custom user ns with correct `order` and
+  `is_user_defined=True`.
 - `tests/test_query_catalog_api.py` (extend) — C1 PUT creates user file; C2 PUT
   overwrites; C3 PUT new query; C4 PUT with write Cypher → 422; C5 PUT missing
   required fields → 422; C6 DELETE removes file then GET shows system version;
@@ -543,12 +605,16 @@ New test files (all `@pytest.mark.unit` unless noted):
   the real catalog, with cleanup so `count == 140` stays valid.
 - `tests/test_library_callbacks.py` — D1 table renders; D2 namespace filter;
   D3 search filter; D4 Edit fires `window.open` with correct URL; D5 New Query
-  fires `window.open` to `/app/library/new`; D6 Reset button only when
-  `source_path` contains `user_defined/`; D7 Reset → ConfirmDialog → DELETE →
+  fires `window.open` to `/app/library/new`; D6 override row shows "Reset to
+  factory" button with correct dialog message; D7 addition row shows "Delete"
+  button with `outline-danger` color and correct dialog message; D8 Reset →
+  ConfirmDialog → DELETE → success alert; D9 Delete → ConfirmDialog → DELETE →
   success alert.
 - `tests/test_library_editor_callbacks.py` — E1 editor loads query; E2 Save →
-  PUT; E3 Save As → PUT to new id; E4 Test → POST execute → results pane; E5
-  Test with write Cypher → error displayed; E6 Reset → DELETE → form reloads.
+  PUT; E3 Save As → PUT to new id; E4 Test Tabular → POST execute with tabular
+  query → results pane; E5 Test Graph → POST execute with graph query → results
+  pane; E6 Test with write Cypher → error displayed; E7 Test button disabled
+  when textarea is empty; E8 Reset → DELETE → form reloads.
 
 Structural pattern: `tests/test_query_catalog_loader.py` for loader tests,
 `tests/test_graph_callbacks_regression.py` for callback tests (mock HTTP and
@@ -562,6 +628,7 @@ Machine-checkable. ALL must hold:
 - [ ] `source .venv/bin/activate && PYTHONPATH=src pytest -m unit tests -q` exits 0 (no regressions)
 - [ ] `source .venv/bin/activate && mypy src/app/query_catalog src/app/api/queries src/app/dash_app/pages/library src/app/dash_app/layout.py` exits 0
 - [ ] `source .venv/bin/activate && pylint src/app/query_catalog/loader.py src/app/api/queries/v1/user_defined_service.py src/app/api/queries/v1/router.py src/app/dash_app/pages/library` exits 0
+- [ ] `grep -rn "is_user_defined" src/app/query_catalog/model.py` returns matches (field added to CatalogNamespace)
 - [ ] `grep -rn "user_defined" src/app/query_catalog/loader.py` returns matches (merge logic present)
 - [ ] `grep -rn "def save_query\|def delete_query" src/app/api/queries/v1/user_defined_service.py` returns matches
 - [ ] `grep -rn "nav-library\|/app/library" src/app/dash_app/layout.py` returns matches

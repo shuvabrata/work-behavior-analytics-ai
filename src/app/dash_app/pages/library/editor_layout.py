@@ -8,6 +8,8 @@ import dash_bootstrap_components as dbc
 from app.dash_app.components.common import create_page_header
 from app.dash_app.styles import (
     CARD_CONTAINER_STYLE,
+    COLOR_BACKGROUND_WHITE,
+    COLOR_BORDER,
     COLOR_GRAY_DARK,
     FEATURE_CARD_STYLE,
     FEATURE_CARD_TITLE_STYLE,
@@ -15,7 +17,6 @@ from app.dash_app.styles import (
     FONT_SIZE_SMALL,
     FONT_SIZE_XSMALL,
     FONT_WEIGHT_SEMIBOLD,
-    SPACING_XXSMALL,
     SPACING_XSMALL,
     SPACING_SMALL,
 )
@@ -75,13 +76,13 @@ def get_editor_layout() -> html.Div:
             ),
             html.Div(
                 [
+                    _render_action_bar(),
                     _render_metadata_section(),
                     _render_queries_section(),
-                    _render_action_bar(),
                     _render_save_as_modal(),
                     _render_test_results(),
                 ],
-                style=CARD_CONTAINER_STYLE,
+                style={**CARD_CONTAINER_STYLE, "paddingTop": SPACING_XSMALL},
             ),
         ],
     )
@@ -306,24 +307,52 @@ def _render_queries_section() -> html.Div:
 
 
 def _render_action_bar() -> html.Div:
-    """Action buttons: Save, Save As, Reset to Factory."""
+    """Sticky action bar: Save, Save As, Reset to Factory.
+
+    Mirrors the Runtime Settings page's sticky top action bar so the primary
+    actions stay visible while scrolling the form and are visually separated
+    from the sections below.
+    """
     return html.Div(
         [
-            dbc.Button("Save", id="editor-save", color="primary", size="sm", className="me-2"),
-            dbc.Button("Save As", id="editor-save-as", color="primary", outline=True, size="sm", className="me-2"),
-            dbc.Button(
-                "Reset to Factory",
-                id="editor-reset",
-                color="outline-danger",
-                size="sm",
+            html.Div(
+                [
+                    dbc.Button("Save", id="editor-save", color="primary", size="sm", className="me-2"),
+                    dbc.Button("Save As", id="editor-save-as", color="primary", outline=True, size="sm", className="me-2"),
+                ],
+                style={
+                    "display": "flex",
+                    "alignItems": "center",
+                    "gap": SPACING_XSMALL,
+                },
+            ),
+            html.Div(
+                [
+                    dbc.Button(
+                        "Reset to Factory",
+                        id="editor-reset",
+                        color="outline-danger",
+                        size="sm",
+                    ),
+                ],
+                style={
+                    "display": "flex",
+                    "alignItems": "center",
+                    "marginLeft": "auto",
+                },
             ),
         ],
         style={
+            "position": "sticky",
+            "top": 0,
+            "zIndex": 10,
+            "backgroundColor": COLOR_BACKGROUND_WHITE,
+            "padding": f"{SPACING_XSMALL} 0",
             "display": "flex",
             "alignItems": "center",
-            "flexWrap": "wrap",
-            "gap": SPACING_XXSMALL,
-            "marginTop": SPACING_SMALL,
+            "gap": SPACING_SMALL,
+            "borderBottom": f"1px solid {COLOR_BORDER}",
+            "marginBottom": SPACING_SMALL,
         },
     )
 

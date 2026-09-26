@@ -95,6 +95,17 @@ def _query(
 # ── Pure helpers (D6, D7) ──────────────────────────────────────────────
 
 
+def test_system_ids_derived_from_source_path():
+    """System ids are derived from the API items without re-parsing YAML."""
+    items = [
+        {"id": "github/a", "source_path": "queries_catalog/github/a.yaml"},
+        {"id": "github/b", "source_path": "queries_catalog/user_defined/github/b.yaml"},
+        {"id": "jira/c", "source_path": "queries_catalog/jira/c.yaml"},
+    ]
+    system_ids = library_callbacks._system_ids_from_items(items)
+    assert system_ids == ["github/a", "jira/c"]
+
+
 def test_d6_override_row_labeled_reset_to_factory():
     """A user row whose id exists in the system catalog is an override."""
     query = _query(

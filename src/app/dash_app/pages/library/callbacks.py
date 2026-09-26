@@ -3,9 +3,6 @@
 from __future__ import annotations
 
 import os
-from pathlib import Path
-import shutil
-import tempfile
 from typing import Any
 
 import requests
@@ -23,7 +20,6 @@ from dash import (
 from dash.exceptions import PreventUpdate
 
 from app.runtime_settings import runtime_settings
-from app.query_catalog import get_default_catalog_dir, load_catalog
 from app.dash_app.components.common import create_alert
 from .layout import render_library_table
 
@@ -35,24 +31,19 @@ def _get_api_base_url() -> str:
     return os.getenv("API_BASE_URL", "http://localhost:8000")
 
 
-def _load_system_ids() -> set[str]:
-    """Return the ids of the system-only catalog (no user overrides).
+def _system_ids_from_items(items: list[dict[str, Any]]) -> list[str]:
+    """Derive the system-only query ids from the catalog API response.
 
-    Loads the catalog from a temporary directory that has no
-    ``user_defined/`` subdirectory, so the merge in :func:`load_catalog`
-    never runs. The resulting id set is used to distinguish override rows
-    (a user row whose id also exists in the system catalog) from addition
-    rows (a user row with a brand-new id).
+    A row is user-defined iff its ``source_path`` lives under
+    ``user_defined/``. Everything else is a system query. This avoids a
+    redundant re-parse of the YAML catalog (which was the source of a
+    multi-second page-load delay).
     """
-    catalog_dir = get_default_catalog_dir()
-    with tempfile.TemporaryDirectory() as tmp:
-        tmp_dir = Path(tmp)
-        shutil.copy2(catalog_dir / "catalog.yaml", tmp_dir / "catalog.yaml")
-        for entry in catalog_dir.iterdir():
-            if entry.is_dir() and entry.name != "user_defined":
-                (tmp_dir / entry.name).symlink_to(entry, target_is_directory=True)
-        system_queries = load_catalog(tmp_dir)
-    return {query.id for query in system_queries}
+    return sorted(
+        item["id"]
+        for item in items
+        if "user_defined/" not in (item.get("source_path") or "")
+    )
 
 
 def _parse_id(query_id: str) -> tuple[str, str]:
@@ -82,9 +73,10 @@ def load_library(pathname: str | None) -> tuple[Any, Any, Any]:
             f"{api_base}/api/v1/queries/catalog/namespaces", timeout=TIMEOUT_SECONDS
         )
         ns_resp.raise_for_status()
-        system_ids = sorted(_load_system_ids())
+        items = catalog_resp.json().get("items", [])
+        system_ids = _system_ids_from_items(items)
         return (
-            catalog_resp.json().get("items", []),
+            items,
             ns_resp.json().get("items", []),
             system_ids,
         )

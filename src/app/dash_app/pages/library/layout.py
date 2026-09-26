@@ -164,27 +164,9 @@ def _is_user_row(query: dict[str, Any]) -> bool:
     return "user_defined/" in (query.get("source_path") or "")
 
 
-def _source_label(query: dict[str, Any]) -> html.Span:
-    """Render a source badge: 'User' for overrides, 'System' otherwise."""
-    if _is_user_row(query):
-        return html.Span(
-            "User",
-            className="badge border",
-            style={
-                "fontSize": FONT_SIZE_XSMALL,
-                "backgroundColor": "var(--color-navy)",
-                "color": "var(--color-background-white)",
-            },
-        )
-    return html.Span(
-        "System",
-        className="badge border",
-        style={
-            "fontSize": FONT_SIZE_XSMALL,
-            "backgroundColor": "var(--color-background-pale)",
-            "color": "var(--color-charcoal-medium)",
-        },
-    )
+def _source_label(query: dict[str, Any]) -> str:
+    """Return the source as plain text: 'User' for overrides, 'System' otherwise."""
+    return "User" if _is_user_row(query) else "System"
 
 
 def _default_view_label(default_view: str | None) -> str:

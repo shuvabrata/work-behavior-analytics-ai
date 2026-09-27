@@ -27,7 +27,16 @@ RUN useradd -m -u 1000 -s /bin/bash appuser && \
     # volume mounted at /app/queries_catalog/user_defined inherits writable
     # ownership on first mount (Docker copies the image dir's ownership).
     mkdir -p /app/queries_catalog/user_defined && \
-    chown -R appuser:appuser /var/log/app /app
+    chown -R appuser:appuser /var/log/app /app && \
+    # Lock down the shipped system catalog: root-owned and read-only so the
+    # app cannot modify it. Only the user_defined/ subtree stays writable by
+    # appuser (it is overlaid by a named volume at runtime). The chmod/chown
+    # on user_defined/ must run AFTER the read-only pass so the volume root
+    # inherits writable ownership on first mount.
+    chown -R root:root /app/queries_catalog && \
+    chmod -R a-w /app/queries_catalog && \
+    chown -R appuser:appuser /app/queries_catalog/user_defined && \
+    chmod -R u+w /app/queries_catalog/user_defined
 
 # Expose port
 EXPOSE 8000

@@ -20,11 +20,6 @@ def get_layout() -> html.Div:
             dcc.Store(id="library-store", storage_type="memory"),
             dcc.Store(id="library-namespaces-store", storage_type="memory"),
             dcc.Store(id="library-system-ids-store", storage_type="memory"),
-            dcc.Store(id="library-pending-delete", storage_type="memory"),
-            dcc.ConfirmDialog(
-                id="library-delete-confirm",
-                message="",
-            ),
             html.Div(id="library-feedback"),
             create_page_header(
                 [("Library", None)],

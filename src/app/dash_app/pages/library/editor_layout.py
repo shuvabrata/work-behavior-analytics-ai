@@ -80,6 +80,10 @@ def get_editor_layout() -> html.Div:
                 id="editor-reset-confirm",
                 message="",
             ),
+            dcc.ConfirmDialog(
+                id="editor-delete-confirm",
+                message="",
+            ),
             html.Div(id="editor-feedback"),
             create_page_header(
                 [("Library", "/app/library"), ("Query Editor", None)],
@@ -348,7 +352,7 @@ def _render_queries_section() -> html.Div:
 
 
 def _render_action_bar() -> html.Div:
-    """Sticky action bar: Save, Save As, Reset to Factory.
+    """Sticky action bar: Save, Save As, Reset to Factory, Delete.
 
     Mirrors the Runtime Settings page's sticky top action bar so the primary
     actions stay visible while scrolling the form and are visually separated
@@ -372,6 +376,13 @@ def _render_action_bar() -> html.Div:
                     dbc.Button(
                         "Reset to Factory",
                         id="editor-reset",
+                        color="outline-danger",
+                        size="sm",
+                        className="me-2",
+                    ),
+                    dbc.Button(
+                        "Delete",
+                        id="editor-delete",
                         color="outline-danger",
                         size="sm",
                     ),

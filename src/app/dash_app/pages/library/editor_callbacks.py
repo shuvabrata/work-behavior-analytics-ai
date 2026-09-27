@@ -817,3 +817,76 @@ def reset_query(
             duration=5000,
         ),
     )
+
+
+@callback(
+    Output("editor-delete-confirm", "message"),
+    Output("editor-delete-confirm", "displayed"),
+    Input("editor-delete", "n_clicks"),
+    State("editor-name", "value"),
+    State("editor-route", "data"),
+    prevent_initial_call=True,
+)
+def confirm_delete(
+    n_clicks: int | None,
+    name: str | None,
+    route: dict[str, Any] | None,
+) -> tuple[str, bool]:
+    """Show the delete confirmation dialog."""
+    if not n_clicks:
+        raise PreventUpdate
+    display_name = name or (route or {}).get("id") or "this query"
+    return (
+        f"Delete '{display_name}'? This will permanently remove this "
+        "user-defined query. This cannot be undone.",
+        True,
+    )
+
+
+@callback(
+    Output("url", "pathname", allow_duplicate=True),
+    Output("editor-feedback", "children", allow_duplicate=True),
+    Input("editor-delete-confirm", "submit_n_clicks"),
+    State("url", "pathname"),
+    prevent_initial_call=True,
+)
+def delete_query(
+    n_clicks: int | None,
+    pathname: str | None,
+) -> tuple[Any, Any]:
+    """Delete the user-defined query and navigate back to the Library."""
+    if not n_clicks:
+        raise PreventUpdate
+
+    _, namespace, slug = _parse_route(pathname)
+    if not namespace or not slug:
+        return (
+            no_update,
+            create_alert(
+                "Cannot delete: missing namespace or slug.",
+                color="danger",
+                class_name="mb-3",
+            ),
+        )
+
+    api_base = _get_api_base_url()
+    try:
+        resp = requests.delete(
+            f"{api_base}/api/v1/queries/catalog/{namespace}/{slug}",
+            timeout=TIMEOUT_SECONDS,
+        )
+        if resp.status_code not in (200, 204):
+            detail = resp.json().get("detail", "Unknown error")
+            return (
+                no_update,
+                create_alert(
+                    f"Delete failed: {detail}", color="danger", class_name="mb-3"
+                ),
+            )
+    except requests.exceptions.RequestException as exc:
+        return (
+            no_update,
+            create_alert(f"Delete failed: {exc}", color="danger", class_name="mb-3"),
+        )
+
+    return "/app/library", no_update

@@ -140,41 +140,18 @@ def test_d5_new_query_click_navigates_to_new(monkeypatch):
     assert result == "/app/library/new"
 
 
-def test_d8_reset_confirm_deletes_and_refreshes(monkeypatch):
-    """Confirming a reset issues DELETE then refreshes the catalog."""
-    fake = _FakeRequests(
-        [
-            _FakeResponse({"message": "Query override deleted"}, 200),
-            _FakeResponse({"items": [_query("github/a", "Query A")]}, 200),
-        ]
-    )
-    monkeypatch.setattr(library_callbacks, "requests", fake)
+def test_table_row_has_no_destructive_button():
+    """The table row no longer renders a destructive (Delete/Reset) button.
 
-    store, feedback = library_callbacks.confirm_delete(
-        1, {"id": "github/a"}
-    )
-    assert fake.delete_calls[0]["url"].endswith(
-        "/api/v1/queries/catalog/github/a"
-    )
-    assert store == [_query("github/a", "Query A")]
-    assert "Query deleted" in str(feedback)
+    All edits and deletes live in the Query Editor. This is a regression
+    guard: it fails if someone reintroduces a destructive button (or the
+    buggy first-match ``querySelector`` click handler) into the table.
+    """
+    import inspect
 
-
-def test_d9_delete_confirm_deletes_and_refreshes(monkeypatch):
-    """Confirming a delete issues DELETE then refreshes the catalog."""
-    fake = _FakeRequests(
-        [
-            _FakeResponse({"message": "Query override deleted"}, 200),
-            _FakeResponse({"items": []}, 200),
-        ]
-    )
-    monkeypatch.setattr(library_callbacks, "requests", fake)
-
-    store, feedback = library_callbacks.confirm_delete(
-        1, {"id": "github/my_custom"}
-    )
-    assert fake.delete_calls[0]["url"].endswith(
-        "/api/v1/queries/catalog/github/my_custom"
-    )
-    assert store == []
-    assert "Query deleted" in str(feedback)
+    source = inspect.getsource(library_callbacks)
+    assert "data-action=\"destructive\"" not in source
+    assert "querySelector('[data-action=\"destructive\"]')" not in source
+    assert "library-delete-confirm" not in source
+    assert "library-pending-delete" not in source
+    assert "confirm_delete" not in source

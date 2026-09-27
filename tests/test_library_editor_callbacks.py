@@ -362,3 +362,50 @@ def test_e8_reset_deletes_and_reloads(monkeypatch):
     )
     assert result[1] == "Top Committers"
     assert "reset to factory" in str(result[12]).lower()
+
+
+# ── E9: Delete → confirm → DELETE → navigate to Library ───────────────
+
+
+def test_e9_confirm_delete_shows_dialog():
+    """Clicking Delete shows the confirmation dialog with the query name."""
+    message, displayed = editor.confirm_delete(1, "Top Committers", {"mode": "edit"})
+    assert displayed is True
+    assert "Top Committers" in message
+    assert "cannot be undone" in message
+
+
+def test_e9b_delete_issues_delete_and_navigates_to_library(monkeypatch):
+    """Confirming delete issues DELETE then navigates back to the Library."""
+    fake = _FakeRequests([_FakeResponse({"message": "Query override deleted"}, 200)])
+    monkeypatch.setattr(editor, "requests", fake)
+
+    pathname, feedback = editor.delete_query(
+        1,
+        "/app/library/edit/github/top_committers",
+    )
+
+    assert fake.delete_calls[0]["url"].endswith(
+        "/api/v1/queries/catalog/github/top_committers"
+    )
+    assert pathname == "/app/library"
+    assert feedback is None or "Delete failed" not in str(feedback)
+
+
+def test_e9c_delete_failure_shows_error(monkeypatch):
+    """A failed delete surfaces an error alert and stays on the editor."""
+    fake = _FakeRequests(
+        [_FakeResponse({"detail": "Not found"}, 404)]
+    )
+    monkeypatch.setattr(editor, "requests", fake)
+
+    pathname, feedback = editor.delete_query(
+        1,
+        "/app/library/edit/github/top_committers",
+    )
+
+    assert fake.delete_calls[0]["url"].endswith(
+        "/api/v1/queries/catalog/github/top_committers"
+    )
+    assert pathname is not None and pathname != "/app/library"
+    assert "Delete failed" in str(feedback)

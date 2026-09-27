@@ -9,7 +9,6 @@ import requests
 from dash import (
     Input,
     Output,
-    State,
     callback,
     clientside_callback,
     no_update,
@@ -17,7 +16,6 @@ from dash import (
 from dash.exceptions import PreventUpdate
 
 from app.runtime_settings import runtime_settings
-from app.dash_app.components.common import create_alert
 
 TIMEOUT_SECONDS = runtime_settings.get_int("HTTP_REQUEST_TIMEOUT")
 
@@ -40,12 +38,6 @@ def _system_ids_from_items(items: list[dict[str, Any]]) -> list[str]:
         for item in items
         if "user_defined/" not in (item.get("source_path") or "")
     )
-
-
-def _parse_id(query_id: str) -> tuple[str, str]:
-    """Split a ``namespace/slug`` catalog id into its two segments."""
-    namespace, _, slug = query_id.partition("/")
-    return namespace, slug
 
 
 @callback(
@@ -114,14 +106,12 @@ def populate_namespace_dropdown(
 # filtering fully client-side and instant.
 clientside_callback(
     """
-    function(queries, systemIds, searchValue, namespaceValue) {
+    function(queries, searchValue, namespaceValue) {
         var tbody = document.getElementById('library-table-body');
         var empty = document.getElementById('library-empty-row');
         if (!tbody) return window.dash_clientside.no_update;
         var search = (searchValue || '').trim().toLowerCase();
         var namespace = namespaceValue || '__all__';
-        var systemSet = {};
-        for (var i = 0; i < (systemIds || []).length; i++) systemSet[systemIds[i]] = true;
 
         function esc(s) {
             return String(s == null ? '' : s)
@@ -163,10 +153,6 @@ clientside_callback(
             var paramCount = (q.parameters || []).length;
             var defaultView = q.default_view || '&mdash;';
             var source = isUser ? 'User' : 'System';
-            var destructiveLabel = isUser ? (systemSet[q.id] ? 'Reset to factory' : 'Delete') : '';
-            var destructiveBtn = destructiveLabel
-                ? '<button class="btn btn-outline-danger btn-sm" data-action="destructive" data-id="' + esc(q.id) + '">' + esc(destructiveLabel) + '</button>'
-                : '';
             // The Edit button navigates directly via onclick. It is a plain
             // HTML button (not a Dash component), so Dash has no n_clicks for
             // it — relying on a children-input callback would never fire
@@ -186,7 +172,7 @@ clientside_callback(
                 '<td>' + paramCount + '</td>' +
                 '<td>' + viewsHtml + '</td>' +
                 '<td>' + esc(source) + '</td>' +
-                '<td>' + editBtn + destructiveBtn + '</td>' +
+                '<td>' + editBtn + '</td>' +
                 '</tr>'
             );
         }
@@ -197,7 +183,6 @@ clientside_callback(
     """,
     Output("library-table-container", "children", allow_duplicate=True),
     Input("library-store", "data"),
-    Input("library-system-ids-store", "data"),
     Input("library-search-input", "value"),
     Input("library-namespace-filter", "value"),
     prevent_initial_call=True,
@@ -214,90 +199,3 @@ def handle_new_click(n_clicks: int | None) -> Any:
     if not n_clicks:
         raise PreventUpdate
     return "/app/library/new"
-
-
-# Destructive button clicks (plain HTML buttons with data-action="destructive").
-# Determines override vs addition and shows the confirm dialog.
-clientside_callback(
-    """
-    function(_n, queries, systemIds) {
-        var btn = document.querySelector('[data-action="destructive"]');
-        if (!btn) return window.dash_clientside.no_update;
-        var id = btn.getAttribute('data-id') || '';
-        if (!id) return window.dash_clientside.no_update;
-        var query = null;
-        for (var i = 0; i < (queries || []).length; i++) {
-            if (queries[i].id === id) { query = queries[i]; break; }
-        }
-        if (!query) return window.dash_clientside.no_update;
-        var name = query.name || id;
-        var systemSet = {};
-        for (var j = 0; j < (systemIds || []).length; j++) systemSet[systemIds[j]] = true;
-        var message;
-        if (systemSet[id]) {
-            message = "Are you sure you want to reset '" + name + "' to factory defaults? " +
-                "This will discard all user edits for this query. This cannot be undone.";
-        } else {
-            message = "Are you sure you want to delete '" + name + "'? This cannot be undone.";
-        }
-        return [message, true, {id: id}];
-    }
-    """,
-    Output("library-delete-confirm", "message"),
-    Output("library-delete-confirm", "displayed"),
-    Output("library-pending-delete", "data"),
-    Input("library-table-container", "children"),
-    State("library-store", "data"),
-    State("library-system-ids-store", "data"),
-    prevent_initial_call=True,
-)
-
-
-@callback(
-    Output("library-store", "data", allow_duplicate=True),
-    Output("library-feedback", "children", allow_duplicate=True),
-    Input("library-delete-confirm", "submit_n_clicks"),
-    State("library-pending-delete", "data"),
-    prevent_initial_call=True,
-)
-def confirm_delete(
-    n_clicks: int | None,
-    pending: dict[str, str] | None,
-) -> tuple[Any, Any]:
-    """Execute the DELETE and refresh the table on confirm."""
-    if not n_clicks:
-        raise PreventUpdate
-    if not pending:
-        raise PreventUpdate
-
-    query_id = pending.get("id")
-    if not query_id:
-        raise PreventUpdate
-    namespace, slug = _parse_id(query_id)
-    api_base = _get_api_base_url()
-
-    try:
-        resp = requests.delete(
-            f"{api_base}/api/v1/queries/catalog/{namespace}/{slug}",
-            timeout=TIMEOUT_SECONDS,
-        )
-        if resp.status_code not in (200, 204):
-            detail = resp.json().get("detail", "Unknown error")
-            return no_update, create_alert(
-                f"Delete failed: {detail}", color="danger", class_name="mb-3"
-            )
-
-        catalog_resp = requests.get(
-            f"{api_base}/api/v1/queries/catalog", timeout=TIMEOUT_SECONDS
-        )
-        catalog_resp.raise_for_status()
-        return (
-            catalog_resp.json().get("items", []),
-            create_alert(
-                "Query deleted.", color="success", class_name="mb-3", duration=5000
-            ),
-        )
-    except requests.exceptions.RequestException as exc:
-        return no_update, create_alert(
-            f"Delete failed: {exc}", color="danger", class_name="mb-3"
-        )

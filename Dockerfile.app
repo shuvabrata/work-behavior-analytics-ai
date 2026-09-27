@@ -23,6 +23,10 @@ COPY queries_catalog/ ./queries_catalog/
 # Create non-root user for security
 RUN useradd -m -u 1000 -s /bin/bash appuser && \
     mkdir -p /var/log/app && \
+    # Pre-create the user-defined catalog dir owned by appuser so the named
+    # volume mounted at /app/queries_catalog/user_defined inherits writable
+    # ownership on first mount (Docker copies the image dir's ownership).
+    mkdir -p /app/queries_catalog/user_defined && \
     chown -R appuser:appuser /var/log/app /app
 
 # Expose port

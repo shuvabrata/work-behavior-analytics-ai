@@ -7,6 +7,10 @@
 !queries_catalog/**
 !requirements.*
 
+# Exclude user-defined catalog overrides from the build context so they are
+# never baked into the image. They live in a named volume at runtime instead.
+queries_catalog/user_defined/
+
 
 
 # Exclude Python cache and compiled files

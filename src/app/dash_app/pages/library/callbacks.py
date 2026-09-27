@@ -152,7 +152,12 @@ clientside_callback(
             if (!viewsHtml) viewsHtml = '&mdash;';
             var paramCount = (q.parameters || []).length;
             var defaultView = q.default_view || '&mdash;';
-            var source = isUser ? 'Custom' : 'Built-in';
+            // "Custom" rows are highlighted with a badge (matching the "env"
+            // badge in Settings -> Runtime Settings, which uses text-bg-info);
+            // "Built-in" rows stay as plain text.
+            var source = isUser
+                ? '<span class="badge text-bg-info" style="font-size:12px">Custom</span>'
+                : 'Built-in';
             // The Edit button navigates directly via onclick. It is a plain
             // HTML button (not a Dash component), so Dash has no n_clicks for
             // it — relying on a children-input callback would never fire
@@ -171,7 +176,7 @@ clientside_callback(
                 '<td>' + esc(defaultView) + '</td>' +
                 '<td>' + paramCount + '</td>' +
                 '<td>' + viewsHtml + '</td>' +
-                '<td>' + esc(source) + '</td>' +
+                '<td>' + source + '</td>' +
                 '<td>' + editBtn + '</td>' +
                 '</tr>'
             );

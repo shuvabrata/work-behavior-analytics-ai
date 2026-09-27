@@ -122,7 +122,7 @@ clientside_callback(
             var parts = [
                 q.name, q.id, q.summary, q.owner, q.status, q.default_view,
                 (q.tags || []).join(' '),
-                (q.source_path || '').indexOf('user_defined/') !== -1 ? 'User' : 'System'
+                (q.source_path || '').indexOf('user_defined/') !== -1 ? 'Custom' : 'Built-in'
             ];
             return parts.join(' ').toLowerCase();
         }
@@ -152,7 +152,7 @@ clientside_callback(
             if (!viewsHtml) viewsHtml = '&mdash;';
             var paramCount = (q.parameters || []).length;
             var defaultView = q.default_view || '&mdash;';
-            var source = isUser ? 'User' : 'System';
+            var source = isUser ? 'Custom' : 'Built-in';
             // The Edit button navigates directly via onclick. It is a plain
             // HTML button (not a Dash component), so Dash has no n_clicks for
             // it — relying on a children-input callback would never fire

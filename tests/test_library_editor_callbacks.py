@@ -104,9 +104,233 @@ def _form_state(**overrides) -> dict:
         "default_view": "tabular",
         "param_count": 0,
         "field_values": [],
+        "field_ids": [],
     }
     state.update(overrides)
     return state
+
+
+def _param_ids(index: int) -> list[dict[str, str]]:
+    """The pattern-matched ids produced by ``render_parameter_row``."""
+    return [
+        {"type": "editor-param-field", "index": str(index), "field": field}
+        for field in [
+            "name",
+            "label",
+            "type",
+            "required",
+            "placeholder",
+            "description",
+            "env_var",
+        ]
+    ]
+
+
+def _extract_field_values(rows: list[Any]) -> dict[tuple[str, str], Any]:
+    """Extract ``{(index, field): value}`` from rendered parameter rows.
+
+    Walks the Dash component tree produced by ``render_parameter_row``:
+    each row is an ``html.Div`` whose first child is a ``dbc.Row`` of
+    ``dbc.Col``s, each containing ``[dbc.Label, control]`` where ``control``
+    is a ``dbc.Input`` or ``dcc.Checklist`` carrying the pattern-matched id.
+    """
+    result: dict[tuple[str, str], Any] = {}
+    for row in rows:
+        index = row.id["index"]
+        fields_row = row.children[0]
+        for col in fields_row.children:
+            control = col.children[1]
+            field = control.id["field"]
+            result[(index, field)] = control.value
+    return result
+
+
+# ── _collect_parameters: id-based row assembly ─────────────────────────
+
+
+def test_collect_parameters_single_row():
+    """A single fully-populated row lands every field correctly."""
+    ids = _param_ids(0)
+    values = ["owner", "Owner", "string", ["required"], "e.g. shuva", "Repo owner", "GH_OWNER"]
+    result = editor._collect_parameters(1, values, ids)
+
+    assert result == [
+        {
+            "name": "owner",
+            "label": "Owner",
+            "type": "string",
+            "required": True,
+            "placeholder": "e.g. shuva",
+            "description": "Repo owner",
+            "env_var": "GH_OWNER",
+        }
+    ]
+
+
+def test_collect_parameters_multiple_rows_shuffled():
+    """Fields land in the correct row/field regardless of input order."""
+    ids = _param_ids(0) + _param_ids(1)
+    # Shuffle the (value, id) pairs so the ordering assumption would break.
+    pairs = list(zip(
+        ["owner", "Owner", "string", ["required"], "e.g. shuva", "Repo owner", "GH_OWNER",
+         "repo", "Repo", "string", [], "e.g. shuvabrata", "Repo name", "GH_REPO"],
+        ids,
+    ))
+    pairs = pairs[7:] + pairs[:7]  # row 1 first, then row 0
+    values = [v for v, _ in pairs]
+    shuffled_ids = [i for _, i in pairs]
+
+    result = editor._collect_parameters(2, values, shuffled_ids)
+
+    assert result == [
+        {
+            "name": "owner",
+            "label": "Owner",
+            "type": "string",
+            "required": True,
+            "placeholder": "e.g. shuva",
+            "description": "Repo owner",
+            "env_var": "GH_OWNER",
+        },
+        {
+            "name": "repo",
+            "label": "Repo",
+            "type": "string",
+            "required": False,
+            "placeholder": "e.g. shuvabrata",
+            "description": "Repo name",
+            "env_var": "GH_REPO",
+        },
+    ]
+
+
+def test_collect_parameters_required_coercion():
+    """The checklist value is coerced to a bool."""
+    ids = _param_ids(0)
+    values = ["owner", "Owner", "string", [], "e.g. shuva", "Repo owner", "GH_OWNER"]
+    result = editor._collect_parameters(1, values, ids)
+
+    assert result[0]["required"] is False
+
+
+def test_collect_parameters_drops_row_without_name():
+    """A row with no name is dropped from the result."""
+    ids = _param_ids(0) + _param_ids(1)
+    values = ["", "Owner", "string", [], "e.g. shuva", "Repo owner", "GH_OWNER",
+              "repo", "Repo", "string", [], "e.g. shuvabrata", "Repo name", "GH_REPO"]
+    result = editor._collect_parameters(2, values, ids)
+
+    assert result == [
+        {
+            "name": "repo",
+            "label": "Repo",
+            "type": "string",
+            "required": False,
+            "placeholder": "e.g. shuvabrata",
+            "description": "Repo name",
+            "env_var": "GH_REPO",
+        }
+    ]
+
+
+# ── Parameter add/remove: preserve existing row values ────────────────
+
+
+def test_add_parameter_preserves_existing_row_values():
+    """Adding a parameter must not wipe values already typed in other rows.
+
+    Regression guard for the reported bug: after filling parameter 1 and
+    clicking "Add parameter", the re-rendered row 0 must retain its values.
+    Otherwise ``_collect_parameters`` drops the now-blank row 0 on save and
+    only the newly added parameter survives.
+    """
+    # Simulate: one parameter row already filled by the user.
+    count, rows = editor.add_parameter(1, 0, [], [])
+    assert count == 1
+    values = _extract_field_values(rows)
+    values[("0", "name")] = "person1_id"
+    values[("0", "label")] = "First person"
+    values[("0", "type")] = "person_id"
+    values[("0", "required")] = ["required"]
+    values[("0", "placeholder")] = "e.g. github::Person::alice"
+    values[("0", "description")] = "WBA canonical Person ID"
+    values[("0", "env_var")] = "PERSON1_ID"
+
+    # Now the user clicks "Add parameter" again to add a second row.
+    # The current field values/ids are passed in so existing rows are preserved.
+    field_values = [values[("0", f)] for f in ["name", "label", "type", "required",
+                                               "placeholder", "description", "env_var"]]
+    field_ids = _param_ids(0)
+    count2, rows2 = editor.add_parameter(1, count, field_values, field_ids)
+
+    assert count2 == 2
+    extracted = _extract_field_values(rows2)
+    # Row 0 must still hold the values the user typed before adding row 1.
+    assert extracted[("0", "name")] == "person1_id"
+    assert extracted[("0", "label")] == "First person"
+    assert extracted[("0", "type")] == "person_id"
+    assert extracted[("0", "required")] == ["required"]
+    assert extracted[("0", "placeholder")] == "e.g. github::Person::alice"
+    assert extracted[("0", "description")] == "WBA canonical Person ID"
+    assert extracted[("0", "env_var")] == "PERSON1_ID"
+    # The new row is blank.
+    assert extracted[("1", "name")] == ""
+
+
+def test_remove_parameter_preserves_remaining_row_values(monkeypatch):
+    """Removing a parameter must not wipe the surviving rows' values.
+
+    Regression guard for the same class of bug as add: ``remove_parameter``
+    re-renders the remaining rows, so their typed values must be preserved
+    and re-indexed contiguously.
+    """
+    # Two filled rows.
+    count, rows = editor.add_parameter(1, 0, [], [])
+    assert count == 1
+    values = _extract_field_values(rows)
+    values[("0", "name")] = "person1_id"
+    values[("0", "label")] = "First person"
+    values[("0", "type")] = "person_id"
+    values[("0", "required")] = ["required"]
+    values[("0", "placeholder")] = "e.g. github::Person::alice"
+    values[("0", "description")] = "WBA canonical Person ID"
+    values[("0", "env_var")] = "PERSON1_ID"
+    field_values = [values[("0", f)] for f in ["name", "label", "type", "required",
+                                               "placeholder", "description", "env_var"]]
+    field_ids = _param_ids(0)
+    count2, rows2 = editor.add_parameter(1, count, field_values, field_ids)
+    assert count2 == 2
+    values2 = _extract_field_values(rows2)
+    values2[("1", "name")] = "person2_id"
+    values2[("1", "label")] = "Second person"
+    values2[("1", "type")] = "person_id"
+    values2[("1", "required")] = ["required"]
+    values2[("1", "placeholder")] = "e.g. github::Person::bob"
+    values2[("1", "description")] = "WBA canonical Person ID"
+    values2[("1", "env_var")] = "PERSON2_ID"
+    field_values2 = [values2[("0", f)] for f in ["name", "label", "type", "required",
+                                                 "placeholder", "description", "env_var"]]
+    field_values2 += [values2[("1", f)] for f in ["name", "label", "type", "required",
+                                                  "placeholder", "description", "env_var"]]
+    field_ids2 = _param_ids(0) + _param_ids(1)
+
+    # Remove row 0; row 1's values must survive and re-index to row 0.
+    class _FakeContext:
+        triggered = True
+        triggered_id = {"type": "editor-param-remove", "index": "0"}
+
+    monkeypatch.setattr(editor, "callback_context", _FakeContext())
+    count3, rows3 = editor.remove_parameter([1, None], count2, field_values2, field_ids2)
+
+    assert count3 == 1
+    extracted = _extract_field_values(rows3)
+    assert extracted[("0", "name")] == "person2_id"
+    assert extracted[("0", "label")] == "Second person"
+    assert extracted[("0", "type")] == "person_id"
+    assert extracted[("0", "required")] == ["required"]
+    assert extracted[("0", "placeholder")] == "e.g. github::Person::bob"
+    assert extracted[("0", "description")] == "WBA canonical Person ID"
+    assert extracted[("0", "env_var")] == "PERSON2_ID"
 
 
 # ── E1: editor loads query ─────────────────────────────────────────────
@@ -170,6 +394,7 @@ def test_e2_save_puts_to_current_id(monkeypatch):
         state["default_view"],
         state["param_count"],
         state["field_values"],
+        state["field_ids"],
     )
 
     assert fake.put_calls[0]["url"].endswith(
@@ -201,6 +426,7 @@ def test_e2b_save_on_new_route_warns(monkeypatch):
         state["default_view"],
         state["param_count"],
         state["field_values"],
+        state["field_ids"],
     )
 
     assert fake.put_calls == []
@@ -232,6 +458,7 @@ def test_e3_save_as_puts_to_new_id(monkeypatch):
         state["default_view"],
         state["param_count"],
         state["field_values"],
+        state["field_ids"],
     )
 
     assert fake.put_calls[0]["url"].endswith(
@@ -263,6 +490,7 @@ def test_e3b_save_as_custom_namespace(monkeypatch):
         state["default_view"],
         state["param_count"],
         state["field_values"],
+        state["field_ids"],
     )
 
     assert fake.put_calls[0]["url"].endswith(

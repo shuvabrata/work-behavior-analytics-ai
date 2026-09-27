@@ -88,30 +88,68 @@ def _build_payload(
     }
 
 
+def _group_field_values(
+    field_values: list[Any],
+    field_ids: list[dict[str, str]],
+) -> dict[str, dict[str, Any]]:
+    """Group pattern-matched field values into per-row parameter dicts.
+
+    Pairs each value with its component id (robust to Dash's wildcard
+    ordering) and assembles ``{index: {field: value}}``. Used to preserve
+    existing rows' values when re-rendering after add/remove.
+
+    Args:
+        field_values: The ``value`` list from the ALL pattern-matched field
+            inputs.
+        field_ids: The parallel ``id`` list from the same pattern-matched
+            inputs, used to read each value's field name and row index.
+    """
+    rows: dict[str, dict[str, Any]] = {}
+    for value, input_id in zip(field_values, field_ids):
+        if not isinstance(input_id, dict):
+            continue  # type: ignore[unreachable]
+        field = input_id["field"]
+        index = input_id["index"]
+        row = rows.setdefault(index, {})
+        if field == "required":
+            row[field] = bool(value)
+        elif value:
+            row[field] = value
+    return rows
+
+
 def _collect_parameters(
     param_count: int,
-    field_values: list[list[str]],
+    field_values: list[Any],
+    field_ids: list[dict[str, str]],
 ) -> list[dict[str, Any]]:
     """Collect parameter rows from the pattern-matched field inputs.
 
     Args:
         param_count: Number of parameter rows currently rendered.
         field_values: The ``value`` list from the ALL pattern-matched field
-            inputs, ordered by (index, field) as declared in the callback.
+            inputs.
+        field_ids: The parallel ``id`` list from the same pattern-matched
+            inputs, used to read each value's field name and row index. This
+            is robust to Dash's wildcard ordering, unlike positional math.
     """
+    rows: dict[str, dict[str, Any]] = {}
+    for value, input_id in zip(field_values, field_ids):
+        if not isinstance(input_id, dict):
+            continue  # type: ignore[unreachable]
+        field = input_id["field"]
+        index = input_id["index"]
+        row = rows.setdefault(index, {})
+        if field == "required":
+            row[field] = bool(value)
+        elif value:
+            row[field] = value
+
     parameters: list[dict[str, Any]] = []
-    for index in range(param_count):
-        row: dict[str, Any] = {}
-        for field_index, field in enumerate(
-            ["name", "label", "type", "required", "placeholder", "description", "env_var"]
-        ):
-            value = field_values[index * 7 + field_index]
-            if field == "required":
-                row[field] = bool(value)
-            elif value:
-                row[field] = value
-        if row.get("name"):
-            parameters.append(row)
+    for row_index in range(param_count):
+        param_row = rows.get(str(row_index))
+        if param_row and param_row.get("name"):
+            parameters.append(param_row)
     return parameters
 
 
@@ -295,14 +333,25 @@ def load_query(
     Output("editor-params-container", "children", allow_duplicate=True),
     Input("editor-param-add", "n_clicks"),
     State("editor-param-count", "data"),
+    State({"type": "editor-param-field", "index": ALL, "field": ALL}, "value"),
+    State({"type": "editor-param-field", "index": ALL, "field": ALL}, "id"),
     prevent_initial_call=True,
 )
-def add_parameter(n_clicks: int | None, count: int | None) -> tuple[int, list[Any]]:
-    """Append a blank parameter row."""
+def add_parameter(
+    n_clicks: int | None,
+    count: int | None,
+    field_values: list[Any],
+    field_ids: list[dict[str, str]],
+) -> tuple[int, list[Any]]:
+    """Append a blank parameter row, preserving existing rows' values."""
     if not n_clicks:
         raise PreventUpdate
+    existing = _group_field_values(field_values, field_ids)
     new_count = (count or 0) + 1
-    rows = [render_parameter_row(index) for index in range(new_count)]
+    rows = [
+        render_parameter_row(index, existing.get(str(index)))
+        for index in range(new_count)
+    ]
     return new_count, rows
 
 
@@ -311,13 +360,17 @@ def add_parameter(n_clicks: int | None, count: int | None) -> tuple[int, list[An
     Output("editor-params-container", "children", allow_duplicate=True),
     Input({"type": "editor-param-remove", "index": ALL}, "n_clicks"),
     State("editor-param-count", "data"),
+    State({"type": "editor-param-field", "index": ALL, "field": ALL}, "value"),
+    State({"type": "editor-param-field", "index": ALL, "field": ALL}, "id"),
     prevent_initial_call=True,
 )
 def remove_parameter(
     n_clicks_list: list[int | None],
     count: int | None,
+    field_values: list[Any],
+    field_ids: list[dict[str, str]],
 ) -> tuple[int, list[Any]]:
-    """Remove the clicked parameter row."""
+    """Remove the clicked parameter row, preserving remaining rows' values."""
     if not callback_context.triggered:
         raise PreventUpdate
     if not any(n is not None for n in n_clicks_list):
@@ -328,9 +381,18 @@ def remove_parameter(
     index = int(triggered.get("index", -1))
     if index < 0:
         raise PreventUpdate
-    new_count = max(0, (count or 0) - 1)
-    rows = [render_parameter_row(i) for i in range(new_count)]
-    return new_count, rows
+    existing = _group_field_values(field_values, field_ids)
+    # Drop the removed row and re-index the survivors contiguously.
+    remaining = [
+        existing[str(i)]
+        for i in range(count or 0)
+        if i != index and existing.get(str(i)) is not None
+    ]
+    rows = [
+        render_parameter_row(i, parameter)
+        for i, parameter in enumerate(remaining)
+    ]
+    return len(remaining), rows
 
 
 @callback(
@@ -349,6 +411,7 @@ def remove_parameter(
     State("editor-default-view", "value"),
     State("editor-param-count", "data"),
     State({"type": "editor-param-field", "index": ALL, "field": ALL}, "value"),
+    State({"type": "editor-param-field", "index": ALL, "field": ALL}, "id"),
     prevent_initial_call=True,
 )
 def save_query(
@@ -365,7 +428,8 @@ def save_query(
     graph_query: str | None,
     default_view: str | None,
     param_count: int | None,
-    field_values: list[list[str]],
+    field_values: list[Any],
+    field_ids: list[dict[str, str]],
 ) -> Any:
     """Save the query via PUT to the current namespace/slug."""
     if not n_clicks:
@@ -384,7 +448,7 @@ def save_query(
             "Missing namespace or slug.", color="danger", class_name="mb-3"
         )
 
-    parameters = _collect_parameters(param_count or 0, field_values)
+    parameters = _collect_parameters(param_count or 0, field_values, field_ids)
     payload = _build_payload(
         name or "",
         description or "",
@@ -478,6 +542,7 @@ def toggle_custom_namespace(namespace_value: str | None) -> dict[str, Any]:
     State("editor-default-view", "value"),
     State("editor-param-count", "data"),
     State({"type": "editor-param-field", "index": ALL, "field": ALL}, "value"),
+    State({"type": "editor-param-field", "index": ALL, "field": ALL}, "id"),
     prevent_initial_call=True,
 )
 def save_as_query(
@@ -495,7 +560,8 @@ def save_as_query(
     graph_query: str | None,
     default_view: str | None,
     param_count: int | None,
-    field_values: list[list[str]],
+    field_values: list[Any],
+    field_ids: list[dict[str, str]],
 ) -> tuple[Any, bool]:
     """Save the query to a new namespace/slug via PUT."""
     if not n_clicks:
@@ -515,7 +581,7 @@ def save_as_query(
             True,
         )
 
-    parameters = _collect_parameters(param_count or 0, field_values)
+    parameters = _collect_parameters(param_count or 0, field_values, field_ids)
     payload = _build_payload(
         name or "",
         description or "",

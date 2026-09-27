@@ -138,10 +138,15 @@ clientside_callback(
             if (visible) anyVisible = true;
 
             var isUser = (q.source_path || '').indexOf('user_defined/') !== -1;
-            var statusColor = {active: 'success', draft: 'warning', deprecated: 'secondary'}[q.status];
-            var statusHtml = statusColor
-                ? '<span class="badge text-bg-' + statusColor + '" style="font-size:12px">' + esc(q.status) + '</span>'
-                : '&mdash;';
+            // "active" is the common/default status, so it stays as plain text;
+            // the non-default statuses are highlighted with a badge so colours
+            // draw the eye to rows that need attention.
+            var statusColor = {draft: 'warning', deprecated: 'secondary'}[q.status];
+            var statusHtml = q.status === 'active'
+                ? esc(q.status)
+                : (statusColor
+                    ? '<span class="badge text-bg-' + statusColor + '" style="font-size:12px">' + esc(q.status) + '</span>'
+                    : '&mdash;');
             var tagHtml = (q.tags || []).map(function(t) {
                 return '<span class="badge text-bg-light me-1" style="font-size:12px">' + esc(t) + '</span>';
             }).join('');

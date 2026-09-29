@@ -50,11 +50,15 @@ write and apply the Alembic migration.
   - `entity_id` (VARCHAR 255, not null)
   - `event_time` (TIMESTAMPTZ, not null)
   - `ingestion_time` (TIMESTAMPTZ, not null, server_default=func.now())
+  - `display_name` (VARCHAR 512, nullable) — computed at write time; see Phase 1 Task 1
+  - `avatar_url` (VARCHAR 1024, nullable) — Person only; NULL for all other entity types
   - `attributes` (JSONB, not null)
   - `relationships` (JSONB, nullable)
   - `content_hash` (VARCHAR 64, not null)
-  - `__table_args__`: `UniqueConstraint('source', 'entity_type', 'entity_id', 'event_time', 'content_hash')`
-  - Index: `Index('idx_activity_events_lookup', 'entity_type', 'entity_id', 'event_time'.desc())`
+  - `__table_args__`:
+    - `UniqueConstraint('signal_id')` — required so `activity_actions.signal_id` can FK-reference this column
+    - `UniqueConstraint('source', 'entity_type', 'entity_id', 'event_time', 'content_hash')` — dedup guard
+  - Index: `Index('idx_activity_events_lookup', 'source', 'entity_type', 'entity_id', 'event_time'.desc())`
 
 - [ ] **2. SQLAlchemy model: `ActivityAction`** (`src/app/db/models/activity_action.py`)
   - `id` (BIGSERIAL PK)
@@ -79,8 +83,32 @@ write and apply the Alembic migration.
   cd src/app && alembic revision --autogenerate -m "add activity_events and activity_actions tables"
   cd ../..
   ```
-  Review the generated migration; adjust index definitions if autogenerate
-  doesn't capture `desc()` ordering.
+  **Escape hatch — Alembic autogenerate will NOT capture `DESC` ordering or functional index expressions.**
+  After generating, open the migration file and manually replace the three `op.create_index(...)` calls
+  for the timeline indexes with raw `op.execute()` SQL. The correct SQL for each is:
+
+  ```python
+  # In upgrade():
+  op.execute(
+      "CREATE INDEX idx_activity_events_lookup "
+      "ON activity_events (source, entity_type, entity_id, event_time DESC)"
+  )
+  op.execute(
+      "CREATE INDEX idx_activity_actions_actor "
+      "ON activity_actions (source, actor_entity_type, actor_entity_id, event_time DESC)"
+  )
+  op.execute(
+      "CREATE INDEX idx_activity_actions_target "
+      "ON activity_actions (source, target_entity_type, target_entity_id, event_time DESC)"
+  )
+
+  # In downgrade():
+  op.execute("DROP INDEX IF EXISTS idx_activity_events_lookup")
+  op.execute("DROP INDEX IF EXISTS idx_activity_actions_actor")
+  op.execute("DROP INDEX IF EXISTS idx_activity_actions_target")
+  ```
+  Also verify that Alembic correctly generated the `UniqueConstraint('signal_id')` on `activity_events`;
+  if absent, add `op.create_unique_constraint('uq_activity_events_signal_id', 'activity_events', ['signal_id'])` manually.
 
 - [ ] **5. Apply migration**
   ```bash
@@ -102,15 +130,15 @@ write and apply the Alembic migration.
   ```bash
   docker compose exec postgres psql -U ${POSTGRES_USER} -d ${POSTGRES_DB} -c "\di idx_activity_*"
   ```
-  Expected: `idx_activity_events_lookup`, `idx_activity_actions_source`, `idx_activity_actions_target`.
+  Expected: `idx_activity_events_lookup`, `idx_activity_actions_actor`, `idx_activity_actions_target`.
 
 - [ ] **V0.3:** Verify FK constraint:
   ```bash
   docker compose exec postgres psql -U ${POSTGRES_USER} -d ${POSTGRES_DB} -c "
-    INSERT INTO activity_events (signal_id, source, entity_type, entity_id, event_time, attributes, content_hash)
-    VALUES ('00000000-0000-0000-0000-000000000001', 'test', 'Person', 'test_user', NOW(), '{}', 'abc');
-    INSERT INTO activity_actions (signal_id, event_time, source_entity_type, source_entity_id, relationship_type, target_entity_type, target_entity_id)
-    VALUES ('00000000-0000-0000-0000-000000000001', NOW(), 'Person', 'test_user', 'CREATED', 'Issue', 'TEST-1');
+    INSERT INTO activity_events (signal_id, source, entity_type, entity_id, event_time, attributes, content_hash, display_name)
+    VALUES ('00000000-0000-0000-0000-000000000001', 'test', 'Person', 'test_user', NOW(), '{}', 'abc', 'Test User');
+    INSERT INTO activity_actions (signal_id, source, event_time, actor_entity_type, actor_entity_id, relationship_type, target_entity_type, target_entity_id)
+    VALUES ('00000000-0000-0000-0000-000000000001', 'test', NOW(), 'Person', 'test_user', 'CREATED', 'Issue', 'TEST-1');
     -- Should succeed
     SELECT * FROM activity_actions;
     -- Cleanup
@@ -155,6 +183,23 @@ with hybrid batching, dedup, and non-fatal failure semantics.
   - Background task `_writer_loop`:
     - Collects signals from queue up to `100` items OR `5` seconds of inactivity
     - For each signal: compute `content_hash = sha256(json(attributes) + json(relationships))`
+    - Compute `display_name` — mirrors `GraphNode.display_name()` in `node_base.py`:
+      ```python
+      def _compute_display_name(signal: ActivitySignal) -> str:
+          attrs = signal.attributes.model_dump()
+          for field in ("name", "title", "summary", "key"):
+              value = attrs.get(field)
+              if value and isinstance(value, str):
+                  return value
+          return signal.id  # fallback to raw entity ID
+      ```
+    - Compute `avatar_url`:
+      ```python
+      def _compute_avatar_url(signal: ActivitySignal) -> str | None:
+          if signal.entity_type == "Person":
+              return signal.attributes.model_dump().get("avatar_url")
+          return None
+      ```
     - Write using `INSERT … ON CONFLICT (source, entity_type, entity_id, event_time, content_hash) DO NOTHING`
       — **do not use SELECT-then-INSERT**. The design doc describes the conceptual dedup flow;
       `ON CONFLICT DO NOTHING` is the correct implementation. A SELECT-before-INSERT is a
@@ -162,8 +207,14 @@ with hybrid batching, dedup, and non-fatal failure semantics.
       can both SELECT, both see no match, and both attempt an INSERT — the second will hit
       the unique constraint and log a spurious error. `ON CONFLICT DO NOTHING` is atomic and
       race-safe.
-    - If the INSERT wrote a row (i.e., `result.rowcount == 1`) → decompose relationships into `activity_actions` rows
-    - If `rowcount == 0` → duplicate, skip decomposition
+    - `asyncpg.execute()` returns a command-tag string, **not** an object with `.rowcount`.
+      Check it like this:
+      ```python
+      status = await conn.execute("INSERT … ON CONFLICT … DO NOTHING")
+      inserted = status == "INSERT 0 1"  # "INSERT 0 0" means dedup hit
+      ```
+    - If `inserted` is `True` → decompose relationships into `activity_actions` rows
+    - If `inserted` is `False` → duplicate, skip decomposition
     - Wrap in try/except — on failure log warning and continue
   - `close()`: drain queue, close pool
   - Use `asyncpg` (no SQLAlchemy dependency — consumer doesn't have app deps)
@@ -180,14 +231,39 @@ with hybrid batching, dedup, and non-fatal failure semantics.
   ```
 
 - [ ] **3. Relationship decomposition** — utility to flatten `signal.relationships[]` into `activity_actions` rows
+
+   The `Relationship` model (defined in `src/common/activity_signal/models.py:99`) has:
+   `type` (str), `direction` (Optional `"OUT"`/`"IN"`/None), `target` (`RelationshipTarget`
+   with fields: `source`, `entity_type`, `id`, `email`, `url`), and `properties` (Optional dict).
+
+   - `summary` — pulled from the signal's own attributes at write time; use the first non-empty
+     of `attributes.title`, `attributes.summary`, `attributes.key`. These are the same
+     fields used by `_compute_display_name`. Fall back to `None` if none are present.
+   - `url` — pulled from `rel.target.url` (the `RelationshipTarget.url` field, which holds
+     the link to the target entity in the source system, e.g. a GitHub PR URL or Jira issue URL).
+
+   ```python
+   def _decompose_relationships(signal: ActivitySignal) -> list[dict]:
+       attrs = signal.attributes.model_dump()
+       summary = (
+           attrs.get("title")
+           or attrs.get("summary")
+           or attrs.get("key")
+           or None
+       )
+       actions = []
+       for rel in signal.relationships:
+           actions.append({
+               "signal_id": signal.signal_id,
                "source": signal.source,
+               "event_time": signal.event_time,
                "actor_entity_type": signal.entity_type,
                "actor_entity_id": signal.id,
                "relationship_type": rel.type,
                "target_entity_type": rel.target.entity_type or "",
                "target_entity_id": rel.target.id or "",
-               "summary": ...,  # extract from attributes
-               "url": ...,  # extract from attributes
+               "summary": summary,
+               "url": rel.target.url,
            })
        return actions
    ```
@@ -281,7 +357,8 @@ with hybrid batching, dedup, and non-fatal failure semantics.
 - [ ] **1. Model definitions** (`model.py`)
   - `TimelineRequest` — Pydantic model with `wba_ids`, `scope`, `from`, `to`, `cursor`, `limit`
   - `TimelineEvent` — `signal_id`, `event_time`, `relationship_type`, `summary`, `entity_type`, `source`, `url`, `details`
-  - `TimelineLane` — `wba_id`, `entity_type`, `label`, `avatar_url`, `events: list[TimelineEvent]`, `total_count`, `next_cursor`
+  - `TimelineLane` — `wba_id`, `entity_type`, `label`, `avatar_url`, `events: list[TimelineEvent]`, `next_cursor`
+    (`total_count` is **omitted** — no count query is implemented in v1; add in v2 if needed)
   - `TimelineResponse` — `lanes: list[TimelineLane]`, `meta`
   - `SuggestRequest` / `SuggestResponse` — for typeahead
 
@@ -292,7 +369,17 @@ with hybrid batching, dedup, and non-fatal failure semantics.
 
 - [ ] **3. Service** (`service.py`)
   - `get_timeline(request)`: parse each WBA ID into `(source, entity_type, entity_id)`, fan out queries
-  - `_resolve_display_label(wba_id)`: fetch Person name / Issue title from activity_events or Neo4j
+  - `_resolve_display_label(source, entity_type, entity_id)`: read the pre-computed `display_name`
+    and `avatar_url` columns from `activity_events` — **no Neo4j call needed**.
+    ```sql
+    SELECT display_name, avatar_url
+    FROM activity_events
+    WHERE source = $1 AND entity_type = $2 AND entity_id = $3
+    ORDER BY event_time DESC
+    LIMIT 1;
+    ```
+    Fall back to the raw `entity_id` string if no row exists or `display_name` is NULL.
+    `avatar_url` is passed through to `TimelineLane.avatar_url`; it will be NULL for non-Person entities.
   - `_encode_cursor(event_time, row_id)` / `_decode_cursor(cursor_str)`: base64 encode/decode
   - `_build_suggestions(query)`: delegate to existing search (Elasticsearch or Neo4j)
 
@@ -333,7 +420,7 @@ with hybrid batching, dedup, and non-fatal failure semantics.
   ```bash
   curl -s "http://localhost:8000/api/v1/activity/timeline?wba_ids=github::Person::alice&limit=5" | jq .
   ```
-  Expected: JSON response with `lanes` array, each containing `events`, `total_count`, `next_cursor`.
+  Expected: JSON response with `lanes` array, each containing `events` and `next_cursor` (null when no more pages).
 
 - [ ] **V2.2:** Test multi-lane query:
   ```bash
@@ -345,8 +432,7 @@ with hybrid batching, dedup, and non-fatal failure semantics.
   ```bash
   FIRST=$(curl -s "http://localhost:8000/api/v1/activity/timeline?wba_ids=github::Person::alice&limit=2")
   CURSOR=$(echo $FIRST | jq -r '.lanes[0].next_cursor')
-  TOTAL=$(echo $FIRST | jq -r '.lanes[0].total_count')
-  echo "Total: $TOTAL, Cursor: $CURSOR"
+  echo "Cursor: $CURSOR"
   SECOND=$(curl -s "http://localhost:8000/api/v1/activity/timeline?wba_ids=github::Person::alice&limit=2&cursor=$CURSOR")
   echo $SECOND | jq '.lanes[0].events | length'
   ```
@@ -412,12 +498,20 @@ with hybrid batching, dedup, and non-fatal failure semantics.
   - Loading overlay + empty state
 
 - [ ] **3. Callbacks** (`callbacks.py`)
-  - `fetch_timeline_data`: on entity selection change / time range change / pagination
-    → calls `fetch("/api/v1/activity/timeline?...")` → updates lane state
-  - Clientside callback for infinite scroll: when user scrolls to bottom of a lane,
-    fetch next page using `next_cursor` and append events
+  - `fetch_timeline_data`: on entity selection change / time range change → calls
+    `GET /api/v1/activity/timeline?...` → populates lane state in `dcc.Store`
+  - **Pagination — "Load more" button per lane** (do NOT use a clientside scroll listener):
+    - Each lane renders a "Load more" button below its event list
+    - A server-side callback reads `next_cursor` from a per-lane `dcc.Store`, calls the API
+      with `cursor=<next_cursor>`, and appends the returned events to the lane's existing list
+    - Button is hidden when `next_cursor` is `null` (no more pages)
+    - Reference: the load-more + `dcc.Store` pattern already used in
+      `src/app/dash_app/pages/search.py` — follow that structure exactly
+    - **Escape hatch**: do not attempt `window.scroll` or `IntersectionObserver` via
+      `clientside_callback` — Dash's clientside callbacks can only read/write Dash component
+      properties and cannot bind to native DOM scroll events outside the component tree
   - Typeahead: on input → debounced call to `/api/v1/activity/suggest` → show suggestions
-  - Entity add/remove: update selected entities list, reload data
+  - Entity add/remove: update selected entities list in `dcc.Store`, reload data
   - Theme-aware: lane colors adapt to light/dark theme tokens
 
 - [ ] **4. Register in Analytics gallery**

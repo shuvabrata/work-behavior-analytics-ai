@@ -43,31 +43,35 @@ history. No timeline-oriented UI exists today.
 ```sql
 CREATE TABLE activity_events (
     id BIGSERIAL PRIMARY KEY,
-    signal_id UUID NOT NULL,
+    signal_id UUID NOT NULL UNIQUE,        -- required: activity_actions FKs to this column
     source VARCHAR(32) NOT NULL,
     entity_type VARCHAR(32) NOT NULL,
     entity_id VARCHAR(255) NOT NULL,
     event_time TIMESTAMPTZ NOT NULL,
     ingestion_time TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    attributes JSONB NOT NULL,
+    display_name VARCHAR(512),             -- computed at write time: first non-empty of name/title/summary/key/id
+    avatar_url VARCHAR(1024),              -- Person only; from attributes.avatar_url; NULL for non-Person entities
+    attributes JSONB NOT NULL,             -- full entity attributes snapshot
     relationships JSONB,
-    content_hash VARCHAR(64) NOT NULL,  -- SHA256 of meaningful payload
+    content_hash VARCHAR(64) NOT NULL,     -- SHA256 of meaningful payload
 
     UNIQUE (source, entity_type, entity_id, event_time, content_hash)
 );
 
 CREATE INDEX idx_activity_events_lookup
-    ON activity_events (entity_type, entity_id, event_time DESC);
+    ON activity_events (source, entity_type, entity_id, event_time DESC);
 ```
 
 Write-time dedup flow:
 ```
 signal arrives → compute content_hash from attributes + relationships
-              → SELECT content_hash FROM activity_events
-                WHERE (source, entity_type, entity_id) = signal's
-                ORDER BY event_time DESC LIMIT 1
-              → if hash matches → SKIP (no state change, just re-emission)
-              → if hash differs → INSERT (state actually changed)
+              → compute display_name: first non-empty of
+                  attributes.name / attributes.title / attributes.summary /
+                  attributes.key / signal.id  (mirrors node_base.GraphNode.display_name())
+              → compute avatar_url: attributes.avatar_url if entity_type == 'Person', else NULL
+              → INSERT … ON CONFLICT DO NOTHING
+              → if rowcount == 1 → decompose relationships into activity_actions rows
+              → if rowcount == 0 → duplicate, skip
 ```
 
 ## 3. Architecture Overview
@@ -97,12 +101,14 @@ One row per *meaningfully distinct* state of an entity. Used for "history of thi
 ```sql
 CREATE TABLE activity_events (
     id BIGSERIAL PRIMARY KEY,
-    signal_id UUID NOT NULL,
+    signal_id UUID NOT NULL UNIQUE,        -- required: activity_actions FKs to this column
     source VARCHAR(32) NOT NULL,
     entity_type VARCHAR(32) NOT NULL,      -- Person, Issue, Page, Commit, etc.
     entity_id VARCHAR(255) NOT NULL,       -- raw ID from the source
     event_time TIMESTAMPTZ NOT NULL,       -- when the event happened in source system
     ingestion_time TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    display_name VARCHAR(512),             -- computed at write time: first non-empty of name/title/summary/key, else entity_id
+    avatar_url VARCHAR(1024),              -- Person only (attributes.avatar_url); NULL for all other entity types
     attributes JSONB NOT NULL,             -- full entity attributes snapshot
     relationships JSONB,                   -- full relationships array
     content_hash VARCHAR(64) NOT NULL,     -- SHA256 of attributes + relationships
@@ -110,8 +116,9 @@ CREATE TABLE activity_events (
     UNIQUE (source, entity_type, entity_id, event_time, content_hash)
 );
 
+-- source is the leading column so queries scoped to a full WBA ID (source+type+id) use one index.
 CREATE INDEX idx_activity_events_lookup
-    ON activity_events (entity_type, entity_id, event_time DESC);
+    ON activity_events (source, entity_type, entity_id, event_time DESC);
 ```
 
 ### Table 2: `activity_actions` — Normalized action rows
@@ -211,7 +218,6 @@ Response shape:
           "details": { "lines_added": 342, "files_changed": 12 }
         }
       ],
-      "total_count": 142,
       "next_cursor": "base64..."
     }
   ],

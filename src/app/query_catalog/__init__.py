@@ -7,11 +7,18 @@ from .loader import (
     load_catalog,
     load_namespaces,
 )
-from .model import CatalogNamespace, CatalogParameter, CatalogQuery, CatalogQueryWrite
+from .model import (
+    CatalogNamespace,
+    CatalogOrigin,
+    CatalogParameter,
+    CatalogQuery,
+    CatalogQueryWrite,
+)
 
 __all__ = [
     "CatalogLoadError",
     "CatalogNamespace",
+    "CatalogOrigin",
     "CatalogParameter",
     "CatalogQuery",
     "CatalogQueryWrite",

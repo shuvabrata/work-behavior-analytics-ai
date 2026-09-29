@@ -203,7 +203,7 @@ async def test_c1_put_creates_user_file():
     saved = await router.put_catalog_query("github", "test_c1", _write_payload())
     try:
         assert saved.id == "github/test_c1"
-        assert "user_defined/" in saved.source_path
+        assert saved.origin == "custom"
     finally:
         await router.delete_catalog_query("github", "test_c1")
 
@@ -271,7 +271,7 @@ async def test_c8_get_merged_catalog_after_override():
         response = await router.get_catalog_query("github", "test_c8")
         assert response is not None
         assert response.name == "Merged"
-        assert "user_defined/" in response.source_path
+        assert response.origin == "custom"
     finally:
         await router.delete_catalog_query("github", "test_c8")
 

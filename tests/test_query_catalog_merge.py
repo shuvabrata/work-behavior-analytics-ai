@@ -102,6 +102,7 @@ def test_b3_override_existing_system_query(tmp_path):
     assert override.name == "Top Committers (User)"
     assert "user_defined/" in override.source_path
     assert "LIMIT 5" in override.queries["tabular"]
+    assert override.origin == "override"
 
     # System version must be excluded — only one entry for this id.
     assert len([q for q in queries if q.id == "github/top_committers"]) == 1
@@ -118,6 +119,10 @@ def test_b4_new_query_in_existing_namespace(tmp_path):
 
     merged = load_catalog(catalog_dir)
     assert len(merged) == len(load_catalog(system_only)) + 1
+
+    # The addition is a brand-new custom query, not an override.
+    custom = next(q for q in merged if q.id == "my_queries/custom_query")
+    assert custom.origin == "custom"
 
 
 def test_b5_new_query_in_custom_namespace(tmp_path):
@@ -163,6 +168,8 @@ def test_b6_multiple_overrides_across_namespaces(tmp_path):
 
     assert by_id["github/top_committers"].name == "Top Committers (User)"
     assert by_id["github/open_prs"].name == "Open PRs (User)"
+    assert by_id["github/top_committers"].origin == "override"
+    assert by_id["github/open_prs"].origin == "override"
     assert len(queries) == 2
 
 

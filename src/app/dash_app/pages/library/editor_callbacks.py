@@ -200,7 +200,7 @@ def toggle_queries_collapse(n_clicks: int | None, is_open: bool) -> bool:
 
 
 @callback(
-    Output("editor-store", "data"),
+    Output("editor-route", "data", allow_duplicate=True),
     Output("editor-name", "value"),
     Output("editor-description", "value"),
     Output("editor-summary", "value"),
@@ -312,7 +312,13 @@ def load_query(
     param_rows = [render_parameter_row(index, param) for index, param in enumerate(parameters)]
 
     return (
-        {"mode": "edit", "id": query.get("id"), "namespace": namespace, "slug": slug},
+        {
+            "mode": "edit",
+            "id": query.get("id"),
+            "namespace": namespace,
+            "slug": slug,
+            "origin": query.get("origin") or "builtin",
+        },
         query.get("name") or "",
         query.get("description") or "",
         query.get("summary"),
@@ -700,31 +706,58 @@ def test_graph(n_clicks: int | None, query_text: str | None) -> Any:
 
 
 @callback(
-    Output("editor-reset-confirm", "message"),
-    Output("editor-reset-confirm", "displayed"),
-    Input("editor-reset", "n_clicks"),
+    Output("editor-destructive", "children"),
+    Output("editor-destructive", "style"),
+    Input("editor-route", "data"),
+)
+def update_destructive_button(route: dict[str, Any] | None) -> tuple[str, dict[str, str]]:
+    """Set the destructive button label and visibility from the query origin.
+
+    An override is reset back to its factory version; a brand-new custom query
+    is deleted outright. A pure built-in (only transient after a reset) shows
+    no destructive button.
+    """
+    origin = (route or {}).get("origin", "builtin") if isinstance(route, dict) else "builtin"
+    if origin == "override":
+        return "Reset to Factory", {"display": "inline-block"}
+    if origin == "custom":
+        return "Delete", {"display": "inline-block"}
+    return "Delete", {"display": "none"}
+
+
+@callback(
+    Output("editor-destructive-confirm", "message"),
+    Output("editor-destructive-confirm", "displayed"),
+    Input("editor-destructive", "n_clicks"),
     State("editor-name", "value"),
     State("editor-route", "data"),
     prevent_initial_call=True,
 )
-def confirm_reset(
+def confirm_destructive(
     n_clicks: int | None,
     name: str | None,
     route: dict[str, Any] | None,
 ) -> tuple[str, bool]:
-    """Show the reset confirmation dialog."""
+    """Show the destructive confirmation dialog with a context-appropriate message."""
     if not n_clicks:
         raise PreventUpdate
     display_name = name or (route or {}).get("id") or "this query"
-    return (
-        f"Reset '{display_name}' to factory defaults? All user edits will be "
-        "lost. This cannot be undone.",
-        True,
-    )
+    origin = (route or {}).get("origin", "builtin") if isinstance(route, dict) else "builtin"
+    if origin == "override":
+        message = (
+            f"Reset '{display_name}' to factory defaults? All user edits will be "
+            "lost. This cannot be undone."
+        )
+    else:
+        message = (
+            f"Delete '{display_name}'? This will permanently remove this "
+            "user-defined query. This cannot be undone."
+        )
+    return message, True
 
 
 @callback(
-    Output("editor-store", "data", allow_duplicate=True),
+    Output("editor-route", "data", allow_duplicate=True),
     Output("editor-name", "value", allow_duplicate=True),
     Output("editor-description", "value", allow_duplicate=True),
     Output("editor-summary", "value", allow_duplicate=True),
@@ -736,21 +769,28 @@ def confirm_reset(
     Output("editor-default-view", "value", allow_duplicate=True),
     Output("editor-param-count", "data", allow_duplicate=True),
     Output("editor-params-container", "children", allow_duplicate=True),
+    Output("url", "pathname", allow_duplicate=True),
     Output("editor-feedback", "children", allow_duplicate=True),
-    Input("editor-reset-confirm", "submit_n_clicks"),
+    Input("editor-destructive-confirm", "submit_n_clicks"),
     State("editor-route", "data"),
     State("url", "pathname"),
     prevent_initial_call=True,
 )
-def reset_query(
+def destructive_action(
     n_clicks: int | None,
     route: dict[str, Any] | None,
     pathname: str | None,
 ) -> tuple[Any, ...]:
-    """Delete the user override and reload the form with system data."""
+    """Delete the user override, then reset or navigate based on origin.
+
+    For an override the factory version survives, so the form is reloaded with
+    the system data. For a brand-new custom query there is no factory version,
+    so the editor navigates back to the Library.
+    """
     if not n_clicks:
         raise PreventUpdate
 
+    origin = (route or {}).get("origin", "builtin") if isinstance(route, dict) else "builtin"
     _, namespace, slug = _parse_route(pathname)
     if not namespace or not slug:
         return (
@@ -766,8 +806,11 @@ def reset_query(
             no_update,
             no_update,
             no_update,
+            no_update,
             create_alert(
-                "Cannot reset: missing namespace or slug.", color="danger", class_name="mb-3"
+                "Cannot delete: missing namespace or slug.",
+                color="danger",
+                class_name="mb-3",
             ),
         )
 
@@ -792,8 +835,9 @@ def reset_query(
                 no_update,
                 no_update,
                 no_update,
+                no_update,
                 create_alert(
-                    f"Reset failed: {detail}", color="danger", class_name="mb-3"
+                    f"Delete failed: {detail}", color="danger", class_name="mb-3"
                 ),
             )
     except requests.exceptions.RequestException as exc:
@@ -810,10 +854,30 @@ def reset_query(
             no_update,
             no_update,
             no_update,
-            create_alert(f"Reset failed: {exc}", color="danger", class_name="mb-3"),
+            no_update,
+            create_alert(f"Delete failed: {exc}", color="danger", class_name="mb-3"),
         )
 
-    # Reload the form with system data.
+    # A brand-new custom query has no factory version — navigate back.
+    if origin != "override":
+        return (
+            no_update,
+            no_update,
+            no_update,
+            no_update,
+            no_update,
+            no_update,
+            no_update,
+            no_update,
+            no_update,
+            no_update,
+            no_update,
+            no_update,
+            "/app/library",
+            no_update,
+        )
+
+    # An override: reload the form with the factory (system) data.
     try:
         get_resp = requests.get(
             f"{api_base}/api/v1/queries/catalog/{namespace}/{slug}",
@@ -821,6 +885,7 @@ def reset_query(
         )
         if get_resp.status_code != 200:
             return (
+                no_update,
                 no_update,
                 no_update,
                 no_update,
@@ -856,6 +921,7 @@ def reset_query(
             no_update,
             no_update,
             no_update,
+            no_update,
             create_alert(f"Reset failed: {exc}", color="danger", class_name="mb-3"),
         )
 
@@ -864,7 +930,13 @@ def reset_query(
     param_rows = [render_parameter_row(index, param) for index, param in enumerate(parameters)]
 
     return (
-        {"mode": "edit", "id": query.get("id"), "namespace": namespace, "slug": slug},
+        {
+            "mode": "edit",
+            "id": query.get("id"),
+            "namespace": namespace,
+            "slug": slug,
+            "origin": query.get("origin") or "builtin",
+        },
         query.get("name") or "",
         query.get("description") or "",
         query.get("summary"),
@@ -876,6 +948,7 @@ def reset_query(
         query.get("default_view"),
         len(parameters),
         param_rows,
+        no_update,
         create_alert(
             "Query reset to factory defaults.",
             color="success",
@@ -883,76 +956,3 @@ def reset_query(
             duration=5000,
         ),
     )
-
-
-@callback(
-    Output("editor-delete-confirm", "message"),
-    Output("editor-delete-confirm", "displayed"),
-    Input("editor-delete", "n_clicks"),
-    State("editor-name", "value"),
-    State("editor-route", "data"),
-    prevent_initial_call=True,
-)
-def confirm_delete(
-    n_clicks: int | None,
-    name: str | None,
-    route: dict[str, Any] | None,
-) -> tuple[str, bool]:
-    """Show the delete confirmation dialog."""
-    if not n_clicks:
-        raise PreventUpdate
-    display_name = name or (route or {}).get("id") or "this query"
-    return (
-        f"Delete '{display_name}'? This will permanently remove this "
-        "user-defined query. This cannot be undone.",
-        True,
-    )
-
-
-@callback(
-    Output("url", "pathname", allow_duplicate=True),
-    Output("editor-feedback", "children", allow_duplicate=True),
-    Input("editor-delete-confirm", "submit_n_clicks"),
-    State("url", "pathname"),
-    prevent_initial_call=True,
-)
-def delete_query(
-    n_clicks: int | None,
-    pathname: str | None,
-) -> tuple[Any, Any]:
-    """Delete the user-defined query and navigate back to the Library."""
-    if not n_clicks:
-        raise PreventUpdate
-
-    _, namespace, slug = _parse_route(pathname)
-    if not namespace or not slug:
-        return (
-            no_update,
-            create_alert(
-                "Cannot delete: missing namespace or slug.",
-                color="danger",
-                class_name="mb-3",
-            ),
-        )
-
-    api_base = _get_api_base_url()
-    try:
-        resp = requests.delete(
-            f"{api_base}/api/v1/queries/catalog/{namespace}/{slug}",
-            timeout=TIMEOUT_SECONDS,
-        )
-        if resp.status_code not in (200, 204):
-            detail = resp.json().get("detail", "Unknown error")
-            return (
-                no_update,
-                create_alert(
-                    f"Delete failed: {detail}", color="danger", class_name="mb-3"
-                ),
-            )
-    except requests.exceptions.RequestException as exc:
-        return (
-            no_update,
-            create_alert(f"Delete failed: {exc}", color="danger", class_name="mb-3"),
-        )
-
-    return "/app/library", no_update

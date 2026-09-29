@@ -19,7 +19,6 @@ def get_layout() -> html.Div:
         [
             dcc.Store(id="library-store", storage_type="memory"),
             dcc.Store(id="library-namespaces-store", storage_type="memory"),
-            dcc.Store(id="library-system-ids-store", storage_type="memory"),
             html.Div(id="library-feedback"),
             create_page_header(
                 [("Library", None)],
@@ -106,7 +105,7 @@ def render_library_table() -> html.Div:
                                 html.Th("Default View"),
                                 html.Th("Parameters"),
                                 html.Th("Views"),
-                                html.Th("Source"),
+                                html.Th("Origin"),
                                 html.Th("Actions"),
                             ]
                         )

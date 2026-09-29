@@ -71,17 +71,12 @@ def get_editor_layout() -> html.Div:
     """Return the shared query editor layout (edit and new routes)."""
     return html.Div(
         [
-            dcc.Store(id="editor-store", storage_type="memory"),
             dcc.Store(id="editor-namespaces-store", storage_type="memory"),
             dcc.Store(id="editor-route", storage_type="memory"),
             dcc.Store(id="editor-param-count", storage_type="memory", data=0),
             dcc.Store(id="editor-save-as-open", storage_type="memory", data=False),
             dcc.ConfirmDialog(
-                id="editor-reset-confirm",
-                message="",
-            ),
-            dcc.ConfirmDialog(
-                id="editor-delete-confirm",
+                id="editor-destructive-confirm",
                 message="",
             ),
             html.Div(id="editor-feedback"),
@@ -352,11 +347,14 @@ def _render_queries_section() -> html.Div:
 
 
 def _render_action_bar() -> html.Div:
-    """Sticky action bar: Save, Save As, Reset to Factory, Delete.
+    """Sticky action bar: Save, Save As, and a single destructive action.
 
-    Mirrors the Runtime Settings page's sticky top action bar so the primary
-    actions stay visible while scrolling the form and are visually separated
-    from the sections below.
+    The destructive button is dynamic: it reads the loaded query's ``origin``
+    and renders as "Reset to Factory" for an override or "Delete" for a
+    brand-new custom query. It is hidden entirely for a pure built-in (which
+    only occurs transiently after a reset). Mirrors the Runtime Settings
+    page's sticky top action bar so the primary actions stay visible while
+    scrolling the form and are visually separated from the sections below.
     """
     return html.Div(
         [
@@ -375,16 +373,10 @@ def _render_action_bar() -> html.Div:
                 [
                     dbc.Button(
                         "Reset to Factory",
-                        id="editor-reset",
+                        id="editor-destructive",
                         color="outline-danger",
                         size="sm",
-                        className="me-2",
-                    ),
-                    dbc.Button(
-                        "Delete",
-                        id="editor-delete",
-                        color="outline-danger",
-                        size="sm",
+                        style={"display": "none"},
                     ),
                 ],
                 style={

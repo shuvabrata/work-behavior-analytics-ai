@@ -168,6 +168,14 @@ def load_catalog(
 
         by_id = {query.id: query for query in queries}
         for user_query in user_queries:
+            # A user query whose id matches a system query is an override of
+            # that built-in; a new id is a brand-new custom query. The loader
+            # is the single place that knows this, so it computes the origin
+            # here rather than leaking path logic to API consumers.
+            if user_query.id in by_id:
+                user_query = user_query.model_copy(
+                    update={"origin": "override"}
+                )
             by_id[user_query.id] = user_query
         queries = list(by_id.values())
 
@@ -241,6 +249,11 @@ def _load_query_file(
             owner=raw_query.get("owner"),
             status=raw_query.get("status"),
             source_path=str(query_file.relative_to(base_dir.parent)),
+            origin=(
+                "custom"
+                if query_file.is_relative_to(base_dir / USER_DEFINED_DIR)
+                else "builtin"
+            ),
         )
     except ValueError as exc:
         raise CatalogLoadError(f"Invalid query file {query_file}: {exc}") from exc

@@ -73,7 +73,7 @@ def _query(
     query_id: str,
     name: str,
     *,
-    source_path: str = "queries_catalog/github/top_committers.yaml",
+    origin: str = "builtin",
     tags: list[str] | None = None,
     status: str | None = "active",
     available_views: list[str] | None = None,
@@ -84,25 +84,11 @@ def _query(
         "id": query_id,
         "name": name,
         "namespace": {"directory": namespace},
-        "source_path": source_path,
+        "origin": origin,
         "tags": tags or [],
         "status": status,
         "available_views": available_views or ["tabular"],
     }
-
-
-# ── Pure helpers (D6, D7) ──────────────────────────────────────────────
-
-
-def test_system_ids_derived_from_source_path():
-    """System ids are derived from the API items without re-parsing YAML."""
-    items = [
-        {"id": "github/a", "source_path": "queries_catalog/github/a.yaml"},
-        {"id": "github/b", "source_path": "queries_catalog/user_defined/github/b.yaml"},
-        {"id": "jira/c", "source_path": "queries_catalog/jira/c.yaml"},
-    ]
-    system_ids = library_callbacks._system_ids_from_items(items)
-    assert system_ids == ["github/a", "jira/c"]
 
 
 # ── Static table skeleton ──────────────────────────────────────────────
@@ -121,7 +107,7 @@ def test_table_skeleton_has_headers_and_empty_body():
         "Default View",
         "Parameters",
         "Views",
-        "Source",
+        "Origin",
         "Actions",
     ):
         assert header in rendered

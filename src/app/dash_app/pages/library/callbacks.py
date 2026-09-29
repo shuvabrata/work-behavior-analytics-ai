@@ -25,31 +25,15 @@ def _get_api_base_url() -> str:
     return os.getenv("API_BASE_URL", "http://localhost:8000")
 
 
-def _system_ids_from_items(items: list[dict[str, Any]]) -> list[str]:
-    """Derive the system-only query ids from the catalog API response.
-
-    A row is user-defined iff its ``source_path`` lives under
-    ``user_defined/``. Everything else is a system query. This avoids a
-    redundant re-parse of the YAML catalog (which was the source of a
-    multi-second page-load delay).
-    """
-    return sorted(
-        item["id"]
-        for item in items
-        if "user_defined/" not in (item.get("source_path") or "")
-    )
-
-
 @callback(
     Output("library-store", "data"),
     Output("library-namespaces-store", "data"),
-    Output("library-system-ids-store", "data"),
     Input("url", "pathname"),
 )
-def load_library(pathname: str | None) -> tuple[Any, Any, Any]:
-    """Load the catalog, namespaces, and system ids when the page mounts."""
+def load_library(pathname: str | None) -> tuple[Any, Any]:
+    """Load the catalog and namespaces when the page mounts."""
     if pathname not in ("/app/library", "/app/library/"):
-        return no_update, no_update, no_update
+        return no_update, no_update
 
     api_base = _get_api_base_url()
     try:
@@ -61,15 +45,12 @@ def load_library(pathname: str | None) -> tuple[Any, Any, Any]:
             f"{api_base}/api/v1/queries/catalog/namespaces", timeout=TIMEOUT_SECONDS
         )
         ns_resp.raise_for_status()
-        items = catalog_resp.json().get("items", [])
-        system_ids = _system_ids_from_items(items)
         return (
-            items,
+            catalog_resp.json().get("items", []),
             ns_resp.json().get("items", []),
-            system_ids,
         )
     except requests.exceptions.RequestException:
-        return [], [], []
+        return [], []
 
 
 @callback(
@@ -122,7 +103,7 @@ clientside_callback(
             var parts = [
                 q.name, q.id, q.summary, q.owner, q.status, q.default_view,
                 (q.tags || []).join(' '),
-                (q.source_path || '').indexOf('user_defined/') !== -1 ? 'Custom' : 'Built-in'
+                q.origin === 'builtin' ? 'Built-in' : (q.origin === 'override' ? 'Overridden' : 'Custom')
             ];
             return parts.join(' ').toLowerCase();
         }
@@ -137,7 +118,6 @@ clientside_callback(
             var visible = nsMatch && searchMatch;
             if (visible) anyVisible = true;
 
-            var isUser = (q.source_path || '').indexOf('user_defined/') !== -1;
             // "active" is the common/default status, so it stays as plain text;
             // the non-default statuses are highlighted with a badge so colours
             // draw the eye to rows that need attention.
@@ -157,12 +137,14 @@ clientside_callback(
             if (!viewsHtml) viewsHtml = '&mdash;';
             var paramCount = (q.parameters || []).length;
             var defaultView = q.default_view || '&mdash;';
-            // "Custom" rows are highlighted with a badge (matching the "env"
-            // badge in Settings -> Runtime Settings, which uses text-bg-info);
-            // "Built-in" rows stay as plain text.
-            var source = isUser
-                ? '<span class="badge text-bg-info" style="font-size:12px">Custom</span>'
-                : 'Built-in';
+            // "Built-in" rows stay as plain text; "Overridden" and "Custom"
+            // rows are highlighted with a badge so colours draw the eye to
+            // user-modified queries (matching the "env" badge in Settings ->
+            // Runtime Settings, which uses text-bg-info).
+            var origin = q.origin || 'builtin';
+            var source = origin === 'builtin'
+                ? 'Built-in'
+                : '<span class="badge text-bg-info" style="font-size:12px">' + (origin === 'override' ? 'Overridden' : 'Custom') + '</span>';
             // The Edit button navigates directly via onclick. It is a plain
             // HTML button (not a Dash component), so Dash has no n_clicks for
             // it — relying on a children-input callback would never fire

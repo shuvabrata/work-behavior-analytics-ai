@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 CatalogView = Literal["tabular", "graph"]
 CatalogStatus = Literal["active", "draft", "deprecated"]
+CatalogOrigin = Literal["builtin", "override", "custom"]
 _SAFE_ID_SEGMENT = re.compile(r"^[a-z0-9][a-z0-9_]*$")
 
 
@@ -59,6 +60,7 @@ class CatalogQuery(BaseModel):
     owner: str | None = Field(default=None, min_length=1)
     status: CatalogStatus | None = None
     source_path: str
+    origin: CatalogOrigin = "builtin"
 
     model_config = ConfigDict(extra="forbid")
 

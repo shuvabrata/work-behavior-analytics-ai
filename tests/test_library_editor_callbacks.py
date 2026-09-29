@@ -87,6 +87,7 @@ def _query_payload() -> dict:
         "queries": {"tabular": "MATCH (n) RETURN n LIMIT 10"},
         "default_view": "tabular",
         "parameters": [],
+        "origin": "builtin",
     }
 
 
@@ -353,6 +354,7 @@ def test_e1_editor_loads_query(monkeypatch):
         "id": "github/top_committers",
         "namespace": "github",
         "slug": "top_committers",
+        "origin": "builtin",
     }
     assert result[1] == "Top Committers"
     assert result[7] == "MATCH (n) RETURN n LIMIT 10"
@@ -563,11 +565,11 @@ def test_e7_test_button_disabled_when_empty(monkeypatch):
     assert "Enter a query" in str(result)
 
 
-# ── E8: Reset → DELETE → form reloads ──────────────────────────────────
+# ── E8: Destructive action → DELETE → reset or navigate ───────────────
 
 
 def test_e8_reset_deletes_and_reloads(monkeypatch):
-    """Reset issues DELETE then reloads the form with system data."""
+    """Resetting an override issues DELETE then reloads the form with system data."""
     fake = _FakeRequests(
         [
             _FakeResponse({"message": "Query override deleted"}, 200),
@@ -576,9 +578,9 @@ def test_e8_reset_deletes_and_reloads(monkeypatch):
     )
     monkeypatch.setattr(editor, "requests", fake)
 
-    result = editor.reset_query(
+    result = editor.destructive_action(
         1,
-        {"mode": "edit", "id": "github/top_committers"},
+        {"mode": "edit", "id": "github/top_committers", "origin": "override"},
         "/app/library/edit/github/top_committers",
     )
 
@@ -589,7 +591,23 @@ def test_e8_reset_deletes_and_reloads(monkeypatch):
         "/api/v1/queries/catalog/github/top_committers"
     )
     assert result[1] == "Top Committers"
-    assert "reset to factory" in str(result[12]).lower()
+    assert "reset to factory" in str(result[13]).lower()
+
+
+def test_e8b_override_button_label_and_message():
+    """An override shows 'Reset to Factory' with a reset confirmation message."""
+    label, style = editor.update_destructive_button(
+        {"mode": "edit", "origin": "override"}
+    )
+    assert label == "Reset to Factory"
+    assert style["display"] != "none"
+
+    message, displayed = editor.confirm_destructive(
+        1, "Top Committers", {"mode": "edit", "origin": "override"}
+    )
+    assert displayed is True
+    assert "Reset" in message
+    assert "cannot be undone" in message
 
 
 # ── E9: Delete → confirm → DELETE → navigate to Library ───────────────
@@ -597,7 +615,9 @@ def test_e8_reset_deletes_and_reloads(monkeypatch):
 
 def test_e9_confirm_delete_shows_dialog():
     """Clicking Delete shows the confirmation dialog with the query name."""
-    message, displayed = editor.confirm_delete(1, "Top Committers", {"mode": "edit"})
+    message, displayed = editor.confirm_destructive(
+        1, "Top Committers", {"mode": "edit", "origin": "custom"}
+    )
     assert displayed is True
     assert "Top Committers" in message
     assert "cannot be undone" in message
@@ -608,16 +628,17 @@ def test_e9b_delete_issues_delete_and_navigates_to_library(monkeypatch):
     fake = _FakeRequests([_FakeResponse({"message": "Query override deleted"}, 200)])
     monkeypatch.setattr(editor, "requests", fake)
 
-    pathname, feedback = editor.delete_query(
+    result = editor.destructive_action(
         1,
+        {"mode": "edit", "id": "github/top_committers", "origin": "custom"},
         "/app/library/edit/github/top_committers",
     )
 
     assert fake.delete_calls[0]["url"].endswith(
         "/api/v1/queries/catalog/github/top_committers"
     )
-    assert pathname == "/app/library"
-    assert feedback is None or "Delete failed" not in str(feedback)
+    assert result[12] == "/app/library"
+    assert result[13] is None or "Delete failed" not in str(result[13])
 
 
 def test_e9c_delete_failure_shows_error(monkeypatch):
@@ -627,13 +648,38 @@ def test_e9c_delete_failure_shows_error(monkeypatch):
     )
     monkeypatch.setattr(editor, "requests", fake)
 
-    pathname, feedback = editor.delete_query(
+    result = editor.destructive_action(
         1,
+        {"mode": "edit", "id": "github/top_committers", "origin": "custom"},
         "/app/library/edit/github/top_committers",
     )
 
     assert fake.delete_calls[0]["url"].endswith(
         "/api/v1/queries/catalog/github/top_committers"
     )
-    assert pathname is not None and pathname != "/app/library"
-    assert "Delete failed" in str(feedback)
+    assert result[12] is None or result[12] != "/app/library"
+    assert "Delete failed" in str(result[13])
+
+
+def test_e9d_custom_button_label_and_message():
+    """A brand-new custom query shows 'Delete' with a delete confirmation message."""
+    label, style = editor.update_destructive_button(
+        {"mode": "edit", "origin": "custom"}
+    )
+    assert label == "Delete"
+    assert style["display"] != "none"
+
+    message, displayed = editor.confirm_destructive(
+        1, "My Query", {"mode": "edit", "origin": "custom"}
+    )
+    assert displayed is True
+    assert "Delete" in message
+    assert "cannot be undone" in message
+
+
+def test_e9e_builtin_hides_destructive_button():
+    """A pure built-in shows no destructive button."""
+    label, style = editor.update_destructive_button(
+        {"mode": "edit", "origin": "builtin"}
+    )
+    assert style["display"] == "none"

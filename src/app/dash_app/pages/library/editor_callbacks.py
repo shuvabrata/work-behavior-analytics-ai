@@ -510,7 +510,7 @@ def toggle_save_as_modal(
     triggered = callback_context.triggered_id
     if triggered == "editor-save-as":
         options = [
-            {"label": ns.get("name") or ns.get("directory"), "value": ns.get("directory")}
+            {"label": str(ns.get("name") or ns.get("directory")), "value": str(ns.get("directory"))}
             for ns in (namespaces or [])
         ]
         options.append({"label": "+ New namespace…", "value": "__new__"})

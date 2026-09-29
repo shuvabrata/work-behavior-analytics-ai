@@ -1673,6 +1673,11 @@ input::placeholder {
     border-color: var(--color-border) !important;
 }
 
+.theme-executive-dark .modal label,
+.theme-executive-dark .modal .form-label {
+    color: var(--color-text-dark) !important;
+}
+
 .theme-executive-dark .modal .form-control:focus,
 .theme-executive-dark .modal .form-select:focus {
     background-color: var(--color-input-background) !important;
@@ -1684,6 +1689,17 @@ input::placeholder {
 .theme-executive-dark .modal .form-control::placeholder {
     color: var(--color-gray-medium) !important;
     opacity: 0.8;
+}
+
+/* dcc.Dropdown (react-select) inside modals — the control and placeholder
+   render inside the modal DOM, so they need modal-scoped overrides */
+.theme-executive-dark .modal .Select-placeholder {
+    color: var(--color-text-dark) !important;
+}
+
+.theme-executive-dark .modal .Select-control {
+    background-color: var(--color-input-background) !important;
+    border-color: var(--color-border) !important;
 }
 
 /* Close (×) button */

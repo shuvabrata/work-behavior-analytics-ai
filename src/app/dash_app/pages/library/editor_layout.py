@@ -415,7 +415,7 @@ def _render_action_bar() -> html.Div:
 
 
 def _render_save_as_modal() -> dbc.Modal:
-    """Save As modal with namespace dropdown and slug input."""
+    """Save As modal with namespace dropdown and key input."""
     return dbc.Modal(
         [
             dbc.ModalHeader(dbc.ModalTitle("Save As")),
@@ -432,11 +432,11 @@ def _render_save_as_modal() -> dbc.Modal:
                         placeholder="New namespace name…",
                         style={"display": "none", "marginTop": SPACING_XSMALL},
                     ),
-                    dbc.Label("Slug", html_for="editor-save-as-slug", className="mt-2"),
+                    dbc.Label("Key", html_for="editor-save-as-slug", className="mt-2"),
                     dbc.Input(
                         id="editor-save-as-slug",
                         type="text",
-                        placeholder="my_query_slug",
+                        placeholder="my_query_key",
                     ),
                 ]
             ),

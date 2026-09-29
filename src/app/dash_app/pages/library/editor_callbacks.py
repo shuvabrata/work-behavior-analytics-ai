@@ -446,14 +446,14 @@ def save_query(
     mode, namespace, slug = _parse_route(pathname)
     if mode == "new":
         return create_alert(
-            "Use Save As to create a new query with a namespace and slug.",
+            "Use Save As to create a new query with a namespace and key.",
             color="warning",
             class_name="mb-3",
         )
 
     if not namespace or not slug:
         return create_alert(
-            "Missing namespace or slug.", color="danger", class_name="mb-3"
+            "Missing namespace or key.", color="danger", class_name="mb-3"
         )
 
     parameters = _collect_parameters(param_count or 0, field_values, field_ids)
@@ -584,7 +584,7 @@ def save_as_query(
     if not namespace or not slug:
         return (
             create_alert(
-                "Namespace and slug are required.", color="warning", class_name="mb-3"
+                "Namespace and key are required.", color="warning", class_name="mb-3"
             ),
             True,
         )
@@ -750,7 +750,7 @@ def update_identifier(route: dict[str, Any] | None) -> Any:
         ),
         html.Span("·", style={"margin": "0 4px", "color": COLOR_GRAY_MEDIUM}),
         html.Span(
-            ["Id: ", html.Strong(slug)],
+            ["Key: ", html.Strong(slug)],
             style={"whiteSpace": "nowrap"},
         ),
     ]
@@ -839,7 +839,7 @@ def destructive_action(
             no_update,
             no_update,
             create_alert(
-                "Cannot delete: missing namespace or slug.",
+                "Cannot delete: missing namespace or key.",
                 color="danger",
                 class_name="mb-3",
             ),

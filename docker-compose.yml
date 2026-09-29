@@ -72,6 +72,10 @@ services:
       - ./.env:/app/.env:ro
       # Mount logs directory
       - ./logs/app:/var/log/app
+      # Persist user-defined query catalog overrides across container rebuilds.
+      # Only the user_defined/ subtree is mounted so the system catalog stays
+      # baked in the image and is refreshed on every image update.
+      - catalog_user_defined:/app/queries_catalog/user_defined
     networks:
       - wba-ai-network
     healthcheck:
@@ -294,3 +298,4 @@ volumes:
   neo4j_import:
   neo4j_plugins:
   rabbitmq_data:
+  catalog_user_defined:

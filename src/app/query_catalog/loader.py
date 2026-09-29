@@ -10,7 +10,9 @@ from app.api.graph.v1.query import validate_read_only_query
 
 from .model import CatalogNamespace, CatalogParameter, CatalogQuery, CatalogView
 
-_SAFE_ID_SEGMENT = re.compile(r"^[a-z0-9][a-z0-9_]*$")
+SAFE_ID_SEGMENT = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_]*$")
+
+USER_DEFINED_DIR = "user_defined"
 
 
 class CatalogLoadError(ValueError):
@@ -59,6 +61,46 @@ def load_namespaces(catalog_dir: str | Path | None = None) -> list[CatalogNamesp
         seen_directories.add(namespace.directory)
         namespaces.append(namespace)
 
+    # Merge user-defined namespaces declared in user_defined/catalog.yaml.
+    user_catalog_file = base_dir / USER_DEFINED_DIR / "catalog.yaml"
+    if user_catalog_file.exists():
+        user_data = _load_yaml_mapping(user_catalog_file)
+        raw_user_namespaces = user_data.get("namespaces")
+        if not isinstance(raw_user_namespaces, list) or not raw_user_namespaces:
+            raise CatalogLoadError(
+                f"{user_catalog_file} must define a non-empty namespaces list"
+            )
+
+        for raw_namespace in raw_user_namespaces:
+            if not isinstance(raw_namespace, dict):
+                raise CatalogLoadError(
+                    f"{user_catalog_file} namespace must be a mapping"
+                )
+
+            order = len(namespaces)
+            try:
+                namespace = CatalogNamespace(
+                    **raw_namespace, order=order, is_user_defined=True
+                )
+            except ValueError as exc:
+                raise CatalogLoadError(
+                    f"Invalid user namespace in {user_catalog_file}: {exc}"
+                ) from exc
+
+            if namespace.directory in seen_directories:
+                raise CatalogLoadError(
+                    f"Duplicate namespace directory: {namespace.directory}"
+                )
+
+            namespace_dir = base_dir / USER_DEFINED_DIR / namespace.directory
+            if not namespace_dir.is_dir():
+                raise CatalogLoadError(
+                    f"User namespace directory does not exist: {namespace_dir}"
+                )
+
+            seen_directories.add(namespace.directory)
+            namespaces.append(namespace)
+
     return namespaces
 
 
@@ -74,6 +116,8 @@ def load_catalog(
     seen_ids: set[str] = set()
 
     for namespace in namespaces:
+        if namespace.is_user_defined:
+            continue
         namespace_dir = base_dir / namespace.directory
         if not namespace_dir.is_dir():
             raise CatalogLoadError(f"Namespace directory does not exist: {namespace_dir}")
@@ -91,6 +135,49 @@ def load_catalog(
 
             seen_ids.add(query.id)
             queries.append(query)
+
+    # Merge user-defined queries over the system list. A user query with the
+    # same id REPLACES the system query; a new id is appended. The system
+    # `seen_ids` guard must not run against user ids — replace semantics
+    # supersede it.
+    #
+    # User overrides may live in a system namespace (e.g. `user_defined/github/`)
+    # or in a custom user namespace (e.g. `user_defined/my_queries/`), so we
+    # scan every namespace's `user_defined/` subdirectory.
+    user_dir = base_dir / USER_DEFINED_DIR
+    if user_dir.is_dir():
+        user_queries: list[CatalogQuery] = []
+        user_seen_ids: set[str] = set()
+        for namespace in namespaces:
+            namespace_dir = user_dir / namespace.directory
+            if not namespace_dir.is_dir():
+                continue
+            for query_file in sorted(namespace_dir.glob("*.yaml")):
+                query = _load_query_file(
+                    query_file=query_file,
+                    namespace=namespace,
+                    base_dir=base_dir,
+                    validate_cypher=validate_cypher,
+                )
+                if query.id in user_seen_ids:
+                    raise CatalogLoadError(
+                        f"Duplicate catalog query id: {query.id}"
+                    )
+                user_seen_ids.add(query.id)
+                user_queries.append(query)
+
+        by_id = {query.id: query for query in queries}
+        for user_query in user_queries:
+            # A user query whose id matches a system query is an override of
+            # that built-in; a new id is a brand-new custom query. The loader
+            # is the single place that knows this, so it computes the origin
+            # here rather than leaking path logic to API consumers.
+            if user_query.id in by_id:
+                user_query = user_query.model_copy(
+                    update={"origin": "override"}
+                )
+            by_id[user_query.id] = user_query
+        queries = list(by_id.values())
 
     return sorted(queries, key=lambda query: (query.namespace.order, query.name.lower()))
 
@@ -133,7 +220,7 @@ def _load_query_file(
         queries[view] = query_text
 
     slug = query_file.stem
-    if not _SAFE_ID_SEGMENT.fullmatch(slug):
+    if not SAFE_ID_SEGMENT.fullmatch(slug):
         raise CatalogLoadError(f"{query_file} filename must be a path-safe slug")
 
     catalog_id = f"{namespace.directory}/{slug}"
@@ -162,6 +249,11 @@ def _load_query_file(
             owner=raw_query.get("owner"),
             status=raw_query.get("status"),
             source_path=str(query_file.relative_to(base_dir.parent)),
+            origin=(
+                "custom"
+                if query_file.is_relative_to(base_dir / USER_DEFINED_DIR)
+                else "builtin"
+            ),
         )
     except ValueError as exc:
         raise CatalogLoadError(f"Invalid query file {query_file}: {exc}") from exc

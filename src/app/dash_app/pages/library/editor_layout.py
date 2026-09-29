@@ -99,6 +99,31 @@ def get_editor_layout() -> html.Div:
     )
 
 
+def _render_collapsible_header(label: str, toggle_id: str) -> html.Div:
+    """Return a collapsible section header with chevron icon.
+
+    Args:
+        label: The section label text (e.g. ``"Metadata"``, ``"Queries"``).
+        toggle_id: The Dash component id for the clickable toggle div.
+    """
+    return html.Div(
+        [
+            html.I(className="fas fa-chevron-down me-1", style={"fontSize": "11px"}),
+            label,
+        ],
+        id=toggle_id,
+        className="collapse-toggle-subtle",
+        style={
+            "fontSize": "11px",
+            "fontWeight": FONT_WEIGHT_SEMIBOLD,
+            "color": COLOR_GRAY_DARK,
+            "marginBottom": SPACING_XSMALL,
+            "cursor": "pointer",
+            "userSelect": "none",
+        },
+    )
+
+
 def _render_metadata_section() -> html.Div:
     """Metadata section card (name, description, summary, owner, status, tags).
 
@@ -106,22 +131,7 @@ def _render_metadata_section() -> html.Div:
     """
     return html.Div(
         [
-            html.Div(
-                [
-                    html.I(className="fas fa-chevron-down me-1", style={"fontSize": "11px"}),
-                    "Metadata",
-                ],
-                id="editor-metadata-collapse-toggle",
-                className="collapse-toggle-subtle",
-                style={
-                    "fontSize": "11px",
-                    "fontWeight": FONT_WEIGHT_SEMIBOLD,
-                    "color": COLOR_GRAY_DARK,
-                    "marginBottom": SPACING_XSMALL,
-                    "cursor": "pointer",
-                    "userSelect": "none",
-                },
-            ),
+            _render_collapsible_header("Metadata", "editor-metadata-collapse-toggle"),
             dbc.Collapse(
                 id="editor-metadata-collapse",
                 is_open=True,
@@ -245,22 +255,7 @@ def _render_queries_section() -> html.Div:
     """
     return html.Div(
         [
-            html.Div(
-                [
-                    html.I(className="fas fa-chevron-down me-1", style={"fontSize": "11px"}),
-                    "Queries",
-                ],
-                id="editor-queries-collapse-toggle",
-                className="collapse-toggle-subtle",
-                style={
-                    "fontSize": "11px",
-                    "fontWeight": FONT_WEIGHT_SEMIBOLD,
-                    "color": COLOR_GRAY_DARK,
-                    "marginBottom": SPACING_XSMALL,
-                    "cursor": "pointer",
-                    "userSelect": "none",
-                },
-            ),
+            _render_collapsible_header("Queries", "editor-queries-collapse-toggle"),
             dbc.Collapse(
                 id="editor-queries-collapse",
                 is_open=True,

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 from typing import Any
 
 import requests
@@ -16,13 +15,9 @@ from dash import (
 from dash.exceptions import PreventUpdate
 
 from app.runtime_settings import runtime_settings
+from ._utils import get_api_base_url
 
 TIMEOUT_SECONDS = runtime_settings.get_int("HTTP_REQUEST_TIMEOUT")
-
-
-def _get_api_base_url() -> str:
-    """Return the configured API base URL (falls back to localhost)."""
-    return os.getenv("API_BASE_URL", "http://localhost:8000")
 
 
 @callback(
@@ -35,7 +30,7 @@ def load_library(pathname: str | None) -> tuple[Any, Any]:
     if pathname not in ("/app/library", "/app/library/"):
         return no_update, no_update
 
-    api_base = _get_api_base_url()
+    api_base = get_api_base_url()
     try:
         catalog_resp = requests.get(
             f"{api_base}/api/v1/queries/catalog", timeout=TIMEOUT_SECONDS

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 from typing import Any
 
 import requests
@@ -25,14 +24,15 @@ from app.dash_app.pages.graph.utils import (
     create_table_display,
 )
 from app.dash_app.styles import COLOR_GRAY_MEDIUM
+from ._utils import get_api_base_url
 from .editor_layout import render_parameter_row
 
 TIMEOUT_SECONDS = runtime_settings.get_int("HTTP_REQUEST_TIMEOUT")
 
-
-def _get_api_base_url() -> str:
-    """Return the configured API base URL (falls back to localhost)."""
-    return os.getenv("API_BASE_URL", "http://localhost:8000")
+# Sentinel tuple for the 13 no_update outputs shared by destructive_action's
+# error/early-return paths. Using a named constant avoids repeating no_update
+# 13 times in each of 6 return paths.
+_NO_CHANGE_13: tuple[Any, ...] = (no_update,) * 13
 
 
 def _parse_route(pathname: str | None) -> tuple[str, str | None, str | None]:
@@ -127,26 +127,10 @@ def _collect_parameters(
 ) -> list[dict[str, Any]]:
     """Collect parameter rows from the pattern-matched field inputs.
 
-    Args:
-        param_count: Number of parameter rows currently rendered.
-        field_values: The ``value`` list from the ALL pattern-matched field
-            inputs.
-        field_ids: The parallel ``id`` list from the same pattern-matched
-            inputs, used to read each value's field name and row index. This
-            is robust to Dash's wildcard ordering, unlike positional math.
+    Delegates grouping to :func:`_group_field_values`, then filters and
+    orders rows by index. Rows without a ``name`` are dropped.
     """
-    rows: dict[str, dict[str, Any]] = {}
-    for value, input_id in zip(field_values, field_ids):
-        if not isinstance(input_id, dict):
-            continue  # type: ignore[unreachable]
-        field = input_id["field"]
-        index = input_id["index"]
-        row = rows.setdefault(index, {})
-        if field == "required":
-            row[field] = bool(value)
-        elif value:
-            row[field] = value
-
+    rows = _group_field_values(field_values, field_ids)
     parameters: list[dict[str, Any]] = []
     for row_index in range(param_count):
         param_row = rows.get(str(row_index))
@@ -163,7 +147,7 @@ def _collect_parameters(
 def init_editor(pathname: str | None) -> tuple[str, Any]:
     """Record the route mode and load namespaces on mount."""
     mode, _, _ = _parse_route(pathname)
-    api_base = _get_api_base_url()
+    api_base = get_api_base_url()
     try:
         ns_resp = requests.get(
             f"{api_base}/api/v1/queries/catalog/namespaces", timeout=TIMEOUT_SECONDS
@@ -175,6 +159,13 @@ def init_editor(pathname: str | None) -> tuple[str, Any]:
     return mode, namespaces
 
 
+def _toggle_collapse(n_clicks: int | None, is_open: bool) -> bool:
+    """Shared toggle logic for collapsible editor sections."""
+    if not n_clicks:
+        raise PreventUpdate
+    return not is_open
+
+
 @callback(
     Output("editor-metadata-collapse", "is_open"),
     Input("editor-metadata-collapse-toggle", "n_clicks"),
@@ -183,9 +174,7 @@ def init_editor(pathname: str | None) -> tuple[str, Any]:
 )
 def toggle_metadata_collapse(n_clicks: int | None, is_open: bool) -> bool:
     """Toggle the Metadata collapsible section."""
-    if not n_clicks:
-        raise PreventUpdate
-    return not is_open
+    return _toggle_collapse(n_clicks, is_open)
 
 
 @callback(
@@ -196,9 +185,7 @@ def toggle_metadata_collapse(n_clicks: int | None, is_open: bool) -> bool:
 )
 def toggle_queries_collapse(n_clicks: int | None, is_open: bool) -> bool:
     """Toggle the Queries collapsible section."""
-    if not n_clicks:
-        raise PreventUpdate
-    return not is_open
+    return _toggle_collapse(n_clicks, is_open)
 
 
 @callback(
@@ -265,7 +252,7 @@ def load_query(
             ),
         )
 
-    api_base = _get_api_base_url()
+    api_base = get_api_base_url()
     try:
         resp = requests.get(
             f"{api_base}/api/v1/queries/catalog/{namespace}/{slug}",
@@ -470,7 +457,7 @@ def save_query(
         parameters,
     )
 
-    api_base = _get_api_base_url()
+    api_base = get_api_base_url()
     try:
         resp = requests.put(
             f"{api_base}/api/v1/queries/catalog/{namespace}/{slug}",
@@ -603,7 +590,7 @@ def save_as_query(
         parameters,
     )
 
-    api_base = _get_api_base_url()
+    api_base = get_api_base_url()
     try:
         resp = requests.put(
             f"{api_base}/api/v1/queries/catalog/{namespace}/{slug}",
@@ -649,7 +636,7 @@ def _run_test(query_text: str | None) -> Any:
         "query": query_text.strip(),
         "view": "auto",
     }
-    api_base = _get_api_base_url()
+    api_base = get_api_base_url()
     try:
         resp = requests.post(
             f"{api_base}/api/v1/graph/execute",
@@ -825,19 +812,7 @@ def destructive_action(
     _, namespace, slug = _parse_route(pathname)
     if not namespace or not slug:
         return (
-            no_update,
-            no_update,
-            no_update,
-            no_update,
-            no_update,
-            no_update,
-            no_update,
-            no_update,
-            no_update,
-            no_update,
-            no_update,
-            no_update,
-            no_update,
+            *_NO_CHANGE_13,
             create_alert(
                 "Cannot delete: missing namespace or key.",
                 color="danger",
@@ -845,7 +820,7 @@ def destructive_action(
             ),
         )
 
-    api_base = _get_api_base_url()
+    api_base = get_api_base_url()
     try:
         resp = requests.delete(
             f"{api_base}/api/v1/queries/catalog/{namespace}/{slug}",
@@ -854,56 +829,21 @@ def destructive_action(
         if resp.status_code not in (200, 204):
             detail = resp.json().get("detail", "Unknown error")
             return (
-                no_update,
-                no_update,
-                no_update,
-                no_update,
-                no_update,
-                no_update,
-                no_update,
-                no_update,
-                no_update,
-                no_update,
-                no_update,
-                no_update,
-                no_update,
+                *_NO_CHANGE_13,
                 create_alert(
                     f"Delete failed: {detail}", color="danger", class_name="mb-3"
                 ),
             )
     except requests.exceptions.RequestException as exc:
         return (
-            no_update,
-            no_update,
-            no_update,
-            no_update,
-            no_update,
-            no_update,
-            no_update,
-            no_update,
-            no_update,
-            no_update,
-            no_update,
-            no_update,
-            no_update,
+            *_NO_CHANGE_13,
             create_alert(f"Delete failed: {exc}", color="danger", class_name="mb-3"),
         )
 
     # A brand-new custom query has no factory version — navigate back.
     if origin != "override":
         return (
-            no_update,
-            no_update,
-            no_update,
-            no_update,
-            no_update,
-            no_update,
-            no_update,
-            no_update,
-            no_update,
-            no_update,
-            no_update,
-            no_update,
+            *(no_update,) * 12,
             "/app/library",
             no_update,
         )
@@ -916,19 +856,7 @@ def destructive_action(
         )
         if get_resp.status_code != 200:
             return (
-                no_update,
-                no_update,
-                no_update,
-                no_update,
-                no_update,
-                no_update,
-                no_update,
-                no_update,
-                no_update,
-                no_update,
-                no_update,
-                no_update,
-                no_update,
+                *_NO_CHANGE_13,
                 create_alert(
                     "Override reset. Reload the page to see factory defaults.",
                     color="success",
@@ -940,19 +868,7 @@ def destructive_action(
         query = get_resp.json()
     except requests.exceptions.RequestException as exc:
         return (
-            no_update,
-            no_update,
-            no_update,
-            no_update,
-            no_update,
-            no_update,
-            no_update,
-            no_update,
-            no_update,
-            no_update,
-            no_update,
-            no_update,
-            no_update,
+            *_NO_CHANGE_13,
             create_alert(f"Reset failed: {exc}", color="danger", class_name="mb-3"),
         )
 

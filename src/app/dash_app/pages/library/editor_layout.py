@@ -425,6 +425,7 @@ def _render_save_as_modal() -> dbc.Modal:
                     dcc.Dropdown(
                         id="editor-save-as-namespace",
                         placeholder="Select namespace",
+                        searchable=False,
                     ),
                     dbc.Input(
                         id="editor-save-as-namespace-custom",

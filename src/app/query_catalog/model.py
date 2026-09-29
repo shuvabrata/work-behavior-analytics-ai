@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 CatalogView = Literal["tabular", "graph"]
 CatalogStatus = Literal["active", "draft", "deprecated"]
 CatalogOrigin = Literal["builtin", "override", "custom"]
-_SAFE_ID_SEGMENT = re.compile(r"^[a-z0-9][a-z0-9_]*$")
+_SAFE_ID_SEGMENT = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_]*$")
 
 
 class CatalogNamespace(BaseModel):

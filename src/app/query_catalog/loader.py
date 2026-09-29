@@ -10,7 +10,7 @@ from app.api.graph.v1.query import validate_read_only_query
 
 from .model import CatalogNamespace, CatalogParameter, CatalogQuery, CatalogView
 
-SAFE_ID_SEGMENT = re.compile(r"^[a-z0-9][a-z0-9_]*$")
+SAFE_ID_SEGMENT = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_]*$")
 
 USER_DEFINED_DIR = "user_defined"
 

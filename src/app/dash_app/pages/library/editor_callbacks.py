@@ -430,14 +430,7 @@ def save_query(
     if not n_clicks:
         raise PreventUpdate
 
-    mode, namespace, slug = _parse_route(pathname)
-    if mode == "new":
-        return create_alert(
-            "Use Save As to create a new query with a namespace and key.",
-            color="warning",
-            class_name="mb-3",
-        )
-
+    _, namespace, slug = _parse_route(pathname)
     if not namespace or not slug:
         return create_alert(
             "Missing namespace or key.", color="danger", class_name="mb-3"
@@ -715,10 +708,26 @@ def update_destructive_button(route: dict[str, Any] | None) -> tuple[str, dict[s
 
 
 @callback(
+    Output("editor-save", "style"),
+    Input("editor-route", "data"),
+)
+def update_save_button(route: dict[str, Any] | None) -> dict[str, str]:
+    """Show the Save button only on the edit route after the query is loaded.
+
+    The button starts hidden in the layout to avoid a flash on the new-query
+    page. It is revealed only when the route store contains an edit-mode dict
+    (set by ``load_query``), which means a namespace and slug are available.
+    """
+    if isinstance(route, dict) and route.get("mode") == "edit":
+        return {}
+    return {"display": "none"}
+
+
+@callback(
     Output("editor-identifier", "children"),
     Input("editor-route", "data"),
 )
-def update_identifier(route: dict[str, Any] | None) -> Any:
+def update_idtifier(route: dict[str, Any] | None) -> Any:
     """Show namespace and id in the action bar center.
 
     For new queries the identifier is empty. For edit mode it reads the

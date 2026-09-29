@@ -467,7 +467,8 @@ def test_e2_save_puts_to_current_id(monkeypatch):
 
 
 def test_e2b_save_on_new_route_warns(monkeypatch):
-    """Save on the new route warns to use Save As instead."""
+    """Save on the new route is unreachable (button hidden), but if triggered
+    it falls through to the missing-namespace/key error."""
     fake = _FakeRequests([])
     monkeypatch.setattr(editor, "requests", fake)
 
@@ -491,7 +492,7 @@ def test_e2b_save_on_new_route_warns(monkeypatch):
     )
 
     assert fake.put_calls == []
-    assert "Save As" in str(feedback)
+    assert "Missing namespace or key" in str(feedback)
 
 
 # ── E3: Save As → PUT to new id ────────────────────────────────────────

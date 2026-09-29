@@ -275,6 +275,20 @@ input::placeholder {
 }
 
 /* ============================================================================= */
+/* Query Editor — tighter form controls to reduce wasted vertical space         */
+/* ============================================================================= */
+
+.editor-form .form-control {
+    padding-top: 4px !important;
+    padding-bottom: 4px !important;
+}
+
+.editor-form textarea.form-control {
+    padding-top: 4px !important;
+    padding-bottom: 4px !important;
+}
+
+/* ============================================================================= */
 /* react-select Dropdown Styling (dcc.Dropdown) — light theme defaults          */
 /* ============================================================================= */
 

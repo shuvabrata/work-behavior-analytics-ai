@@ -93,6 +93,7 @@ def get_editor_layout() -> html.Div:
                     _render_save_as_modal(),
                     _render_test_results(),
                 ],
+                className="editor-form",
                 style={**CARD_CONTAINER_STYLE, "paddingTop": SPACING_XSMALL},
             ),
         ],
@@ -356,7 +357,7 @@ def _render_action_bar() -> html.Div:
         [
             html.Div(
                 [
-                    dbc.Button("Save", id="editor-save", color="primary", size="sm", className="me-2"),
+                    dbc.Button("Save", id="editor-save", color="primary", size="sm", className="me-2", style={"display": "none"}),
                     dbc.Button("Save As", id="editor-save-as", color="primary", outline=True, size="sm", className="me-2"),
                 ],
                 style={

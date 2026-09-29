@@ -234,6 +234,65 @@ def test_collect_parameters_drops_row_without_name():
     ]
 
 
+# ── _group_field_values: id-based grouping ─────────────────────────────
+
+
+def test_group_field_values_single_row():
+    """A single row groups all fields under its index."""
+    ids = _param_ids(0)
+    values = ["owner", "Owner", "string", ["required"], "e.g. shuva", "Repo owner", "GH_OWNER"]
+    result = editor._group_field_values(values, ids)
+
+    assert result == {
+        "0": {
+            "name": "owner",
+            "label": "Owner",
+            "type": "string",
+            "required": True,
+            "placeholder": "e.g. shuva",
+            "description": "Repo owner",
+            "env_var": "GH_OWNER",
+        }
+    }
+
+
+def test_group_field_values_multiple_rows():
+    """Two rows group independently by index."""
+    ids = _param_ids(0) + _param_ids(1)
+    values = (
+        ["owner", "Owner", "string", ["required"], "e.g. shuva", "Repo owner", "GH_OWNER"]
+        + ["repo", "Repo", "string", [], "e.g. shuvabrata", "Repo name", "GH_REPO"]
+    )
+    result = editor._group_field_values(values, ids)
+
+    assert result["0"]["name"] == "owner"
+    assert result["0"]["required"] is True
+    assert result["1"]["name"] == "repo"
+    assert result["1"]["required"] is False
+
+
+def test_group_field_values_empty_values_are_omitted():
+    """Empty string values are omitted from the row dict (truthiness check).
+
+    An empty list for ``required`` coerces to ``False`` via ``bool([])``,
+    so it still appears in the result.
+    """
+    ids = _param_ids(0)
+    values = ["owner", "", "", [], "", "", ""]
+    result = editor._group_field_values(values, ids)
+
+    assert result == {"0": {"name": "owner", "required": False}}
+
+
+def test_group_field_values_required_coercion():
+    """The checklist value is coerced to a bool, matching _collect_parameters."""
+    ids = _param_ids(0)
+    values = ["owner", "Owner", "string", [], "e.g. shuva", "Repo owner", "GH_OWNER"]
+    result = editor._group_field_values(values, ids)
+
+    assert result["0"]["required"] is False
+
+
 # ── Parameter add/remove: preserve existing row values ────────────────
 
 
@@ -683,3 +742,70 @@ def test_e9e_builtin_hides_destructive_button():
         {"mode": "edit", "origin": "builtin"}
     )
     assert style["display"] == "none"
+
+
+# ── Toggle callbacks ───────────────────────────────────────────────────
+
+
+def test_toggle_metadata_opens_when_closed():
+    """Clicking the toggle when closed opens the section."""
+    result = editor.toggle_metadata_collapse(1, False)
+    assert result is True
+
+
+def test_toggle_metadata_closes_when_open():
+    """Clicking the toggle when open closes the section."""
+    result = editor.toggle_metadata_collapse(1, True)
+    assert result is False
+
+
+def test_toggle_queries_opens_when_closed():
+    """Clicking the toggle when closed opens the section."""
+    result = editor.toggle_queries_collapse(1, False)
+    assert result is True
+
+
+def test_toggle_queries_closes_when_open():
+    """Clicking the toggle when open closes the section."""
+    result = editor.toggle_queries_collapse(1, True)
+    assert result is False
+
+
+# ── E1: load_query error paths ─────────────────────────────────────────
+
+
+def test_e1c_load_query_404_shows_error(monkeypatch):
+    """A 404 from the catalog endpoint surfaces an error alert."""
+    fake = _FakeRequests([_FakeResponse({"detail": "Catalog query not found"}, 404)])
+    monkeypatch.setattr(editor, "requests", fake)
+
+    result = editor.load_query("edit", "/app/library/edit/github/nonexistent")
+
+    # The feedback output (index 12) should contain an error alert.
+    feedback = result[12]
+    assert feedback is not None
+    assert "Failed to load query" in str(feedback)
+    # The form fields should be blank on error.
+    assert result[1] == ""
+
+
+def test_e1d_load_query_request_exception_shows_error(monkeypatch):
+    """A connection error surfaces an error alert.
+
+    Monkeypatches only ``requests.get`` (not the whole module) so that
+    ``except requests.exceptions.RequestException`` in the source still
+    resolves against the real ``requests`` module.
+    """
+    import requests as requests_lib
+
+    def _failing_get(url, timeout):
+        raise requests_lib.exceptions.ConnectionError("Connection refused")
+
+    monkeypatch.setattr(editor.requests, "get", _failing_get)
+
+    result = editor.load_query("edit", "/app/library/edit/github/top_committers")
+
+    feedback = result[12]
+    assert feedback is not None
+    assert "Failed to load query" in str(feedback)
+    assert result[1] == ""

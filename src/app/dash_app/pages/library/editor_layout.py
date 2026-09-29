@@ -15,6 +15,7 @@ from app.dash_app.styles import (
     FEATURE_CARD_STYLE,
     FEATURE_CARD_TITLE_STYLE,
     FONT_SANS,
+    FONT_SIZE_MEDIUM,
     FONT_SIZE_SMALL,
     FONT_SIZE_XSMALL,
     FONT_WEIGHT_SEMIBOLD,
@@ -370,6 +371,19 @@ def _render_action_bar() -> html.Div:
                 },
             ),
             html.Div(
+                id="editor-identifier",
+                style={
+                    "display": "flex",
+                    "alignItems": "center",
+                    "justifyContent": "center",
+                    "flex": 1,
+                    "fontFamily": FONT_SANS,
+                    "fontSize": FONT_SIZE_MEDIUM,
+                    "color": COLOR_GRAY_DARK,
+                    "gap": "12px",
+                },
+            ),
+            html.Div(
                 [
                     dbc.Button(
                         "Reset to Factory",
@@ -382,7 +396,6 @@ def _render_action_bar() -> html.Div:
                 style={
                     "display": "flex",
                     "alignItems": "center",
-                    "marginLeft": "auto",
                 },
             ),
         ],

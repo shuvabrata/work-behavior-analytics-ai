@@ -13,6 +13,7 @@ from dash import (
     State,
     callback,
     callback_context,
+    html,
     no_update,
 )
 from dash.exceptions import PreventUpdate
@@ -23,6 +24,7 @@ from app.dash_app.pages.graph.utils import (
     create_error_alert,
     create_table_display,
 )
+from app.dash_app.styles import COLOR_GRAY_MEDIUM
 from .editor_layout import render_parameter_row
 
 TIMEOUT_SECONDS = runtime_settings.get_int("HTTP_REQUEST_TIMEOUT")
@@ -723,6 +725,35 @@ def update_destructive_button(route: dict[str, Any] | None) -> tuple[str, dict[s
     if origin == "custom":
         return "Delete", {"display": "inline-block"}
     return "Delete", {"display": "none"}
+
+
+@callback(
+    Output("editor-identifier", "children"),
+    Input("editor-route", "data"),
+)
+def update_identifier(route: dict[str, Any] | None) -> Any:
+    """Show namespace and id in the action bar center.
+
+    For new queries the identifier is empty. For edit mode it reads the
+    namespace and slug from the route store populated by ``load_query``.
+    """
+    if not isinstance(route, dict):
+        return None
+    namespace = route.get("namespace")
+    slug = route.get("slug")
+    if not namespace or not slug:
+        return None
+    return [
+        html.Span(
+            ["Namespace: ", html.Strong(namespace)],
+            style={"whiteSpace": "nowrap"},
+        ),
+        html.Span("·", style={"margin": "0 4px", "color": COLOR_GRAY_MEDIUM}),
+        html.Span(
+            ["Id: ", html.Strong(slug)],
+            style={"whiteSpace": "nowrap"},
+        ),
+    ]
 
 
 @callback(

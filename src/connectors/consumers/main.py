@@ -50,6 +50,7 @@ from connectors.consumers.sinks.elasticsearch_sink import (
     build_es_client,
     index_signal_with_canonical_id,
 )
+from common.activity_signal.activity_writer import ActivityWriter
 from common.logger import logger
 from common.runtime_settings import RuntimeConfigCache
 from common.runtime_settings.client import fetch_runtime_snapshot
@@ -116,6 +117,7 @@ async def consume_queue(
     neo4j_uri: str,
     neo4j_user: str,
     neo4j_password: str,
+    activity_writer: ActivityWriter,
 ) -> None:
     """Consume all messages from *queue_name* and upsert them into Neo4j and Elasticsearch.
 
@@ -191,6 +193,9 @@ async def consume_queue(
                             f"Elasticsearch index failed for wba_id={signal.source}::{signal.entity_type}::{signal.id}"
                             f" — {es_exc}"
                         )
+
+                # Timeline write — non-fatal; never nack on timeline failure.
+                await activity_writer.enqueue(signal)
     finally:
         driver.close()
         logger.info(f"Consumer stopped: queue={queue_name}")
@@ -243,14 +248,22 @@ async def main() -> None:
     neo4j_user = _env("NEO4J_USERNAME", "neo4j")
     neo4j_password = _env("NEO4J_PASSWORD", "password")
 
+    # Initialise the shared activity timeline writer.  One writer is shared
+    # across all queue consumer tasks — the asyncio.Queue and asyncpg pool
+    # are both coroutine-safe.
+    activity_writer = ActivityWriter(os.environ.get("DATABASE_URL", ""))
+    await activity_writer.start()
+    logger.info("ActivityWriter initialised")
+
     tasks = [
-        consume_queue(q, rabbitmq_url, neo4j_uri, neo4j_user, neo4j_password)
+        consume_queue(q, rabbitmq_url, neo4j_uri, neo4j_user, neo4j_password, activity_writer)
         for q in queues
     ]
 
     try:
         await asyncio.gather(*tasks)
     finally:
+        await activity_writer.close()
         if _listener_task is not None:
             _listener_task.cancel()
             try:

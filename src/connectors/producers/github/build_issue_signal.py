@@ -25,6 +25,7 @@ from common.activity_signal.models import (
 from connectors.producers.github.constants import (
     _SOURCE,
     _VERSION,
+    _EPOCH,
     _connector_url,
     _truncate,
 )
@@ -74,10 +75,10 @@ def build_issue_signal(
         issue_id = f"{repo_full_name}#{number}"
         reporter_login = issue_data.get("reporter") or "unknown"
 
-        # Event time — from updated_at, fallback to created_at, fallback to now
+        # Event time — from updated_at, fallback to created_at, fallback to epoch
         raw_updated = issue_data.get("updated_at")
         raw_created = issue_data.get("created_at")
-        event_time = _parse_event_time(raw_updated, raw_created)
+        event_time = _parse_event_time(raw_updated, raw_created, issue_id=issue_id)
 
         logger.info(
             f"Building Issue signal for '{repo_full_name}#{number}' (state={issue_data.get('status', '?')}, assignees="
@@ -254,15 +255,21 @@ def build_issue_signal(
         return None
 
 
-def _parse_event_time(updated_at: Optional[str], created_at: Optional[str]) -> datetime:
+def _parse_event_time(
+    updated_at: Optional[str],
+    created_at: Optional[str],
+    issue_id: str = "",
+) -> datetime:
     """Parse the event time from ``updated_at`` (preferred) or ``created_at``.
 
     Args:
         updated_at: ISO format datetime string (preferred).
         created_at: ISO format datetime string (fallback).
+        issue_id: Human-readable issue identifier for the warning message.
 
     Returns:
-        UTC-aware datetime.
+        UTC-aware datetime, or the epoch sentinel (with a warning) when
+        neither timestamp is usable.
     """
     raw = updated_at or created_at
     if raw:
@@ -271,4 +278,8 @@ def _parse_event_time(updated_at: Optional[str], created_at: Optional[str]) -> d
             return ts if ts.tzinfo else ts.replace(tzinfo=timezone.utc)
         except (ValueError, TypeError):
             pass
-    return datetime.now(timezone.utc)
+    logger.warning(
+        f"Issue {issue_id!r} has no valid timestamp (updated_at={updated_at!r}, "
+        f"created_at={created_at!r}) — using epoch sentinel."
+    )
+    return _EPOCH

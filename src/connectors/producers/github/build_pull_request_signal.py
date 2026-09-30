@@ -15,9 +15,36 @@ from common.activity_signal.models import (
 from connectors.producers.github.constants import (
     _SOURCE,
     _VERSION,
+    _EPOCH,
     _connector_url,
     _truncate,
 )
+
+
+def _pr_event_time(pr_data: Dict[str, Any]) -> datetime:
+    """Resolve PR event_time using state-specific timestamps.
+
+    merged_at (if merged) → closed_at (if closed) → updated_at → epoch + warning.
+    """
+    state = pr_data.get("state", "")
+    candidates = []
+    if state == "merged":
+        candidates.append(pr_data.get("merged_at") or "")
+    elif state == "closed":
+        candidates.append(pr_data.get("closed_at") or "")
+    candidates.append(pr_data.get("updated_at") or "")
+
+    for raw in candidates:
+        if raw:
+            try:
+                ts = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+                return ts if ts.tzinfo else ts.replace(tzinfo=timezone.utc)
+            except (ValueError, TypeError):
+                continue
+
+    pr_id = pr_data.get("number", "unknown")
+    logger.warning(f"PR #{pr_id} has no usable timestamp (state={state!r}) — using epoch sentinel.")
+    return _EPOCH
 
 
 def build_pull_request_signal(
@@ -35,11 +62,7 @@ def build_pull_request_signal(
         repo_name = repo_data.get("name", "unknown")
         pull_request_number = int(pr_data["number"])
         pr_id = f"{repo_name}::{pull_request_number}"
-        event_time = (
-            datetime.fromisoformat(pr_data["updated_at"]).replace(tzinfo=timezone.utc)
-            if pr_data.get("updated_at")
-            else datetime.now(timezone.utc)
-        )
+        event_time = _pr_event_time(pr_data)
         author_login = author_data.get("login") or author_data.get("name", "unknown")
         author_person_id = author_login
 

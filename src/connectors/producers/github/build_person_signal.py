@@ -13,8 +13,25 @@ from common.logger import logger
 from connectors.producers.github.constants import (
     _SOURCE,
     _VERSION,
+    _EPOCH,
     _connector_url
 )
+
+def _person_event_time(person_data: Dict[str, Any]) -> datetime:
+    """Parse ``created_at`` from *person_data* into a UTC datetime.
+
+    Falls back to the epoch sentinel without a warning — expected behaviour
+    for GitAuthor-path persons (commit authors with no GitHub account).
+    """
+    raw = person_data.get("created_at") or ""
+    if raw:
+        try:
+            ts = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+            return ts if ts.tzinfo else ts.replace(tzinfo=timezone.utc)
+        except (ValueError, TypeError):
+            pass
+    return _EPOCH
+
 
 def build_person_signal(
     person_data: Dict[str, Any],
@@ -38,7 +55,7 @@ def build_person_signal(
             id=login,
             source_config="https://github.com",
             connector_url=_connector_url(),
-            event_time=datetime.now(timezone.utc),
+            event_time=_person_event_time(person_data),
             version=_VERSION,
             attributes=attrs,
             relationships=list(extra_relationships) if extra_relationships else [],

@@ -182,11 +182,13 @@ def fetch_github_user(user_obj: Any) -> Dict[str, Any]:
       git-embedded metadata directly; no network call needed.
 
     Returns:
-        Dict with keys ``login``, ``name``, ``email``.
+        Dict with keys ``login``, ``name``, ``email``, ``created_at``.
         ``email`` is always a lower-cased string, never ``None``.
+        ``created_at`` is an ISO-format string when available (NamedUser
+        path), or ``""`` for GitAuthor/unknown fallbacks.
     """
     if user_obj is None:
-        return {"login": "unknown", "name": "Unknown", "email": ""}
+        return {"login": "unknown", "name": "Unknown", "email": "", "created_at": ""}
 
     # A NamedUser stub (e.g. commit.author on a PR commit) may be created
     # without a URL, so accessing .login/.name/.email raises
@@ -213,8 +215,14 @@ def fetch_github_user(user_obj: Any) -> Dict[str, Any]:
         # the entire repo should be skipped without advancing the cursor.
         # Let it propagate to the config-level handler in main.py.
         try:
-            name, email = retry_with_backoff(
-                lambda: (user_obj.name or login, (user_obj.email or "").lower())
+            name, email, created_at = retry_with_backoff(
+                lambda: (
+                    user_obj.name or login,
+                    (user_obj.email or "").lower(),
+                    user_obj.created_at.isoformat()
+                    if getattr(user_obj, "created_at", None)
+                    else "",
+                )
             )
         except WbaRetryTimeoutError:
             raise
@@ -227,8 +235,9 @@ def fetch_github_user(user_obj: Any) -> Dict[str, Any]:
             )
             name = login
             email = ""
+            created_at = ""
 
-        result = {"login": login, "name": name, "email": email}
+        result = {"login": login, "name": name, "email": email, "created_at": created_at}
         _user_cache[login] = result
         return result
 
@@ -246,9 +255,9 @@ def fetch_github_user(user_obj: Any) -> Dict[str, Any]:
         except Exception:
             email = ""
         login = email.split("@")[0] if email else name.lower().replace(" ", "_")
-        return {"login": login, "name": name, "email": email}
+        return {"login": login, "name": name, "email": email, "created_at": ""}
 
-    return {"login": "unknown", "name": "Unknown", "email": ""}
+    return {"login": "unknown", "name": "Unknown", "email": "", "created_at": ""}
 
 
 def map_pull_request(

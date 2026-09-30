@@ -11,13 +11,29 @@ from common.activity_signal.models import (
     RelationshipTarget,
     TeamAttributes,
 )
-from common.activity_signal.wba_node_id import wba_format
 
 from connectors.producers.github.constants import (
     _SOURCE,
     _VERSION,
+    _EPOCH,
     _connector_url,
 )
+
+
+def _team_event_time(team_data: Dict[str, Any]) -> datetime:
+    """Parse ``created_at`` from *team_data* into a UTC datetime.
+
+    Falls back to the epoch sentinel without a warning — teams without a
+    ``created_at`` are uncommon but possible.
+    """
+    raw = team_data.get("created_at") or ""
+    if raw:
+        try:
+            ts = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+            return ts if ts.tzinfo else ts.replace(tzinfo=timezone.utc)
+        except (ValueError, TypeError):
+            pass
+    return _EPOCH
 
 
 def build_team_signal(
@@ -51,7 +67,7 @@ def build_team_signal(
             id=slug,
             source_config="https://github.com",
             connector_url=_connector_url(),
-            event_time=datetime.now(timezone.utc),
+            event_time=_team_event_time(team_data),
             version=_VERSION,
             attributes=attrs,
             relationships=rels,

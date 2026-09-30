@@ -45,12 +45,12 @@ from neo4j import GraphDatabase
 
 from common.messaging.rabbitmq import RabbitMQConsumer
 from connectors.commons.person_cache import PersonCache
+from connectors.consumers.activity_writer import ActivityWriter
 from connectors.consumers.sinks.neo4j_sink import upsert_signal
 from connectors.consumers.sinks.elasticsearch_sink import (
     build_es_client,
     index_signal_with_canonical_id,
 )
-from common.activity_signal.activity_writer import ActivityWriter
 from common.logger import logger
 from common.runtime_settings import RuntimeConfigCache
 from common.runtime_settings.client import fetch_runtime_snapshot

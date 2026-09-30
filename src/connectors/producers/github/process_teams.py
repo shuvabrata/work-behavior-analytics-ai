@@ -45,12 +45,12 @@ async def process_teams(
             team_id = f"github_team_{team_slug}"
             permission = getattr(team, "permission", None)
             team_created_at = ""
-            try:
-                raw_created = getattr(team, "created_at", None)
-                if raw_created:
+            raw_created = getattr(team, "created_at", None)
+            if raw_created is not None:
+                try:
                     team_created_at = raw_created.isoformat()
-            except Exception:
-                pass
+                except (AttributeError, TypeError, ValueError):
+                    pass  # stays "" — builder will fall back to epoch
             team_data_dict: Dict[str, Any] = {
                 "id": team_id,
                 "name": team_name,

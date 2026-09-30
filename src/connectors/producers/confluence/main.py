@@ -61,6 +61,7 @@ from connectors.producers.github.retry_with_backoff import WbaRetryTimeoutError
 
 _SOURCE = "confluence"
 _VERSION = "1.0"
+_EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
 
 
 
@@ -177,10 +178,16 @@ def _content_title(content: Dict[str, Any]) -> Optional[str]:
 
 
 def _content_created_at(content: Dict[str, Any]) -> str:
-    return (
-        _first_string(content, [("history", "createdDate"), ("createdAt",), ("version", "createdAt")])
-        or datetime.now(timezone.utc).isoformat()
+    result = _first_string(
+        content, [("history", "createdDate"), ("createdAt",), ("version", "createdAt")]
     )
+    if result:
+        return result
+    content_id = _content_id(content) or "unknown"
+    logger.warning(
+        f"No created_at found for content id={content_id!r} — using epoch sentinel string."
+    )
+    return _EPOCH.isoformat()
 
 
 def _content_last_updated_at(content: Dict[str, Any]) -> str:
@@ -214,7 +221,12 @@ def _content_event_time(content: Dict[str, Any]) -> datetime:
         parsed = _parse_datetime(candidate)
         if parsed:
             return parsed
-    return datetime.now(timezone.utc)
+    content_id = _content_id(content) or "unknown"
+    logger.warning(
+        f"No event timestamp found for content id={content_id!r} "
+        f"(version.when, history.createdDate, updatedAt all absent) — using epoch sentinel."
+    )
+    return _EPOCH
 
 
 def _space_event_time(space: Dict[str, Any]) -> datetime:
@@ -228,7 +240,12 @@ def _space_event_time(space: Dict[str, Any]) -> datetime:
         parsed = _parse_datetime(candidate)
         if parsed:
             return parsed
-    return datetime.now(timezone.utc)
+    space_key = space.get("key", "unknown")
+    logger.warning(
+        f"No event timestamp found for Space key={space_key!r} "
+        f"(updatedAt, lastModificationDate, createdAt, creationDate all absent) — using epoch sentinel."
+    )
+    return _EPOCH
 
 
 def _space_key_from_content(content: Dict[str, Any]) -> Optional[str]:
@@ -286,7 +303,11 @@ def _comment_timestamp(comment: Dict[str, Any]) -> datetime:
         parsed = _parse_datetime(candidate)
         if parsed:
             return parsed
-    return datetime.now(timezone.utc)
+    comment_id = comment.get("id", "unknown")
+    logger.warning(
+        f"No timestamp found for comment id={comment_id!r} — using epoch sentinel."
+    )
+    return _EPOCH
 
 
 def _relationship_key(rel: Relationship) -> Tuple[Any, ...]:
@@ -358,7 +379,7 @@ def build_person_signal(
             id=account_id,
             source_config=confluence_url,
             connector_url=_connector_url(),
-            event_time=datetime.now(timezone.utc),
+            event_time=_EPOCH,  # Confluence user API provides no creation/modification timestamp
             version=_VERSION,
             attributes=attrs,
         )
@@ -741,6 +762,15 @@ async def process_account(
             
             # If the page was modified after our sync cursor, we fetch the full body.
             # Otherwise, we skip the body fetch and only process its comments/likes.
+            #
+            # NOTE (known limitation): On incremental scans we skip the body fetch
+            # for pages whose last-modified date is before the sync cursor, so
+            # body-derived relationships (MENTIONS, REFERENCES) are NOT re-emitted
+            # for unmodified pages. On the FIRST incremental scan after a full scan
+            # this produces a signal whose content_hash differs from the full-scan
+            # signal (body relationships dropped), which the activity timeline
+            # writer treats as a new event/action set. Subsequent incremental scans
+            # are stable because the stored signal already reflects the reduced set.
             fetch_body = True
             if last_mod_dt and last_mod_dt < body_last_synced_at:
                 fetch_body = False

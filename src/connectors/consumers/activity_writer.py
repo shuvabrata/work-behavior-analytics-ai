@@ -263,7 +263,8 @@ class ActivityWriter:
         display_name = _compute_display_name(signal)
         avatar_url = _compute_avatar_url(signal)
 
-        assert self._pool is not None
+        if self._pool is None:
+            raise RuntimeError("ActivityWriter pool not initialised — call start() first")
         async with self._pool.acquire() as conn:
             # --- activity_events INSERT (dedup via ON CONFLICT DO NOTHING) ---
             status = await conn.execute(

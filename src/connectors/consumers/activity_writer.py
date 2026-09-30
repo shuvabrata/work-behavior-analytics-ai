@@ -24,14 +24,12 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
-import logging
 from typing import Optional
 
 import asyncpg
 
 from common.activity_signal.models import ActivitySignal
-
-logger = logging.getLogger(__name__)
+from common.logger import logger
 
 # Tuning constants
 _BATCH_SIZE = 100
@@ -227,18 +225,40 @@ class ActivityWriter:
             logger.warning("ActivityWriter: pool is None — skipping batch")
             return
 
+        inserted_count = 0
+        duplicate_count = 0
+        action_count = 0
         for signal in batch:
             try:
-                await self._write_signal(signal)
+                result = await self._write_signal(signal)
+                if result is None:
+                    duplicate_count += 1
+                else:
+                    inserted_count += 1
+                    action_count += result
             except Exception as exc:  # pylint: disable=broad-except
                 logger.warning(
-                    "ActivityWriter: failed to write signal_id=%s — %s",
+                    "ActivityWriter: failed to write signal_id=%s entity_type=%s id=%s — %s",
                     signal.signal_id,
+                    signal.entity_type,
+                    signal.id,
                     exc,
                 )
 
-    async def _write_signal(self, signal: ActivitySignal) -> None:
-        """Persist one signal (event row + action rows) within a single connection."""
+        logger.info(
+            "Wrote to Postgres batch_size=%d inserted=%d duplicates=%d actions=%d",
+            len(batch),
+            inserted_count,
+            duplicate_count,
+            action_count,
+        )
+
+    async def _write_signal(self, signal: ActivitySignal) -> Optional[int]:
+        """Persist one signal (event row + action rows) within a single connection.
+
+        Returns the number of ``activity_actions`` rows written, or ``None`` if
+        the event was a duplicate (skipped).
+        """
         content_hash = _compute_content_hash(signal)
         display_name = _compute_display_name(signal)
         avatar_url = _compute_avatar_url(signal)
@@ -273,18 +293,16 @@ class ActivityWriter:
 
             if not inserted:
                 logger.debug(
-                    "ActivityWriter: duplicate skipped signal_id=%s source=%s entity=%s::%s",
+                    "ActivityWriter: duplicate skipped signal_id=%s entity_type=%s id=%s",
                     signal.signal_id,
-                    signal.source,
                     signal.entity_type,
                     signal.id,
                 )
-                return
+                return None
 
             logger.debug(
-                "ActivityWriter: inserted event signal_id=%s source=%s entity=%s::%s",
+                "ActivityWriter: inserted event signal_id=%s entity_type=%s id=%s",
                 signal.signal_id,
-                signal.source,
                 signal.entity_type,
                 signal.id,
             )
@@ -292,7 +310,7 @@ class ActivityWriter:
             # --- activity_actions INSERT (one row per relationship) ----------
             actions = _decompose_relationships(signal)
             if not actions:
-                return
+                return 0
 
             await conn.executemany(
                 """
@@ -319,7 +337,10 @@ class ActivityWriter:
                 ],
             )
             logger.debug(
-                "ActivityWriter: inserted %d action(s) for signal_id=%s",
+                "ActivityWriter: inserted %d action(s) for signal_id=%s entity_type=%s id=%s",
                 len(actions),
                 signal.signal_id,
+                signal.entity_type,
+                signal.id,
             )
+            return len(actions)

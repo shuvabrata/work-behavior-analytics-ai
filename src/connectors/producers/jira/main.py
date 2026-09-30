@@ -102,8 +102,15 @@ def _connector_url() -> str:
     return f"{api_server.rstrip('/')}/connectors/jira"
 
 
-def _event_time_from(updated_at: str, created_at: str) -> datetime:
-    """Parse ``updated_at`` (or fall back to ``created_at``) into a UTC datetime."""
+_EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
+
+
+def _event_time_from(updated_at: str, created_at: str, entity_label: str = "") -> datetime:
+    """Parse ``updated_at`` (or fall back to ``created_at``) into a UTC datetime.
+
+    Falls back to the epoch sentinel (1970-01-01T00:00:00Z) with a WARNING log
+    when both fields are absent or unparseable. Never returns ``datetime.now()``.
+    """
     raw = updated_at or created_at
     if raw:
         try:
@@ -112,7 +119,40 @@ def _event_time_from(updated_at: str, created_at: str) -> datetime:
             return ts if ts.tzinfo else ts.replace(tzinfo=timezone.utc)
         except ValueError:
             pass
-    return datetime.now(timezone.utc)
+    logger.warning(
+        f"No valid event timestamp for {entity_label!r} — using epoch sentinel. "
+        f"(updated_at={updated_at!r}, created_at={created_at!r})"
+    )
+    return _EPOCH
+
+
+def _sprint_event_time(sprint_data: Dict[str, Any]) -> datetime:
+    """Resolve ``event_time`` for a Sprint.
+
+    Priority: ``completeDate`` → ``startDate`` → ``endDate`` → epoch sentinel.
+    Prefers raw ISO strings (``*_date_iso``) over date-only strings for full
+    timestamp precision.
+    """
+    for field in (
+        "complete_date_iso",
+        "start_date_iso",
+        "end_date_iso",
+        "complete_date",
+        "start_date",
+        "end_date",
+    ):
+        raw = sprint_data.get(field)
+        if raw:
+            try:
+                ts = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+                logger.debug(f"Sprint timestamp: {ts} extracted from {field} for sprint {sprint_data.get('name')!r}")
+                return ts if ts.tzinfo else ts.replace(tzinfo=timezone.utc)
+            except ValueError:
+                continue
+    logger.warning(
+        f"Sprint {sprint_data.get('name')!r} has no usable date field — using epoch sentinel."
+    )
+    return _EPOCH
 
 
 # ---------------------------------------------------------------------------
@@ -139,7 +179,7 @@ def build_project_signal(
             id=project_data["project_key"],
             source_config=jira_base_url,
             connector_url=_connector_url(),
-            event_time=datetime.now(timezone.utc),
+            event_time=_EPOCH,  # Project is a structural anchor; no timestamp from Jira API
             version=_VERSION,
             attributes=attrs,
         )
@@ -173,7 +213,7 @@ def build_person_signal(
             id=account_id,
             source_config=jira_base_url,
             connector_url=_connector_url(),
-            event_time=datetime.now(timezone.utc),
+            event_time=_EPOCH,  # Jira user API provides no creation/modification timestamp
             version=_VERSION,
             attributes=attrs,
         )
@@ -303,6 +343,7 @@ def build_initiative_signal(
             event_time=_event_time_from(
                 initiative_data.get("updated_at", ""),
                 initiative_data.get("created_at", ""),
+                entity_label=f"Initiative/{initiative_data.get('key')}",
             ),
             version=_VERSION,
             attributes=attrs,
@@ -460,6 +501,7 @@ def build_epic_signal(
             event_time=_event_time_from(
                 epic_data.get("updated_at", ""),
                 epic_data.get("created_at", ""),
+                entity_label=f"Epic/{epic_data.get('key')}",
             ),
             version=_VERSION,
             attributes=attrs,
@@ -489,7 +531,7 @@ def build_sprint_signal(
             id=sprint_data["sprint_id"],
             source_config=jira_base_url,
             connector_url=_connector_url(),
-            event_time=datetime.now(timezone.utc),
+            event_time=_sprint_event_time(sprint_data),
             version=_VERSION,
             attributes=attrs,
         )
@@ -707,6 +749,7 @@ def build_issue_signal(
             event_time=_event_time_from(
                 issue_data.get("updated_at", ""),
                 issue_data.get("created_at", ""),
+                entity_label=f"Issue/{issue_data.get('key')}",
             ),
             version=_VERSION,
             attributes=attrs,

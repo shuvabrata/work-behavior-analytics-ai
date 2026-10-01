@@ -340,21 +340,21 @@ with hybrid batching, dedup, and non-fatal failure semantics.
 **Objective:** Build the FastAPI router, service, and query layers for the
 `/api/v1/activity` endpoints.
 
-**Progress:** [ ] Not started
+**Progress:** [x] Complete
 
 #### Files to create
 
 | File | Purpose | Status |
 |------|---------|--------|
-| `src/app/api/activity/v1/__init__.py` | Package init | [ ] |
-| `src/app/api/activity/v1/model.py` | Pydantic request/response models | [ ] |
-| `src/app/api/activity/v1/router.py` | FastAPI route definitions | [ ] |
-| `src/app/api/activity/v1/service.py` | Business logic (parse WBA IDs, resolve cursors) | [ ] |
-| `src/app/api/activity/v1/query.py` | SQL queries (via SQLAlchemy async) | [ ] |
+| `src/app/api/activity/v1/__init__.py` | Package init | [x] |
+| `src/app/api/activity/v1/model.py` | Pydantic request/response models | [x] |
+| `src/app/api/activity/v1/router.py` | FastAPI route definitions | [x] |
+| `src/app/api/activity/v1/service.py` | Business logic (parse WBA IDs, resolve cursors) | [x] |
+| `src/app/api/activity/v1/query.py` | SQL queries (via SQLAlchemy async) | [x] |
 
 #### Tasks
 
-- [ ] **1. Model definitions** (`model.py`)
+- [x] **1. Model definitions** (`model.py`)
   - `TimelineRequest` — Pydantic model with `wba_ids`, `scope`, `from`, `to`, `cursor`, `limit`
   - `TimelineEvent` — `signal_id`, `event_time`, `relationship_type`, `summary`, `entity_type`, `source`, `url`, `details`
   - `TimelineLane` — `wba_id`, `entity_type`, `label`, `avatar_url`, `events: list[TimelineEvent]`, `next_cursor`
@@ -362,12 +362,12 @@ with hybrid batching, dedup, and non-fatal failure semantics.
   - `TimelineResponse` — `lanes: list[TimelineLane]`, `meta`
   - `SuggestRequest` / `SuggestResponse` — for typeahead
 
-- [ ] **2. Router** (`router.py`)
+- [x] **2. Router** (`router.py`)
   - `GET /api/v1/activity/timeline` → delegates to `service.get_timeline()`
   - `GET /api/v1/activity/suggest?q=...` → delegates to existing search service
   - Register router in `src/app/main.py`
 
-- [ ] **3. Service** (`service.py`)
+- [x] **3. Service** (`service.py`)
   - `get_timeline(request)`: parse each WBA ID into `(source, entity_type, entity_id)`, fan out queries
   - `_resolve_display_label(source, entity_type, entity_id)`: read the pre-computed `display_name`
     and `avatar_url` columns from `activity_events` — **no Neo4j call needed**.
@@ -383,7 +383,7 @@ with hybrid batching, dedup, and non-fatal failure semantics.
   - `_encode_cursor(event_time, row_id)` / `_decode_cursor(cursor_str)`: base64 encode/decode
   - `_build_suggestions(query)`: delegate to existing search (Elasticsearch or Neo4j)
 
-- [ ] **4. Query** (`query.py`)
+- [x] **4. Query** (`query.py`)
   - `fetch_actions_for_entity(source, entity_type, entity_id, from_time, to_time, cursor, limit)`:
     ```sql
     SELECT * FROM activity_actions
@@ -407,54 +407,81 @@ with hybrid batching, dedup, and non-fatal failure semantics.
     LIMIT $8;
     ```
   - Use SQLAlchemy `text()` + async execution (reuse `ASYNC_SESSION_LOCAL`)
+    > **Implementation note:** the query layer uses typed ORM ``select()`` with
+    > ``sqlalchemy.tuple_`` for the row-value cursor comparison instead of raw
+    > ``text()`` SQL — same semantics, but type-checked under mypy strict mode.
 
-- [ ] **5. Automated tests:**
+- [x] **5. Automated tests:**
   - Unit tests for cursor encode/decode round-trip
   - Unit tests for WBA ID parsing
   - Integration test: seed activity_actions rows, call API, verify correct lane splitting
   - Integration test: cursor pagination returns correct next pages
+  > **Result:** 23 tests in `tests/test_activity_api_unit.py` +
+  > `tests/test_activity_api_integration.py` — all passing.  The integration
+  > tests use ASGI transport with a mocked DB session (no Postgres needed),
+  > so they run under the ``unit`` marker.
 
 #### Manual Validation
 
-- [ ] **V2.1:** Confirm the API responds:
+- [x] **V2.1:** Confirm the API responds:
   ```bash
-  curl -s "http://localhost:8000/api/v1/activity/timeline?wba_ids=github::Person::alice&limit=5" | jq .
+  curl -s "http://localhost:8000/api/v1/activity/timeline?wba_ids=jira::Person::557058:62105664-0fbe-4128-ab5c-3b0071e8f7f5&limit=5" | jq .
   ```
   Expected: JSON response with `lanes` array, each containing `events` and `next_cursor` (null when no more pages).
+  > **Result:** 200 OK; lanes/events/next_cursor present; events respect `limit`. ✓
 
-- [ ] **V2.2:** Test multi-lane query:
+- [x] **V2.2:** Test multi-lane query:
   ```bash
-  curl -s "http://localhost:8000/api/v1/activity/timeline?wba_ids=github::Person::alice,github::Person::bob&limit=3" | jq '.lanes | length'
+  curl -s "http://localhost:8000/api/v1/activity/timeline?wba_ids=jira::Person::557058:62105664-0fbe-4128-ab5c-3b0071e8f7f5,jira::Person::712020:cc7f7515-d137-44a0-9858-22b270a86387&limit=3" | jq '.lanes | length'
   ```
   Expected: `2` lanes returned.
+  > **Result:** 2 lanes returned; `meta.total_lanes == 2`. ✓
 
-- [ ] **V2.3:** Verify cursor pagination:
+- [x] **V2.3:** Verify cursor pagination:
   ```bash
-  FIRST=$(curl -s "http://localhost:8000/api/v1/activity/timeline?wba_ids=github::Person::alice&limit=2")
+  FIRST=$(curl -s "http://localhost:8000/api/v1/activity/timeline?wba_ids=jira::Person::557058:62105664-0fbe-4128-ab5c-3b0071e8f7f5&limit=2")
   CURSOR=$(echo $FIRST | jq -r '.lanes[0].next_cursor')
   echo "Cursor: $CURSOR"
-  SECOND=$(curl -s "http://localhost:8000/api/v1/activity/timeline?wba_ids=github::Person::alice&limit=2&cursor=$CURSOR")
+  SECOND=$(curl -s "http://localhost:8000/api/v1/activity/timeline?wba_ids=jira::Person::557058:62105664-0fbe-4128-ab5c-3b0071e8f7f5&limit=2&cursor=$CURSOR")
   echo $SECOND | jq '.lanes[0].events | length'
   ```
   Expected: second page has 2 events (or fewer if exhausted). Events on page 2 are older than events on page 1.
+  > **Result:** Cursor round-trip works; page 2 events older than page 1; no overlap. ✓
 
-- [ ] **V2.4:** Test time range filter:
+- [x] **V2.4:** Test time range filter:
   ```bash
-  curl -s "http://localhost:8000/api/v1/activity/timeline?wba_ids=github::Person::alice&from=2026-09-01T00:00:00Z&to=2026-09-07T23:59:59Z" | jq '.lanes[0].total_count'
+  curl -s "http://localhost:8000/api/v1/activity/timeline?wba_ids=github::Person::alice&from=2026-09-01T00:00:00Z&to=2026-09-07T23:59:59Z" | jq '.lanes[0].events[].event_time'
   ```
-  Expected: count matches events within that week.
+  Expected: every returned `event_time` falls within `[from, to]`. (Note: the
+  response has **no** `total_count` field in v1 — the plan deliberately omits
+  count queries; validate the filter by inspecting the returned event
+  timestamps instead.)
+  > **Result:** All returned event_times within the window; empty window returns `[]`. ✓
 
-- [ ] **V2.5:** Test typeahead:
+- [x] **V2.5:** Test typeahead:
   ```bash
-  curl -s "http://localhost:8000/api/v1/activity/suggest?q=ali" | jq .
+  curl -s "http://localhost:8000/api/v1/activity/suggest?q=557058" | jq .
   ```
   Expected: array of matching WBA IDs with labels.
+  > **Result:** Suggestions returned with wba_id/label/entity_type/source. ✓
+  > (Used `q=557058` — the Jira person account id — since the dataset is Jira-based.)
 
-- [ ] **V2.6:** Test error handling — invalid WBA ID:
+- [x] **V2.6:** Test error handling — invalid WBA ID:
   ```bash
   curl -s "http://localhost:8000/api/v1/activity/timeline?wba_ids=invalid::bad" | jq .
   ```
   Expected: graceful 400 with error detail (not a 500).
+  > **Result:** 400 with `detail.error == "Invalid WBA ID"`; empty wba_ids also 400. ✓
+
+- [x] **V2.7:** Test `scope=history` (own state changes):
+  ```bash
+  curl -s "http://localhost:8000/api/v1/activity/timeline?wba_ids=jira::Issue::BTS-15&scope=history&limit=5" | jq .
+  ```
+  Expected: lane events use the synthetic `STATE_CHANGE` relationship type,
+  `summary` = the entity's `display_name`, `details` = the full attributes
+  snapshot, and `url` = the entity's `attributes.url` (clickable link).
+  > **Result:** STATE_CHANGE events returned with summary/details; url passthrough verified. ✓
+  > (Used `jira::Issue::BTS-15` — a real issue from the Jira dataset.)
 
 ---
 
@@ -610,7 +637,7 @@ with hybrid batching, dedup, and non-fatal failure semantics.
 
 #### Tasks
 
-- [ ] **1. Deep-linking from Search** — In `src/app/dash_app/pages/search.py`, add "View Timeline" button in person/object result cards. Navigate to `/app/analytics/timeline?wba_ids=github::Person::alice`
+- [ ] **1. Deep-linking from Search** — In `src/app/dash_app/pages/search.py`, add "View Timeline" button in person/object result cards. Navigate to `/app/analytics/timeline?wba_ids=jira::Person::557058:62105664-0fbe-4128-ab5c-3b0071e8f7f5`
 
 - [ ] **2. Deep-linking from Graph** — In node panel, add "View Timeline" button. Pass `wba_id` via URL parameter.
 
@@ -632,7 +659,7 @@ with hybrid batching, dedup, and non-fatal failure semantics.
 
 - [ ] **V4.1:** Search for a person on the Search page (`/app/search?q=alice`). Click the result. Expected: "View Timeline" button is present in the result card.
 
-- [ ] **V4.2:** Click "View Timeline" from a Search result. Expected: navigates to `/app/analytics/timeline?wba_ids=github::Person::alice` with the person's lane pre-loaded.
+- [ ] **V4.2:** Click "View Timeline" from a Search result. Expected: navigates to `/app/analytics/timeline?wba_ids=jira::Person::557058:62105664-0fbe-4128-ab5c-3b0071e8f7f5` with the person's lane pre-loaded.
 
 - [ ] **V4.3:** In the Graph page, click on a Person node. Expected: the node detail panel has a "View Timeline" button.
 
@@ -642,7 +669,7 @@ with hybrid batching, dedup, and non-fatal failure semantics.
 
 - [ ] **V4.6:** Run a heavy scan (e.g., full GitHub or Jira re-sync). Check API response times:
   ```bash
-  time curl -s "http://localhost:8000/api/v1/activity/timeline?wba_ids=github::Person::alice&limit=50" > /dev/null
+  time curl -s "http://localhost:8000/api/v1/activity/timeline?wba_ids=jira::Person::557058:62105664-0fbe-4128-ab5c-3b0071e8f7f5&limit=50" > /dev/null
   ```
   Expected: response in under 500ms even with 100K+ rows in the tables.
 

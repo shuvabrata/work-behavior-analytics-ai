@@ -89,7 +89,7 @@ def _compute_avatar_url(signal: ActivitySignal) -> Optional[str]:
     return None
 
 
-def _decompose_relationships(signal: ActivitySignal) -> list[dict]:
+def _decompose_relationships(signal: ActivitySignal) -> list[dict[str, object]]:
     """Flatten ``signal.relationships`` into ``activity_actions`` row dicts.
 
     ``summary`` — first non-empty of title / summary / key from attributes,
@@ -147,7 +147,7 @@ class ActivityWriter:
         self._dsn = _normalize_database_url(database_url)
         self._queue: asyncio.Queue[ActivitySignal] = asyncio.Queue()
         self._pool: Optional[asyncpg.Pool] = None
-        self._task: Optional[asyncio.Task] = None
+        self._task: Optional[asyncio.Task[None]] = None
 
     async def start(self) -> None:
         """Create the connection pool and start the background writer loop."""

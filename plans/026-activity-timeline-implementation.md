@@ -489,49 +489,73 @@ with hybrid batching, dedup, and non-fatal failure semantics.
 
 **Objective:** Build the swimlane timeline page and register it in the Analytics gallery.
 
-**Progress:** [ ] Not started
+**Progress:** [x] Complete
+
+#### Finalized design decisions (2026-10-01)
+
+| # | Decision | Resolution |
+|---|----------|------------|
+| 1 | "Load more" UX | **Single global button** below the swimlane grid. Clicking fetches the next page for every lane that still has a `next_cursor` (parallel API calls), appends events per lane, hides when all lanes exhausted. Per-lane cursors tracked in a `dcc.Store`. |
+| 2 | Time scaling | **Linear time scale + gap compression with visual intensity indication.** Cards positioned by actual time (server-side pixel math). Gaps between consecutive events exceeding an **adaptive threshold** (based on median event spacing) are compressed to a fixed small height with a zigzag/ellipsis "gap break" marker + `— N days —` label. Dense clusters show as tightly-packed cards; sparse periods show as compressed breaks. |
+| 3 | Time range default | **Last 30 days.** Time axis markers are **daily**. |
+| 4 | Entity selector | **Person-only toggle ON by default.** Typeahead uses `/api/v1/activity/suggest` as it exists today (no entity_type filter). The Person min-3-chars rule lives in `/api/v1/search/persons` — a proper Person search is deferred to a **new Phase 5** (see below). |
+| 5 | Scope | Strictly Phase 3 — no `?wba_ids=` deep-link handling, no Search/Graph/Collab deep-link buttons. |
+| 6 | Tests | **Unit** (`@pytest.mark.unit`): layout render smoke, gap-compression math, cursor/state helpers, callback logic with mocked API. **Integration** (`@pytest.mark.integration`): real API calls against a running app server. |
 
 #### Files to create / modify
 
 | File | Action | Purpose | Status |
 |------|--------|---------|--------|
 | `src/app/dash_app/pages/timeline/__init__.py` | **Create** | Package init; re-export `get_layout` | [ ] |
+| `src/app/dash_app/pages/timeline/geometry.py` | **Create** | Pure functions: time→pixel mapping, gap compression, lane layout | [ ] |
 | `src/app/dash_app/pages/timeline/layout.py` | **Create** | Main swimlane layout builder | [ ] |
 | `src/app/dash_app/pages/timeline/callbacks.py` | **Create** | Dash callbacks (data fetch, time range, pagination, entity selector) | [ ] |
 | `src/app/analytics/registry.py` | **Modify** | Add `TimelineAnalytic` entry | [ ] |
 | `src/app/dash_app/pages/analytics.py` | **Modify** | Render timeline card + wire callbacks | [ ] |
 | `src/app/dash_app/layout.py` | **Modify** | Add route `/app/analytics/timeline` | [ ] |
+| `src/app/dash_app/assets/executive-dashboard.css` | **Modify** | Add `.timeline-*` styles (light + dark) | [ ] |
+| `tests/test_timeline_ui_unit.py` | **Create** | Unit tests (geometry, layout, callbacks) | [ ] |
+| `tests/test_timeline_ui_integration.py` | **Create** | Integration tests (real API) | [ ] |
 
 #### Tasks
 
-- [ ] **1. Create page package** `src/app/dash_app/pages/timeline/`
+- [x] **1. Create page package** `src/app/dash_app/pages/timeline/`
   - `__init__.py`: `__all__ = ["get_layout"]; from .layout import get_layout`
   - Match the existing page pattern (see `collaboration_network/` as reference)
 
-- [ ] **2. Layout** (`layout.py`)
+- [x] **2. Geometry module** (`geometry.py`) — pure, unit-testable functions:
+  - `compute_lane_layout(events, range_start, range_end, px_per_day, gap_break_px)` →
+    list of positioned cards `{top, height, gap_before, gap_days}` + total lane height
+  - Adaptive gap threshold: compress any gap > `min(max(2 × median spacing, 2d), 7d)`
+  - `build_time_axis_markers(range_start, range_end)` → daily markers
+  - No Dash imports — pure math so it is trivially testable
+
+- [x] **3. Layout** (`layout.py`)
   - `get_layout() -> html.Div` — the main swimlane container
   - Entity selector bar at top:
     - Search input for typeahead (WBA ID search)
     - Chips/pills for selected entities (person/object avatars + remove button)
     - "Clear All" button
+    - Person-only toggle (default ON)
   - Time range controls:
     - Dropdown: Last 7d / 30d / 90d / Custom
     - DatePickerRange for custom
   - Swimlane container:
-    - Left: time axis markers
+    - Left: time axis markers (daily)
     - Right: one horizontal lane per entity
-    - Each lane: event cards positioned by time
+    - Each lane: event cards positioned by time (server-side pixel math)
     - Cards show: icon, title/name, time, hover popup with full details
+    - Gap-break markers between compressed gaps
   - Loading overlay + empty state
 
-- [ ] **3. Callbacks** (`callbacks.py`)
+- [x] **4. Callbacks** (`callbacks.py`)
   - `fetch_timeline_data`: on entity selection change / time range change → calls
     `GET /api/v1/activity/timeline?...` → populates lane state in `dcc.Store`
-  - **Pagination — "Load more" button per lane** (do NOT use a clientside scroll listener):
-    - Each lane renders a "Load more" button below its event list
-    - A server-side callback reads `next_cursor` from a per-lane `dcc.Store`, calls the API
-      with `cursor=<next_cursor>`, and appends the returned events to the lane's existing list
-    - Button is hidden when `next_cursor` is `null` (no more pages)
+  - **Pagination — single global "Load more" button** (do NOT use a clientside scroll listener):
+    - One button below the swimlane grid
+    - Server-side callback reads each lane's `next_cursor` from a `dcc.Store`, calls the API
+      with `cursor=<next_cursor>` for each lane that has one, appends events per lane
+    - Button hidden when all lanes have `next_cursor == null`
     - Reference: the load-more + `dcc.Store` pattern already used in
       `src/app/dash_app/pages/search.py` — follow that structure exactly
     - **Escape hatch**: do not attempt `window.scroll` or `IntersectionObserver` via
@@ -541,7 +565,7 @@ with hybrid batching, dedup, and non-fatal failure semantics.
   - Entity add/remove: update selected entities list in `dcc.Store`, reload data
   - Theme-aware: lane colors adapt to light/dark theme tokens
 
-- [ ] **4. Register in Analytics gallery**
+- [x] **5. Register in Analytics gallery**
   - **`registry.py`** — create a new `TimelineAnalytic` dataclass. Do **not** reuse `GraphAnalytic`:
     `GraphAnalytic.href` generates `/app/graph?mode=<key>`, which is wrong for the timeline page.
     ```python
@@ -572,26 +596,37 @@ with hybrid batching, dedup, and non-fatal failure semantics.
     - The existing `_create_analytic_card()` has a hardcoded `if is_collaboration` branch.
       Add a parallel `elif is_timeline` branch (check `analytic.key == "activity_timeline"`).
       Create a `_create_timeline_controls()` function (can be a stub returning an
-      "Open Visualization" button for now — full entity selector wires up in Phase 3 Task 3).
+      "Open Visualization" button for now — full entity selector wires up in Phase 3 Task 4).
     - Add `TIMELINE_ANALYTIC` to the list rendered by `get_layout()`. Do **not** add it to
       `GRAPH_ANALYTICS` (that list drives graph-mode analytics); instead pass it separately
       or extend the gallery loop to also render `[TIMELINE_ANALYTIC]`.
 
-- [ ] **5. Register route** in `layout.py`:
+- [x] **6. Register route** in `layout.py`:
   ```python
+  # Eager import at module top (matches the other pages):
+  from app.dash_app.pages.timeline import get_layout as get_timeline_layout
+
+  # In display_page():
   if pathname == "/app/analytics/timeline":
-      from app.dash_app.pages.timeline import get_layout as get_timeline_layout
       return get_timeline_layout()
   ```
+  > **Note:** The plan originally suggested a lazy import inside the route.
+  > The codebase convention is eager imports at the top of `layout.py` (all
+  > other pages are imported that way), so the eager form is used instead.
 
-- [ ] **6. Styling:**
+- [x] **7. Styling:**
   - Reuse existing CSS tokens from `styles.py` (Executive Dashboard theme)
-  - Add lane-specific CSS to `executive-dashboard.css` if needed (`.timeline-lane`, `.timeline-event-card`, `.timeline-hover-popup`)
+  - Add lane-specific CSS to `executive-dashboard.css` (`.timeline-lane`, `.timeline-event-card`, `.timeline-hover-popup`, `.timeline-gap-break`)
   - Ensure dark theme support
 
-- [ ] **7. Automated tests:**
+- [x] **8. Automated tests:**
+  - Unit tests for geometry (gap compression, positioning, axis markers)
   - Unit tests for layout rendering (no crash)
-  - Integration test: mock API response → verify cards rendered
+  - Unit tests for callback logic (mocked API)
+  - Integration test: real API → verify lanes/events/cursors
+  > **Result:** 30 unit tests in `tests/test_timeline_ui_unit.py` + 5 integration
+  > tests in `tests/test_timeline_ui_integration.py` — all passing.  mypy strict
+  > clean; pylint 10.00/10 on the new timeline package.
 
 #### Manual Validation
 
@@ -613,8 +648,8 @@ with hybrid batching, dedup, and non-fatal failure semantics.
 - [ ] **V3.6:** Hover over an event card in a lane.
   Expected: popup appears with full details (title, time, description, URL).
 
-- [ ] **V3.7:** Scroll down in a lane (or let infinite scroll trigger).
-  Expected: more events load. No duplicate events on re-scroll.
+- [ ] **V3.7:** Click the global "Load more" button.
+  Expected: more events load for every lane with a remaining cursor. No duplicate events. Button hides when all lanes exhausted.
 
 - [ ] **V3.8:** Change time range to "Last 7 days".
   Expected: lanes re-render with only events from the past week. Empty lane if no events in that period.
@@ -626,6 +661,40 @@ with hybrid batching, dedup, and non-fatal failure semantics.
   Expected: swimlane colors adapt — navy elements become lighter, cards get dark backgrounds, readability maintained.
 
 - [ ] **V3.11:** Navigate to another page and back. Timeline state (selected entities, time range) should persist if using `dcc.Store`, or reset gracefully.
+
+- [ ] **V3.12:** Verify gap compression: with sparse events (e.g. 2 events 10 days apart), the lane shows a gap-break marker with `— 10 days —` instead of 600px of empty space.
+
+---
+
+### Phase 5: Proper Person Search for Entity Selector (est. 1–2 days)
+
+**Objective:** Improve the timeline entity selector's typeahead with a proper
+Person search (min 3 chars, Person-only filtering) instead of the generic
+`/api/v1/activity/suggest` endpoint.
+
+**Progress:** [ ] Not started
+
+> **Note:** Added 2026-10-01 during Phase 3 planning. Phase 3 ships with the
+> existing `/api/v1/activity/suggest` endpoint (which delegates to the generic
+> search service and has no entity-type filter). The Person min-3-chars rule
+> lives in `/api/v1/search/persons` (`min_length=3`). This phase is scoped to
+> wiring the selector to a proper Person search.
+
+#### Tasks
+
+- [ ] **1. Extend `/api/v1/activity/suggest`** with an optional `entity_type` query
+  parameter (default `None` = all types). When `entity_type=Person`, delegate to
+  the existing persons search service (min 3 chars, Person-only) instead of the
+  generic search service.
+- [ ] **2. Wire the Person-only toggle** in the timeline entity selector to pass
+  `entity_type=Person` when ON.
+- [ ] **3. Add unit + integration tests** for the `entity_type` filter.
+
+#### Manual Validation
+
+- [ ] **V5.1:** With Person-only ON, type 2 chars → no suggestions (min 3 chars enforced).
+- [ ] **V5.2:** With Person-only ON, type 3+ chars → Person suggestions only.
+- [ ] **V5.3:** With Person-only OFF, type 2+ chars → suggestions across all entity types.
 
 ---
 
@@ -686,12 +755,15 @@ Phase 1 (Consumer ingestion) ──→ Phase 2 (API layer)
                                        ▼
                                   Phase 3 (Dash UI page)
                                        │
+                                       ├──→ Phase 5 (Person search for selector)
                                        ▼
                                   Phase 4 (Integration + polish)
 ```
 
 - Phases 0 → 1 → 2 → 3 are strictly sequential.
 - Phase 4 can overlap with Phase 3 (deep-linking can be partially built alongside the UI).
+- Phase 5 (proper Person search) depends on Phase 3 (the selector UI) and can be
+  built independently after Phase 3 ships.
 
 ## Files Changed Summary
 
@@ -708,8 +780,11 @@ Phase 1 (Consumer ingestion) ──→ Phase 2 (API layer)
 | 7 | `src/app/api/activity/v1/service.py` | 2 |
 | 8 | `src/app/api/activity/v1/query.py` | 2 |
 | 9 | `src/app/dash_app/pages/timeline/__init__.py` | 3 |
-| 10 | `src/app/dash_app/pages/timeline/layout.py` | 3 |
-| 11 | `src/app/dash_app/pages/timeline/callbacks.py` | 3 |
+| 10 | `src/app/dash_app/pages/timeline/geometry.py` | 3 |
+| 11 | `src/app/dash_app/pages/timeline/layout.py` | 3 |
+| 12 | `src/app/dash_app/pages/timeline/callbacks.py` | 3 |
+| 13 | `tests/test_timeline_ui_unit.py` | 3 |
+| 14 | `tests/test_timeline_ui_integration.py` | 3 |
 
 ### Modified files
 
@@ -721,10 +796,13 @@ Phase 1 (Consumer ingestion) ──→ Phase 2 (API layer)
 | 4 | `src/app/analytics/registry.py` | 3 | Add TimelineAnalytic |
 | 5 | `src/app/dash_app/pages/analytics.py` | 3 | Render timeline card + controls |
 | 6 | `src/app/dash_app/layout.py` | 3 | Add `/app/analytics/timeline` route |
-| 7 | `src/app/dash_app/pages/search.py` | 4 | Add "View Timeline" button |
-| 8 | `src/app/dash_app/pages/graph/utils/data_transform.py` | 4 | Add "View Timeline" to node panel |
-| 9 | `src/app/dash_app/pages/collaboration_network/layout.py` | 4 | Add "View Timeline" link |
-| 10 | `docker-compose.yml` | 4 | Verify DATABASE_URL passes to consumer (should already be set) |
+| 7 | `src/app/dash_app/assets/executive-dashboard.css` | 3 | Add `.timeline-*` styles (light + dark) |
+| 8 | `src/app/dash_app/pages/search.py` | 4 | Add "View Timeline" button |
+| 9 | `src/app/dash_app/pages/graph/utils/data_transform.py` | 4 | Add "View Timeline" to node panel |
+| 10 | `src/app/dash_app/pages/collaboration_network/layout.py` | 4 | Add "View Timeline" link |
+| 11 | `docker-compose.yml` | 4 | Verify DATABASE_URL passes to consumer (should already be set) |
+| 12 | `src/app/api/activity/v1/router.py` | 5 | Add `entity_type` filter to suggest |
+| 13 | `src/app/api/activity/v1/service.py` | 5 | Person search delegation |
 
 ## Estimated Effort
 
@@ -735,4 +813,5 @@ Phase 1 (Consumer ingestion) ──→ Phase 2 (API layer)
 | Phase 2 — API | 2–3 | Phase 0 |
 | Phase 3 — Dash UI | 3–4 | Phase 2 |
 | Phase 4 — Integration | 1–2 | Phase 2 (can overlap w/ Phase 3) |
-| **Total** | **9–14** | |
+| Phase 5 — Person search | 1–2 | Phase 3 |
+| **Total** | **10–16** | |

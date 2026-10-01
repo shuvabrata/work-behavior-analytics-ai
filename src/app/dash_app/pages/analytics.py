@@ -19,7 +19,7 @@ from app.analytics.collaboration.config import (
     LAYER_LABELS,
     LAYER_ORDER,
 )
-from app.analytics.registry import GRAPH_ANALYTICS
+from app.analytics.registry import GRAPH_ANALYTICS, TIMELINE_ANALYTIC
 from app.dash_app.components.common import create_page_header
 from app.dash_app.styles import (
     CARD_CONTAINER_STYLE,
@@ -49,14 +49,14 @@ def get_layout() -> html.Div:
         [
             create_page_header(
                 [("Analytics", None)],
-                "Launch pre-built graph visualizations for common leadership and delivery questions.",
+                "Launch pre-built visualizations for common leadership and delivery questions.",
             ),
             html.Div(
                 [
                     dbc.Row(
                         [
                             dbc.Col(_create_analytic_card(analytic), md=6, className="mb-3")
-                            for analytic in GRAPH_ANALYTICS
+                            for analytic in [*GRAPH_ANALYTICS, TIMELINE_ANALYTIC]
                         ],
                         className="g-3",
                     ),
@@ -69,12 +69,14 @@ def get_layout() -> html.Div:
 
 def _create_analytic_card(analytic: Any) -> dbc.Card:
     is_collaboration = analytic.key == "collaboration_network"
+    is_timeline = analytic.key == "activity_timeline"
 
-    footer = (
-        _create_collaboration_controls()
-        if is_collaboration
-        else dbc.Button("Open Visualization", href=analytic.href, color="primary", size="sm")
-    )
+    if is_collaboration:
+        footer = _create_collaboration_controls()
+    elif is_timeline:
+        footer = _create_timeline_controls()
+    else:
+        footer = dbc.Button("Open Visualization", href=analytic.href, color="primary", size="sm")
 
     return dbc.Card(
         dbc.CardBody(
@@ -413,6 +415,63 @@ def _create_collaboration_controls() -> html.Div:
     )
 
 
+def _create_timeline_controls() -> html.Div:
+    """Footer controls for the Activity Timeline analytic card.
+
+    The full entity selector and time-range controls live on the timeline page
+    itself; the gallery card offers an "Open Visualization" button plus a
+    "Show Options" collapse that explains the feature.
+    """
+    return html.Div(
+        [
+            dbc.Row(
+                [
+                    dbc.Col(
+                        dbc.Button(
+                            "Open Visualization",
+                            id="timeline-open-btn",
+                            href="/app/analytics/timeline",
+                            color="primary",
+                            size="sm",
+                        ),
+                        width="auto",
+                    ),
+                    dbc.Col(
+                        dbc.Button(
+                            "Show Options",
+                            id="timeline-controls-toggle-btn",
+                            color="secondary",
+                            outline=True,
+                            size="sm",
+                        ),
+                        width="auto",
+                    ),
+                ],
+                className="g-2 align-items-center",
+            ),
+            dbc.Collapse(
+                [
+                    html.Div(
+                        "Compare the chronological activity of persons and objects "
+                        "across GitHub, Jira, and Confluence in a side-by-side "
+                        "swimlane view. Add entities on the timeline page to build "
+                        "lanes, then hover event cards for details.",
+                        style={
+                            "fontFamily": FONT_SANS,
+                            "fontSize": FONT_SIZE_SMALL,
+                            "color": COLOR_GRAY_MEDIUM,
+                            "marginBottom": SPACING_SMALL,
+                            "marginTop": SPACING_SMALL,
+                        },
+                    ),
+                ],
+                id="timeline-controls-collapse",
+                is_open=False,
+            ),
+        ]
+    )
+
+
 # ---------------------------------------------------------------------------
 # Callbacks
 # ---------------------------------------------------------------------------
@@ -592,3 +651,19 @@ def toggle_collaboration_controls(_n_clicks: int | None, is_open: bool) -> tuple
         "display": "block" if next_state else "none",
     }
     return next_state, label, preview_style
+
+
+@callback(
+    [
+        Output("timeline-controls-collapse", "is_open"),
+        Output("timeline-controls-toggle-btn", "children"),
+    ],
+    Input("timeline-controls-toggle-btn", "n_clicks"),
+    State("timeline-controls-collapse", "is_open"),
+    prevent_initial_call=True,
+)
+def toggle_timeline_controls(_n_clicks: int | None, is_open: bool) -> tuple[bool, str]:
+    """Toggle timeline controls visibility in the analytics card."""
+    next_state = not is_open
+    label = "Hide Options" if next_state else "Show Options"
+    return next_state, label

@@ -1562,3 +1562,346 @@ input::placeholder {
     filter: invert(1) grayscale(100%) brightness(200%);
 }
 
+
+/* ============================================================================= */
+/* Activity Timeline (Swimlane) — /app/analytics/timeline                       */
+/* ============================================================================= */
+
+/* --- Entity selector chips --- */
+.timeline-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background-color: var(--color-background-white);
+    border: 1px solid var(--color-border);
+    border-radius: 2px;
+    padding: 3px 8px;
+    font-size: 12px;
+    color: var(--color-charcoal-medium);
+    margin-right: 6px;
+}
+.timeline-chip-avatar {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background-color: var(--color-navy);
+    color: var(--color-background-white);
+    font-size: 10px;
+    font-weight: 600;
+    flex-shrink: 0;
+}
+.timeline-chip-label {
+    max-width: 180px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.timeline-chip-remove {
+    cursor: pointer;
+    color: var(--color-gray-medium);
+    font-size: 13px;
+    line-height: 1;
+    padding: 0 2px;
+}
+.timeline-chip-remove:hover {
+    color: var(--color-destructive);
+}
+
+/* --- Typeahead suggestions --- */
+.timeline-suggestion-item {
+    padding: 6px 10px;
+    cursor: pointer;
+    border-bottom: 1px solid var(--color-border-light);
+    display: flex;
+    flex-direction: column;
+    background-color: var(--color-background-white);
+}
+.timeline-suggestion-item:hover {
+    background-color: var(--color-surface-active);
+}
+.timeline-suggestion-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--color-charcoal);
+}
+.timeline-suggestion-meta {
+    font-size: 10px;
+    color: var(--color-gray-medium);
+}
+.timeline-suggestion-empty {
+    padding: 6px 10px;
+    font-size: 11px;
+    color: var(--color-gray-medium);
+}
+
+/* --- Swimlane grid --- */
+.timeline-swimlane {
+    display: flex;
+    gap: 0;
+    position: relative;
+    overflow-x: auto;
+}
+.timeline-time-axis {
+    width: 72px;
+    flex-shrink: 0;
+    position: relative;
+    border-right: 1px solid var(--color-border);
+}
+.timeline-time-marker {
+    position: absolute;
+    left: 0;
+    right: 0;
+    font-size: 10px;
+    color: var(--color-gray-light);
+    text-align: right;
+    padding-right: 6px;
+    line-height: 1.2;
+    border-top: 1px dashed var(--color-gray-lighter);
+    white-space: nowrap;
+}
+.timeline-time-marker:first-child {
+    border-top: none;
+}
+
+/* --- Lane --- */
+.timeline-lane {
+    flex: 1;
+    min-width: 220px;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    border-left: 1px solid var(--color-border-light);
+}
+.timeline-lane-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    border-bottom: 2px solid var(--color-border);
+    background-color: var(--color-background-light);
+    position: sticky;
+    top: 0;
+    z-index: 5;
+}
+.timeline-lane-avatar,
+.timeline-lane-avatar-img {
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+.timeline-lane-avatar {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background-color: var(--color-navy);
+    color: var(--color-background-white);
+    font-size: 10px;
+    font-weight: 600;
+}
+.timeline-lane-avatar-img {
+    object-fit: cover;
+}
+.timeline-lane-info {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+.timeline-lane-name {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--color-charcoal);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.timeline-lane-count {
+    font-size: 10px;
+    color: var(--color-gray-medium);
+}
+.timeline-lane-body {
+    position: relative;
+    background: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 31px,
+        var(--color-gray-lighter) 31px,
+        var(--color-gray-lighter) 32px
+    );
+}
+
+/* Empty lane — compact "no activity" state instead of a tall empty body */
+.timeline-lane-empty {
+    padding: 16px 10px;
+    font-size: 11px;
+    color: var(--color-gray-medium);
+    font-style: italic;
+    text-align: center;
+    border-top: 1px dashed var(--color-border);
+}
+
+/* --- Event cards --- */
+.timeline-event-card {
+    position: absolute;
+    left: 8px;
+    right: 8px;
+    background-color: var(--color-background-white);
+    border: 1px solid var(--color-border);
+    border-left: 3px solid var(--color-navy);
+    border-radius: 2px;
+    padding: 6px 8px;
+    cursor: pointer;
+    z-index: 2;
+    overflow: hidden;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+    transition: box-shadow 0.15s;
+}
+.timeline-event-card:hover {
+    box-shadow: 0 3px 10px rgba(44, 82, 130, 0.1);
+    z-index: 3;
+}
+.timeline-card-title {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--color-charcoal);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-bottom: 2px;
+}
+.timeline-card-meta {
+    font-size: 10px;
+    color: var(--color-gray-medium);
+    display: flex;
+    gap: 6px;
+}
+.timeline-card-type {
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+/* --- Gap break marker --- */
+.timeline-gap-break {
+    position: absolute;
+    left: 8px;
+    right: 8px;
+    height: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 9px;
+    color: var(--color-gray-medium);
+    background: repeating-linear-gradient(
+        90deg,
+        transparent,
+        transparent 4px,
+        var(--color-gray-lighter) 4px,
+        var(--color-gray-lighter) 8px
+    );
+    z-index: 1;
+    pointer-events: none;
+}
+
+/* --- Hover popup --- */
+.timeline-popup {
+    display: none;
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 100%;
+    background-color: var(--color-charcoal);
+    color: var(--color-background-white);
+    padding: 8px 10px;
+    border-radius: 2px;
+    font-size: 11px;
+    line-height: 1.4;
+    z-index: 20;
+    margin-top: 4px;
+    white-space: normal;
+}
+.timeline-event-card:hover .timeline-popup {
+    display: block;
+}
+.timeline-popup::before {
+    content: '';
+    position: absolute;
+    bottom: 100%;
+    left: 16px;
+    border: 6px solid transparent;
+    border-bottom-color: var(--color-charcoal);
+}
+.timeline-popup-title {
+    font-weight: 600;
+    font-size: 11px;
+    margin-bottom: 2px;
+}
+.timeline-popup-summary {
+    font-size: 11px;
+    margin-bottom: 4px;
+}
+.timeline-popup-line {
+    font-size: 10px;
+    opacity: 0.9;
+}
+.timeline-popup-link {
+    display: inline-block;
+    margin-top: 4px;
+    font-size: 10px;
+    color: var(--color-info);
+    text-decoration: underline;
+}
+
+/* --- Dark theme overrides --- */
+.theme-executive-dark .timeline-chip {
+    background-color: var(--color-background-white);
+    border-color: var(--color-border);
+    color: var(--color-charcoal-medium);
+}
+.theme-executive-dark .timeline-suggestion-item {
+    background-color: var(--color-background-white);
+    border-bottom-color: var(--color-border-light);
+}
+.theme-executive-dark .timeline-suggestion-item:hover {
+    background-color: var(--color-surface-active);
+}
+.theme-executive-dark .timeline-lane-header {
+    background-color: var(--color-background-light);
+    border-bottom-color: var(--color-border);
+}
+.theme-executive-dark .timeline-lane-body {
+    background: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 31px,
+        var(--color-gray-lighter) 31px,
+        var(--color-gray-lighter) 32px
+    );
+}
+.theme-executive-dark .timeline-event-card {
+    background-color: var(--color-background-white);
+    border-color: var(--color-border);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+.theme-executive-dark .timeline-event-card:hover {
+    box-shadow: 0 3px 10px rgba(95, 134, 180, 0.2);
+}
+.theme-executive-dark .timeline-popup {
+    background-color: var(--color-charcoal);
+    color: var(--color-background-white);
+}
+.theme-executive-dark .timeline-popup::before {
+    border-bottom-color: var(--color-charcoal);
+}
+.theme-executive-dark .timeline-gap-break {
+    background: repeating-linear-gradient(
+        90deg,
+        transparent,
+        transparent 4px,
+        var(--color-gray-lighter) 4px,
+        var(--color-gray-lighter) 8px
+    );
+}

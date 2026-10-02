@@ -216,20 +216,28 @@ this call is a client bug, not a transient API failure.
   `Page`, `Person`); the token keys are snake_case, so add the explicit mapping helper
   in UI-3. Timeline-specific *rules* live in `executive-dashboard.css` using
   `var(--color-*)` tokens. No hardcoded hex in components.
-- **Active-theme color resolution (do not use the static default).**
-  `get_theme_tokens()` with no argument returns the `ACTIVE_THEME = "executive-light"`
-  module constant (`styles.py:44, 272-277`) — it does **not** see the runtime theme,
-  which is applied as a CSS class on `#app-shell` (`layout.py:130, 251-279`). Always
-  resolve entity-type and lane colors by passing the theme explicitly:
-  `get_theme_tokens(active_theme)`, where `active_theme` comes from
-  `Input("theme-store", "data")` on the card-rendering callback. This mirrors how
-  `pages/search.py` re-resolves badge colors per render (`search.py:138-190, 397-422`)
-  and how the graph page re-renders its stylesheet on `theme-store`
-  (`pages/graph/callbacks/display.py:110-128`). Without it, colors are correct in
-  light mode but stale (light hex) after a dark-mode toggle. Do **not** use the
-  module-level `TOKENS` snapshot for per-entity colors. (search.py additionally layers
-  server-side effective-theme overrides from `/api/v1/graph-themes/effective`; that is
-  out of scope here — the active-theme token lookup is sufficient.)
+- **Entity-type / lane color resolution (mirror `pages/search.py` — do not use the
+  static token snapshot).** Resolve colors from the **effective graph theme** — base
+  tokens ⊕ the operator's Graph-Styling overrides from `/api/v1/graph-themes/effective`
+  — not from a static token dict. `get_theme_tokens()` with no argument returns the
+  `ACTIVE_THEME = "executive-light"` snapshot (`styles.py:44, 272-277`), which sees
+  neither the runtime theme (a CSS class on `#app-shell`, `layout.py:130`) nor
+  Graph-Styling overrides. Follow `pages/search.py` instead: a page-level
+  `dcc.Store(id="timeline-theme-store")` is populated by a callback
+  `Input("theme-store", "data") → fetch_effective_theme(active_theme)`
+  (import `fetch_effective_theme` from `app.dash_app.pages.graph.utils`; see
+  `search.py:24, 976-986`). The card-render callback takes both
+  `Input("theme-store", "data")` and `Input("timeline-theme-store", "data")`. The
+  effective doc has shape
+  `{"nodes": {<NodeType>: {"background-color": ...}, "default": {...}}, ...}`, keyed by
+  the same PascalCase `entity_type` the API sends; look the entity-type color up there
+  and **fall back to the base token** (`get_theme_tokens(active_theme)` via
+  `entity_type_token`) when the store is `None` — see `search.py:160-177, 1023-1040`.
+  The five `timeline.lane.*` lane-accent tokens are not part of the effective doc, so
+  resolve those directly from `get_theme_tokens(active_theme)`. Do **not** use the
+  module-level `TOKENS` snapshot for per-entity or lane colors. Without this, colors
+  are stale after a dark-mode toggle *and* diverge from the Graph and Search pages
+  whenever Graph-Styling overrides are set.
 - **Lane palette:** the five lane-accent tokens `timeline.lane.1` … `timeline.lane.5`
   are added to `THEME_TOKENS` (both themes) in **UI-1**, not UI-10; UI-10 only
   calibrates dark-theme variants. `assign_lane_colors(n)` returns token **keys**,
@@ -248,7 +256,8 @@ this call is a client bug, not a transient API failure.
   `executive-dashboard.css:6` and `:83`). Write timeline dark rules the same way —
   do **not** invent a new theme switch.
 - **State:** `dcc.Store` components (prefixed `timeline-`) hold selection, params,
-  fetched lanes/cursors, expansion state. No URL writes in v1.
+  fetched lanes/cursors, expansion state, and the effective-theme payload
+  (`timeline-theme-store`). No URL writes in v1.
 - **IDs:** all timeline components prefixed `timeline-` to avoid collisions in the
   single-page Dash app.
 - **Naming:** page package `src/app/dash_app/pages/timeline/` with `layout.py`
@@ -260,7 +269,8 @@ this call is a client bug, not a transient API failure.
 ## Commands you will need
 
 Run all commands from the repo root with the virtualenv active
-(`source .venv/bin/activate`).
+(`source .venv/bin/activate`). **Never start the app server yourself** — the app
+runs via Docker and is owned by the operator.
 
 | Purpose | Command | Expected on success |
 |---------|---------|---------------------|
@@ -269,7 +279,7 @@ Run all commands from the repo root with the virtualenv active
 | Typecheck | `mypy src/` | exit 0, no errors |
 | Lint (repo gate) | `pylint src --score=y` | repo score ≥ 9.0 (not lower than before) |
 | Security scan | `bandit -c .bandit.yml -r src/ -lll` | no High-severity findings |
-| Run the app | `uvicorn app.main:app --reload` | serves UI at http://localhost:8000/app |
+| Run the app | **ask the operator to (re)start the Docker stack** (`docker compose up -d`) — do not run `uvicorn` yourself | UI served at http://localhost:8000/app |
 | Open the page | http://localhost:8000/app/analytics/timeline | timeline page renders |
 
 `.github/workflows/pr_checks.yml` runs four blocking jobs on every PR: `pytest -m unit
@@ -291,7 +301,8 @@ Every phase below lists **Unit tests** (pure helper tests) and **Manual validati
   `pythonpath = src . tests` — e.g. `from app.dash_app.pages.timeline.helpers import bucket_by_period`.
 - Verify each phase with `pytest -m unit tests/test_activity_timeline_ui_helpers.py -q`;
   expected: all collected pass, 0 failures. A phase is **not done** until its unit
-  tests pass and its `V*` items are manually confirmed with the app running.
+  tests pass and its `V*` items are manually confirmed with the app running — ask
+  the operator to restart it via Docker first; never launch the server yourself.
 - If a phase adds no pure helper (e.g. UI-0), its manual `V*` items are the gate.
 
 ## Scope
@@ -442,11 +453,18 @@ Stop and report back (do not improvise) if:
 
       Do **not** append `TIMELINE_ANALYTIC` to `GRAPH_ANALYTICS` (that list drives
       graph-mode analytics, `registry.py:36-38`); render it separately (Task 5).
-- [ ] **3.** In `layout.py`, add the route branch:
+- [ ] **3.** In `layout.py`, add `timeline` to the **existing top-level page import**
+      (`layout.py:11`) so its callbacks register at app startup — the file imports
+      every other page this way, and a deferred import would register the timeline
+      `@callback`s only on first navigation (exactly the silent-no-op failure mode
+      that `suppress_callback_exceptions=True` hides):
+      ```python
+      from app.dash_app.pages import analytics, chat, collaboration_network, connectors, graph, search, settings, timeline
+      ```
+      Then add the route branch:
       ```python
       if pathname == "/app/analytics/timeline":
-          from app.dash_app.pages.timeline import get_layout as get_timeline_layout
-          return get_timeline_layout()
+          return timeline.get_layout()
       ```
 - [ ] **4.** `get_layout()` returns: `create_page_header([("Analytics", "/app/analytics"), ("Timeline", None)], …)`, a selector bar placeholder, and an empty state via `create_empty_state("Add people or objects to compare their activity.")`.
 - [ ] **5.** In `analytics.py`, render `TIMELINE_ANALYTIC` alongside `GRAPH_ANALYTICS`.
@@ -629,15 +647,19 @@ with placeholder cards. Loading + error handling.
       `Person`→`graph.node.person`, `Issue`→`graph.node.issue`, `Commit`→
       `graph.node.commit`, `Epic`→`graph.node.epic`, `Repository`→
       `graph.node.repository`), and return `graph.node.default` for anything unmapped.
-      `entity_type_token` returns the token **key**; resolve it to a color with
-      `get_theme_tokens(active_theme)` from `app.dash_app.styles`
-      (`styles.py:272-283`), where `active_theme` is read from
-      `Input("theme-store", "data")` on the card-rendering callback (see "Global
-      conventions → Active-theme color resolution"). Do **not** call
-      `get_theme_tokens()` with no argument — it returns the static light-theme
-      snapshot and will not follow a dark-mode toggle. Relationship humanized to
-      Title Case via `humanize_relationship` (`relationship_type` is the API field
-      name).
+      `entity_type_token` returns the base token **key**, used only as the fallback.
+      Resolve the actual color from the effective theme store, mirroring
+      `search.py:160-177`: look up
+      `effective["nodes"][entity_type]["background-color"]` (the API's PascalCase
+      `entity_type` is the effective-doc key), and only when the store is `None` or
+      that type is absent fall back to
+      `get_theme_tokens(active_theme)[entity_type_token(entity_type)]`. The
+      card-rendering callback takes `Input("theme-store", "data")` and
+      `Input("timeline-theme-store", "data")` (see "Global conventions → Entity-type /
+      lane color resolution"). Do **not** call `get_theme_tokens()` with no argument —
+      it returns the static light-theme snapshot and will not follow a dark-mode toggle
+      or Graph-Styling overrides. Relationship humanized to Title Case via
+      `humanize_relationship` (`relationship_type` is the API field name).
 - [ ] **3.** Time rendered from `event_time` via `to_app_timezone` + `UI_DATE_FORMAT`-time
       (time only). Full datetime reserved for the popup.
 - [ ] **4.** Fixed/semi-fixed card height; `text-overflow: ellipsis` on the summary;
@@ -908,7 +930,11 @@ UI-4 is verified by the `V4.*` items only.
       **single-lane** request (`wba_ids=<lane>&cursor=<lane.next_cursor>&from&to&scope&limit`)
       and merge results into that lane. Requests run sequentially (≤5).
 - [ ] **3.** `merge_lane_page` appends new events and updates the lane's `next_cursor`,
-      de-duplicating by `signal_id`.
+      de-duplicating by `signal_id`. **If the single-lane response returns an empty
+      `events` list, set that lane's `next_cursor = None`** instead of storing the
+      cursor the server echoed — the server's `next_cursor` is optimistic (see
+      "Current state" constraint 4), and clearing it is what lets Task 4's button
+      actually hide.
 - [ ] **4.** Button hidden when every lane's `next_cursor` is null; shows a spinner/disabled
       state while requests are in flight.
 - [ ] **5.** Range/scope/selection changes reset cursors to the first page.

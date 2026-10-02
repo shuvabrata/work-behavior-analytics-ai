@@ -250,7 +250,7 @@ this call is a client bug, not a transient API failure.
   Heterogeneous Dash callback signatures follow the existing `Any` convention (see
   `pages/analytics.py:451-495`).
 - **Dark theme mechanism:** the shell element carries `theme-executive-light` /
-  `theme-executive-dark` classes (`layout.py:131`); dark overrides in
+  `theme-executive-dark` classes (`layout.py:130`); dark overrides in
   `executive-dashboard.css` are scoped under `.theme-executive-dark` (see the
   `:root[data-theme="executive-light"]` / `.theme-executive-dark` blocks at
   `executive-dashboard.css:6` and `:83`). Write timeline dark rules the same way —
@@ -454,7 +454,7 @@ Stop and report back (do not improvise) if:
       Do **not** append `TIMELINE_ANALYTIC` to `GRAPH_ANALYTICS` (that list drives
       graph-mode analytics, `registry.py:36-38`); render it separately (Task 5).
 - [ ] **3.** In `layout.py`, add `timeline` to the **existing top-level page import**
-      (`layout.py:11`) so its callbacks register at app startup — the file imports
+      (`layout.py:10`) so its callbacks register at app startup — the file imports
       every other page this way, and a deferred import would register the timeline
       `@callback`s only on first navigation (exactly the silent-no-op failure mode
       that `suppress_callback_exceptions=True` hides):
@@ -470,7 +470,14 @@ Stop and report back (do not improvise) if:
 - [ ] **5.** In `analytics.py`, render `TIMELINE_ANALYTIC` alongside `GRAPH_ANALYTICS`.
       **Do not append it to `GRAPH_ANALYTICS`** — that list feeds
       `GRAPH_ANALYTICS_BY_KEY` (`registry.py:41`) and graph-mode routing. Instead make
-      two explicit changes to `pages/analytics.py`:
+      three explicit changes to `pages/analytics.py`:
+      - first, add the symbol to the existing registry import at
+        `analytics.py:21` — change
+        `from app.analytics.registry import GRAPH_ANALYTICS` to
+        `from app.analytics.registry import GRAPH_ANALYTICS, TIMELINE_ANALYTIC`.
+        (Without this, `TIMELINE_ANALYTIC` is a `NameError` at import and the whole
+        app fails to start.) Verify with
+        `PYTHONPATH=src python -c "import app.dash_app.pages.analytics"` → exit 0.
       - change the gallery loop in `get_layout()` (`analytics.py:59`) to iterate the
         concatenation:
         ```python
@@ -559,9 +566,15 @@ Stop and report back (do not improvise) if:
 - [ ] `test_assign_lane_colors_distinct` — no duplicate colors up to 5.
 - [ ] `test_entity_type_label_mapping` — `PullRequest→"PR"`, unknown→raw type.
 - [ ] `test_selection_add_remove_dedup` — re-adding the same `wba_id` is a no-op; remove drops it.
-- [ ] `test_timeline_callbacks_registered` — importing the timeline package registers
-      at least one `timeline-` key in Dash's `callback_map` (guards the UI-0
-      `__init__` → `callbacks` import; see `dash.callback_map`).
+- [ ] `test_timeline_callbacks_registered` — after importing
+      `app.dash_app.pages.timeline`, assert
+      `any("timeline-" in key for key in dash._callback.GLOBAL_CALLBACK_MAP)`
+      (guards the UI-0 `__init__` → `callbacks` import). Module-level
+      `@callback`/`clientside_callback` registrations land in
+      `dash._callback.GLOBAL_CALLBACK_MAP` in the pinned `dash==4.4.1`;
+      **`dash.callback_map` does not exist** (it raises `AttributeError`/`ImportError`).
+      Reading `create_dash_app().callback_map` is the alternative but pulls in app
+      settings/env — prefer the global map.
 
 #### Manual validation
 

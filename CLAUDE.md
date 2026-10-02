@@ -47,7 +47,7 @@ Shell/git/project commands in this repo are wrapped by the `rtk` token-optimizin
 - `mypy src/` — **strict** (`disallow_untyped_defs`, `disallow_untyped_calls`). Only `app.dash_app.*` relaxes `return-value, index, union-attr`. Every new function needs full annotations.
 - `pylint src` — the repo-wide score must stay **≥ 9.0**
 - `bandit -c .bandit.yml -r src/ -lll` — fails on High severity
-- **Spec freshness** — CI regenerates `docs/design/spec-activity-signal.md` and fails if the committed file differs. After changing ActivitySignal models, run the generator above and commit the regenerated doc.
+- **Spec freshness** — CI regenerates `docs/design/spec-activity-signal.md` and fails if the committed file differs. After changing ActivitySignal models, run the generator above and leave the regenerated doc in the working tree; it must ship in the same change as the model update or CI fails.
 
 ## Import convention
 
@@ -175,6 +175,7 @@ Some suites (e.g. connector validation) live in their own `tests/<suite>/` direc
 
 ## Repo conventions
 
+- **Never commit, push, open a PR, or rewrite history unless the user explicitly asks in that turn.** Leave changes in the working tree and report them. An earlier request does not authorize later commits.
 - API endpoints: `/api/v1/` prefix; add a router module and include it in `src/app/main.py`.
 - Alembic for every schema change; import new models in `src/app/db/models/__init__.py`.
 - `queries_catalog/` (top level) holds the Cypher query catalog by domain; `src/app/query_catalog/` loads it. Neo4j uses a single **undirected** edge per relationship — do not add bidirectional edges (see `docs/design/RELATIONSHIPS_DESIGN.md`).

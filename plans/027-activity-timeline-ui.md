@@ -5,7 +5,7 @@
 > phase. If any "STOP conditions" item occurs, stop and report — do not improvise.
 > Update this plan's status row in `plans/README.md` when a phase completes.
 >
-> **Drift check (run first)**: `git diff --stat 7f08656..HEAD -- src/app/dash_app src/app/analytics src/app/api/activity src/app/dash_app/assets/executive-dashboard.css tests`
+> **Drift check (run first)**: `git diff --stat 94f6b7a..HEAD -- src/app/dash_app src/app/analytics src/app/api/activity src/app/dash_app/assets/executive-dashboard.css tests`
 > If any in-scope file changed since this plan was written, compare the
 > "Current state" excerpts below against the live code before proceeding; on a
 > mismatch, treat it as a STOP condition.
@@ -20,7 +20,8 @@
   (shipped in commit `7f08656`; `GET /api/v1/activity/timeline` and
   `GET /api/v1/activity/suggest` are live).
 - **Category**: direction
-- **Planned at**: commit `6b3d0dd`, 2026-10-02
+- **Planned at**: commit `94f6b7a`, 2026-10-02 (revision commit; in-scope source is
+  unchanged as of this commit)
 - **Branch**: the repo is currently on `feature/activity-timeline-2` (NOT
   `feature/activity-timeline-ui`, as an earlier draft of this plan stated). Work
   on a new branch cut from the current HEAD — see "Git workflow".
@@ -154,8 +155,13 @@ class TimelineResponse:
 
 Query params: `q` (str, **min_length=2**, required), `limit` (int 1–20, default 10).
 Response: `{"results": [{wba_id, label, entity_type, source, avatar_url}]}`
-(`model.py:115-127`). Suggestions are backed by Elasticsearch; the endpoint returns
-`[]` when ES is disabled or `q` is shorter than 2 chars (`service.py:334-343`).
+(`model.py:115-127`). Suggestions are backed by Elasticsearch. Because `q` is declared
+with `min_length=2` at the router (`router.py:132-136`), a query shorter than 2 chars
+is rejected with **422** before it reaches the service — the service's own
+short-query `[]` guard (`service.py:341-342`) is therefore unreachable over HTTP.
+When ES is disabled, the result is an empty `results` list. → The selector must gate
+at ≥2 chars client-side (decision #6, and this is *required*, not cosmetic); a 422 on
+this call is a client bug, not a transient API failure.
 
 ### Constraints the UI must honor (all verified)
 
@@ -199,18 +205,42 @@ Response: `{"results": [{wba_id, label, entity_type, source, avatar_url}]}`
   overrides are honored (defaults: `src/app/settings.py:102-103`). Footer shows
   **time only**; popup shows the **full datetime**. Reference pattern:
   `src/app/dash_app/pages/search.py:202`.
-- **Colors/typography:** import from `app.dash_app.styles`. Entity-type colors reuse
-  the existing graph-node tokens in `THEME_TOKENS` — `graph.node.person`,
-  `graph.node.pull_request`, `graph.node.issue`, `graph.node.commit`,
-  `graph.node.page`, `graph.node.epic`, `graph.node.repository`, `graph.node.branch`,
-  `graph.node.sprint`, … — with the neutral fallback `graph.node.default`. Read them
-  via `get_theme_tokens()` (see `styles.py:272-283`), not by hardcoding. The API sends
-  PascalCase `entity_type` values (`PullRequest`, `Page`, `Person`); the token keys are
-  snake_case, so add an explicit mapping helper (see UI-3). Styling constants are
-  already exported as `COLOR_*`/`FONT_*`/`SPACING_*` (e.g. `COLOR_BORDER`,
-  `COLOR_BACKGROUND_WHITE`); timeline-specific rules live in
-  `executive-dashboard.css` using `var(--color-*)` tokens. No hardcoded hex in
-  components.
+- **Colors/typography:** import static styling constants from `app.dash_app.styles`
+  (`COLOR_*`/`FONT_*`/`SPACING_*`, e.g. `COLOR_BORDER`, `COLOR_BACKGROUND_WHITE` —
+  these are backed by `var(--color-*)` CSS variables, so they follow the runtime theme
+  automatically). Entity-type colors reuse the graph-node tokens in `THEME_TOKENS` —
+  `graph.node.person`, `graph.node.pull_request`, `graph.node.issue`,
+  `graph.node.commit`, `graph.node.page`, `graph.node.epic`, `graph.node.repository`,
+  `graph.node.branch`, `graph.node.sprint`, … — with the neutral fallback
+  `graph.node.default`. The API sends PascalCase `entity_type` values (`PullRequest`,
+  `Page`, `Person`); the token keys are snake_case, so add the explicit mapping helper
+  in UI-3. Timeline-specific *rules* live in `executive-dashboard.css` using
+  `var(--color-*)` tokens. No hardcoded hex in components.
+- **Active-theme color resolution (do not use the static default).**
+  `get_theme_tokens()` with no argument returns the `ACTIVE_THEME = "executive-light"`
+  module constant (`styles.py:44, 272-277`) — it does **not** see the runtime theme,
+  which is applied as a CSS class on `#app-shell` (`layout.py:130, 251-279`). Always
+  resolve entity-type and lane colors by passing the theme explicitly:
+  `get_theme_tokens(active_theme)`, where `active_theme` comes from
+  `Input("theme-store", "data")` on the card-rendering callback. This mirrors how
+  `pages/search.py` re-resolves badge colors per render (`search.py:138-190, 397-422`)
+  and how the graph page re-renders its stylesheet on `theme-store`
+  (`pages/graph/callbacks/display.py:110-128`). Without it, colors are correct in
+  light mode but stale (light hex) after a dark-mode toggle. Do **not** use the
+  module-level `TOKENS` snapshot for per-entity colors. (search.py additionally layers
+  server-side effective-theme overrides from `/api/v1/graph-themes/effective`; that is
+  out of scope here — the active-theme token lookup is sufficient.)
+- **Lane palette:** the five lane-accent tokens `timeline.lane.1` … `timeline.lane.5`
+  are added to `THEME_TOKENS` (both themes) in **UI-1**, not UI-10; UI-10 only
+  calibrates dark-theme variants. `assign_lane_colors(n)` returns token **keys**,
+  resolved to colors through the active-theme mechanism above. The graph palette is
+  deliberately theme-invariant (`styles.py:191`), so lane values may be shared across
+  themes — but the tokens must still live in `THEME_TOKENS` to satisfy the
+  no-hardcoded-hex criterion.
+- **Typing:** CI runs `mypy src/` in strict mode. Annotate every function's parameters
+  and return type; start each module with `from __future__ import annotations`.
+  Heterogeneous Dash callback signatures follow the existing `Any` convention (see
+  `pages/analytics.py:451-495`).
 - **Dark theme mechanism:** the shell element carries `theme-executive-light` /
   `theme-executive-dark` classes (`layout.py:131`); dark overrides in
   `executive-dashboard.css` are scoped under `.theme-executive-dark` (see the
@@ -236,11 +266,18 @@ Run all commands from the repo root with the virtualenv active
 |---------|---------|---------------------|
 | Unit tests (this plan) | `pytest -m unit tests/test_activity_timeline_ui_helpers.py -q` | exit 0, all pass |
 | All unit tests (regression) | `pytest -m unit tests -q` | exit 0, no new failures |
+| Typecheck | `mypy src/` | exit 0, no errors |
+| Lint (repo gate) | `pylint src --score=y` | repo score ≥ 9.0 (not lower than before) |
+| Security scan | `bandit -c .bandit.yml -r src/ -lll` | no High-severity findings |
 | Run the app | `uvicorn app.main:app --reload` | serves UI at http://localhost:8000/app |
 | Open the page | http://localhost:8000/app/analytics/timeline | timeline page renders |
 
-There is **no repo-root lint/typecheck command configured** (only `pytest.ini`).
-Match the surrounding module style manually. Backend migrations are **not** part of
+`.github/workflows/pr_checks.yml` runs four blocking jobs on every PR: `pytest -m unit
+tests`, `mypy src/`, `pylint src` (fails below a repo score of 9.0), and bandit (fails
+on High severity). `mypy.ini` is `strict = True` with `disallow_untyped_defs` /
+`disallow_untyped_calls`; the only relaxation covering this tree is
+`[mypy-app.dash_app.*]` disabling `return-value, index, union-attr`. **Every new
+function must be fully annotated** or CI fails. Backend migrations are **not** part of
 this plan.
 
 ## Per-phase verification convention
@@ -266,7 +303,7 @@ Every phase below lists **Unit tests** (pure helper tests) and **Manual validati
 - **Modified:** `src/app/analytics/registry.py`, `src/app/dash_app/layout.py`,
   `src/app/dash_app/pages/analytics.py`,
   `src/app/dash_app/assets/executive-dashboard.css`,
-  `src/app/dash_app/styles.py` (lane palette tokens only, UI-10).
+  `src/app/dash_app/styles.py` (lane palette tokens in UI-1; dark variants in UI-10).
 
 **Out of scope** — do NOT touch, even if related:
 
@@ -290,8 +327,12 @@ Every phase below lists **Unit tests** (pure helper tests) and **Manual validati
 ## Global done criteria (ALL must hold when the whole plan lands)
 
 - [ ] `pytest -m unit tests -q` exits 0 with the new helper tests passing.
+- [ ] `mypy src/` exits 0; `pylint src --score=y` reports a score ≥ 9.0 and not lower
+      than before the change.
 - [ ] `/app/analytics/timeline` renders from the Analytics gallery card and via the
       direct route; every `V*` item for every executed phase was manually checked.
+- [ ] Toggling the topbar theme re-renders entity-type and lane colors (no stale
+      light-theme hex remains on cards in dark mode).
 - [ ] `git status` shows no files modified outside the Scope list.
 - [ ] No hardcoded hex in timeline components:
       `grep -rnE '#[0-9a-fA-F]{6}' src/app/dash_app/pages/timeline/` returns nothing.
@@ -303,9 +344,11 @@ Stop and report back (do not improvise) if:
 
 - The live API response does not match the "Current state" contract (e.g. a field is
   renamed or `next_cursor` semantics differ) — the codebase has drifted.
-- UI-4's hover popup cannot be made to work with the horizontal-scroll container in a
-  CSS/clientside-only way without a JS-positioned overlay. **Report the constraint**;
-  do not silently accept clipped popups or remove horizontal scroll.
+- `dash_clientside.set_props` is unavailable in the installed Dash version
+  (`requirements.app.txt` pins `dash==4.4.1`; `set_props` needs ≥ 2.16). **Report the
+  constraint** — do not fall back to a CSS-clipped popup and do **not** add
+  `overflow: visible` to lane cells (it breaks horizontal scroll) or remove horizontal
+  scroll.
 - A phase appears to require a backend change or a file outside the Scope list.
 - A step's verification fails twice after a reasonable fix attempt.
 
@@ -337,7 +380,8 @@ Stop and report back (do not improvise) if:
 
 | File | Action | Purpose |
 |------|--------|---------|
-| `src/app/dash_app/pages/timeline/__init__.py` | Create | `__all__ = ["get_layout"]`, re-export |
+| `src/app/dash_app/pages/timeline/__init__.py` | Create | Re-export `get_layout` + import `callbacks` to register them |
+| `src/app/dash_app/pages/timeline/callbacks.py` | Create | Docstring-only stub (filled in UI-1); `__init__` import target |
 | `src/app/dash_app/pages/timeline/layout.py` | Create | Header + empty state + placeholder stores |
 | `src/app/analytics/registry.py` | Modify | Add `TimelineAnalytic` dataclass + `TIMELINE_ANALYTIC` |
 | `src/app/dash_app/layout.py` | Modify | Route `/app/analytics/timeline` |
@@ -345,7 +389,30 @@ Stop and report back (do not improvise) if:
 
 #### Tasks
 
-- [ ] **1.** Create `TimelineAnalytic` in `src/app/analytics/registry.py` — do **not**
+- [ ] **1.** Create the package files. `src/app/dash_app/pages/timeline/callbacks.py`
+      is a **docstring-only stub** at this phase (UI-1 fills it in); it must exist so
+      the package imports cleanly. `src/app/dash_app/pages/timeline/__init__.py`:
+
+      ```python
+      """Activity Timeline page package.
+
+      Exposes get_layout() and registers all Dash callbacks on import.
+      """
+
+      __all__ = ["get_layout"]
+
+      from app.dash_app.pages.timeline.layout import get_layout
+      from app.dash_app.pages.timeline import callbacks  # noqa: F401
+      ```
+
+      The `callbacks` import is **required**: module-level `@callback`s in
+      `callbacks.py` register only when that module is imported (repo convention —
+      see `pages/collaboration_network/__init__.py:13`,
+      `pages/connectors/__init__.py:10`). Without it the page still renders (because
+      `suppress_callback_exceptions=True`) but **every interaction silently does
+      nothing**. `layout.py` must **not** import `callbacks` (circular import — same
+      rationale as `pages/collaboration_network/layout.py:1-5`).
+- [ ] **2.** Create `TimelineAnalytic` in `src/app/analytics/registry.py` — do **not**
       reuse `GraphAnalytic` (its `.href` property generates `/app/graph?mode=<key>`,
       which is wrong for this page — see `registry.py:19-22`). Add exactly:
 
@@ -374,21 +441,39 @@ Stop and report back (do not improvise) if:
       ```
 
       Do **not** append `TIMELINE_ANALYTIC` to `GRAPH_ANALYTICS` (that list drives
-      graph-mode analytics, `registry.py:36-38`); render it separately (Task 4).
-- [ ] **2.** In `layout.py`, add the route branch:
+      graph-mode analytics, `registry.py:36-38`); render it separately (Task 5).
+- [ ] **3.** In `layout.py`, add the route branch:
       ```python
       if pathname == "/app/analytics/timeline":
           from app.dash_app.pages.timeline import get_layout as get_timeline_layout
           return get_timeline_layout()
       ```
-- [ ] **3.** `get_layout()` returns: `create_page_header([("Analytics", "/app/analytics"), ("Timeline", None)], …)`, a selector bar placeholder, and an empty state via `create_empty_state("Add people or objects to compare their activity.")`.
-- [ ] **4.** In `analytics.py`, render `TIMELINE_ANALYTIC` alongside `GRAPH_ANALYTICS`
-      (extend the gallery loop; do **not** append to `GRAPH_ANALYTICS`). Add an
-      `elif analytic.key == "activity_timeline"` branch in `_create_analytic_card`
-      calling `_create_timeline_controls()`.
-- [ ] **5.** `_create_timeline_controls()` mirrors `_create_collaboration_controls()`:
+- [ ] **4.** `get_layout()` returns: `create_page_header([("Analytics", "/app/analytics"), ("Timeline", None)], …)`, a selector bar placeholder, and an empty state via `create_empty_state("Add people or objects to compare their activity.")`.
+- [ ] **5.** In `analytics.py`, render `TIMELINE_ANALYTIC` alongside `GRAPH_ANALYTICS`.
+      **Do not append it to `GRAPH_ANALYTICS`** — that list feeds
+      `GRAPH_ANALYTICS_BY_KEY` (`registry.py:41`) and graph-mode routing. Instead make
+      two explicit changes to `pages/analytics.py`:
+      - change the gallery loop in `get_layout()` (`analytics.py:59`) to iterate the
+        concatenation:
+        ```python
+        for analytic in [*GRAPH_ANALYTICS, TIMELINE_ANALYTIC]:
+        ```
+      - expand the two-branch ternary in `_create_analytic_card`
+        (`analytics.py:70-77`) into an if/elif/else:
+        ```python
+        if analytic.key == "collaboration_network":
+            footer = _create_collaboration_controls()
+        elif analytic.key == "activity_timeline":
+            footer = _create_timeline_controls()
+        else:
+            footer = dbc.Button("Open Visualization", href=analytic.href, color="primary", size="sm")
+        ```
+- [ ] **6.** `_create_timeline_controls()` mirrors `_create_collaboration_controls()`:
       "Open Visualization" (href `/app/analytics/timeline`) + "Show Options" collapse
-      containing Default Range / Group by / View selects. A callback builds the href
+      containing Default Range / Group by / View selects. Use `timeline-`-prefixed ids
+      (e.g. `timeline-open-btn`, `timeline-controls-toggle-btn`,
+      `timeline-controls-collapse`) — the gallery renders every card on one page, so
+      ids must not collide with the `collab-*` controls. A callback builds the href
       with `urlencode({"range": …, "group": …, "scope": …})`. (URL is consumed in
       UI-11; until then it simply navigates.)
 
@@ -402,6 +487,10 @@ Stop and report back (do not improvise) if:
 - [ ] **V0.1** `/app/analytics` shows the "Activity Timeline" card next to "Collaboration Network".
 - [ ] **V0.2** "Show Options" expands with Range/Group/View selects.
 - [ ] **V0.3** "Open Visualization" navigates to `/app/analytics/timeline` and renders the header + empty state.
+- [ ] **V0.4** The timeline package imports cleanly (no `ModuleNotFoundError` for
+      `callbacks`) and the page loads with no browser-console error. From UI-1 onward,
+      also confirm `timeline-`-prefixed callbacks are registered (see the UI-1 unit
+      test `test_timeline_callbacks_registered`).
 
 ---
 
@@ -418,13 +507,17 @@ Stop and report back (do not improvise) if:
 | `src/app/dash_app/pages/timeline/api.py` | Create | `fetch_suggestions(q)` |
 | `src/app/dash_app/pages/timeline/helpers.py` | Create | `assign_lane_colors`, `entity_type_label`, dedup/add/remove helpers |
 | `src/app/dash_app/pages/timeline/layout.py` | Modify | Selector bar + lane-header row |
-| `src/app/dash_app/pages/timeline/callbacks.py` | Create | Typeahead, add/remove, clear-all, max-lane hint |
+| `src/app/dash_app/pages/timeline/callbacks.py` | Modify | Fill the UI-0 stub: typeahead, add/remove, clear-all, max-lane hint |
+| `src/app/dash_app/styles.py` | Modify | Add `timeline.lane.1`–`.5` tokens to `THEME_TOKENS` (both themes) |
 
 #### Tasks
 
 - [ ] **1. Selector bar:** `dbc.Input(id="timeline-search-input")` + a results
       dropdown container. Debounce ~300 ms via `dcc.Store` + a clientside callback that
       returns `no_update` until idle (mirror `graph` spotlight debounce), min 2 chars.
+      The ≥2-char gate is **required**, not cosmetic: `/api/v1/activity/suggest`
+      declares `q` with `min_length=2` (`router.py:132-136`), so a shorter query
+      returns **422**, not an empty result.
 - [ ] **2. Suggestions:** on debounced input → `fetch_suggestions(q)` →
       `GET /api/v1/activity/suggest?q=…` → render up to 10 rows (avatar/type icon +
       label + type tag + source). Click adds; Enter adds the top result.
@@ -436,14 +529,21 @@ Stop and report back (do not improvise) if:
       selection; no chip row.
 - [ ] **5. Limits:** soft cap 5; at 5 disable the input and show the inline hint
       "🔒 Maximum 5 lanes — remove one first". "Clear all" text link appears when ≥1 lane.
-- [ ] **6. Colors:** `assign_lane_colors(n)` returns the first *n* tokens from a
-      5-entry palette (reassigned on removal so colors stay distinct).
+- [ ] **6. Colors:** add five lane-accent tokens `timeline.lane.1` … `timeline.lane.5`
+      to `THEME_TOKENS` in `src/app/dash_app/styles.py`, for **both** themes (values may
+      be shared across themes — the graph palette is deliberately theme-invariant,
+      `styles.py:191`). `assign_lane_colors(n)` returns the first *n* token **keys**
+      (not hex), reassigned on removal so colors stay distinct; resolve them to colors
+      via the active-theme mechanism in "Global conventions".
 
 #### Unit tests
 
 - [ ] `test_assign_lane_colors_distinct` — no duplicate colors up to 5.
 - [ ] `test_entity_type_label_mapping` — `PullRequest→"PR"`, unknown→raw type.
 - [ ] `test_selection_add_remove_dedup` — re-adding the same `wba_id` is a no-op; remove drops it.
+- [ ] `test_timeline_callbacks_registered` — importing the timeline package registers
+      at least one `timeline-` key in Dash's `callback_map` (guards the UI-0
+      `__init__` → `callbacks` import; see `dash.callback_map`).
 
 #### Manual validation
 
@@ -529,9 +629,15 @@ with placeholder cards. Loading + error handling.
       `Person`→`graph.node.person`, `Issue`→`graph.node.issue`, `Commit`→
       `graph.node.commit`, `Epic`→`graph.node.epic`, `Repository`→
       `graph.node.repository`), and return `graph.node.default` for anything unmapped.
-      Resolve the hex with `get_theme_tokens()` from `app.dash_app.styles`
-      (`styles.py:272-283`). Relationship humanized to Title Case via
-      `humanize_relationship` (`relationship_type` is the API field name).
+      `entity_type_token` returns the token **key**; resolve it to a color with
+      `get_theme_tokens(active_theme)` from `app.dash_app.styles`
+      (`styles.py:272-283`), where `active_theme` is read from
+      `Input("theme-store", "data")` on the card-rendering callback (see "Global
+      conventions → Active-theme color resolution"). Do **not** call
+      `get_theme_tokens()` with no argument — it returns the static light-theme
+      snapshot and will not follow a dark-mode toggle. Relationship humanized to
+      Title Case via `humanize_relationship` (`relationship_type` is the API field
+      name).
 - [ ] **3.** Time rendered from `event_time` via `to_app_timezone` + `UI_DATE_FORMAT`-time
       (time only). Full datetime reserved for the popup.
 - [ ] **4.** Fixed/semi-fixed card height; `text-overflow: ellipsis` on the summary;
@@ -582,11 +688,21 @@ with placeholder cards. Loading + error handling.
         child of the page root, **outside** the scrolling grid.
       - Give each card its detail payload via a data attribute, e.g.
         `html.A(..., **{"data-timeline-event": json.dumps(popup_fields(...))})`.
-      - Add a clientside callback that on `mouseover`/`focusin` (event delegation on
-        the grid) reads the attribute, fills the portal, and positions it
-        `position: fixed` using `target.getBoundingClientRect()`, choosing above/below
-        based on whether the card sits in the upper/lower half of the viewport. On
-        `mouseout`/`focusout`, hide it.
+      - **Mechanism (Dash cannot bind a callback to a DOM event, so install the
+        listeners once and drive the portal imperatively).** Register one
+        `clientside_callback` with a dummy `Output` and
+        `prevent_initial_call=False`; its JS runs on page load and installs a single
+        set of delegated listeners on `document` (`mouseover`, `focusin`, `mouseout`,
+        `focusout`, `scroll`, `resize`, and `keydown` for Escape), guarded by a
+        `window.__timelinePopupWired` flag so a re-render does not attach duplicates.
+        The `mouseover`/`focusin` handler reads `data-timeline-event` off the closest
+        card to the event target, then calls
+        `window.dash_clientside.set_props("timeline-popup-portal", {children: …,
+        style: …})` — `set_props` (Dash ≥ 2.16; this repo pins `dash==4.4.1`) is how
+        the portal is filled, positioned, and hidden without an `Input`. Position
+        `position: fixed` from `target.getBoundingClientRect()`, choosing above/below
+        by which half of the viewport the card occupies. Hide via `set_props` on
+        `mouseout`/`focusout`, `scroll`, `resize`, and Escape.
       - The portal sits at a high `z-index` at page level, so it is never clipped by
         the grid. Do **not** add `overflow: visible` to lane cells (it would break
         horizontal scroll).
@@ -606,6 +722,9 @@ with placeholder cards. Loading + error handling.
 #### Unit tests
 
 - [ ] `test_popup_fields_from_event` — popup builder includes source link only when url present.
+
+The portal's listener/`set_props` JS is vanilla DOM code and is **not unit-testable**;
+UI-4 is verified by the `V4.*` items only.
 
 #### Manual validation
 
@@ -819,14 +938,15 @@ with placeholder cards. Loading + error handling.
 | File | Action | Purpose |
 |------|--------|---------|
 | `src/app/dash_app/assets/executive-dashboard.css` | Modify | `.timeline-*` token-based rules + dark overrides |
-| `src/app/dash_app/styles.py` | Modify | Lane palette tokens (optional) |
+| `src/app/dash_app/styles.py` | Modify | Dark-theme/contrast variants for the `timeline.lane.*` tokens (defined in UI-1) |
 
 #### Tasks
 
 - [ ] **1.** Define `.timeline-card`, `.timeline-popup`, `.timeline-idle-bar`,
       `.timeline-guide`, `.timeline-lane-header`, `.timeline-axis` using `var(--color-*)`.
-- [ ] **2.** Lane palette: 5 accents with light/dark variants calibrated for contrast;
-      verify entity-type colors remain legible on dark card backgrounds.
+- [ ] **2.** Lane palette: calibrate dark-theme variants / contrast for the
+      `timeline.lane.1`–`.5` tokens added in UI-1 (the palette is *defined* in UI-1,
+      not here); verify entity-type colors remain legible on dark card backgrounds.
 - [ ] **3.** Ensure the popup, sticky headers, and hover states all adapt (no hardcoded hex).
 
 #### Unit tests
@@ -871,8 +991,12 @@ with placeholder cards. Loading + error handling.
       response, drop that lane, and retry once; if it fails again, show the danger
       alert preserving the last good render.
 - [ ] **3.** Applying params populates the selection store + toolbar controls, then
-      triggers the normal fetch. Applies **once** on initial load (guard against
-      re-applying on later navigation).
+      triggers the normal fetch. Applies **once** on initial load, guarded by a
+      `dcc.Store(id="timeline-deeplink-applied", storage_type="memory")` boolean:
+      once it is `True`, the handler raises `PreventUpdate` and does not re-apply.
+      This guard is necessary because `url.search` is an `Input` that also fires when
+      the global-search box writes it (`layout.py:227-239`) and on any later
+      navigation — without it, re-applying would clobber the user's in-page state.
 - [ ] **4.** Gallery "Show Options" href (UI-0) uses the same param names.
 
 #### Unit tests
@@ -961,7 +1085,7 @@ UI-12 polish ── last
 |---|------|-------|
 | 1 | `src/app/dash_app/pages/timeline/__init__.py` | UI-0 |
 | 2 | `src/app/dash_app/pages/timeline/layout.py` | UI-0 |
-| 3 | `src/app/dash_app/pages/timeline/callbacks.py` | UI-1 |
+| 3 | `src/app/dash_app/pages/timeline/callbacks.py` | UI-0 (stub), UI-1+ |
 | 4 | `src/app/dash_app/pages/timeline/helpers.py` | UI-1 |
 | 5 | `src/app/dash_app/pages/timeline/api.py` | UI-1 |
 | 6 | `tests/test_activity_timeline_ui_helpers.py` | UI-1+ |
@@ -974,7 +1098,7 @@ UI-12 polish ── last
 | 2 | `src/app/dash_app/layout.py` | UI-0 | `/app/analytics/timeline` route |
 | 3 | `src/app/dash_app/pages/analytics.py` | UI-0 | Timeline card + controls |
 | 4 | `src/app/dash_app/assets/executive-dashboard.css` | UI-3…UI-10 | Timeline CSS + dark overrides |
-| 5 | `src/app/dash_app/styles.py` | UI-10 | Lane palette tokens (optional) |
+| 5 | `src/app/dash_app/styles.py` | UI-1, UI-10 | `timeline.lane.*` tokens (UI-1) + dark variants (UI-10) |
 
 ---
 

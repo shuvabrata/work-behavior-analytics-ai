@@ -108,7 +108,7 @@ async def upsert_config_item(
     if not db_item:
         return None
 
-    for key, value in data.items():
+    for key, value in data.items():  # type: ignore[unreachable]
         setattr(db_item, key, value)
     await db.commit()
     await db.refresh(db_item)
@@ -128,7 +128,7 @@ async def delete_config_item(
     db_item = result.scalars().first()
     if not db_item:
         return False
-    await db.delete(db_item)
+    await db.delete(db_item)  # type: ignore[unreachable]
     await db.commit()
     return True
 

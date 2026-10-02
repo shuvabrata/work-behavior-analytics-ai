@@ -1,12 +1,45 @@
-# Activity Timeline — UI Implementation Plan
+# Plan 027: Activity Timeline UI (phases UI-0 … UI-12)
 
-> **Plan:** 027
-> **Date:** 2026-10-02
-> **Feature design:** `plans/activity-timeline-feature.md`
-> **Backend plan:** `plans/026-activity-timeline-implementation.md` (Phases 0–2 complete)
-> **Visual reference:** `plans/timeline-samples/03-swimlane-multi-user.html`
-> **Branch:** `feature/activity-timeline-ui`
-> **Route:** `/app/analytics/timeline`
+> **Executor instructions**: Follow this plan phase by phase, in order. Run every
+> verification command and confirm the expected result before moving to the next
+> phase. If any "STOP conditions" item occurs, stop and report — do not improvise.
+> Update this plan's status row in `plans/README.md` when a phase completes.
+>
+> **Drift check (run first)**: `git diff --stat 7f08656..HEAD -- src/app/dash_app src/app/analytics src/app/api/activity src/app/dash_app/assets/executive-dashboard.css tests`
+> If any in-scope file changed since this plan was written, compare the
+> "Current state" excerpts below against the live code before proceeding; on a
+> mismatch, treat it as a STOP condition.
+
+## Status
+
+- **Priority**: P1
+- **Effort**: L (~8.5 focused days; 13 independently reviewable phases)
+- **Risk**: MED — large net-new UI. Highest-risk areas: sticky-axis + horizontal
+  scroll + hover-popup interaction (UI-2/UI-4), and Dash callback re-render cost (UI-12).
+- **Depends on**: `plans/026-activity-timeline-implementation.md` Phases 0–2
+  (shipped in commit `7f08656`; `GET /api/v1/activity/timeline` and
+  `GET /api/v1/activity/suggest` are live).
+- **Category**: direction
+- **Planned at**: commit `6b3d0dd`, 2026-10-02
+- **Branch**: the repo is currently on `feature/activity-timeline-2` (NOT
+  `feature/activity-timeline-ui`, as an earlier draft of this plan stated). Work
+  on a new branch cut from the current HEAD — see "Git workflow".
+
+> **Plan provenance**: feature design `plans/activity-timeline-feature.md` (decisions log) ·
+> superseded backend UI phase in `plans/026-activity-timeline-implementation.md` ·
+> visual reference `plans/timeline-samples/03-swimlane-multi-user.html`
+> **Route**: `/app/analytics/timeline`
+
+## Why this matters
+
+The Activity Timeline is the first UI over the timeline backend that shipped in
+`7f08656`. It lets a leader select up to five people/objects and compare their
+chronological activity (commits, PRs, issue/page changes, state history) side by
+side. This plan builds that Dash view on top of the already-live API — **no
+backend changes**. Everything here is net-new UI, so the risk is concentrated in
+layout/CSS mechanics and Dash state handling, not in data correctness. When this
+lands, `/app/analytics/timeline` becomes a reachable, themed, deep-linkable page
+launched from the Analytics gallery.
 
 ---
 
@@ -67,22 +100,90 @@ via the UI formats; the sample's decorative "🏊 swimlane" banner is omitted.
 
 ---
 
-## Backend reality & constraints (no backend changes required)
+## Current state — verified API contract (no backend changes required)
 
-These were verified against the shipped API and shape the UI design:
+The UI talks to two live endpoints (registered in `src/app/main.py:195`,
+`prefix="/api/v1"`). The models below are inlined verbatim from
+`src/app/api/activity/v1/model.py`; **use these exact field names** — the UI
+helpers and card builders depend on them.
+
+### `GET /api/v1/activity/timeline`
+
+Query params (router `src/app/api/activity/v1/router.py:25-56`):
+
+| Param | Type | Default | Notes |
+|-------|------|---------|-------|
+| `wba_ids` | str, **required** | — | Comma-separated `{source}::{entity_type}::{id}`, one per lane |
+| `scope` | `"activity"` \| `"history"` | `activity` | invalid value → 400 |
+| `from` | ISO 8601 datetime | `None` | query alias for `from_` |
+| `to` | ISO 8601 datetime | `None` | |
+| `cursor` | str | `None` | opaque; applies to **every** lane in the request |
+| `limit` | int 1–100 | `20` | events **per lane** |
+
+Response shape (`model.py:50-112`):
+
+```python
+class TimelineEvent:
+    signal_id: str            # UUID string
+    event_time: datetime
+    relationship_type: str    # e.g. "CREATED", "REVIEWED"; "STATE_CHANGE" for history
+    summary: str | None       # may be None → card must fall back
+    entity_type: str          # the *other* side (activity) / own type (history)
+    source: str               # "github" | "jira" | "confluence"
+    url: str | None           # source-system link
+    details: dict             # {} for scope=activity; attribute snapshot for history
+
+class TimelineLane:
+    wba_id: str
+    entity_type: str
+    label: str                # pre-computed display name or raw id
+    avatar_url: str | None    # Person only
+    events: list[TimelineEvent]
+    next_cursor: str | None
+
+class TimelineMeta:
+    time_range: {"from": datetime | None, "to": datetime | None}
+    total_lanes: int
+
+class TimelineResponse:
+    lanes: list[TimelineLane]
+    meta: TimelineMeta
+```
+
+### `GET /api/v1/activity/suggest`
+
+Query params: `q` (str, **min_length=2**, required), `limit` (int 1–20, default 10).
+Response: `{"results": [{wba_id, label, entity_type, source, avatar_url}]}`
+(`model.py:115-127`). Suggestions are backed by Elasticsearch; the endpoint returns
+`[]` when ES is disabled or `q` is shorter than 2 chars (`service.py:334-343`).
+
+### Constraints the UI must honor (all verified)
 
 1. **Activity-scope events carry no related-entity id.** `TimelineEvent` exposes
    `entity_type` (the *other* side) but not its id; `details` is `{}` for
-   `scope=activity` (full attribute snapshot only for `scope=history`). → Card shows
-   `summary`, not "PR #142".
-2. **No per-lane count.** `TimelineLane` has no `total_count`. → Lane headers show no
-   event count.
-3. **One global cursor per request.** The router accepts a single `cursor` applied to
-   *all* lanes while returning per-lane `next_cursor`. → Pagination issues one
-   single-lane request per lane instead of one multi-lane request.
-4. **History scope** yields synthetic `STATE_CHANGE` events with `summary =
-   display_name`, `entity_type` = the lane entity's own type, and a populated
-   `details` snapshot.
+   `scope=activity` (populated snapshot only for `scope=history`). → Card shows
+   `summary`, not "PR #142". (`service.py:158-185`)
+2. **No per-lane event count.** `TimelineLane` has no `total_count`. → Lane headers
+   show no event count.
+3. **Cursor is per-lane, not global.** The request accepts *one* `cursor` that is
+   applied to *all* lanes (`service.py:232-247`), while each lane returns its own
+   `next_cursor` (`service.py:290-292`). Because the cursor encodes a specific
+   lane's `(event_time, row_id)`, a shared cursor across lanes is semantically
+   wrong. → Pagination must issue **one single-lane request per lane**, each with its
+   own `cursor`. This is the workaround, not an optimization.
+4. **`next_cursor` is a may-exist signal, not a has-more signal.** It is emitted
+   whenever a lane returned exactly `limit` events (`service.py:291`), even if the
+   table has no more rows. A subsequent "Load more" can therefore return zero events;
+   the UI must clear that lane's cursor when it gets an empty page (UI-12 edge case).
+5. **One invalid `wba_id` fails the whole request.** The router validates every id
+   up front and returns **400** with `detail.wba_id` set to the offending key
+   (`router.py:69-88`); the service's per-lane skip is unreachable over HTTP. → The
+   selector must validate the `{source}::{type}::{id}` shape client-side before
+   fetching, and treat a 400 as "drop the named lane, retry once" (UI-11).
+6. **History scope** yields synthetic `STATE_CHANGE` events with
+   `summary = display_name`, `entity_type` = the lane entity's own type, `url`
+   extracted from `attributes.url`, and a populated `details` snapshot
+   (`service.py:188-210`).
 
 ---
 
@@ -92,15 +193,30 @@ These were verified against the shipped API and shape the UI design:
   `pages/search.py`. Base URL from `os.getenv("API_BASE_URL", "http://localhost:8000")`;
   timeout from `runtime_settings.get_int("HTTP_REQUEST_TIMEOUT")`. A small
   `pages/timeline/api.py` wrapper centralizes the two calls.
-- **Datetime rendering:** `app.common.timezone.to_app_timezone(dt)` +
-  `settings.UI_DATETIME_FORMAT` / `UI_DATE_FORMAT` (see `components/common.py`
-  `_panel_properties_table` for the reference pattern). Footer shows **time only**;
-  popup shows the **full datetime**.
-- **Colors/typography:** import from `app.dash_app.styles`; entity-type colors reuse
-  existing graph tokens (`graph.node.pull_request`, `.issue`, `.commit`, `.page`,
-  `.person`, `.epic`, `.repository`, …) with a neutral fallback. No hardcoded hex in
-  components; timeline-specific rules live in `executive-dashboard.css` using
-  `var(--color-*)` tokens.
+- **Datetime rendering:** `to_app_timezone(dt)` from `app.common.timezone`
+  (`src/app/common/timezone.py:16`), then format with
+  `runtime_settings.get("UI_DATETIME_FORMAT")` / `get("UI_DATE_FORMAT")` so runtime
+  overrides are honored (defaults: `src/app/settings.py:102-103`). Footer shows
+  **time only**; popup shows the **full datetime**. Reference pattern:
+  `src/app/dash_app/pages/search.py:202`.
+- **Colors/typography:** import from `app.dash_app.styles`. Entity-type colors reuse
+  the existing graph-node tokens in `THEME_TOKENS` — `graph.node.person`,
+  `graph.node.pull_request`, `graph.node.issue`, `graph.node.commit`,
+  `graph.node.page`, `graph.node.epic`, `graph.node.repository`, `graph.node.branch`,
+  `graph.node.sprint`, … — with the neutral fallback `graph.node.default`. Read them
+  via `get_theme_tokens()` (see `styles.py:272-283`), not by hardcoding. The API sends
+  PascalCase `entity_type` values (`PullRequest`, `Page`, `Person`); the token keys are
+  snake_case, so add an explicit mapping helper (see UI-3). Styling constants are
+  already exported as `COLOR_*`/`FONT_*`/`SPACING_*` (e.g. `COLOR_BORDER`,
+  `COLOR_BACKGROUND_WHITE`); timeline-specific rules live in
+  `executive-dashboard.css` using `var(--color-*)` tokens. No hardcoded hex in
+  components.
+- **Dark theme mechanism:** the shell element carries `theme-executive-light` /
+  `theme-executive-dark` classes (`layout.py:131`); dark overrides in
+  `executive-dashboard.css` are scoped under `.theme-executive-dark` (see the
+  `:root[data-theme="executive-light"]` / `.theme-executive-dark` blocks at
+  `executive-dashboard.css:6` and `:83`). Write timeline dark rules the same way —
+  do **not** invent a new theme switch.
 - **State:** `dcc.Store` components (prefixed `timeline-`) hold selection, params,
   fetched lanes/cursors, expansion state. No URL writes in v1.
 - **IDs:** all timeline components prefixed `timeline-` to avoid collisions in the
@@ -108,6 +224,104 @@ These were verified against the shipped API and shape the UI design:
 - **Naming:** page package `src/app/dash_app/pages/timeline/` with `layout.py`
   (view builders), `callbacks.py` (Dash callbacks), `helpers.py` (pure, unit-testable
   functions), `api.py` (HTTP wrapper), `__init__.py`.
+
+---
+
+## Commands you will need
+
+Run all commands from the repo root with the virtualenv active
+(`source .venv/bin/activate`).
+
+| Purpose | Command | Expected on success |
+|---------|---------|---------------------|
+| Unit tests (this plan) | `pytest -m unit tests/test_activity_timeline_ui_helpers.py -q` | exit 0, all pass |
+| All unit tests (regression) | `pytest -m unit tests -q` | exit 0, no new failures |
+| Run the app | `uvicorn app.main:app --reload` | serves UI at http://localhost:8000/app |
+| Open the page | http://localhost:8000/app/analytics/timeline | timeline page renders |
+
+There is **no repo-root lint/typecheck command configured** (only `pytest.ini`).
+Match the surrounding module style manually. Backend migrations are **not** part of
+this plan.
+
+## Per-phase verification convention
+
+Every phase below lists **Unit tests** (pure helper tests) and **Manual validation**
+(visual acceptance). Apply this convention to each phase:
+
+- Put every phase's unit tests in `tests/test_activity_timeline_ui_helpers.py`, with
+  `pytestmark = pytest.mark.unit` at module top (model after `tests/test_analytics_page.py`).
+  Helper modules are importable in tests because `pytest.ini` sets
+  `pythonpath = src . tests` — e.g. `from app.dash_app.pages.timeline.helpers import bucket_by_period`.
+- Verify each phase with `pytest -m unit tests/test_activity_timeline_ui_helpers.py -q`;
+  expected: all collected pass, 0 failures. A phase is **not done** until its unit
+  tests pass and its `V*` items are manually confirmed with the app running.
+- If a phase adds no pure helper (e.g. UI-0), its manual `V*` items are the gate.
+
+## Scope
+
+**In scope** — exactly these files:
+
+- **New:** `src/app/dash_app/pages/timeline/{__init__,layout,callbacks,helpers,api}.py`,
+  `tests/test_activity_timeline_ui_helpers.py`.
+- **Modified:** `src/app/analytics/registry.py`, `src/app/dash_app/layout.py`,
+  `src/app/dash_app/pages/analytics.py`,
+  `src/app/dash_app/assets/executive-dashboard.css`,
+  `src/app/dash_app/styles.py` (lane palette tokens only, UI-10).
+
+**Out of scope** — do NOT touch, even if related:
+
+- **Any backend code** (`src/app/api/activity/**`, `src/app/db/**`, migrations). The
+  API is shipped and frozen for this plan; the UI works around its constraints.
+- `src/app/dash_app/pages/graph/**`, `pages/search.py`, `pages/collaboration_network/**`
+  — other pages stay untouched beyond adding the gallery card/route wiring.
+- Outbound deep-links from other pages ("View Timeline" buttons) and any Playwright/e2e
+  suite — deferred (see "Deferred").
+
+## Git workflow
+
+- Branch: create `feat/activity-timeline-ui` from the current HEAD
+  (`git switch -c feat/activity-timeline-ui`). Do not work directly on
+  `feature/activity-timeline-2` or `main`.
+- Commit per phase using short imperative subjects, matching recent history
+  (e.g. `Activity timeline UI-0: scaffold, route & gallery entry`). Recent subjects
+  are plain imperative sentences — not Conventional Commits.
+- Do **not** push or open a PR unless the operator instructs it.
+
+## Global done criteria (ALL must hold when the whole plan lands)
+
+- [ ] `pytest -m unit tests -q` exits 0 with the new helper tests passing.
+- [ ] `/app/analytics/timeline` renders from the Analytics gallery card and via the
+      direct route; every `V*` item for every executed phase was manually checked.
+- [ ] `git status` shows no files modified outside the Scope list.
+- [ ] No hardcoded hex in timeline components:
+      `grep -rnE '#[0-9a-fA-F]{6}' src/app/dash_app/pages/timeline/` returns nothing.
+- [ ] `plans/README.md` status row for plan 027 updated.
+
+## STOP conditions
+
+Stop and report back (do not improvise) if:
+
+- The live API response does not match the "Current state" contract (e.g. a field is
+  renamed or `next_cursor` semantics differ) — the codebase has drifted.
+- UI-4's hover popup cannot be made to work with the horizontal-scroll container in a
+  CSS/clientside-only way without a JS-positioned overlay. **Report the constraint**;
+  do not silently accept clipped popups or remove horizontal scroll.
+- A phase appears to require a backend change or a file outside the Scope list.
+- A step's verification fails twice after a reasonable fix attempt.
+
+## Maintenance notes
+
+- **Pagination coupling:** UI-9 depends on the per-lane cursor workaround. If the
+  backend later adds a true multi-lane cursor (deferred), replace the per-lane loop in
+  `callbacks.py` and delete the "one request per lane" comment.
+- **`next_cursor` is optimistic:** a lane can report a cursor when no further rows
+  exist. UI-12 handles the empty-page case; any future pager must too.
+- **Entity-type colors** are keyed by PascalCase API values mapped to snake_case
+  tokens in UI-3's helper. Adding a new entity type means adding a mapping entry;
+  unmapped types intentionally fall back to `graph.node.default`.
+- **Reviewer focus:** verify the sticky axis/header does not clip the hover popup, that
+  keyboard focus opens the popup, and that "Load more" issues per-lane requests (not a
+  single multi-lane request).
 
 ---
 
@@ -131,10 +345,36 @@ These were verified against the shipped API and shape the UI design:
 
 #### Tasks
 
-- [ ] **1.** Create `TimelineAnalytic` in `registry.py` — do **not** reuse
-      `GraphAnalytic` (its `.href` points at `/app/graph?mode=`). Follow the
-      dataclass in plan 026 Phase 3 Task 4, with `key="activity_timeline"`,
-      `icon="fas fa-timeline"`.
+- [ ] **1.** Create `TimelineAnalytic` in `src/app/analytics/registry.py` — do **not**
+      reuse `GraphAnalytic` (its `.href` property generates `/app/graph?mode=<key>`,
+      which is wrong for this page — see `registry.py:19-22`). Add exactly:
+
+      ```python
+      @dataclass(frozen=True)
+      class TimelineAnalytic:
+          """Metadata for the activity timeline visualization."""
+          key: str
+          title: str
+          description: str
+          icon: str
+
+          @property
+          def href(self) -> str:
+              return "/app/analytics/timeline"
+
+      TIMELINE_ANALYTIC = TimelineAnalytic(
+          key="activity_timeline",
+          title="Activity Timeline",
+          description=(
+              "Visualize the chronological activity of persons and objects "
+              "across GitHub, Jira, and Confluence in a side-by-side swimlane view."
+          ),
+          icon="fas fa-timeline",
+      )
+      ```
+
+      Do **not** append `TIMELINE_ANALYTIC` to `GRAPH_ANALYTICS` (that list drives
+      graph-mode analytics, `registry.py:36-38`); render it separately (Task 4).
 - [ ] **2.** In `layout.py`, add the route branch:
       ```python
       if pathname == "/app/analytics/timeline":
@@ -275,7 +515,7 @@ with placeholder cards. Loading + error handling.
 | File | Action | Purpose |
 |------|--------|---------|
 | `src/app/dash_app/pages/timeline/layout.py` | Modify | `_event_card(event, lane_color)` |
-| `src/app/dash_app/pages/timeline/helpers.py` | Modify | `humanize_relationship`, `card_summary` |
+| `src/app/dash_app/pages/timeline/helpers.py` | Modify | `humanize_relationship`, `card_summary`, `entity_type_token` |
 | `src/app/dash_app/assets/executive-dashboard.css` | Modify | `.timeline-card*` rules |
 
 #### Tasks
@@ -283,8 +523,15 @@ with placeholder cards. Loading + error handling.
 - [ ] **1.** Card: left accent border in the **lane color**; line 1 = `summary`,
       one line, ellipsised; fallback when null = humanized relationship + entity type.
 - [ ] **2.** Line 2 = `<EntityType (colored)> · <relationship> · <time>` — e.g.
-      `PR · Created · 2:30 PM`. Entity-type token colored via graph node tokens with a
-      neutral fallback; relationship humanized to Title Case.
+      `PR · Created · 2:30 PM`. Color the type via a new pure helper
+      `entity_type_token(entity_type) -> str`: lower-case and snake_case the PascalCase
+      API value (`PullRequest`→`graph.node.pull_request`, `Page`→`graph.node.page`,
+      `Person`→`graph.node.person`, `Issue`→`graph.node.issue`, `Commit`→
+      `graph.node.commit`, `Epic`→`graph.node.epic`, `Repository`→
+      `graph.node.repository`), and return `graph.node.default` for anything unmapped.
+      Resolve the hex with `get_theme_tokens()` from `app.dash_app.styles`
+      (`styles.py:272-283`). Relationship humanized to Title Case via
+      `humanize_relationship` (`relationship_type` is the API field name).
 - [ ] **3.** Time rendered from `event_time` via `to_app_timezone` + `UI_DATE_FORMAT`-time
       (time only). Full datetime reserved for the popup.
 - [ ] **4.** Fixed/semi-fixed card height; `text-overflow: ellipsis` on the summary;
@@ -294,6 +541,8 @@ with placeholder cards. Loading + error handling.
 
 - [ ] `test_humanize_relationship` — `CREATED→"Created"`, `STATE_CHANGE→"Updated"`.
 - [ ] `test_card_summary_fallback` — null summary falls back to relationship + type.
+- [ ] `test_entity_type_token_mapping` — `PullRequest→"graph.node.pull_request"`,
+      `Page→"graph.node.page"`; an unknown type returns `"graph.node.default"`.
 
 #### Manual validation
 
@@ -314,8 +563,9 @@ with placeholder cards. Loading + error handling.
 
 | File | Action | Purpose |
 |------|--------|---------|
-| `src/app/dash_app/pages/timeline/layout.py` | Modify | Wrap card in anchor + popup markup |
-| `src/app/dash_app/assets/executive-dashboard.css` | Modify | `.timeline-card:hover .timeline-popup`, flip variants |
+| `src/app/dash_app/pages/timeline/layout.py` | Modify | Card anchor; popup portal + data attributes |
+| `src/app/dash_app/pages/timeline/helpers.py` | Modify | `popup_fields(event)` |
+| `src/app/dash_app/assets/executive-dashboard.css` | Modify | `.timeline-popup-portal` styles |
 
 #### Tasks
 
@@ -324,12 +574,34 @@ with placeholder cards. Loading + error handling.
       full datetime (`UI_DATETIME_FORMAT`), and an "Open source ↗" link to `event.url`
       (rendered only when `url` is present). `scope=activity` detail is limited (no
       attributes); `scope=history` may show key attributes from `details`.
-- [ ] **3.** CSS-only show on `:hover` and `:focus-within` (keyboard); `bottom: 100%`
-      for cards in the upper half of the viewport, `top: 100%` for the lower half, to
-      avoid clipping. Lane cells set `overflow: visible`; popup `z-index` above
-      neighbours.
-- [ ] **4.** "Open source ↗" stops propagation so it opens the source URL, not Graph.
-      (Render it as the popup's own `<a>`; the card anchor is the click target.)
+- [ ] **3. Popup placement (do NOT use a CSS-only clipping workaround).** The lane grid
+      scrolls horizontally (`overflow-x: auto`), which clips any popup rendered inside
+      a cell — and CSS `:hover` cannot know a card's viewport position, so a
+      `bottom:100%`/`top:100%` "flip" rule is not implementable in CSS. Instead:
+      - Render **one** popup portal `html.Div(id="timeline-popup-portal")` as a direct
+        child of the page root, **outside** the scrolling grid.
+      - Give each card its detail payload via a data attribute, e.g.
+        `html.A(..., **{"data-timeline-event": json.dumps(popup_fields(...))})`.
+      - Add a clientside callback that on `mouseover`/`focusin` (event delegation on
+        the grid) reads the attribute, fills the portal, and positions it
+        `position: fixed` using `target.getBoundingClientRect()`, choosing above/below
+        based on whether the card sits in the upper/lower half of the viewport. On
+        `mouseout`/`focusout`, hide it.
+      - The portal sits at a high `z-index` at page level, so it is never clipped by
+        the grid. Do **not** add `overflow: visible` to lane cells (it would break
+        horizontal scroll).
+- [ ] **4.** "Open source ↗" is an `<a href="{event.url}">` inside the portal; it must
+      not trigger the card's Graph navigation (the card anchor is the click target and
+      the portal is outside it, so propagation is naturally isolated — verify this
+      holds).
+- [ ] **5. Safety & robustness (do not skip).** Build the portal's contents with
+      `document.createElement` + `textContent` — **never `innerHTML`** — because
+      `summary`, `label`, and `url` originate from ingested source data and would be an
+      injection vector if interpolated into markup. Hide the portal on the grid's
+      `scroll` event and on window `resize` (a `position: fixed` popup does not follow
+      its target when the scroll container moves). Give the portal `role="tooltip"`
+      and set/remove `aria-describedby` on the hovered card so screen readers announce
+      it; `Escape` hides it.
 
 #### Unit tests
 
@@ -587,8 +859,17 @@ with placeholder cards. Loading + error handling.
 - [ ] **1.** Read `dcc.Location(id="url").search` (clientside/`Input`) and parse
       `wba_ids` (comma-separated), `range` (`7d|30d|90d|custom`), `group`
       (`day|week|month`), `scope` (`activity|history`), `from`, `to`.
-- [ ] **2.** Missing `wba_ids` labels fall back to the raw id; unknown params ignored;
-      malformed `wba_ids` surfaces a non-fatal warning and drops only the bad lane.
+- [ ] **2. Validate `wba_ids` client-side before fetching.** The router rejects the
+      **whole** request with HTTP 400 if *any* id is malformed (`router.py:69-88`), so
+      "drop only the bad lane" is impossible unless the UI pre-validates. Add a pure
+      helper `is_valid_wba_id(wba_id) -> bool` that mirrors `service.parse_wba_id`
+      (`service.py:50-67`): `parts = wba_id.split("::", 2)`; valid iff
+      `len(parts) == 3` and every part is non-empty. Drop malformed entries from the
+      URL with a non-fatal inline warning; load the rest. Unknown/extra params are
+      ignored; missing `wba_ids` labels fall back to the raw id.
+      **Belt-and-braces:** if a fetch still returns 400, read `detail.wba_id` from the
+      response, drop that lane, and retry once; if it fails again, show the danger
+      alert preserving the last good render.
 - [ ] **3.** Applying params populates the selection store + toolbar controls, then
       triggers the normal fetch. Applies **once** on initial load (guard against
       re-applying on later navigation).
@@ -599,6 +880,8 @@ with placeholder cards. Loading + error handling.
 - [ ] `test_parse_deeplink_full` — all params parsed.
 - [ ] `test_parse_deeplink_missing_wba` — returns empty selection, no crash.
 - [ ] `test_parse_deeplink_bad_range` — unknown preset falls back to default 30d.
+- [ ] `test_is_valid_wba_id` — `"jira::Person::x"` valid; `"bad"`, `"a::b"`, and
+      `"jira::::x"` invalid (mirrors `service.parse_wba_id`).
 
 #### Manual validation
 

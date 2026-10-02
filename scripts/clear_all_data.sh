@@ -12,12 +12,12 @@ PROJECT_ROOT="$( cd "$SCRIPT_DIR/.." && pwd )"
 cd "$PROJECT_ROOT/simulation/layer1"
 python3 reset_db.py
 
-# Clear PostgreSQL producer_sync_state table
-echo "Clearing producer_sync_state table..."
+# Clear PostgreSQL tables (producer_sync_state, activity_events, activity_actions)
+echo "Clearing PostgreSQL tables..."
 docker compose -f "$PROJECT_ROOT/docker-compose.yml" exec -T postgres \
   psql -U "${POSTGRES_USER:-postgres}" -d "${POSTGRES_DB:-postgres}" \
-  -c "DELETE FROM producer_sync_state;"
-echo "producer_sync_state cleared."
+  -c "DELETE FROM activity_actions; DELETE FROM activity_events; DELETE FROM producer_sync_state;"
+echo "PostgreSQL tables cleared."
 
 # Flush RabbitMQ queues
 echo "Flushing RabbitMQ queues..."

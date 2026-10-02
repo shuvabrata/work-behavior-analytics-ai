@@ -404,6 +404,11 @@ def map_sprint(sprint_data: Dict[str, Any]) -> Dict[str, Any]:
         "start_date": _date(sprint_data.get("startDate")),
         "end_date": _date(sprint_data.get("endDate")),
         "complete_date": _date(sprint_data.get("completeDate")),
+        # Raw ISO datetime strings for event_time resolution — full precision, not truncated.
+        # Used by _sprint_event_time() in main.py; not exposed in SprintAttributes.
+        "start_date_iso": sprint_data.get("startDate") or "",
+        "end_date_iso": sprint_data.get("endDate") or "",
+        "complete_date_iso": sprint_data.get("completeDate") or "",
         "status": status,
         "url": None,  # Sprint browse URLs require board ID; left for future enrichment
     }

@@ -583,6 +583,23 @@ Stop and report back (do not improvise) if:
 - [x] **V1.3** ✕ removes a lane; "Clear all" empties the view back to the empty state.
 - [x] **V1.4** Lane headers show avatar/icon + label + type tag; no count.
 
+**Additional manual checks (added during implementation, verified by operator):**
+
+- [x] **V1.5** Arrow Up/Down move a highlight through the suggestions and Enter adds
+      the highlighted entity (the row the user sees selected, consistently).
+- [x] **V1.6** Only the active suggestion row's background changes; other rows are
+      unaffected.
+- [x] **V1.7** Escape clears the search text and dismisses the dropdown immediately.
+
+> Implementation note: keyboard navigation, Escape-to-clear, and the highlight are
+> driven by a single install-once clientside `keydown` listener (Dash cannot bind
+> callbacks to DOM key events). The active row is tracked by element reference and
+> reset on any list re-render via a `MutationObserver`; `Enter` clicks that exact
+> element rather than an index. The input's `n_submit` is deliberately *not* a
+> server trigger, so there is no dual-trigger race. A hand-rolled list was used
+> (rather than `dcc.Dropdown`) to keep the server-side `/activity/suggest`
+> typeahead and custom rows; the keyboard/ARIA layer is ours to maintain.
+
 ---
 
 ### UI-2 — Data fetch, day bucketing & swimlane skeleton (est. 1 day)

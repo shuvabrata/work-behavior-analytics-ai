@@ -283,6 +283,9 @@ runs via Docker and is owned by the operator.
 | Security scan | `bandit -c .bandit.yml -r src/ -lll` | no High-severity findings |
 | Run the app | **ask the operator to (re)start the Docker stack** (`docker compose up -d`) — do not run `uvicorn` yourself | UI served at http://localhost:8000/app |
 | Open the page | http://localhost:8000/app/analytics/timeline | timeline page renders |
+| Enable timeline mock data (dev-only) | put `TIMELINE_MOCK_SCENARIO=<scenario>` in `.env`, then `docker compose up -d --force-recreate app` | API serves the mock scenario; app logs `[Activity][MOCK] … ENABLED`. **See UI-2P "Enabling mock mode".** |
+| Disable timeline mock data | remove/blank `TIMELINE_MOCK_SCENARIO` in `.env` and restart the app | real data resumes (V2P.1) |
+| Switch scenario without a restart | append `?mock=<scenario>` to an `/api/v1/activity/timeline` request (mock mode must already be on) | that request serves the chosen scenario |
 
 `.github/workflows/pr_checks.yml` runs four blocking jobs on every PR: `pytest -m unit
 tests`, `mypy src/`, `pylint src` (fails below a repo score of 9.0), and bandit (fails
@@ -619,10 +622,66 @@ so manual QA can reproduce activity shapes that real data will not contain
 (30-day gaps, 100-event spikes, empty lanes, non-aligned gaps, pagination,
 failures).
 
-**Progress:** [~] In progress (implementation + unit tests done; manual V2P pending)
+**Progress:** [x] Complete
 
 **Depends on:** nothing (may land before UI-2). **Unblocks:** manual validation for
 UI-2 / UI-5 / UI-8 / UI-9 / UI-12.
+
+#### Enabling mock mode (read first)
+
+Mock data is **off unless activated**. Activation is an env var (needs an app
+restart); the per-request override then switches scenarios without one.
+
+1. **Turn it on** — add to `.env` (repo root), using any name from the catalog below:
+
+   ```
+   TIMELINE_MOCK_SCENARIO=even
+   ```
+
+   Blank/unset ⇒ mock **off** (real data, unchanged).
+2. **Restart the app** so settings reload (the operator owns the stack):
+
+   ```
+   docker compose up -d --force-recreate app
+   ```
+
+   Startup logs `[Activity][MOCK] Timeline mock mode is ENABLED …`.
+3. **Switch scenario without a restart** (while mock mode is on) by appending
+   `?mock=<scenario>` to an API request, e.g.
+   `curl "http://localhost:8000/api/v1/activity/timeline?wba_ids=mock::Person::alice&mock=gap_30d"`.
+   The override can never enable mock mode by itself. From the UI this works once
+   UI-2 task 8 forwards the page URL's `mock` param.
+4. **Turn it off** — remove/blank `TIMELINE_MOCK_SCENARIO` and restart; real data
+   resumes (V2P.1). Mock data must never be enabled in a real deployment.
+
+`TIMELINE_MOCK_SCENARIO` and the scenario names are also documented in `.env.example`
+(the entry ships commented-out).
+
+**Valid scenarios:** `even`, `empty_range`, `empty_lane`, `gaps_small`, `gaps_global`,
+`gap_30d`, `gaps_staggered`, `spike_100`, `cell_boundary`, `time_edges`,
+`card_variety`, `history`, `pagination`, `error_500`, `suggest_variants`.
+
+#### Mock entities (suggest catalogue)
+
+The mocked `/activity/suggest` returns these fixed entities. It filters the
+catalogue by query substring; a query matching nothing returns the whole catalogue,
+and the literal query `none` returns `[]`. Two Persons carry an avatar and the rest
+do not, so the avatar vs. icon rendering path is exercised.
+
+| `wba_id` | Label | entity_type | source | avatar |
+|----------|-------|-------------|--------|--------|
+| `mock::Person::alice` | Alice Johnson | Person | github | yes |
+| `mock::Person::bob` | Bob Smith | Person | github | no |
+| `mock::Person::carol` | Carol Diaz | Person | jira | yes |
+| `mock::PullRequest::142` | PR #142: Refactor scheduler | PullRequest | github | no |
+| `mock::Issue::BUG-7` | BUG-7 Login fails | Issue | jira | no |
+| `mock::Page::home` | Docs Home | Page | confluence | no |
+
+The mocked `/activity/timeline` builds a lane for **any** `{source}::{type}::{id}`
+key passed in `wba_ids` — it parses the key and does not check that the entity
+exists. So beyond the six above you can deep-link arbitrary ids, e.g.
+`mock::Commit::abc`, `mock::Sprint::42`, or a real key like `github::Person::alice`.
+Only the six rows above are reachable through the mocked typeahead.
 
 #### Files
 
@@ -679,13 +738,13 @@ UI-2 / UI-5 / UI-8 / UI-9 / UI-12.
 
 #### Manual validation
 
-- [ ] **V2P.1** With `TIMELINE_MOCK_SCENARIO` unset, `/api/v1/activity/timeline`
+- [x] **V2P.1** With `TIMELINE_MOCK_SCENARIO` unset, `/api/v1/activity/timeline`
       behaves exactly as before (real data).
-- [ ] **V2P.2** With `TIMELINE_MOCK_SCENARIO=even` and the app restarted, the timeline
+- [x] **V2P.2** With `TIMELINE_MOCK_SCENARIO=even` and the app restarted, the timeline
       UI renders the scenario's lanes for the selected entities.
-- [ ] **V2P.3** `?mock=gap_30d` shows a 30-day gap; `?mock=error_500` returns HTTP 500
+- [x] **V2P.3** `?mock=gap_30d` shows a 30-day gap; `?mock=error_500` returns HTTP 500
       (and the UI shows the danger alert without losing the last good render).
-- [ ] **V2P.4** Existing unit/integration suites are unaffected (default off).
+- [x] **V2P.4** Existing unit/integration suites are unaffected (default off).
 
 > Scenarios are anchored to the selected range: `gap_30d` needs **Last 90 days**;
 > `spike_100` / `cell_boundary` need a per-lane `limit` ≥ 20. The `?mock=` switch is
@@ -745,8 +804,12 @@ with placeholder cards. Loading + error handling.
 
 - [ ] **V2.1** Adding two people renders two aligned columns of day rows.
 - [ ] **V2.2** A day active for one lane and idle for another shows an empty cell (not a missing row).
-- [ ] **V2.3** Header row stays pinned while scrolling down; time axis pinned while scrolling right (≥6 lanes → horizontal scroll).
+- [ ] **V2.3** Header row stays pinned while scrolling down; time axis pinned while scrolling right (the soft cap is 5 lanes, so verify horizontal scroll with 5 lanes on a narrow viewport rather than ≥6).
 - [ ] **V2.4** API failure shows the danger alert and preserves the previous grid.
+
+> **Mock scenarios:** V2.1 `even`; V2.2 `empty_lane` + `gaps_staggered`; V2.3 `even`
+> (5 lanes, narrow viewport); V2.4 `error_500`. Requires mock mode enabled (see UI-2P
+> "Enabling mock mode") and UI-2 task 8 for the `?mock=` URL switch.
 
 ---
 
@@ -806,6 +869,9 @@ with placeholder cards. Loading + error handling.
 - [ ] **V3.2** Long summaries truncate with an ellipsis; no overflow.
 - [ ] **V3.3** Lane accent matches the lane header color; type colors are distinct (PR/Issue/Commit/Page).
 - [ ] **V3.4** `scope=history` cards read "Updated" (STATE_CHANGE) with the lane's own type.
+
+> **Mock scenarios:** V3.1/V3.3 `even`; V3.2 and the unknown-type / missing-url paths
+> `card_variety`; V3.4 `history`.
 
 ---
 
@@ -883,6 +949,9 @@ UI-4 is verified by the `V4.*` items only.
 - [ ] **V4.3** "Open source ↗" opens the event URL instead of Graph.
 - [ ] **V4.4** Tab-focusing a card shows the popup (keyboard).
 
+> **Mock scenarios:** V4.1/V4.2/V4.4 `even`; V4.3 `card_variety` (it has both a
+> url-bearing event and a `url=None` event).
+
 ---
 
 ### UI-5 — Empty cells, empty lanes & idle separators (est. 1 day)
@@ -926,6 +995,9 @@ UI-4 is verified by the `V4.*` items only.
 - [ ] **V5.3** An entity selected with no activity in range shows the "No activity in this range" note.
 - [ ] **V5.4** Idle gaps in only one lane do **not** collapse the row (they show as empty cells with guides).
 
+> **Mock scenarios:** V5.1/V5.2 `gaps_small`; V5.3 `empty_lane`; V5.4 `gaps_staggered`
+> (gaps land in different lanes). For a global collapse see `gaps_global` / `gap_30d`.
+
 ---
 
 ### UI-6 — Toolbar: time range & scope (est. 0.5 day)
@@ -964,6 +1036,8 @@ UI-4 is verified by the `V4.*` items only.
 - [ ] **V6.3** Toggling Activity/History re-renders cards (History cards show STATE_CHANGE/"Updated").
 - [ ] **V6.4** Changing range/scope resets "Load more" back to the first page.
 
+> **Mock scenarios:** V6.1/V6.2 `even`; V6.3 `history`; V6.4 `pagination`.
+
 ---
 
 ### UI-7 — Group by: Day / Week / Month (est. 0.5 day)
@@ -999,6 +1073,9 @@ UI-4 is verified by the `V4.*` items only.
 - [ ] **V7.2** Idle separators change unit ("3 days" → "2 weeks" → "1 month").
 - [ ] **V7.3** No data is lost or duplicated when regrouping.
 
+> **Mock scenarios:** V7.1 `even`; V7.2 `gap_30d` (needs Last 90 days) or
+> `gaps_global`; V7.3 `cell_boundary` (many events per day across granularities).
+
 ---
 
 ### UI-8 — Row overflow: "+N more" per cell (est. 0.5 day)
@@ -1033,6 +1110,9 @@ UI-4 is verified by the `V4.*` items only.
 - [ ] **V8.1** A day with >3 events shows 3 cards + "+N more".
 - [ ] **V8.2** Clicking expands that cell only; the row grows while other lanes keep whitespace.
 - [ ] **V8.3** Collapsing restores the capped view; state resets on range change.
+
+> **Mock scenarios:** V8.1–V8.3 `cell_boundary` (days with 3/4/20/21 events);
+> `spike_100` for the stress case.
 
 ---
 
@@ -1079,6 +1159,10 @@ UI-4 is verified by the `V4.*` items only.
 - [ ] **V9.2** The button disappears once every lane is exhausted.
 - [ ] **V9.3** Changing the range resets to page 1.
 
+> **Mock scenarios:** V9.1–V9.3 `pagination` — lane 0 spans 3 pages, lane 1 has
+> exactly `limit` events (the *optimistic cursor* trap: page 2 is empty), lane 2 is a
+> short page.
+
 ---
 
 ### UI-10 — Theming & dark mode (est. 0.5 day)
@@ -1112,6 +1196,9 @@ UI-4 is verified by the `V4.*` items only.
 - [ ] **V10.1** Toggling the topbar theme switches all timeline surfaces sensibly.
 - [ ] **V10.2** Cards, popups, guides, and separators remain readable in dark mode.
 - [ ] **V10.3** Lane accent colors stay distinguishable in both themes.
+
+> **Mock scenarios:** `card_variety` (mixed/unknown types, long + non-ASCII + HTML
+> strings, missing url/avatar) exercises every themed surface.
 
 ---
 
@@ -1168,6 +1255,12 @@ UI-4 is verified by the `V4.*` items only.
 - [ ] **V11.3** A gallery-generated link (Show Options) opens with the chosen presets applied.
 - [ ] **V11.4** A bad lane id is dropped with a warning; the rest load.
 
+> **Mock scenarios:** V11.1 use the `suggest_variants` ids from UI-2P's
+> **"Mock entities"** table (`mock::Person::alice`, `mock::Person::bob`,
+> `mock::Person::carol`, `mock::PullRequest::142`, `mock::Issue::BUG-7`,
+> `mock::Page::home`); V11.2 `history` / `even`; V11.4 append a malformed key (e.g.
+> `bad`) alongside valid `mock::…` ids.
+
 ---
 
 ### UI-12 — Polish & cross-cutting review (est. 0.5 day)
@@ -1194,6 +1287,11 @@ UI-4 is verified by the `V4.*` items only.
 - [ ] **V12.1** Tab through the page: cards, expanders, and remove buttons are reachable and operable.
 - [ ] **V12.2** All edge cases above render without errors.
 - [ ] **V12.3** Dark mode final pass.
+
+> **Mock scenarios (edge-case sweep, V12.2):** single lane / exactly 5 lanes `even`;
+> one empty lane `empty_lane`; all lanes empty in range `empty_range`; custom range
+> with no events `empty_range` over a narrow window; history on a Person `history`;
+> lane whose only page is exactly `limit` (optimistic cursor) `pagination`.
 
 ---
 

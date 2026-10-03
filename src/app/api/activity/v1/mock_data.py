@@ -206,7 +206,7 @@ def _even(range_days: float, *, step: float = 3.0, first: float = 1.0) -> list[_
 
 def _drop(specs: list[_Spec], low: float, high: float) -> list[_Spec]:
     """Remove specs whose ``days_ago`` falls within ``[low, high]``."""
-    return [spec for spec in specs if not (low <= spec.days_ago <= high)]
+    return [spec for spec in specs if spec.days_ago < low or spec.days_ago > high]
 
 
 def _time_edge_specs(end: datetime) -> list[_Spec]:

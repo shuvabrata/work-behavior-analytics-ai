@@ -523,7 +523,7 @@ Stop and report back (do not improvise) if:
 
 **Objective:** Add/remove entities; lanes render as empty columns. No events yet.
 
-**Progress:** [ ] Not started
+**Progress:** [x] Complete
 
 #### Files
 
@@ -537,24 +537,24 @@ Stop and report back (do not improvise) if:
 
 #### Tasks
 
-- [ ] **1. Selector bar:** `dbc.Input(id="timeline-search-input")` + a results
+- [x] **1. Selector bar:** `dbc.Input(id="timeline-search-input")` + a results
       dropdown container. Debounce ~300 ms via `dcc.Store` + a clientside callback that
       returns `no_update` until idle (mirror `graph` spotlight debounce), min 2 chars.
       The ≥2-char gate is **required**, not cosmetic: `/api/v1/activity/suggest`
       declares `q` with `min_length=2` (`router.py:132-136`), so a shorter query
       returns **422**, not an empty result.
-- [ ] **2. Suggestions:** on debounced input → `fetch_suggestions(q)` →
+- [x] **2. Suggestions:** on debounced input → `fetch_suggestions(q)` →
       `GET /api/v1/activity/suggest?q=…` → render up to 10 rows (avatar/type icon +
       label + type tag + source). Click adds; Enter adds the top result.
-- [ ] **3. Selection store:** `timeline-selected-store` = ordered list of
+- [x] **3. Selection store:** `timeline-selected-store` = ordered list of
       `{wba_id, label, entity_type, source, avatar_url}`. Adding is idempotent.
-- [ ] **4. Lane headers:** render one header per selected entity —
+- [x] **4. Lane headers:** render one header per selected entity —
       avatar (`avatar_url`) or entity-type `fas` icon, label, type tag, ✕ remove.
       Left column of fixed width for the time-axis label. Headers **are** the
       selection; no chip row.
-- [ ] **5. Limits:** soft cap 5; at 5 disable the input and show the inline hint
+- [x] **5. Limits:** soft cap 5; at 5 disable the input and show the inline hint
       "🔒 Maximum 5 lanes — remove one first". "Clear all" text link appears when ≥1 lane.
-- [ ] **6. Colors:** add five lane-accent tokens `timeline.lane.1` … `timeline.lane.5`
+- [x] **6. Colors:** add five lane-accent tokens `timeline.lane.1` … `timeline.lane.5`
       to `THEME_TOKENS` in `src/app/dash_app/styles.py`, for **both** themes (values may
       be shared across themes — the graph palette is deliberately theme-invariant,
       `styles.py:191`). `assign_lane_colors(n)` returns the first *n* token **keys**
@@ -563,10 +563,10 @@ Stop and report back (do not improvise) if:
 
 #### Unit tests
 
-- [ ] `test_assign_lane_colors_distinct` — no duplicate colors up to 5.
-- [ ] `test_entity_type_label_mapping` — `PullRequest→"PR"`, unknown→raw type.
-- [ ] `test_selection_add_remove_dedup` — re-adding the same `wba_id` is a no-op; remove drops it.
-- [ ] `test_timeline_callbacks_registered` — after importing
+- [x] `test_assign_lane_colors_distinct` — no duplicate colors up to 5.
+- [x] `test_entity_type_label_mapping` — `PullRequest→"PR"`, unknown→raw type.
+- [x] `test_selection_add_remove_dedup` — re-adding the same `wba_id` is a no-op; remove drops it.
+- [x] `test_timeline_callbacks_registered` — after importing
       `app.dash_app.pages.timeline`, assert
       `any("timeline-" in key for key in dash._callback.GLOBAL_CALLBACK_MAP)`
       (guards the UI-0 `__init__` → `callbacks` import). Module-level
@@ -578,10 +578,10 @@ Stop and report back (do not improvise) if:
 
 #### Manual validation
 
-- [ ] **V1.1** Typing ≥2 chars shows suggestions; clicking adds a lane header.
-- [ ] **V1.2** Adding a 6th is blocked with the inline hint.
-- [ ] **V1.3** ✕ removes a lane; "Clear all" empties the view back to the empty state.
-- [ ] **V1.4** Lane headers show avatar/icon + label + type tag; no count.
+- [x] **V1.1** Typing ≥2 chars shows suggestions; clicking adds a lane header.
+- [x] **V1.2** Adding a 6th is blocked with the inline hint.
+- [x] **V1.3** ✕ removes a lane; "Clear all" empties the view back to the empty state.
+- [x] **V1.4** Lane headers show avatar/icon + label + type tag; no count.
 
 ---
 

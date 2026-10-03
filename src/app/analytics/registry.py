@@ -33,6 +33,32 @@ COLLABORATION_NETWORK_ANALYTIC = GraphAnalytic(
 )
 
 
+@dataclass(frozen=True)
+class TimelineAnalytic:
+    """Metadata for the activity timeline visualization."""
+
+    key: str
+    title: str
+    description: str
+    icon: str
+
+    @property
+    def href(self) -> str:
+        """Return the timeline page route used to launch this analytic."""
+        return "/app/analytics/timeline"
+
+
+TIMELINE_ANALYTIC = TimelineAnalytic(
+    key="activity_timeline",
+    title="Activity Timeline",
+    description=(
+        "Visualize the chronological activity of persons and objects "
+        "across GitHub, Jira, and Confluence in a side-by-side swimlane view."
+    ),
+    icon="fas fa-timeline",
+)
+
+
 GRAPH_ANALYTICS = [
     COLLABORATION_NETWORK_ANALYTIC,
 ]

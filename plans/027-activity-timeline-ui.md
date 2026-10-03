@@ -385,7 +385,7 @@ Stop and report back (do not improvise) if:
 
 **Objective:** A reachable, empty page. No data fetching.
 
-**Progress:** [ ] Not started
+**Progress:** [x] Complete
 
 #### Files
 
@@ -400,7 +400,7 @@ Stop and report back (do not improvise) if:
 
 #### Tasks
 
-- [ ] **1.** Create the package files. `src/app/dash_app/pages/timeline/callbacks.py`
+- [x] **1.** Create the package files. `src/app/dash_app/pages/timeline/callbacks.py`
       is a **docstring-only stub** at this phase (UI-1 fills it in); it must exist so
       the package imports cleanly. `src/app/dash_app/pages/timeline/__init__.py`:
 
@@ -423,7 +423,7 @@ Stop and report back (do not improvise) if:
       `suppress_callback_exceptions=True`) but **every interaction silently does
       nothing**. `layout.py` must **not** import `callbacks` (circular import — same
       rationale as `pages/collaboration_network/layout.py:1-5`).
-- [ ] **2.** Create `TimelineAnalytic` in `src/app/analytics/registry.py` — do **not**
+- [x] **2.** Create `TimelineAnalytic` in `src/app/analytics/registry.py` — do **not**
       reuse `GraphAnalytic` (its `.href` property generates `/app/graph?mode=<key>`,
       which is wrong for this page — see `registry.py:19-22`). Add exactly:
 
@@ -453,7 +453,7 @@ Stop and report back (do not improvise) if:
 
       Do **not** append `TIMELINE_ANALYTIC` to `GRAPH_ANALYTICS` (that list drives
       graph-mode analytics, `registry.py:36-38`); render it separately (Task 5).
-- [ ] **3.** In `layout.py`, add `timeline` to the **existing top-level page import**
+- [x] **3.** In `layout.py`, add `timeline` to the **existing top-level page import**
       (`layout.py:10`) so its callbacks register at app startup — the file imports
       every other page this way, and a deferred import would register the timeline
       `@callback`s only on first navigation (exactly the silent-no-op failure mode
@@ -466,8 +466,8 @@ Stop and report back (do not improvise) if:
       if pathname == "/app/analytics/timeline":
           return timeline.get_layout()
       ```
-- [ ] **4.** `get_layout()` returns: `create_page_header([("Analytics", "/app/analytics"), ("Timeline", None)], …)`, a selector bar placeholder, and an empty state via `create_empty_state("Add people or objects to compare their activity.")`.
-- [ ] **5.** In `analytics.py`, render `TIMELINE_ANALYTIC` alongside `GRAPH_ANALYTICS`.
+- [x] **4.** `get_layout()` returns: `create_page_header([("Analytics", "/app/analytics"), ("Timeline", None)], …)`, a selector bar placeholder, and an empty state via `create_empty_state("Add people or objects to compare their activity.")`.
+- [x] **5.** In `analytics.py`, render `TIMELINE_ANALYTIC` alongside `GRAPH_ANALYTICS`.
       **Do not append it to `GRAPH_ANALYTICS`** — that list feeds
       `GRAPH_ANALYTICS_BY_KEY` (`registry.py:41`) and graph-mode routing. Instead make
       three explicit changes to `pages/analytics.py`:
@@ -493,7 +493,7 @@ Stop and report back (do not improvise) if:
         else:
             footer = dbc.Button("Open Visualization", href=analytic.href, color="primary", size="sm")
         ```
-- [ ] **6.** `_create_timeline_controls()` mirrors `_create_collaboration_controls()`:
+- [x] **6.** `_create_timeline_controls()` mirrors `_create_collaboration_controls()`:
       "Open Visualization" (href `/app/analytics/timeline`) + "Show Options" collapse
       containing Default Range / Group by / View selects. Use `timeline-`-prefixed ids
       (e.g. `timeline-open-btn`, `timeline-controls-toggle-btn`,
@@ -504,15 +504,15 @@ Stop and report back (do not improvise) if:
 
 #### Unit tests
 
-- [ ] `test_timeline_analytic_href` — `TIMELINE_ANALYTIC.href == "/app/analytics/timeline"`.
-- [ ] `test_timeline_layout_renders` — `get_layout()` returns an `html.Div` without error.
+- [x] `test_timeline_analytic_href` — `TIMELINE_ANALYTIC.href == "/app/analytics/timeline"`.
+- [x] `test_timeline_layout_renders` — `get_layout()` returns an `html.Div` without error.
 
 #### Manual validation
 
-- [ ] **V0.1** `/app/analytics` shows the "Activity Timeline" card next to "Collaboration Network".
-- [ ] **V0.2** "Show Options" expands with Range/Group/View selects.
-- [ ] **V0.3** "Open Visualization" navigates to `/app/analytics/timeline` and renders the header + empty state.
-- [ ] **V0.4** The timeline package imports cleanly (no `ModuleNotFoundError` for
+- [x] **V0.1** `/app/analytics` shows the "Activity Timeline" card next to "Collaboration Network".
+- [x] **V0.2** "Show Options" expands with Range/Group/View selects.
+- [x] **V0.3** "Open Visualization" navigates to `/app/analytics/timeline` and renders the header + empty state.
+- [x] **V0.4** The timeline package imports cleanly (no `ModuleNotFoundError` for
       `callbacks`) and the page loads with no browser-console error. From UI-1 onward,
       also confirm `timeline-`-prefixed callbacks are registered (see the UI-1 unit
       test `test_timeline_callbacks_registered`).

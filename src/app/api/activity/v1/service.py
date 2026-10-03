@@ -19,7 +19,7 @@ from app.api.search.v1.model import SearchRequest
 from app.db.models.activity_action import ActivityAction
 from app.db.models.activity_event import ActivityEvent
 from common.logger import logger
-from . import query
+from . import mock_data, query
 from .model import (
     Suggestion,
     TimelineEvent,
@@ -302,9 +302,21 @@ async def _fetch_lane(
 
 
 async def get_timeline(
-    db: AsyncSession, request: TimelineRequest
+    db: AsyncSession,
+    request: TimelineRequest,
+    *,
+    mock_scenario: str | None = None,
 ) -> TimelineResponse:
-    """Build the full timeline response for all requested lanes."""
+    """Build the full timeline response for all requested lanes.
+
+    When mock mode is active (dev only — see ``mock_data``) the response is
+    generated deterministically and no database access happens. The router's
+    real request validation still runs, so 400/500 semantics are unchanged.
+    """
+    scenario = mock_data.resolve_scenario(mock_scenario)
+    if scenario is not None:
+        return mock_data.build_timeline(request, scenario)
+
     lanes: list[TimelineLane] = []
     for wba_id in request.wba_ids:
         try:
@@ -375,7 +387,16 @@ def _build_suggestions(query_text: str, limit: int) -> list[Suggestion]:
     return suggestions
 
 
-async def get_suggestions(db: AsyncSession, q: str, limit: int) -> list[Suggestion]:
+async def get_suggestions(
+    db: AsyncSession,
+    q: str,
+    limit: int,
+    *,
+    mock_scenario: str | None = None,
+) -> list[Suggestion]:
     """Return typeahead suggestions for the entity selector."""
+    scenario = mock_data.resolve_scenario(mock_scenario)
+    if scenario is not None:
+        return mock_data.build_suggestions(q, limit)
     _ = db  # suggestions come from the search service, not Postgres
     return _build_suggestions(q, limit)

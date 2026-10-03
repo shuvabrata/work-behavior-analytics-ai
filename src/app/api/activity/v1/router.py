@@ -54,6 +54,13 @@ async def get_timeline(
         le=100,
         description="Events per lane. Default 20, max 100.",
     ),
+    mock: str | None = Query(
+        default=None,
+        description=(
+            "DEV ONLY: switch the mock scenario for this request. Only takes "
+            "effect while TIMELINE_MOCK_SCENARIO mock mode is enabled."
+        ),
+    ),
     db: AsyncSession = Depends(get_async_db),
 ) -> TimelineResponse:
     """Return swimlane timeline data for one or more entities."""
@@ -112,7 +119,7 @@ async def get_timeline(
     )
 
     try:
-        response = await service.get_timeline(db, request)
+        response = await service.get_timeline(db, request, mock_scenario=mock)
     except Exception as exc:
         logger.exception(f"[Activity] Unhandled error during timeline fetch: {exc}")
         raise HTTPException(
@@ -140,12 +147,19 @@ async def suggest(
         le=20,
         description="Max suggestions to return. Default 10, max 20.",
     ),
+    mock: str | None = Query(
+        default=None,
+        description=(
+            "DEV ONLY: switch the mock scenario for this request. Only takes "
+            "effect while TIMELINE_MOCK_SCENARIO mock mode is enabled."
+        ),
+    ),
     db: AsyncSession = Depends(get_async_db),
 ) -> SuggestResponse:
     """Typeahead suggestions for the timeline entity selector."""
     logger.info(f"[Activity] suggest q={q!r} limit={limit}")
     try:
-        results = await service.get_suggestions(db, q=q, limit=limit)
+        results = await service.get_suggestions(db, q=q, limit=limit, mock_scenario=mock)
     except Exception as exc:
         logger.exception(f"[Activity] Unhandled error during suggest: {exc}")
         raise HTTPException(

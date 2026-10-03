@@ -52,9 +52,11 @@ multi-lane swimlane: one vertical column per selected entity, rows bucketed by
 day/week/month, idle periods collapsed into expandable separators, and event cards
 that reveal detail on hover and open the Graph page on click.
 
-The work is split into **13 deliberately small phases (UI-0 … UI-12)**. Each phase is
-independently reviewable and tunable before the next begins, matching the manual
-review cadence used for backend Phases 0–2.
+The work is split into **14 deliberately small phases**: the 13 UI phases
+(UI-0 … UI-12) plus a dev-only prep phase **UI-2P** (backend mock scenario
+fixtures) that lands before UI-2. Each phase is independently reviewable and
+tunable before the next begins, matching the manual review cadence used for
+backend Phases 0–2.
 
 ---
 
@@ -311,15 +313,22 @@ Every phase below lists **Unit tests** (pure helper tests) and **Manual validati
 
 - **New:** `src/app/dash_app/pages/timeline/{__init__,layout,callbacks,helpers,api}.py`,
   `tests/test_activity_timeline_ui_helpers.py`.
+- **New (UI-2P, dev-only):** `src/app/api/activity/v1/mock_data.py`,
+  `tests/test_activity_timeline_mock.py`.
 - **Modified:** `src/app/analytics/registry.py`, `src/app/dash_app/layout.py`,
   `src/app/dash_app/pages/analytics.py`,
   `src/app/dash_app/assets/executive-dashboard.css`,
   `src/app/dash_app/styles.py` (lane palette tokens in UI-1; dark variants in UI-10).
+- **Modified (UI-2P, dev-only):** `src/app/api/activity/v1/service.py`,
+  `src/app/api/activity/v1/router.py`, `src/app/settings.py`, `.env.example`.
 
 **Out of scope** — do NOT touch, even if related:
 
-- **Any backend code** (`src/app/api/activity/**`, `src/app/db/**`, migrations). The
-  API is shipped and frozen for this plan; the UI works around its constraints.
+- **Backend data/logic code** — with ONE exception: the dev-only mock in phase
+  **UI-2P** may add `src/app/api/activity/v1/mock_data.py` and thread an optional
+  `?mock=` switch through `service.py` / `router.py` (+ its settings/env entries).
+  Nothing else under `src/app/api/**`, `src/app/db/**`, or migrations may change; the
+  API's response contract stays frozen and the mock is default-off.
 - `src/app/dash_app/pages/graph/**`, `pages/search.py`, `pages/collaboration_network/**`
   — other pages stay untouched beyond adding the gallery card/route wiring.
 - Outbound deep-links from other pages ("View Timeline" buttons) and any Playwright/e2e
@@ -361,6 +370,7 @@ Stop and report back (do not improvise) if:
   `overflow: visible` to lane cells (it breaks horizontal scroll) or remove horizontal
   scroll.
 - A phase appears to require a backend change or a file outside the Scope list.
+  (The only sanctioned backend change is the dev-only mock in phase **UI-2P** — see Scope.)
 - A step's verification fails twice after a reasonable fix attempt.
 
 ## Maintenance notes
@@ -602,6 +612,88 @@ Stop and report back (do not improvise) if:
 
 ---
 
+### UI-2P — Backend mock scenario fixtures (dev-only prep) (est. 0.5 day)
+
+**Objective:** A default-off, deterministic mock served by the *real* activity API
+so manual QA can reproduce activity shapes that real data will not contain
+(30-day gaps, 100-event spikes, empty lanes, non-aligned gaps, pagination,
+failures).
+
+**Progress:** [~] In progress (implementation + unit tests done; manual V2P pending)
+
+**Depends on:** nothing (may land before UI-2). **Unblocks:** manual validation for
+UI-2 / UI-5 / UI-8 / UI-9 / UI-12.
+
+#### Files
+
+| File | Action | Purpose |
+|------|--------|---------|
+| `src/app/api/activity/v1/mock_data.py` | Create | Scenario registry + deterministic generators |
+| `tests/test_activity_timeline_mock.py` | Create | Unit tests for the mock contract |
+| `src/app/api/activity/v1/service.py` | Modify | Gate `get_timeline` / `get_suggestions` on the scenario |
+| `src/app/api/activity/v1/router.py` | Modify | Optional `?mock=<scenario>` switch on both endpoints |
+| `src/app/settings.py` | Modify | `TIMELINE_MOCK_SCENARIO: str = ""` |
+| `.env.example` | Modify | Documented, commented-out `TIMELINE_MOCK_SCENARIO` |
+
+#### Tasks
+
+- [x] **1. Activation (default-off).** Blank `TIMELINE_MOCK_SCENARIO` ⇒ mock mode
+      OFF (real data, unchanged). Set to a registered scenario ⇒ ON. `?mock=<scenario>`
+      may *switch* the scenario per request but can never enable mock mode on its own.
+      Unknown names raise a clear error (surfaced as 500).
+- [x] **2. Scenario catalog (15).** `even`, `empty_range`, `empty_lane`, `gaps_small`,
+      `gaps_global`, `gap_30d`, `gaps_staggered`, `spike_100`, `cell_boundary`,
+      `time_edges`, `card_variety`, `history`, `pagination`, `error_500`,
+      `suggest_variants`.
+- [x] **3. Determinism.** Stable UUID5 `signal_id`s; times are offsets from the range
+      end, clamped to `[from, to]`; the same scenario + request is byte-identical.
+- [x] **4. Contract fidelity.** Returns real `TimelineResponse` / `SuggestResponse`
+      models, so serialization matches the live API. `scope=history` yields
+      `STATE_CHANGE` events with populated `details`. `error_500` raises inside the
+      service so the router's real 500 path runs. Events newest-first.
+- [x] **5. Pagination.** `pagination` gives lane 0 three pages, lane 1 exactly `limit`
+      events (the *optimistic cursor* trap: a full page emits `next_cursor`, the next
+      request returns an empty page and clears it), lane 2 a short page. Cursor format
+      matches `service._encode_cursor`, so `service.validate_cursor` accepts it.
+- [x] **6. Suggestions.** `suggest_variants` returns a fixed catalogue (Person with and
+      without avatar, PullRequest, Issue, Page), filtered by query substring; the
+      literal query `none` returns `[]`.
+- [x] **7. Safety.** Startup `logger.warning` when mock mode is active; every mocked
+      response logs its scenario. No production guard (operator decision) — the flag
+      must never be set in a real deployment.
+
+#### Unit tests
+
+`tests/test_activity_timeline_mock.py` (`pytestmark = pytest.mark.unit`):
+
+- [x] `test_every_scenario_builds` — one lane per requested `wba_id`, all 15 scenarios.
+- [x] `test_error_scenario_raises` — `error_500` raises.
+- [x] `test_output_is_deterministic` — identical signal ids across two builds.
+- [x] `test_events_stay_within_range`.
+- [x] `test_empty_range_and_empty_lane`.
+- [x] `test_history_scope_markers`.
+- [x] `test_pagination_cursor_round_trips` — mock cursors pass `service.validate_cursor`.
+- [x] `test_pagination_optimistic_cursor_lane`.
+- [x] `test_suggestions_filter_and_empty`.
+- [x] `test_resolve_scenario_gate` — env enables; override only switches.
+
+#### Manual validation
+
+- [ ] **V2P.1** With `TIMELINE_MOCK_SCENARIO` unset, `/api/v1/activity/timeline`
+      behaves exactly as before (real data).
+- [ ] **V2P.2** With `TIMELINE_MOCK_SCENARIO=even` and the app restarted, the timeline
+      UI renders the scenario's lanes for the selected entities.
+- [ ] **V2P.3** `?mock=gap_30d` shows a 30-day gap; `?mock=error_500` returns HTTP 500
+      (and the UI shows the danger alert without losing the last good render).
+- [ ] **V2P.4** Existing unit/integration suites are unaffected (default off).
+
+> Scenarios are anchored to the selected range: `gap_30d` needs **Last 90 days**;
+> `spike_100` / `cell_boundary` need a per-lane `limit` ≥ 20. The `?mock=` switch is
+> reachable from the UI only once UI-2 forwards it from the page URL (UI-2 task 8);
+> until then use it directly against the API.
+
+---
+
 ### UI-2 — Data fetch, day bucketing & swimlane skeleton (est. 1 day)
 
 **Objective:** Fetch events for all lanes, bucket by day, render the shared-row grid
@@ -635,6 +727,12 @@ with placeholder cards. Loading + error handling.
 - [ ] **7.** Loading overlay via `create_loading_overlay_container` +
       `register_loading_overlay_hider`; on API error show `create_alert(..., "danger")`
       above the grid and keep the last good render.
+- [ ] **8. Mock passthrough (QA convenience).** Read the page URL
+      (`Input("url", "search")`), extract a `mock=<scenario>` value, and forward it as
+      the `mock` query param on `fetch_timeline` (and `fetch_suggestions`). This makes
+      `?mock=gap_30d` switch mock scenarios live for visual QA without a restart.
+      No-op when the param is absent or when the server's mock mode is off. This is
+      the minimal hook UI-11 later generalises into full deep-link parsing.
 
 #### Unit tests
 
@@ -1108,6 +1206,9 @@ UI-0 scaffold/route/gallery
 UI-1 selector + lane headers
    │
    ▼
+UI-2P backend mock fixtures (dev-only, independent)
+   │
+   ▼
 UI-2 fetch + bucketing + skeleton ────► UI-3 card design
    │                                        │
    │                                        ▼
@@ -1126,7 +1227,8 @@ UI-11 deep-linking ── depends on UI-1 + UI-6 + UI-7
 UI-12 polish ── last
 ```
 
-- UI-0 → UI-1 → UI-2 are strictly sequential.
+- UI-0 → UI-1 → UI-2 are strictly sequential (UI-2P may land any time before UI-2's
+  manual validation; it has no code dependency on the UI phases).
 - UI-3/UI-4 build directly on UI-2 and can be tuned independently.
 - UI-5, UI-6/7, UI-8, UI-9 branch from UI-2 and are largely independent of each other.
 - UI-10 and UI-11 come after the structures they theme/populate; UI-12 last.
@@ -1145,6 +1247,8 @@ UI-12 polish ── last
 | 4 | `src/app/dash_app/pages/timeline/helpers.py` | UI-1 |
 | 5 | `src/app/dash_app/pages/timeline/api.py` | UI-1 |
 | 6 | `tests/test_activity_timeline_ui_helpers.py` | UI-1+ |
+| 7 | `src/app/api/activity/v1/mock_data.py` | UI-2P (dev-only) |
+| 8 | `tests/test_activity_timeline_mock.py` | UI-2P |
 
 ### Modified files
 
@@ -1155,6 +1259,10 @@ UI-12 polish ── last
 | 3 | `src/app/dash_app/pages/analytics.py` | UI-0 | Timeline card + controls |
 | 4 | `src/app/dash_app/assets/executive-dashboard.css` | UI-3…UI-10 | Timeline CSS + dark overrides |
 | 5 | `src/app/dash_app/styles.py` | UI-1, UI-10 | `timeline.lane.*` tokens (UI-1) + dark variants (UI-10) |
+| 6 | `src/app/api/activity/v1/service.py` | UI-2P | Mock gate in `get_timeline` / `get_suggestions` |
+| 7 | `src/app/api/activity/v1/router.py` | UI-2P | Optional `?mock=` switch on both endpoints |
+| 8 | `src/app/settings.py` | UI-2P | `TIMELINE_MOCK_SCENARIO` |
+| 9 | `.env.example` | UI-2P | Documented commented-out env entry |
 
 ---
 
@@ -1176,6 +1284,7 @@ UI-12 polish ── last
 |-------|------|
 | UI-0 Scaffold & entry | 0.5 d |
 | UI-1 Entity selector & lane headers | 1.0 d |
+| UI-2P Backend mock fixtures (dev-only) | 0.5 d |
 | UI-2 Fetch, bucketing & skeleton | 1.0 d |
 | UI-3 Card design | 1.0 d |
 | UI-4 Hover popup & click-to-Graph | 0.5 d |
@@ -1187,4 +1296,4 @@ UI-12 polish ── last
 | UI-10 Theming | 0.5 d |
 | UI-11 Deep-linking | 0.5 d |
 | UI-12 Polish | 0.5 d |
-| **Total** | **~8.5 d** |
+| **Total** | **~9.0 d** |

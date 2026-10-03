@@ -140,6 +140,14 @@ THEME_TOKENS = {
         "graph.edge.default": "#C0C0C0",
         "graph.edge.label.font.size": "9",  # edge label font size (px)
         "graph.selection": "#424242",
+
+        # Activity Timeline lane accents (assigned by selection order).
+        # Vivid palette shared with the graph nodes so lanes read consistently.
+        "timeline.lane.1": "#3B82F6",
+        "timeline.lane.2": "#EF4444",
+        "timeline.lane.3": "#8B5CF6",
+        "timeline.lane.4": "#10B981",
+        "timeline.lane.5": "#F97316",
     },
     "executive-dark": {
         # Brand / accent (slightly brighter for dark surfaces)
@@ -230,6 +238,14 @@ THEME_TOKENS = {
         "graph.edge.default": "#8c9aab",
         "graph.edge.label.font.size": "9",  # edge label font size (px)
         "graph.selection": "#d5deea",
+
+        # Activity Timeline lane accents — kept identical across themes for
+        # cross-theme consistency, matching the theme-invariant graph palette.
+        "timeline.lane.1": "#3B82F6",
+        "timeline.lane.2": "#EF4444",
+        "timeline.lane.3": "#8B5CF6",
+        "timeline.lane.4": "#10B981",
+        "timeline.lane.5": "#F97316",
     }
 }
 

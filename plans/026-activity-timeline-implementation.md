@@ -487,6 +487,11 @@ with hybrid batching, dedup, and non-fatal failure semantics.
 
 ### Phase 3: Dash UI Page (est. 3–4 days)
 
+> **Superseded by `plans/027-activity-timeline-ui.md`.** Phase 3 was broken into 13
+> fine-grained, independently reviewable phases (UI-0…UI-12) via an interview-driven
+> design pass. Use plan 027 as the authoritative UI plan; the task list below is kept
+> as historical context and for the original file/route references.
+
 **Objective:** Build the swimlane timeline page and register it in the Analytics gallery.
 
 **Progress:** [ ] Not started

@@ -9,6 +9,7 @@ UI-2 onwards.
 from __future__ import annotations
 
 import json
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from dash import (
@@ -24,21 +25,33 @@ from dash import (
 )
 from dash.exceptions import PreventUpdate
 
-from app.dash_app.pages.timeline.api import fetch_suggestions
+from app.common.timezone import get_app_timezone
+from app.dash_app.components.common import create_alert, register_loading_overlay_hider
+from app.dash_app.pages.timeline.api import (
+    TimelineFetchError,
+    fetch_suggestions,
+    fetch_timeline,
+)
 from app.dash_app.pages.timeline.helpers import (
     MIN_QUERY_LENGTH,
     add_selection,
     assign_lane_colors,
+    build_grid,
     entity_type_icon,
     entity_type_label,
+    extract_mock_scenario,
     is_full,
     remove_selection,
 )
 from app.dash_app.pages.timeline.layout import (
     CLEAR_ALL_HIDDEN_STYLE,
     CLEAR_ALL_STYLE,
-    build_axis_spacer,
+    GRID_SCROLL_HIDDEN_STYLE,
+    GRID_SCROLL_STYLE,
+    build_grid_body,
+    build_header_axis_cell,
     build_lane_header,
+    grid_inner_style,
 )
 from app.dash_app.styles import (
     COLOR_BACKGROUND_WHITE,
@@ -51,6 +64,7 @@ from app.dash_app.styles import (
     FONT_SIZE_XTINY,
     get_theme_tokens,
 )
+from common.logger import logger
 
 _SUGGESTION_LIMIT = 10
 _FALLBACK_THEME = "executive-light"
@@ -427,19 +441,22 @@ def update_selection(
     Output("timeline-lane-hint", "children"),
     Output("timeline-search-input", "disabled"),
     Output("timeline-clear-all", "style"),
+    Output("timeline-grid-scroll", "style"),
+    Output("timeline-grid-inner", "style"),
     Input("timeline-selected-store", "data"),
     Input("theme-store", "data"),
 )
 def render_lanes(
     selection: list[dict[str, Any]] | None,
     theme_name: str | None,
-) -> tuple[Any, dict[str, Any], str, bool, dict[str, Any]]:
-    """Render lane headers, empty state, cap hint, and clear-all visibility."""
+) -> tuple[Any, dict[str, Any], str, bool, dict[str, Any], dict[str, Any], dict[str, Any]]:
+    """Render lane headers (inside the grid), empty state, cap hint, clear-all,
+    and the grid's visibility + column template."""
     current = selection or []
     tokens = get_theme_tokens(theme_name or _FALLBACK_THEME)
     lane_keys = assign_lane_colors(len(current))
 
-    children: list[Any] = [build_axis_spacer()]
+    children: list[Any] = [build_header_axis_cell()]
     for item, token_key in zip(current, lane_keys):
         color = tokens[token_key]
         children.append(build_lane_header(item, color))
@@ -451,4 +468,90 @@ def render_lanes(
         _MAX_LANE_HINT if full else "",
         full,
         CLEAR_ALL_STYLE if current else CLEAR_ALL_HIDDEN_STYLE,
+        GRID_SCROLL_STYLE if current else GRID_SCROLL_HIDDEN_STYLE,
+        grid_inner_style(len(current)),
     )
+
+
+# ---------------------------------------------------------------------------
+# Timeline fetch & grid render (UI-2)
+# ---------------------------------------------------------------------------
+
+_DEFAULT_RANGE_DAYS = 30
+_DEFAULT_SCOPE = "activity"
+_DEFAULT_LIMIT = 20
+
+# Flip the loading overlay on as soon as a fetch is about to start; the server
+# callback below flips it back to False when the request completes.
+clientside_callback(
+    """
+    function(_selection, _search) {
+        return true;
+    }
+    """,
+    Output("timeline-loading-store", "data", allow_duplicate=True),
+    Input("timeline-selected-store", "data"),
+    Input("url", "search"),
+    prevent_initial_call=True,
+)
+
+register_loading_overlay_hider("timeline-loading-store", "timeline-grid-overlay")
+
+
+@callback(
+    Output("timeline-data-store", "data"),
+    Output("timeline-grid-body", "children"),
+    Output("timeline-alert-slot", "children"),
+    Output("timeline-loading-store", "data"),
+    Input("timeline-selected-store", "data"),
+    Input("url", "search"),
+)
+def load_timeline(
+    selection: list[dict[str, Any]] | None,
+    search: str | None,
+) -> tuple[Any, Any, Any, bool]:
+    """Fetch events for the selected lanes and render the period grid.
+
+    On error the previous grid is preserved (``no_update``) and a persistent
+    danger alert is shown above it. The ``mock`` query param (dev-only) is
+    forwarded so ``?mock=<scenario>`` switches scenarios without a restart.
+    """
+    current = selection or []
+    if not current:
+        return None, [], [], False
+
+    to_dt = datetime.now(timezone.utc)
+    from_dt = to_dt - timedelta(days=_DEFAULT_RANGE_DAYS)
+    mock = extract_mock_scenario(search)
+
+    try:
+        payload = fetch_timeline(
+            wba_ids=[str(item.get("wba_id")) for item in current],
+            scope=_DEFAULT_SCOPE,
+            from_iso=from_dt.isoformat(),
+            to_iso=to_dt.isoformat(),
+            limit=_DEFAULT_LIMIT,
+            mock=mock,
+        )
+    except TimelineFetchError as exc:
+        logger.warning(f"[Timeline] timeline fetch failed: {exc}")
+        alert = create_alert(
+            f"Could not load timeline data: {exc}", color="danger", dismissable=True
+        )
+        return no_update, no_update, [alert], False
+
+    lanes = payload.get("lanes") or []
+    data = {
+        "lanes": lanes,
+        "params": {
+            "scope": _DEFAULT_SCOPE,
+            "from": from_dt.isoformat(),
+            "to": to_dt.isoformat(),
+            "limit": _DEFAULT_LIMIT,
+        },
+        "time_range": (payload.get("meta") or {}).get("time_range") or {},
+    }
+    rows = build_grid(lanes, "day", get_app_timezone())
+    # Render one cell per *selected* lane (grid rows are keyed by wba_id), so the
+    # body always aligns with the header row even if the API reordered a lane.
+    return data, build_grid_body(rows, current), [], False

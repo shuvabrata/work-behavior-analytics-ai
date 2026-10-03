@@ -758,7 +758,7 @@ Only the six rows above are reachable through the mocked typeahead.
 **Objective:** Fetch events for all lanes, bucket by day, render the shared-row grid
 with placeholder cards. Loading + error handling.
 
-**Progress:** [ ] Not started
+**Progress:** [x] Complete
 
 #### Files
 
@@ -771,22 +771,22 @@ with placeholder cards. Loading + error handling.
 
 #### Tasks
 
-- [ ] **1.** `fetch_timeline` calls `GET /api/v1/activity/timeline?wba_ids=…&scope=…&from=…&to=…&limit=20`;
+- [x] **1.** `fetch_timeline` calls `GET /api/v1/activity/timeline?wba_ids=…&scope=…&from=…&to=…&limit=20`;
       returns parsed `lanes` + `meta`. Default range = last 30 days, scope = activity.
-- [ ] **2.** Store `timeline-data-store`: `{lanes: [{wba_id, label, avatar_url, entity_type, events, next_cursor}], params, time_range}`.
-- [ ] **3.** `bucket_by_period(lanes, granularity)` → ordered list of *period rows*
+- [x] **2.** Store `timeline-data-store`: `{lanes: [{wba_id, label, avatar_url, entity_type, events, next_cursor}], params, time_range}`.
+- [x] **3.** `bucket_by_period(lanes, granularity)` → ordered list of *period rows*
       (union of all lanes' buckets), each row = `{period_key, label, cells: {wba_id: [events]}}`.
       Rows sorted newest-first; events newest-first within a cell.
-- [ ] **4.** `find_idle_runs(rows, granularity)` → maximal runs of periods with no
+- [x] **4.** `find_idle_runs(rows, granularity)` → maximal runs of periods with no
       events in any lane (used in UI-5; skeleton can render them as plain rows first).
-- [ ] **5.** Render the grid: fixed-width left time-axis column with period labels;
+- [x] **5.** Render the grid: fixed-width left time-axis column with period labels;
       one fluid lane column per entity (min-width 220px; horizontal scroll when
       exceeded). Lane-header row sticky-top; time-axis sticky-left.
-- [ ] **6.** Render placeholder card boxes (summary text only) to validate layout.
-- [ ] **7.** Loading overlay via `create_loading_overlay_container` +
+- [x] **6.** Render placeholder card boxes (summary text only) to validate layout.
+- [x] **7.** Loading overlay via `create_loading_overlay_container` +
       `register_loading_overlay_hider`; on API error show `create_alert(..., "danger")`
       above the grid and keep the last good render.
-- [ ] **8. Mock passthrough (QA convenience).** Read the page URL
+- [x] **8. Mock passthrough (QA convenience).** Read the page URL
       (`Input("url", "search")`), extract a `mock=<scenario>` value, and forward it as
       the `mock` query param on `fetch_timeline` (and `fetch_suggestions`). This makes
       `?mock=gap_30d` switch mock scenarios live for visual QA without a restart.
@@ -795,17 +795,17 @@ with placeholder cards. Loading + error handling.
 
 #### Unit tests
 
-- [ ] `test_bucket_by_period_day` — events map to the correct calendar day (window timezone).
-- [ ] `test_build_grid_union_rows` — rows are the union across lanes; empty cells present.
-- [ ] `test_find_idle_runs` — maximal runs detected, boundary days excluded.
-- [ ] `test_event_order_newest_first` — events within a cell sorted descending.
+- [x] `test_bucket_by_period_day` — events map to the correct calendar day (window timezone).
+- [x] `test_build_grid_union_rows` — rows are the union across lanes; empty cells present.
+- [x] `test_find_idle_runs` — maximal runs detected, boundary days excluded.
+- [x] `test_event_order_newest_first` — events within a cell sorted descending.
 
 #### Manual validation
 
-- [ ] **V2.1** Adding two people renders two aligned columns of day rows.
-- [ ] **V2.2** A day active for one lane and idle for another shows an empty cell (not a missing row).
-- [ ] **V2.3** Header row stays pinned while scrolling down; time axis pinned while scrolling right (the soft cap is 5 lanes, so verify horizontal scroll with 5 lanes on a narrow viewport rather than ≥6).
-- [ ] **V2.4** API failure shows the danger alert and preserves the previous grid.
+- [x] **V2.1** Adding two people renders two aligned columns of day rows.
+- [x] **V2.2** A day active for one lane and idle for another shows an empty cell (not a missing row).
+- [x] **V2.3** Header row stays pinned while scrolling down; time axis pinned while scrolling right (the soft cap is 5 lanes, so verify horizontal scroll with 5 lanes on a narrow viewport rather than ≥6).
+- [x] **V2.4** API failure shows the danger alert and preserves the previous grid.
 
 > **Mock scenarios:** V2.1 `even`; V2.2 `empty_lane` + `gaps_staggered`; V2.3 `even`
 > (5 lanes, narrow viewport); V2.4 `error_500`. Requires mock mode enabled (see UI-2P

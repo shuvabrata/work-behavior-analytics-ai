@@ -6,6 +6,9 @@ Later phases append their own pure-helper tests here.
 
 from __future__ import annotations
 
+from datetime import date
+from zoneinfo import ZoneInfo
+
 import dash
 import pytest
 from dash import html
@@ -16,7 +19,12 @@ from app.dash_app.pages.timeline.helpers import (
     MAX_LANES,
     add_selection,
     assign_lane_colors,
+    build_grid,
+    bucket_by_period,
     entity_type_label,
+    extract_mock_scenario,
+    find_idle_runs,
+    placeholder_summary,
     remove_selection,
 )
 
@@ -90,3 +98,120 @@ def test_timeline_callbacks_registered() -> None:
     assert any(
         "timeline-" in str(key) for key in dash._callback.GLOBAL_CALLBACK_MAP
     )
+
+
+# ---------------------------------------------------------------------------
+# UI-2 — bucketing, grid, idle runs, mock param
+# ---------------------------------------------------------------------------
+
+_UTC = ZoneInfo("UTC")
+_KOLKATA = ZoneInfo("Asia/Kolkata")
+
+
+def _event(signal_id: str, iso: str, summary: str = "event") -> dict[str, object]:
+    return {
+        "signal_id": signal_id,
+        "event_time": iso,
+        "relationship_type": "CREATED",
+        "summary": summary,
+        "entity_type": "PullRequest",
+        "source": "github",
+        "url": None,
+        "details": {},
+    }
+
+
+def _lane(wba_id: str, events: list[dict[str, object]]) -> dict[str, object]:
+    return {
+        "wba_id": wba_id,
+        "entity_type": "Person",
+        "label": wba_id,
+        "avatar_url": None,
+        "events": events,
+        "next_cursor": None,
+    }
+
+
+def test_bucket_by_period_day() -> None:
+    """Events map to the correct calendar day in the display timezone."""
+    lanes = [
+        _lane(
+            "a",
+            [
+                _event("s1", "2026-03-15T10:00:00+00:00"),
+                _event("s2", "2026-03-15T23:30:00+00:00"),
+                _event("s3", "2026-03-14T01:00:00+00:00"),
+            ],
+        )
+    ]
+    rows = bucket_by_period(lanes, "day", _UTC)
+    assert [row["period_key"] for row in rows] == ["2026-03-15", "2026-03-14"]
+    assert len(rows[0]["cells"]["a"]) == 2
+
+    # 23:30 UTC is already the next calendar day in UTC+05:30.
+    shifted = bucket_by_period(
+        [_lane("a", [_event("s1", "2026-03-15T23:30:00+00:00")])], "day", _KOLKATA
+    )
+    assert shifted[0]["period_key"] == "2026-03-16"
+
+
+def test_build_grid_union_rows() -> None:
+    """Rows are the union across lanes and every lane has a cell per row."""
+    lanes = [
+        _lane("a", [_event("s1", "2026-03-15T10:00:00+00:00")]),
+        _lane("b", [_event("s2", "2026-03-14T10:00:00+00:00")]),
+    ]
+    rows = build_grid(lanes, "day", _UTC)
+    assert [row["period_key"] for row in rows] == ["2026-03-15", "2026-03-14"]
+    assert rows[0]["cells"]["b"] == []
+    assert rows[1]["cells"]["a"] == []
+
+
+def test_event_order_newest_first() -> None:
+    """Events inside a cell are sorted newest-first."""
+    lane = _lane(
+        "a",
+        [
+            _event("s1", "2026-03-15T08:00:00+00:00"),
+            _event("s2", "2026-03-15T18:00:00+00:00"),
+        ],
+    )
+    rows = bucket_by_period([lane], "day", _UTC)
+    assert [event["signal_id"] for event in rows[0]["cells"]["a"]] == ["s2", "s1"]
+
+
+def test_find_idle_runs() -> None:
+    """A gap between present periods yields one run; boundaries excluded."""
+    lanes = [
+        _lane(
+            "a",
+            [
+                _event("s1", "2026-03-15T10:00:00+00:00"),
+                _event("s2", "2026-03-11T10:00:00+00:00"),
+            ],
+        )
+    ]
+    rows = build_grid(lanes, "day", _UTC)
+    runs = find_idle_runs(rows, "day")
+    assert len(runs) == 1
+    assert runs[0]["count"] == 3  # Mar 12, 13, 14
+    assert runs[0]["start_ordinal"] == date(2026, 3, 12).toordinal()
+    assert runs[0]["end_ordinal"] == date(2026, 3, 14).toordinal()
+
+
+def test_extract_mock_scenario() -> None:
+    """The mock scenario is read from the page URL search string."""
+    assert extract_mock_scenario(None) is None
+    assert extract_mock_scenario("?mock=gap_30d") == "gap_30d"
+    assert extract_mock_scenario("?wba_ids=x&mock=even") == "even"
+    assert extract_mock_scenario("?q=foo") is None
+
+
+def test_placeholder_summary_fallback() -> None:
+    """Placeholder cards fall back to the relationship type when summary is null."""
+    assert placeholder_summary({"summary": "Hi", "relationship_type": "CREATED"}) == "Hi"
+    assert (
+        placeholder_summary({"summary": None, "relationship_type": "CREATED"})
+        == "CREATED"
+    )
+    assert placeholder_summary({}) == ""

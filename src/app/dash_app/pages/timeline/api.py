@@ -20,6 +20,10 @@ from common.logger import logger
 _DEFAULT_LIMIT = 10
 
 
+class TimelineFetchError(RuntimeError):
+    """Raised when the timeline request fails (non-200 or transport error)."""
+
+
 def get_api_base_url() -> str:
     """Return the backend API base URL (falls back to localhost for dev)."""
     return os.getenv("API_BASE_URL", "http://localhost:8000")
@@ -62,3 +66,65 @@ def fetch_suggestions(query: str, limit: int = _DEFAULT_LIMIT) -> list[dict[str,
 
     results = payload.get("results", []) if isinstance(payload, dict) else []
     return results if isinstance(results, list) else []
+
+
+def fetch_timeline(
+    *,
+    wba_ids: list[str],
+    scope: str = "activity",
+    from_iso: str | None = None,
+    to_iso: str | None = None,
+    limit: int = 20,
+    cursor: str | None = None,
+    mock: str | None = None,
+) -> dict[str, Any]:
+    """Fetch multi-lane timeline data.
+
+    Returns the parsed ``{lanes, meta}`` payload on success. Raises
+    :class:`TimelineFetchError` on a non-200 response, a transport error, or
+    malformed JSON, so the caller can show a danger alert and keep the last
+    good render. ``mock`` is forwarded only when set (dev-only scenario switch).
+    """
+    params: dict[str, str | int] = {
+        "wba_ids": ",".join(wba_ids),
+        "scope": scope,
+        "limit": limit,
+    }
+    if from_iso:
+        params["from"] = from_iso
+    if to_iso:
+        params["to"] = to_iso
+    if cursor:
+        params["cursor"] = cursor
+    if mock:
+        params["mock"] = mock
+
+    try:
+        response = requests.get(
+            f"{get_api_base_url()}/api/v1/activity/timeline",
+            params=params,
+            timeout=runtime_settings.get_int("HTTP_REQUEST_TIMEOUT"),
+        )
+    except requests.RequestException as exc:
+        raise TimelineFetchError(f"request failed: {exc}") from exc
+
+    if response.status_code != 200:
+        detail = ""
+        try:
+            body = response.json()
+            raw_detail = body.get("detail") if isinstance(body, dict) else None
+            if isinstance(raw_detail, dict):
+                detail = f": {raw_detail.get('message', raw_detail)}"
+            elif raw_detail:
+                detail = f": {raw_detail}"
+        except ValueError:
+            pass
+        raise TimelineFetchError(f"HTTP {response.status_code}{detail}")
+
+    try:
+        payload = response.json()
+    except ValueError as exc:
+        raise TimelineFetchError(f"invalid JSON: {exc}") from exc
+    if not isinstance(payload, dict):
+        raise TimelineFetchError("unexpected response shape")
+    return payload

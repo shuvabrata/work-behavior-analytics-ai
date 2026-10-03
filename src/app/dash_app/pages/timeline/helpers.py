@@ -7,7 +7,10 @@ phases extend this module with bucketing/card helpers.
 
 from __future__ import annotations
 
+from datetime import date, datetime, timedelta, timezone
 from typing import Any
+from urllib.parse import parse_qs
+from zoneinfo import ZoneInfo
 
 # Soft cap on the number of lanes (design decision #4).
 MAX_LANES = 5
@@ -115,3 +118,165 @@ def remove_selection(
 def is_full(selection: list[dict[str, Any]]) -> bool:
     """Return whether the selection has reached the soft lane cap."""
     return len(selection) >= MAX_LANES
+
+
+# ---------------------------------------------------------------------------
+# Period bucketing (UI-2)
+# ---------------------------------------------------------------------------
+
+DAY = "day"
+WEEK = "week"
+MONTH = "month"
+GRANULARITIES: tuple[str, ...] = (DAY, WEEK, MONTH)
+
+
+def _to_local(value: datetime, tz: ZoneInfo) -> datetime:
+    """Convert a possibly-naive datetime to the display timezone."""
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return value.astimezone(tz)
+
+
+def _parse_event_time(raw: Any) -> datetime | None:
+    """Parse an ISO 8601 event timestamp, or ``None`` when absent/invalid."""
+    if not isinstance(raw, str) or not raw:
+        return None
+    try:
+        return datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
+def _week_start(value: datetime) -> date:
+    """Return the Monday of ``value``'s ISO week."""
+    return (value - timedelta(days=value.weekday())).date()
+
+
+def period_ordinal(value: datetime, granularity: str) -> int:
+    """Return a monotonic integer for the period containing ``value``.
+
+    Successive periods differ by 1, so the gap between two periods is
+    ``ordinal(newer) - ordinal(older) - 1``.
+    """
+    if granularity == MONTH:
+        return value.year * 12 + value.month
+    if granularity == WEEK:
+        return _week_start(value).toordinal() // 7
+    return value.date().toordinal()
+
+
+def period_key(value: datetime, granularity: str) -> str:
+    """Return a stable, sortable key for the period containing ``value``."""
+    if granularity == MONTH:
+        return value.strftime("%Y-%m")
+    if granularity == WEEK:
+        return _week_start(value).isoformat()
+    return value.strftime("%Y-%m-%d")
+
+
+def period_label(period_key_value: str, granularity: str) -> str:
+    """Return the axis label for a period key (Day `Mar 15`, Week `Mar 9 – 15`,
+    Month `March 2026`)."""
+    if granularity == MONTH:
+        year, month = period_key_value.split("-")
+        return date(int(year), int(month), 1).strftime("%B %Y")
+    if granularity == WEEK:
+        start = date.fromisoformat(period_key_value)
+        end = start + timedelta(days=6)
+        return f"{start.strftime('%b %d')} – {end.strftime('%b %d')}"
+    return date.fromisoformat(period_key_value).strftime("%b %d")
+
+
+def bucket_by_period(
+    lanes: list[dict[str, Any]], granularity: str, tz: ZoneInfo
+) -> list[dict[str, Any]]:
+    """Group events into shared period rows across all lanes.
+
+    Returns the union of every lane's periods (only periods with at least one
+    event), newest-first. Each row is
+    ``{period_key, label, ordinal, cells: {wba_id: [events]}}`` with events
+    newest-first inside each cell. Lanes without events in a period are absent
+    from ``cells`` here — see :func:`build_grid`, which fills them as empty.
+    """
+    buckets: dict[str, dict[str, Any]] = {}
+    for lane in lanes:
+        wba_id = lane.get("wba_id")
+        if not wba_id:
+            continue
+        for event in lane.get("events", []) or []:
+            parsed = _parse_event_time(event.get("event_time"))
+            if parsed is None:
+                continue
+            local = _to_local(parsed, tz)
+            key = period_key(local, granularity)
+            row = buckets.setdefault(
+                key,
+                {
+                    "period_key": key,
+                    "label": period_label(key, granularity),
+                    "ordinal": period_ordinal(local, granularity),
+                    "cells": {},
+                },
+            )
+            row["cells"].setdefault(wba_id, []).append(event)
+
+    rows = sorted(buckets.values(), key=lambda row: row["ordinal"], reverse=True)
+    for row in rows:
+        for events in row["cells"].values():
+            events.sort(key=lambda event: event.get("event_time") or "", reverse=True)
+    return rows
+
+
+def build_grid(
+    lanes: list[dict[str, Any]], granularity: str, tz: ZoneInfo
+) -> list[dict[str, Any]]:
+    """Return the ordered period rows with an explicit (possibly empty) cell
+    for every requested lane, so a day active for one lane renders an empty
+    cell — not a missing row — for the others."""
+    rows = bucket_by_period(lanes, granularity, tz)
+    wba_ids = [lane.get("wba_id") for lane in lanes if lane.get("wba_id")]
+    for row in rows:
+        cells = row["cells"]
+        for wba_id in wba_ids:
+            cells.setdefault(wba_id, [])
+    return rows
+
+
+def find_idle_runs(
+    rows: list[dict[str, Any]], granularity: str
+) -> list[dict[str, Any]]:
+    """Return the maximal runs of periods with no events in any lane.
+
+    Idle periods are exactly the gaps between consecutive present rows, so each
+    run excludes the bounding (present) periods. Each run is
+    ``{count, start_ordinal, end_ordinal}``; the units follow ``granularity``.
+    Used by UI-5 to render collapsed idle separators.
+    """
+    runs: list[dict[str, Any]] = []
+    for newer, older in zip(rows, rows[1:]):
+        gap = int(newer["ordinal"]) - int(older["ordinal"]) - 1
+        if gap > 0:
+            runs.append(
+                {
+                    "count": gap,
+                    "start_ordinal": int(older["ordinal"]) + 1,
+                    "end_ordinal": int(newer["ordinal"]) - 1,
+                    "granularity": granularity,
+                }
+            )
+    return runs
+
+
+def extract_mock_scenario(search: str | None) -> str | None:
+    """Return the ``mock`` query-param value from a URL search string."""
+    if not search:
+        return None
+    values = parse_qs(search.lstrip("?")).get("mock") or []
+    return values[0] if values else None
+
+
+def placeholder_summary(event: dict[str, Any]) -> str:
+    """UI-2 placeholder text for a card: ``summary`` or, when null, the
+    ``relationship_type`` so the card is never blank (the real 2-line card with
+    its own fallback lands in UI-3)."""
+    return str(event.get("summary") or event.get("relationship_type") or "")

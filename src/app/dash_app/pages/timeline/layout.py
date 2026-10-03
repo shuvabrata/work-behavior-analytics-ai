@@ -12,9 +12,18 @@ from typing import Any
 import dash_bootstrap_components as dbc
 from dash import dcc, html
 
-from app.dash_app.components.common import create_empty_state, create_page_header
-from app.dash_app.pages.timeline.helpers import entity_type_icon, entity_type_label
+from app.dash_app.components.common import (
+    create_empty_state,
+    create_loading_overlay_container,
+    create_page_header,
+)
+from app.dash_app.pages.timeline.helpers import (
+    entity_type_icon,
+    entity_type_label,
+    placeholder_summary,
+)
 from app.dash_app.styles import (
+    COLOR_BACKGROUND_LIGHT,
     COLOR_BACKGROUND_WHITE,
     COLOR_BORDER,
     COLOR_CHARCOAL_MEDIUM,
@@ -67,20 +76,15 @@ CLEAR_ALL_STYLE: dict[str, Any] = {
 
 CLEAR_ALL_HIDDEN_STYLE: dict[str, Any] = {**CLEAR_ALL_STYLE, "display": "none"}
 
-_LANE_HEADERS_ROW_STYLE: dict[str, Any] = {
-    "display": "flex",
-    "alignItems": "stretch",
-    "gap": "8px",
-    "marginBottom": SPACING_SMALL,
-}
-
 _LANE_HEADER_BASE_STYLE: dict[str, Any] = {
     "display": "flex",
     "alignItems": "center",
     "gap": "8px",
     "padding": "8px 10px",
-    "minWidth": "220px",
-    "flex": "1 1 0",
+    # Sticky-top so the header row stays pinned inside the grid scroller.
+    "position": "sticky",
+    "top": "0",
+    "zIndex": 3,
     "backgroundColor": COLOR_BACKGROUND_WHITE,
     "border": f"1px solid {COLOR_BORDER}",
     "borderRadius": "2px",
@@ -130,6 +134,93 @@ _REMOVE_BTN_STYLE: dict[str, Any] = {
     "fontSize": FONT_SIZE_SMALL,
 }
 
+# ---------------------------------------------------------------------------
+# Grid (UI-2): shared-row swimlane table
+# ---------------------------------------------------------------------------
+
+_AXIS_CELL_WIDTH_PX = int(TIME_AXIS_WIDTH.rstrip("px"))
+
+GRID_SCROLL_STYLE: dict[str, Any] = {
+    "position": "relative",
+    "overflow": "auto",
+    # Fill the viewport below the topbar + header + selector bar; grow only as
+    # far as the content needs (no premature scrollbar when the page has room).
+    "maxHeight": "calc(100vh - 220px)",
+    "border": f"1px solid {COLOR_BORDER}",
+    "borderRadius": "2px",
+    "backgroundColor": COLOR_BACKGROUND_WHITE,
+}
+
+GRID_SCROLL_HIDDEN_STYLE: dict[str, Any] = {
+    **GRID_SCROLL_STYLE,
+    "display": "none",
+}
+
+_AXIS_CELL_BASE_STYLE: dict[str, Any] = {
+    "padding": "6px 8px",
+    "fontFamily": FONT_SANS,
+    "fontSize": FONT_SIZE_XTINY,
+    "color": COLOR_GRAY_MEDIUM,
+    "textAlign": "right",
+    "whiteSpace": "nowrap",
+    "borderRight": f"1px solid {COLOR_BORDER}",
+    "borderBottom": f"1px solid {COLOR_BORDER}",
+    "backgroundColor": COLOR_BACKGROUND_WHITE,
+    "minHeight": "28px",
+}
+
+_HEADER_AXIS_STYLE: dict[str, Any] = {
+    **_AXIS_CELL_BASE_STYLE,
+    "position": "sticky",
+    "top": "0",
+    "left": "0",
+    "zIndex": 4,
+}
+
+_ROW_AXIS_STYLE: dict[str, Any] = {
+    **_AXIS_CELL_BASE_STYLE,
+    "position": "sticky",
+    "left": "0",
+    "zIndex": 2,
+}
+
+_CELL_STYLE: dict[str, Any] = {
+    "padding": "4px 6px",
+    "borderBottom": f"1px solid {COLOR_BORDER}",
+    "minHeight": "28px",
+}
+
+_PLACEHOLDER_CARD_STYLE: dict[str, Any] = {
+    "fontFamily": FONT_SANS,
+    "fontSize": FONT_SIZE_XTINY,
+    "color": COLOR_CHARCOAL_MEDIUM,
+    "backgroundColor": COLOR_BACKGROUND_LIGHT,
+    "border": f"1px solid {COLOR_BORDER}",
+    "borderRadius": "2px",
+    "padding": "4px 6px",
+    "marginBottom": "4px",
+    "whiteSpace": "nowrap",
+    "overflow": "hidden",
+    "textOverflow": "ellipsis",
+}
+
+
+def grid_inner_style(lane_count: int) -> dict[str, Any]:
+    """Return the CSS-grid template for the swimlane table.
+
+    One fixed axis column plus ``minmax(220px, 1fr)`` per lane; ``minWidth``
+    forces horizontal scrolling once the lanes exceed the viewport.
+    """
+    columns = max(lane_count, 1)
+    return {
+        "display": "grid",
+        "gridTemplateColumns": (
+            f"{TIME_AXIS_WIDTH} repeat({columns}, minmax(220px, 1fr))"
+        ),
+        "minWidth": f"{_AXIS_CELL_WIDTH_PX + columns * 220}px",
+        "alignItems": "start",
+    }
+
 
 def get_layout() -> html.Div:
     """Return the Activity Timeline page scaffold with selector and lane row."""
@@ -140,7 +231,7 @@ def get_layout() -> html.Div:
                 "Compare the chronological activity of people and objects side by side.",
             ),
             _selector_bar(),
-            html.Div(id="timeline-lane-headers", style=_LANE_HEADERS_ROW_STYLE),
+            html.Div(id="timeline-alert-slot"),
             html.Div(
                 id="timeline-empty-state",
                 children=[
@@ -149,6 +240,29 @@ def get_layout() -> html.Div:
                     )
                 ],
                 style=_EMPTY_STATE_WRAPPER_STYLE,
+            ),
+            create_loading_overlay_container(
+                html.Div(
+                    id="timeline-grid-scroll",
+                    style=GRID_SCROLL_HIDDEN_STYLE,
+                    children=[
+                        html.Div(
+                            id="timeline-grid-inner",
+                            style=grid_inner_style(1),
+                            children=[
+                                html.Div(
+                                    id="timeline-lane-headers",
+                                    style={"display": "contents"},
+                                ),
+                                html.Div(
+                                    id="timeline-grid-body",
+                                    style={"display": "contents"},
+                                ),
+                            ],
+                        )
+                    ],
+                ),
+                overlay_id="timeline-grid-overlay",
             ),
             # Dummy output target for the install-once keyboard-navigation
             # clientside callback (ArrowUp/Down/Enter over the suggestion list).
@@ -161,6 +275,7 @@ def get_layout() -> html.Div:
                 id="timeline-suggestions-store", storage_type="memory", data=[]
             ),
             dcc.Store(id="timeline-data-store", storage_type="memory", data=None),
+            dcc.Store(id="timeline-loading-store", storage_type="memory", data=False),
             dcc.Store(id="timeline-theme-store", storage_type="memory", data=None),
             dcc.Store(id="timeline-expanded-runs-store", storage_type="memory", data=[]),
             dcc.Store(
@@ -203,11 +318,47 @@ def _selector_bar() -> html.Div:
     )
 
 
-def build_axis_spacer() -> html.Div:
-    """Fixed-width spacer aligning lane headers with the time-axis column."""
+def build_header_axis_cell() -> html.Div:
+    """Sticky top-left corner cell above the time-axis column."""
+    return html.Div(id="timeline-axis-corner", style=_HEADER_AXIS_STYLE)
+
+
+def build_row_axis_cell(label: str) -> html.Div:
+    """Sticky-left axis cell showing a period label."""
+    return html.Div(label, style=_ROW_AXIS_STYLE, title=label)
+
+
+def build_placeholder_card(event: dict[str, Any]) -> html.Div:
+    """UI-2 placeholder card: summary text, falling back to the relationship
+    type when the API sends ``summary=None`` (the real card lands in UI-3)."""
+    text = placeholder_summary(event)
+    return html.Div(text, style=_PLACEHOLDER_CARD_STYLE, title=text)
+
+
+def build_cell(events: list[dict[str, Any]]) -> html.Div:
+    """One lane cell for a period row (empty cells render as a bare guide)."""
+    if not events:
+        return html.Div(style={**_CELL_STYLE, "backgroundColor": "transparent"})
     return html.Div(
-        style={"flex": f"0 0 {TIME_AXIS_WIDTH}", "minWidth": TIME_AXIS_WIDTH}
+        [build_placeholder_card(event) for event in events], style=_CELL_STYLE
     )
+
+
+def build_grid_body(
+    rows: list[dict[str, Any]], lanes: list[dict[str, Any]]
+) -> list[Any]:
+    """Return the flat grid-item list for the body.
+
+    One axis cell plus one cell per lane, repeated for every period row, so the
+    items flow into the CSS grid behind the sticky header row.
+    """
+    children: list[Any] = []
+    for row in rows:
+        children.append(build_row_axis_cell(str(row.get("label") or "")))
+        cells = row.get("cells") or {}
+        for lane in lanes:
+            children.append(build_cell(list(cells.get(lane.get("wba_id")) or [])))
+    return children
 
 
 def build_lane_header(item: dict[str, Any], lane_color: str) -> html.Div:

@@ -6,7 +6,7 @@ Later phases append their own pure-helper tests here.
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 from zoneinfo import ZoneInfo
 
 import dash
@@ -29,8 +29,11 @@ from app.dash_app.pages.timeline.helpers import (
     extract_scope,
     find_idle_runs,
     humanize_relationship,
+    idle_run_key,
+    idle_run_label,
     popup_fields,
     remove_selection,
+    toggle_expanded,
 )
 
 
@@ -296,3 +299,52 @@ def test_popup_fields_from_event() -> None:
     )
     assert "url" not in without_url
     assert without_url["summary"] == "Created · File"
+
+
+# ---------------------------------------------------------------------------
+# UI-5 — idle runs
+# ---------------------------------------------------------------------------
+
+
+def test_idle_run_label_days_weeks_months() -> None:
+    """Idle-run labels use the right unit + count for each granularity."""
+    day_run = {
+        "count": 3,
+        "start_ordinal": date(2026, 3, 12).toordinal(),
+        "end_ordinal": date(2026, 3, 14).toordinal(),
+        "granularity": "day",
+    }
+    assert idle_run_label(day_run) == "Mar 12 – 14 · 3 days no activity"
+
+    week_start = date(2026, 3, 9)
+    week_start -= timedelta(days=week_start.weekday())
+    week0 = week_start.toordinal() // 7
+    week_run = {
+        "count": 2,
+        "start_ordinal": week0,
+        "end_ordinal": week0 + 1,
+        "granularity": "week",
+    }
+    assert idle_run_label(week_run).endswith("2 weeks no activity")
+
+    month_run = {
+        "count": 1,
+        "start_ordinal": 2026 * 12 + 3,
+        "end_ordinal": 2026 * 12 + 3,
+        "granularity": "month",
+    }
+    assert idle_run_label(month_run) == "Mar 2026 · 1 month no activity"
+
+
+def test_idle_expansion_toggle() -> None:
+    """Toggling a run key expands only that run and never duplicates keys."""
+    key = "day:24313:24315"
+    assert toggle_expanded([], key) == [key]
+    assert toggle_expanded(["day:1:2"], key) == ["day:1:2", key]
+    assert toggle_expanded([key, "day:1:2"], key) == ["day:1:2"]
+
+
+def test_idle_run_key_is_stable() -> None:
+    """A run's key is derived from granularity + span."""
+    run = {"granularity": "day", "start_ordinal": 5, "end_ordinal": 9}
+    assert idle_run_key(run) == "day:5:9"

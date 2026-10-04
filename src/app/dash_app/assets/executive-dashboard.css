@@ -1680,3 +1680,59 @@ input::placeholder {
     text-decoration: underline;
 }
 
+/* ---------------------------------------------------------------------------
+   Activity Timeline — empty cells, empty lanes, idle separators (UI-5)
+--------------------------------------------------------------------------- */
+.timeline-cell-guide {
+    min-height: 28px;
+    border-bottom: 1px solid var(--color-border);
+    background-image: repeating-linear-gradient(
+        to bottom,
+        var(--color-border) 0 4px,
+        transparent 4px 8px
+    );
+    background-size: 1px 100%;
+    background-position: center;
+    background-repeat: no-repeat;
+}
+
+.timeline-empty-note {
+    min-height: 28px;
+    border-bottom: 1px solid var(--color-border);
+    padding: 8px 6px;
+    font-family: 'Inter', sans-serif;
+    font-size: 10px;
+    color: var(--color-gray-medium);
+    text-align: center;
+}
+
+.timeline-idle-bar {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    width: 100%;
+    padding: 3px 8px;
+    background-color: var(--color-background-light);
+    border: none;
+    border-top: 1px dashed var(--color-border);
+    border-bottom: 1px dashed var(--color-border);
+    color: var(--color-gray-medium);
+    font-family: 'Inter', sans-serif;
+    font-size: 10px;
+    cursor: pointer;
+}
+
+.timeline-idle-bar:hover {
+    color: var(--color-charcoal-medium);
+}
+
+.timeline-idle-bar .timeline-idle-chevron {
+    transition: transform 0.15s ease;
+}
+
+.timeline-idle-bar.expanded .timeline-idle-chevron {
+    transform: rotate(180deg);
+}
+

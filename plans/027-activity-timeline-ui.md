@@ -976,7 +976,7 @@ UI-4 is verified by the `V4.*` items only.
 
 **Objective:** The idle/emptiness language: dashed guides, empty-lane note, expandable gaps.
 
-**Progress:** [ ] Not started
+**Progress:** [x] Complete
 
 #### Files
 
@@ -988,33 +988,40 @@ UI-4 is verified by the `V4.*` items only.
 
 #### Tasks
 
-- [ ] **1.** Empty cell: blank cell with a faint **dashed vertical guide line**
+- [x] **1.** Empty cell: blank cell with a faint **dashed vertical guide line**
       continuing the lane column through the gap.
-- [ ] **2.** Wholly-empty lane: centered faint note "No activity in this range"
+- [x] **2.** Wholly-empty lane: centered faint note "No activity in this range"
       aligned to the top of the column; header still renders.
-- [ ] **3.** Idle run: slim full-width bar spanning all lanes with a centered label
+- [x] **3.** Idle run: slim full-width bar spanning all lanes with a centered label
       naming the span (e.g. `· Mar 11 – 14 · 3 days no activity ·`) and a ⌄ affordance.
       Label unit follows the current Group by (days / weeks / months).
-- [ ] **4.** Click toggles expansion: expanded runs render as normal (empty) period
+- [x] **4.** Click toggles expansion: expanded runs render as normal (empty) period
       rows; state held in `timeline-expanded-runs-store` (set of run keys) so it
       survives re-renders. Default collapsed.
-- [ ] **5.** Runs are computed only over periods currently loaded; expanding a run
+- [x] **5.** Runs are computed only over periods currently loaded; expanding a run
       does not fetch from the server (that remains "Load more").
 
 #### Unit tests
 
-- [ ] `test_idle_run_label_days_weeks_months` — correct unit + count per granularity.
-- [ ] `test_idle_expansion_toggle` — toggling a run key expands only that run.
+- [x] `test_idle_run_label_days_weeks_months` — correct unit + count per granularity.
+- [x] `test_idle_expansion_toggle` — toggling a run key expands only that run.
+
+> Note: the grid renders at **day** granularity only for now (Group by is UI-7); the
+> label helper already supports day/week/month. Runs are recomputed from the loaded
+> rows, so expanding never fetches. An extra `test_idle_run_key_is_stable` covers the
+> expansion id.
 
 #### Manual validation
 
-- [ ] **V5.1** A multi-day gap collapses to a slim bar naming the date span.
-- [ ] **V5.2** Clicking the bar expands the hidden days as empty rows; clicking again collapses.
-- [ ] **V5.3** An entity selected with no activity in range shows the "No activity in this range" note.
-- [ ] **V5.4** Idle gaps in only one lane do **not** collapse the row (they show as empty cells with guides).
+- [x] **V5.1** A multi-day gap collapses to a slim bar naming the date span.
+- [x] **V5.2** Clicking the bar expands the hidden days as empty rows; clicking again collapses.
+- [x] **V5.3** An entity selected with no activity in range shows the "No activity in this range" note.
+- [x] **V5.4** Idle gaps in only one lane do **not** collapse the row (they show as empty cells with guides).
 
-> **Mock scenarios:** V5.1/V5.2 `gaps_small`; V5.3 `empty_lane`; V5.4 `gaps_staggered`
-> (gaps land in different lanes). For a global collapse see `gaps_global` / `gap_30d`.
+> **Mock scenarios:** V5.1/V5.2 use **`gaps_global`** (all lanes idle for several
+> days → the run collapses); a *single-lane* gap does **not** collapse (that is V5.4)
+> — see `gaps_small`/`gaps_staggered`. V5.3 `empty_lane`; V5.4 `gaps_small` /
+> `gaps_staggered`.
 
 ---
 

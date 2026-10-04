@@ -394,3 +394,80 @@ def popup_fields(event: dict[str, Any], datetime_text: str) -> dict[str, Any]:
     if isinstance(url, str) and url:
         fields["url"] = url
     return fields
+
+
+# ---------------------------------------------------------------------------
+# Idle runs (UI-5)
+# ---------------------------------------------------------------------------
+
+
+def _ordinal_to_date(ordinal: int, granularity: str) -> date:
+    """Inverse of :func:`period_ordinal` — the first day of a period ordinal."""
+    if granularity == MONTH:
+        year = (ordinal - 1) // 12
+        month = (ordinal - 1) % 12 + 1
+        return date(year, month, 1)
+    if granularity == WEEK:
+        # Monday ordinals satisfy o % 7 == 1, so ordinal k → 7k + 1.
+        return date.fromordinal(ordinal * 7 + 1)
+    return date.fromordinal(ordinal)
+
+
+def _ordinal_to_key(ordinal: int, granularity: str) -> str:
+    """Return the period key for a period ordinal."""
+    start = _ordinal_to_date(ordinal, granularity)
+    if granularity == MONTH:
+        return start.strftime("%Y-%m")
+    return start.isoformat()
+
+
+def _unit_phrase(count: int, granularity: str) -> str:
+    """Return e.g. ``3 days`` / ``1 month`` for an idle run."""
+    noun = {DAY: "day", WEEK: "week", MONTH: "month"}.get(granularity, "period")
+    return f"{count} {noun}{'s' if count != 1 else ''}"
+
+
+def _span_label(start: date, end: date, granularity: str) -> str:
+    """Return the date-span text for an idle run (e.g. ``Mar 12 – 14``)."""
+    if granularity == MONTH:
+        if (start.year, start.month) == (end.year, end.month):
+            return f"{start:%b %Y}"
+        return f"{start:%b %Y} – {end:%b %Y}"
+    last = end + timedelta(days=6) if granularity == WEEK else end
+    if start == last:
+        return f"{start:%b} {start.day}"
+    if start.month == last.month:
+        return f"{start:%b} {start.day} – {last.day}"
+    return f"{start:%b} {start.day} – {last:%b} {last.day}"
+
+
+def idle_run_key(run: dict[str, Any]) -> str:
+    """Return a stable key for an idle run (used as expansion-state id)."""
+    return f"{run.get('granularity')}:{run.get('start_ordinal')}:{run.get('end_ordinal')}"
+
+
+def idle_run_label(run: dict[str, Any]) -> str:
+    """Return the idle-run bar label, e.g. ``Mar 12 – 14 · 3 days no activity``."""
+    granularity = str(run.get("granularity") or DAY)
+    start = _ordinal_to_date(int(run["start_ordinal"]), granularity)
+    end = _ordinal_to_date(int(run["end_ordinal"]), granularity)
+    span = _span_label(start, end, granularity)
+    return f"{span} · {_unit_phrase(int(run['count']), granularity)} no activity"
+
+
+def idle_run_period_labels(run: dict[str, Any]) -> list[str]:
+    """Return the hidden period labels for an expanded run, newest-first."""
+    granularity = str(run.get("granularity") or DAY)
+    return [
+        period_label(_ordinal_to_key(ordinal, granularity), granularity)
+        for ordinal in range(
+            int(run["end_ordinal"]), int(run["start_ordinal"]) - 1, -1
+        )
+    ]
+
+
+def toggle_expanded(expanded: list[str], key: str) -> list[str]:
+    """Return ``expanded`` with ``key`` added if absent, else removed."""
+    if key in expanded:
+        return [item for item in expanded if item != key]
+    return [*expanded, key]

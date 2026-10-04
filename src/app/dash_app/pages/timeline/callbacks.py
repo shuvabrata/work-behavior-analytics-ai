@@ -43,6 +43,7 @@ from app.dash_app.pages.timeline.helpers import (
     extract_mock_scenario,
     extract_scope,
     is_full,
+    toggle_expanded,
     remove_selection,
 )
 from app.dash_app.pages.timeline.layout import (
@@ -573,19 +574,22 @@ def populate_timeline_theme_store(
     Input("timeline-selected-store", "data"),
     Input("theme-store", "data"),
     Input("timeline-theme-store", "data"),
+    Input("timeline-expanded-runs-store", "data"),
 )
 def render_grid(
     data: dict[str, Any] | None,
     selection: list[dict[str, Any]] | None,
     theme_name: str | None,
     effective_theme: dict[str, Any] | None,
+    expanded_runs: list[str] | None,
 ) -> list[Any]:
     """Render the period grid from stored data.
 
     Resolves lane-accent colours from the active theme and entity-type colours
     from the effective theme (``effective_theme["nodes"][<Type>]["background-color"]``),
     falling back to the base token. One cell per *selected* lane keeps the body
-    aligned with the sticky header row even if the API reordered a lane.
+    aligned with the sticky header row even if the API reordered a lane. Idle-run
+    separators honour the expansion state in ``timeline-expanded-runs-store``.
     """
     current = selection or []
     if not data or not current:
@@ -602,7 +606,33 @@ def render_grid(
         effective_theme.get("nodes") if isinstance(effective_theme, dict) else None
     )
     rows = build_grid(lanes, "day", get_app_timezone())
-    return build_grid_body(rows, current, lane_colors, effective_nodes, tokens)
+    return build_grid_body(
+        rows,
+        current,
+        lane_colors,
+        effective_nodes,
+        tokens,
+        expanded_runs=expanded_runs,
+        granularity="day",
+    )
+
+
+@callback(
+    Output("timeline-expanded-runs-store", "data"),
+    Input({"type": "timeline-idle-toggle", "index": ALL}, "n_clicks"),
+    State("timeline-expanded-runs-store", "data"),
+    prevent_initial_call=True,
+)
+def toggle_idle_run(
+    _clicks: list[Any],
+    expanded: list[str] | None,
+) -> list[str]:
+    """Expand/collapse a single idle-run separator (keyed by run)."""
+    triggered = _first_changed_trigger()
+    key = triggered.get("index") if isinstance(triggered, dict) else None
+    if not key:
+        raise PreventUpdate
+    return toggle_expanded(expanded or [], str(key))
 
 
 # ---------------------------------------------------------------------------

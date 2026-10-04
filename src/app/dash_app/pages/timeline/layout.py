@@ -25,7 +25,11 @@ from app.dash_app.pages.timeline.helpers import (
     entity_type_color,
     entity_type_icon,
     entity_type_label,
+    find_idle_runs,
     humanize_relationship,
+    idle_run_key,
+    idle_run_label,
+    idle_run_period_labels,
     popup_fields,
 )
 from app.runtime_settings import runtime_settings
@@ -415,10 +419,17 @@ def build_cell(
     lane_color: str,
     effective_nodes: dict[str, Any] | None,
     base_tokens: dict[str, Any],
+    *,
+    show_empty_note: bool = False,
 ) -> html.Div:
-    """One lane cell: the cards for a period, or a bare guide when empty."""
+    """One lane cell: the cards for a period, an empty-lane note, or a dashed
+    vertical guide continuing the lane through the gap."""
     if not events:
-        return html.Div(style={**_CELL_STYLE, "backgroundColor": "transparent"})
+        if show_empty_note:
+            return html.Div(
+                "No activity in this range", className="timeline-empty-note"
+            )
+        return html.Div(className="timeline-cell-guide")
     cards = [
         build_event_card(
             event,
@@ -432,32 +443,101 @@ def build_cell(
     return html.Div(cards, style=_CELL_STYLE)
 
 
+def build_idle_bar(run: dict[str, Any], *, expanded: bool = False) -> html.Button:
+    """A slim full-width, clickable idle-gap separator.
+
+    Rendered in both states so it stays the toggle target — expanding shows the
+    hidden rows *below* the bar and flips the chevron; clicking again collapses.
+    """
+    return html.Button(
+        [
+            html.I(className="fas fa-chevron-down timeline-idle-chevron"),
+            html.Span(idle_run_label(run)),
+        ],
+        id={"type": "timeline-idle-toggle", "index": idle_run_key(run)},
+        n_clicks=0,
+        className="timeline-idle-bar expanded" if expanded else "timeline-idle-bar",
+    )
+
+
 def build_grid_body(
     rows: list[dict[str, Any]],
     lanes: list[dict[str, Any]],
     lane_colors: dict[str, str],
     effective_nodes: dict[str, Any] | None,
     base_tokens: dict[str, Any],
+    *,
+    expanded_runs: list[str] | None = None,
+    granularity: str = "day",
 ) -> list[Any]:
     """Return the flat grid-item list for the body.
 
-    One axis cell plus one cell per lane, repeated for every period row, so the
-    items flow into the CSS grid behind the sticky header row.
+    One axis cell plus one cell per lane per period row, with collapsed idle-run
+    separators inserted between rows (expanded runs render as empty period rows).
+    A lane with no events at all shows a "No activity in this range" note in its
+    top cell; every other empty cell gets a dashed guide.
     """
+    expanded = set(expanded_runs or [])
+    lane_ids = [str(lane.get("wba_id") or "") for lane in lanes]
     children: list[Any] = []
+
+    lane_empty = {
+        wba_id: not any((row.get("cells") or {}).get(wba_id) for row in rows)
+        for wba_id in lane_ids
+    }
+
+    if not rows:
+        # No period rows at all — still show the per-lane empty note.
+        children.append(build_row_axis_cell(""))
+        for wba_id in lane_ids:
+            children.append(
+                build_cell(
+                    [],
+                    lane_colors.get(wba_id, ""),
+                    effective_nodes,
+                    base_tokens,
+                    show_empty_note=True,
+                )
+            )
+        return children
+
+    runs_by_newer = {
+        int(run["end_ordinal"]) + 1: run for run in find_idle_runs(rows, granularity)
+    }
+
+    first_row = True
     for row in rows:
         children.append(build_row_axis_cell(str(row.get("label") or "")))
         cells = row.get("cells") or {}
-        for lane in lanes:
-            wba_id = str(lane.get("wba_id") or "")
+        for wba_id in lane_ids:
             children.append(
                 build_cell(
                     list(cells.get(wba_id) or []),
                     lane_colors.get(wba_id, ""),
                     effective_nodes,
                     base_tokens,
+                    show_empty_note=first_row and lane_empty.get(wba_id, False),
                 )
             )
+        first_row = False
+
+        run = runs_by_newer.get(int(row["ordinal"]))
+        if run is None:
+            continue
+        is_expanded = idle_run_key(run) in expanded
+        children.append(build_idle_bar(run, expanded=is_expanded))
+        if is_expanded:
+            for label in idle_run_period_labels(run):
+                children.append(build_row_axis_cell(label))
+                for wba_id in lane_ids:
+                    children.append(
+                        build_cell(
+                            [],
+                            lane_colors.get(wba_id, ""),
+                            effective_nodes,
+                            base_tokens,
+                        )
+                    )
     return children
 
 

@@ -13,18 +13,20 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# Force SYNC database URL for Alembic
-config.set_main_option(
-    "sqlalchemy.url",
-    settings.DATABASE_URL.replace("+asyncpg", "")
-)
+# Force SYNC database URL for Alembic.
+# The app runs on the asyncpg driver, but Alembic needs a synchronous DBAPI.
+# Pin psycopg2 explicitly: SQLAlchemy 2.1 changed the default DBAPI for a bare
+# ``postgresql://`` URL to psycopg (v3), which requirements.app.txt does not
+# ship — it ships psycopg2-binary.
+_SYNC_DATABASE_URL = settings.DATABASE_URL.replace("+asyncpg", "+psycopg2")
+config.set_main_option("sqlalchemy.url", _SYNC_DATABASE_URL)
 
 target_metadata = Base.metadata
 
 
 def run_migrations_offline() -> None:
     context.configure(
-        url=settings.DATABASE_URL.replace("+asyncpg", ""),
+        url=_SYNC_DATABASE_URL,
         target_metadata=target_metadata,
         literal_binds=True,
         compare_type=True,

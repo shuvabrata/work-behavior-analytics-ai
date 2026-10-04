@@ -7,6 +7,7 @@ until UI-2 wires the timeline fetch.
 
 from __future__ import annotations
 
+import json
 from datetime import datetime
 from typing import Any
 
@@ -25,7 +26,9 @@ from app.dash_app.pages.timeline.helpers import (
     entity_type_icon,
     entity_type_label,
     humanize_relationship,
+    popup_fields,
 )
+from app.runtime_settings import runtime_settings
 from app.dash_app.styles import (
     COLOR_BACKGROUND_WHITE,
     COLOR_BORDER,
@@ -195,6 +198,10 @@ _CELL_STYLE: dict[str, Any] = {
 
 _EVENT_TIME_FORMAT = "%I:%M %p"
 
+# The popup portal lives at the page root (outside the scrolling grid) so it is
+# never clipped by the grid's overflow; the clientside listener fills it.
+POPUP_PORTAL_ID = "timeline-popup-portal"
+
 
 def grid_inner_style(lane_count: int) -> dict[str, Any]:
     """Return the CSS-grid template for the swimlane table.
@@ -255,6 +262,16 @@ def get_layout() -> html.Div:
                 ),
                 overlay_id="timeline-grid-overlay",
             ),
+            # Hover-popup portal — a direct child of the page root, outside the
+            # scrolling grid, so it is never clipped. Filled imperatively by the
+            # UI-4 clientside listener; contents are built with createElement /
+            # textContent (never innerHTML) because they carry ingested data.
+            html.Div(
+                id=POPUP_PORTAL_ID,
+                className="timeline-popup-portal",
+                role="tooltip",
+            ),
+            html.Div(id="timeline-popup-dummy", style={"display": "none"}),
             # Dummy output target for the install-once keyboard-navigation
             # clientside callback (ArrowUp/Down/Enter over the suggestion list).
             html.Div(id="timeline-keyboard-dummy", style={"display": "none"}),
@@ -330,9 +347,20 @@ def _format_event_time(raw: Any) -> str:
     return to_app_timezone(parsed).strftime(_EVENT_TIME_FORMAT)
 
 
+def _format_full_datetime(raw: Any) -> str:
+    """Render an event timestamp as a full datetime in the app timezone."""
+    if not isinstance(raw, str) or not raw:
+        return ""
+    try:
+        parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except ValueError:
+        return ""
+    return to_app_timezone(parsed).strftime(runtime_settings.get("UI_DATETIME_FORMAT"))
+
+
 def build_event_card(
     event: dict[str, Any], lane_color: str, type_color: str
-) -> html.Div:
+) -> html.A:
     """Build the 2-line event card.
 
     Line 1: the summary (with fallback). Line 2: ``<Type(colored)> · <relationship>
@@ -360,14 +388,25 @@ def build_event_card(
     card_style: dict[str, Any] = (
         {"borderLeft": f"3px solid {lane_color}"} if lane_color else {}
     )
-    return html.Div(
+    # The whole card links to the Graph page in a new tab; the hover popup detail
+    # is carried as a JSON data attribute and rendered by the clientside listener.
+    payload: Any = {
+        "data-timeline-event": json.dumps(
+            popup_fields(event, _format_full_datetime(event.get("event_time")))
+        )
+    }
+    return html.A(
         [
             html.Div(summary, className="timeline-card-summary", title=summary),
             html.Div(meta, className="timeline-card-meta"),
         ],
+        href="/app/graph",
+        target="_blank",
+        rel="noopener noreferrer",
         className="timeline-card",
         style=card_style,
         title=summary,
+        **payload,
     )
 
 

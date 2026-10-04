@@ -888,7 +888,7 @@ with placeholder cards. Loading + error handling.
 
 **Objective:** Detail popup on hover/focus; click opens the Graph page.
 
-**Progress:** [ ] Not started
+**Progress:** [x] Complete
 
 #### Files
 
@@ -900,12 +900,12 @@ with placeholder cards. Loading + error handling.
 
 #### Tasks
 
-- [ ] **1.** Wrap each card in `html.A(href="/app/graph", target="_blank", rel="noopener noreferrer")` — whole card clickable to Graph, new tab.
-- [ ] **2.** Popup content: `summary`, humanized relationship, entity type, source,
+- [x] **1.** Wrap each card in `html.A(href="/app/graph", target="_blank", rel="noopener noreferrer")` — whole card clickable to Graph, new tab.
+- [x] **2.** Popup content: `summary`, humanized relationship, entity type, source,
       full datetime (`UI_DATETIME_FORMAT`), and an "Open source ↗" link to `event.url`
       (rendered only when `url` is present). `scope=activity` detail is limited (no
       attributes); `scope=history` may show key attributes from `details`.
-- [ ] **3. Popup placement (do NOT use a CSS-only clipping workaround).** The lane grid
+- [x] **3. Popup placement (do NOT use a CSS-only clipping workaround).** The lane grid
       scrolls horizontally (`overflow-x: auto`), which clips any popup rendered inside
       a cell — and CSS `:hover` cannot know a card's viewport position, so a
       `bottom:100%`/`top:100%` "flip" rule is not implementable in CSS. Instead:
@@ -931,11 +931,11 @@ with placeholder cards. Loading + error handling.
       - The portal sits at a high `z-index` at page level, so it is never clipped by
         the grid. Do **not** add `overflow: visible` to lane cells (it would break
         horizontal scroll).
-- [ ] **4.** "Open source ↗" is an `<a href="{event.url}">` inside the portal; it must
+- [x] **4.** "Open source ↗" is an `<a href="{event.url}">` inside the portal; it must
       not trigger the card's Graph navigation (the card anchor is the click target and
       the portal is outside it, so propagation is naturally isolated — verify this
       holds).
-- [ ] **5. Safety & robustness (do not skip).** Build the portal's contents with
+- [x] **5. Safety & robustness (do not skip).** Build the portal's contents with
       `document.createElement` + `textContent` — **never `innerHTML`** — because
       `summary`, `label`, and `url` originate from ingested source data and would be an
       injection vector if interpolated into markup. Hide the portal on the grid's
@@ -946,17 +946,26 @@ with placeholder cards. Loading + error handling.
 
 #### Unit tests
 
-- [ ] `test_popup_fields_from_event` — popup builder includes source link only when url present.
+- [x] `test_popup_fields_from_event` — popup builder includes source link only when url present.
+
+> Implementation note: the portal is filled by **direct DOM manipulation** (setting
+> the portal element's own `style` and `replaceChildren`, nodes built with
+> `createElement`/`textContent`) rather than `dash_clientside.set_props`. `set_props`
+> would re-render the portal through React and reconcile away manually-appended DOM
+> nodes; direct DOM is equivalent, keeps the XSS-safe `textContent` guarantee, and
+> avoids that clobbering. Popup fields load from the card's `data-timeline-event`
+> JSON; the popup is suppressed while the pointer is over it so "Open source ↗"
+> stays clickable, and it hides on scroll/resize/Escape.
 
 The portal's listener/`set_props` JS is vanilla DOM code and is **not unit-testable**;
 UI-4 is verified by the `V4.*` items only.
 
 #### Manual validation
 
-- [ ] **V4.1** Hovering a card shows the popup with full details; it is not clipped by neighbours.
-- [ ] **V4.2** Clicking a card opens `/app/graph` in a new tab.
-- [ ] **V4.3** "Open source ↗" opens the event URL instead of Graph.
-- [ ] **V4.4** Tab-focusing a card shows the popup (keyboard).
+- [x] **V4.1** Hovering a card shows the popup with full details; it is not clipped by neighbours.
+- [x] **V4.2** Clicking a card opens `/app/graph` in a new tab.
+- [x] **V4.3** "Open source ↗" opens the event URL instead of Graph.
+- [x] **V4.4** Tab-focusing a card shows the popup (keyboard).
 
 > **Mock scenarios:** V4.1/V4.2/V4.4 `even`; V4.3 `card_variety` (it has both a
 > url-bearing event and a `url=None` event).

@@ -1569,6 +1569,9 @@ input::placeholder {
    resolved theme tokens.
 --------------------------------------------------------------------------- */
 .timeline-card {
+    display: block;
+    text-decoration: none;
+    color: inherit;
     background-color: var(--color-background-white);
     border: 1px solid var(--color-border);
     border-left-width: 3px;
@@ -1578,6 +1581,10 @@ input::placeholder {
     box-sizing: border-box;
     min-height: 40px;
     overflow: hidden;
+}
+
+.timeline-card:hover {
+    border-color: var(--color-navy);
 }
 
 .timeline-card-summary {
@@ -1612,5 +1619,64 @@ input::placeholder {
 
 .timeline-card-time {
     margin-left: auto;
+}
+
+/* Hover popup portal — page-level, outside the scrolling grid, so it is never
+   clipped. Position/visibility are set imperatively by the UI-4 listener.
+   Uses an INVERSE (contrast) palette mirroring `.popover-inverted`, so it reads
+   against the current theme instead of blending into it. */
+:root .timeline-popup-portal,
+.theme-executive-light .timeline-popup-portal {
+    --timeline-popup-bg: #1f262f;
+    --timeline-popup-border: #3a4653;
+    --timeline-popup-text: #e6edf3;
+    --timeline-popup-muted: #a9b6c5;
+    --timeline-popup-link: #8ab4f8;
+}
+
+.theme-executive-dark .timeline-popup-portal {
+    --timeline-popup-bg: #ffffff;
+    --timeline-popup-border: #e2e8f0;
+    --timeline-popup-text: #1a202c;
+    --timeline-popup-muted: #4a5568;
+    --timeline-popup-link: #2c5282;
+}
+
+.timeline-popup-portal {
+    position: fixed;
+    display: none;
+    z-index: 2000;
+    max-width: 300px;
+    background-color: var(--timeline-popup-bg);
+    color: var(--timeline-popup-text);
+    border: 1px solid var(--timeline-popup-border);
+    border-radius: 2px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+    padding: 8px 10px;
+    font-family: 'Inter', sans-serif;
+    font-size: 12px;
+    pointer-events: auto;
+}
+
+.timeline-popup-summary {
+    font-weight: 600;
+    margin-bottom: 2px;
+}
+
+.timeline-popup-meta,
+.timeline-popup-time {
+    font-size: 10px;
+    color: var(--timeline-popup-muted);
+}
+
+.timeline-popup-link {
+    display: inline-block;
+    margin-top: 6px;
+    color: var(--timeline-popup-link);
+    text-decoration: none;
+}
+
+.timeline-popup-link:hover {
+    text-decoration: underline;
 }
 

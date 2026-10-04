@@ -373,3 +373,24 @@ def entity_type_color(
             entity_type_token(entity_type), base_tokens.get("graph.node.default", "")
         )
     )
+
+
+def popup_fields(event: dict[str, Any], datetime_text: str) -> dict[str, Any]:
+    """Build the JSON payload carried on each card for the UI-4 hover popup.
+
+    Includes the source ``url`` key **only** when the event has one, so the
+    popup renders the "Open source" link only when there is somewhere to go.
+    """
+    fields: dict[str, Any] = {
+        "summary": card_summary(event),
+        "relationship": humanize_relationship(
+            str(event.get("relationship_type") or "")
+        ),
+        "entity_type": entity_type_label(str(event.get("entity_type") or "")),
+        "source": str(event.get("source") or ""),
+        "datetime": datetime_text,
+    }
+    url = event.get("url")
+    if isinstance(url, str) and url:
+        fields["url"] = url
+    return fields

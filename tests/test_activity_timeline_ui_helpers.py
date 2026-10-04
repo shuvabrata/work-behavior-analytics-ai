@@ -29,6 +29,7 @@ from app.dash_app.pages.timeline.helpers import (
     extract_scope,
     find_idle_runs,
     humanize_relationship,
+    popup_fields,
     remove_selection,
 )
 
@@ -265,3 +266,33 @@ def test_entity_type_color_resolution() -> None:
         == "#123456"
     )
     assert entity_type_color("Nope", None, base) == "#B8B8B8"
+
+
+# ---------------------------------------------------------------------------
+# UI-4 — popup payload
+# ---------------------------------------------------------------------------
+
+
+def test_popup_fields_from_event() -> None:
+    """The popup payload includes a source link only when the event has a url."""
+    with_url = popup_fields(
+        {
+            "summary": "Reviewed PR",
+            "relationship_type": "REVIEWED",
+            "entity_type": "PullRequest",
+            "source": "github",
+            "url": "https://example.com/pr/1",
+        },
+        "Mar 15, 2026 2:30 PM",
+    )
+    assert with_url["url"] == "https://example.com/pr/1"
+    assert with_url["relationship"] == "Reviewed"
+    assert with_url["entity_type"] == "PR"
+    assert with_url["datetime"] == "Mar 15, 2026 2:30 PM"
+
+    without_url = popup_fields(
+        {"summary": None, "relationship_type": "CREATED", "entity_type": "File"},
+        "",
+    )
+    assert "url" not in without_url
+    assert without_url["summary"] == "Created · File"

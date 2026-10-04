@@ -603,3 +603,162 @@ def render_grid(
     )
     rows = build_grid(lanes, "day", get_app_timezone())
     return build_grid_body(rows, current, lane_colors, effective_nodes, tokens)
+
+
+# ---------------------------------------------------------------------------
+# Hover popup (UI-4) — install-once delegated listeners driving the portal
+# ---------------------------------------------------------------------------
+# Dash cannot bind a callback to a DOM event, so install one delegated set of
+# listeners on ``document`` and drive the portal div imperatively. The portal
+# lives at the page root (outside the scrolling grid) so it is never clipped.
+# Contents are built with ``createElement``/``textContent`` — never ``innerHTML``
+# — because summary/label/url come from ingested source data.
+clientside_callback(
+    """
+    function(_body) {
+        if (!window.__timelinePopupWired) {
+            window.__timelinePopupWired = true;
+            window.__timelinePopupCard = null;
+
+            function make(tag, className, text) {
+                var el = document.createElement(tag);
+                if (className) { el.className = className; }
+                if (text !== undefined && text !== null) { el.textContent = String(text); }
+                return el;
+            }
+
+            function build(data) {
+                var frag = document.createDocumentFragment();
+                frag.appendChild(make('div', 'timeline-popup-summary', data.summary || ''));
+                var meta = [data.entity_type, data.relationship, data.source]
+                    .filter(Boolean).join(' \\u00b7 ');
+                if (meta) { frag.appendChild(make('div', 'timeline-popup-meta', meta)); }
+                if (data.datetime) {
+                    frag.appendChild(make('div', 'timeline-popup-time', data.datetime));
+                }
+                if (data.url) {
+                    var link = document.createElement('a');
+                    link.href = data.url;
+                    link.target = '_blank';
+                    link.rel = 'noopener noreferrer';
+                    link.className = 'timeline-popup-link';
+                    link.textContent = 'Open source \\u2197';
+                    frag.appendChild(link);
+                }
+                return frag;
+            }
+
+            window.__timelinePopupHide = function() {
+                clearTimeout(window.__timelinePopupTimer);
+                var portal = document.getElementById('timeline-popup-portal');
+                if (portal) { portal.style.display = 'none'; }
+                if (window.__timelinePopupCard) {
+                    window.__timelinePopupCard.removeAttribute('aria-describedby');
+                    window.__timelinePopupCard = null;
+                }
+            };
+            // Grace period: leaving a card does not hide immediately, so the
+            // pointer can travel into the popup to click "Open source".
+            window.__timelinePopupHideSoon = function() {
+                clearTimeout(window.__timelinePopupTimer);
+                window.__timelinePopupTimer = setTimeout(
+                    window.__timelinePopupHide, 140
+                );
+            };
+
+            window.__timelinePopupShow = function(card) {
+                var portal = document.getElementById('timeline-popup-portal');
+                if (!portal) { return; }
+                var raw = card.getAttribute('data-timeline-event');
+                if (!raw) { return; }
+                var data;
+                try { data = JSON.parse(raw); } catch (e) { return; }
+
+                clearTimeout(window.__timelinePopupTimer);
+                portal.replaceChildren(build(data));
+                portal.style.display = 'block';
+                portal.style.visibility = 'hidden';
+                var rect = card.getBoundingClientRect();
+                var pw = portal.offsetWidth;
+                var ph = portal.offsetHeight;
+                // Place to the SIDE, top-aligned with the card, so reaching the
+                // popup never crosses the next card lower in the same column
+                // (which would steal the hover and re-open a different popup).
+                var left = rect.right + 8;
+                if (left + pw > window.innerWidth - 8) {
+                    left = rect.left - pw - 8;
+                }
+                if (left < 8) { left = 8; }
+                var top = rect.top + 6;  // slightly below the row's top edge
+                if (top + ph > window.innerHeight - 8) {
+                    top = window.innerHeight - ph - 8;
+                }
+                if (top < 8) { top = 8; }
+                portal.style.left = left + 'px';
+                portal.style.top = top + 'px';
+                portal.style.visibility = 'visible';
+
+                if (window.__timelinePopupCard && window.__timelinePopupCard !== card) {
+                    window.__timelinePopupCard.removeAttribute('aria-describedby');
+                }
+                card.setAttribute('aria-describedby', 'timeline-popup-portal');
+                window.__timelinePopupCard = card;
+            };
+
+            function cardFrom(target) {
+                return target && target.closest
+                    ? target.closest('[data-timeline-event]')
+                    : null;
+            }
+
+            document.addEventListener('mouseover', function(ev) {
+                var card = cardFrom(ev.target);
+                if (card) { clearTimeout(window.__timelinePopupTimer); }
+                if (card && card !== window.__timelinePopupCard) {
+                    window.__timelinePopupShow(card);
+                }
+            });
+            document.addEventListener('focusin', function(ev) {
+                var card = cardFrom(ev.target);
+                if (card) { window.__timelinePopupShow(card); }
+            });
+            document.addEventListener('mouseout', function(ev) {
+                var card = cardFrom(ev.target);
+                if (!card) { return; }
+                var portal = document.getElementById('timeline-popup-portal');
+                if (ev.relatedTarget && portal && portal.contains(ev.relatedTarget)) {
+                    return;
+                }
+                window.__timelinePopupHideSoon();
+            });
+            document.addEventListener('focusout', function(ev) {
+                if (!cardFrom(ev.target)) { return; }
+                setTimeout(function() {
+                    var portal = document.getElementById('timeline-popup-portal');
+                    if (!portal || !portal.contains(document.activeElement)) {
+                        window.__timelinePopupHide();
+                    }
+                }, 0);
+            });
+            document.addEventListener('keydown', function(ev) {
+                if (ev.key === 'Escape') { window.__timelinePopupHide(); }
+            }, true);
+            document.addEventListener('scroll', window.__timelinePopupHide, true);
+            window.addEventListener('resize', window.__timelinePopupHide);
+        }
+
+        // Rebind the portal's own listener after a navigation re-mounts it.
+        var portal = document.getElementById('timeline-popup-portal');
+        if (portal && window.__timelinePopupBoundPortal !== portal) {
+            portal.addEventListener('mouseenter', function() {
+                clearTimeout(window.__timelinePopupTimer);
+            });
+            portal.addEventListener('mouseleave', window.__timelinePopupHide);
+            window.__timelinePopupBoundPortal = portal;
+        }
+        return window.dash_clientside.no_update;
+    }
+    """,
+    Output("timeline-popup-dummy", "children"),
+    Input("timeline-grid-body", "children"),
+)

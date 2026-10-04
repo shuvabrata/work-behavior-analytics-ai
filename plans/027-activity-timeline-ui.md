@@ -1029,7 +1029,7 @@ UI-4 is verified by the `V4.*` items only.
 
 **Objective:** Range presets + custom picker; Activity/History scope; refetch semantics.
 
-**Progress:** [~] In progress (implementation + unit tests done; V6.1–V6.3 pending; V6.4 deferred to UI-9)
+**Progress:** [x] Complete (V6.4 deferred to UI-9)
 
 #### Files
 
@@ -1062,9 +1062,9 @@ UI-4 is verified by the `V4.*` items only.
 
 #### Manual validation
 
-- [ ] **V6.1** Switching to "Last 7 days" refetches and hides older rows.
-- [ ] **V6.2** Custom reveals date pickers; picking a range refetches.
-- [ ] **V6.3** Toggling Activity/History re-renders cards (History cards show STATE_CHANGE/"Updated").
+- [x] **V6.1** Switching to "Last 7 days" refetches and hides older rows.
+- [x] **V6.2** Custom reveals date pickers; picking a range refetches.
+- [x] **V6.3** Toggling Activity/History re-renders cards (History cards show STATE_CHANGE/"Updated").
 - [ ] **V6.4** Changing range/scope resets "Load more" back to the first page.
 
 > **Deferred:** V6.4 depends on UI-9's "Load more" (pagination) — verify it after UI-9.
@@ -1077,7 +1077,7 @@ UI-4 is verified by the `V4.*` items only.
 
 **Objective:** Client-side re-bucketing and relabeling without refetch.
 
-**Progress:** [ ] Not started
+**Progress:** [x] Complete
 
 #### Files
 
@@ -1089,22 +1089,26 @@ UI-4 is verified by the `V4.*` items only.
 
 #### Tasks
 
-- [ ] **1.** `period_key`/`period_label` for Day (`Mar 15`), Week (ISO, `Mar 9 – 15`), Month (`March 2026`).
-- [ ] **2.** Group by change rebuilds the grid purely from the already-fetched events —
+- [x] **1.** `period_key`/`period_label` for Day (`Mar 15`), Week (ISO, `Mar 9 – 15`), Month (`March 2026`).
+- [x] **2.** Group by change rebuilds the grid purely from the already-fetched events —
       **no API call**. Idle-run units and labels follow the granularity.
-- [ ] **3.** Cards remain newest-first within a period; per-cell overflow (UI-8) re-applies.
+- [x] **3.** Cards remain newest-first within a period; per-cell overflow (UI-8) re-applies.
 
 #### Unit tests
 
-- [ ] `test_period_key_week_iso` — ISO week boundaries (Mon-start).
-- [ ] `test_period_key_month`.
-- [ ] `test_regroup_preserves_events` — total event count unchanged across granularities.
+- [x] `test_period_key_week_iso` — ISO week boundaries (Mon-start).
+- [x] `test_period_key_month`.
+- [x] `test_regroup_preserves_events` — total event count unchanged across granularities.
+
+> Note: the Group-by select (`timeline-group`, ids `day`/`week`/`month`) is a new
+> toolbar control; changing it re-runs `render_grid` only (no fetch). `?group=` seeds
+> it via `sync_group_from_url`. Idle-run separators and labels use the same granularity.
 
 #### Manual validation
 
-- [ ] **V7.1** Switching Day→Week→Month relabels rows and regroups cards without a network request.
-- [ ] **V7.2** Idle separators change unit ("3 days" → "2 weeks" → "1 month").
-- [ ] **V7.3** No data is lost or duplicated when regrouping.
+- [x] **V7.1** Switching Day→Week→Month relabels rows and regroups cards without a network request.
+- [x] **V7.2** Idle separators change unit ("3 days" → "2 weeks" → "1 month").
+- [x] **V7.3** No data is lost or duplicated when regrouping.
 
 > **Mock scenarios:** V7.1 `even`; V7.2 `gap_30d` (needs Last 90 days) or
 > `gaps_global`; V7.3 `cell_boundary` (many events per day across granularities).

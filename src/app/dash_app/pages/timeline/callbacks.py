@@ -40,6 +40,7 @@ from app.dash_app.pages.timeline.helpers import (
     build_grid,
     entity_type_icon,
     entity_type_label,
+    extract_group,
     extract_mock_scenario,
     extract_range,
     is_full,
@@ -609,6 +610,18 @@ def sync_range_from_url(search: str | None) -> Any:
 
 
 @callback(
+    Output("timeline-group", "value"),
+    Input("url", "search"),
+)
+def sync_group_from_url(search: str | None) -> Any:
+    """Seed the Group-by control from ``?group=`` on the page URL (deep-link stub)."""
+    value = extract_group(search)
+    if value is None:
+        raise PreventUpdate
+    return value
+
+
+@callback(
     Output("timeline-theme-store", "data"),
     Input("theme-store", "data"),
 )
@@ -626,6 +639,7 @@ def populate_timeline_theme_store(
     Input("theme-store", "data"),
     Input("timeline-theme-store", "data"),
     Input("timeline-expanded-runs-store", "data"),
+    Input("timeline-group", "value"),
 )
 def render_grid(
     data: dict[str, Any] | None,
@@ -633,19 +647,20 @@ def render_grid(
     theme_name: str | None,
     effective_theme: dict[str, Any] | None,
     expanded_runs: list[str] | None,
+    group_value: str | None,
 ) -> list[Any]:
-    """Render the period grid from stored data.
+    """Render the period grid from stored data (no refetch).
 
-    Resolves lane-accent colours from the active theme and entity-type colours
-    from the effective theme (``effective_theme["nodes"][<Type>]["background-color"]``),
-    falling back to the base token. One cell per *selected* lane keeps the body
-    aligned with the sticky header row even if the API reordered a lane. Idle-run
-    separators honour the expansion state in ``timeline-expanded-runs-store``.
+    Group by (Day/Week/Month) re-buckets the already-fetched events client-side;
+    idle-run separators follow the same granularity. Resolves lane colours from
+    the active theme and entity-type colours from the effective theme, and keeps
+    one cell per *selected* lane so the body aligns with the sticky header row.
     """
     current = selection or []
     if not data or not current:
         return []
 
+    granularity = group_value or "day"
     lanes = data.get("lanes") or []
     tokens = get_theme_tokens(theme_name or _FALLBACK_THEME)
     lane_keys = assign_lane_colors(len(current))
@@ -656,7 +671,7 @@ def render_grid(
     effective_nodes = (
         effective_theme.get("nodes") if isinstance(effective_theme, dict) else None
     )
-    rows = build_grid(lanes, "day", get_app_timezone())
+    rows = build_grid(lanes, granularity, get_app_timezone())
     return build_grid_body(
         rows,
         current,
@@ -664,7 +679,7 @@ def render_grid(
         effective_nodes,
         tokens,
         expanded_runs=expanded_runs,
-        granularity="day",
+        granularity=granularity,
     )
 
 

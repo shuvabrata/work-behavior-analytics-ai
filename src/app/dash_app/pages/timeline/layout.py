@@ -88,6 +88,12 @@ _SCOPE_OPTIONS: list[dict[str, str]] = [
     {"label": "History", "value": "history"},
 ]
 
+_GROUP_OPTIONS: list[dict[str, str]] = [
+    {"label": "Day", "value": "day"},
+    {"label": "Week", "value": "week"},
+    {"label": "Month", "value": "month"},
+]
+
 _SEARCH_WRAPPER_STYLE: dict[str, Any] = {
     "position": "relative",
     "flex": "0 0 auto",
@@ -384,6 +390,19 @@ def _toolbar() -> html.Div:
                 ),
                 id="timeline-custom-range-wrapper",
                 style={"display": "none"},
+            ),
+            html.Div(
+                [
+                    html.Label("Group by", style=_TOOLBAR_LABEL_STYLE),
+                    dbc.Select(
+                        id="timeline-group",
+                        options=_GROUP_OPTIONS,
+                        value="day",
+                        size="sm",
+                        style={"minWidth": "120px"},
+                    ),
+                ],
+                style={"display": "flex", "flexDirection": "column", "gap": "2px"},
             ),
             html.Div(
                 [

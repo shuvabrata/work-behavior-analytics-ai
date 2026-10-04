@@ -33,6 +33,8 @@ from app.dash_app.pages.timeline.helpers import (
     humanize_relationship,
     idle_run_key,
     idle_run_label,
+    period_key,
+    period_label,
     popup_fields,
     remove_selection,
     resolve_range,
@@ -389,3 +391,44 @@ def test_resolve_range_custom() -> None:
         resolve_range("custom", "2026-03-15", "2026-03-01")
     with pytest.raises(ValueError):
         resolve_range("custom", "2026-03-01", None)
+
+
+# ---------------------------------------------------------------------------
+# UI-7 — group by
+# ---------------------------------------------------------------------------
+
+
+def test_period_key_week_iso() -> None:
+    """Weeks use ISO (Monday-start) keys; any day in the week maps to its Monday."""
+    some_day = date(2026, 3, 12)
+    monday = some_day - timedelta(days=some_day.weekday())
+    sunday = monday + timedelta(days=6)
+    assert period_key(datetime(monday.year, monday.month, monday.day), "week") == (
+        monday.isoformat()
+    )
+    assert period_key(
+        datetime(sunday.year, sunday.month, sunday.day), "week"
+    ) == monday.isoformat()
+
+
+def test_period_key_month() -> None:
+    """Month keys are ``YYYY-MM`` and labels are 'Month YYYY'."""
+    assert period_key(datetime(2026, 3, 15), "month") == "2026-03"
+    assert period_label("2026-03", "month") == "March 2026"
+
+
+def test_regroup_preserves_events() -> None:
+    """Total event count is unchanged across day/week/month regroupings."""
+    events = [
+        _event(f"s{i}", f"2026-03-{10 + i:02d}T09:00:00+00:00") for i in range(8)
+    ]
+    lanes = [_lane("a", events)]
+    totals = {
+        granularity: sum(
+            len(cell)
+            for row in build_grid(lanes, granularity, _UTC)
+            for cell in row["cells"].values()
+        )
+        for granularity in ("day", "week", "month")
+    }
+    assert totals == {"day": 8, "week": 8, "month": 8}

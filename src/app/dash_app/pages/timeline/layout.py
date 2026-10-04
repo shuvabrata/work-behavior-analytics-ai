@@ -64,7 +64,16 @@ _TOOLBAR_STYLE: dict[str, Any] = {
     "display": "flex",
     "alignItems": "flex-end",
     "gap": SPACING_SMALL,
-    "marginBottom": SPACING_SMALL,
+    "flexWrap": "wrap",
+}
+
+# Right-hand cluster of the selector row: toolbar controls + hint + clear link,
+# pushed to the right so it shares the row with the search box.
+_SELECTOR_RIGHT_STYLE: dict[str, Any] = {
+    "display": "flex",
+    "alignItems": "center",
+    "gap": SPACING_XSMALL,
+    "marginLeft": "auto",
     "flexWrap": "wrap",
 }
 
@@ -74,6 +83,7 @@ _TOOLBAR_LABEL_STYLE: dict[str, Any] = {
     "color": COLOR_GRAY_MEDIUM,
     "textTransform": "uppercase",
     "letterSpacing": "0.5px",
+    "whiteSpace": "nowrap",
 }
 
 _RANGE_OPTIONS: list[dict[str, str]] = [
@@ -267,7 +277,6 @@ def get_layout() -> html.Div:
                 "Compare the chronological activity of people and objects side by side.",
             ),
             _selector_bar(),
-            _toolbar(),
             html.Div(id="timeline-alert-slot"),
             html.Div(
                 id="timeline-empty-state",
@@ -334,7 +343,8 @@ def get_layout() -> html.Div:
 
 
 def _selector_bar() -> html.Div:
-    """Selector bar: search input, suggestion dropdown, hint, and clear link."""
+    """Selector row: search box on the left; Range/Group-by/Scope (plus the lane
+    hint and clear link) right-aligned on the same row to save vertical space."""
     return html.Div(
         [
             html.Div(
@@ -352,12 +362,18 @@ def _selector_bar() -> html.Div:
                 ],
                 style=_SEARCH_WRAPPER_STYLE,
             ),
-            html.Div(id="timeline-lane-hint", style=_HINT_STYLE),
-            html.Button(
-                "Clear all",
-                id="timeline-clear-all",
-                n_clicks=0,
-                style=CLEAR_ALL_STYLE,
+            html.Div(
+                [
+                    _toolbar(),
+                    html.Div(id="timeline-lane-hint", style=_HINT_STYLE),
+                    html.Button(
+                        "Clear all",
+                        id="timeline-clear-all",
+                        n_clicks=0,
+                        style=CLEAR_ALL_STYLE,
+                    ),
+                ],
+                style=_SELECTOR_RIGHT_STYLE,
             ),
         ],
         id="timeline-selector-bar",
@@ -366,7 +382,7 @@ def _selector_bar() -> html.Div:
 
 
 def _toolbar() -> html.Div:
-    """Toolbar: time range (presets + custom picker) and Activity/History scope."""
+    """Range / Group-by / Scope controls (right cluster of the selector row)."""
     return html.Div(
         [
             html.Div(
@@ -380,7 +396,7 @@ def _toolbar() -> html.Div:
                         style={"minWidth": "150px"},
                     ),
                 ],
-                style={"display": "flex", "flexDirection": "column", "gap": "2px"},
+                style={"display": "flex", "alignItems": "center", "gap": "6px"},
             ),
             html.Div(
                 dcc.DatePickerRange(
@@ -402,7 +418,7 @@ def _toolbar() -> html.Div:
                         style={"minWidth": "120px"},
                     ),
                 ],
-                style={"display": "flex", "flexDirection": "column", "gap": "2px"},
+                style={"display": "flex", "alignItems": "center", "gap": "6px"},
             ),
             html.Div(
                 [
@@ -412,10 +428,11 @@ def _toolbar() -> html.Div:
                         options=_SCOPE_OPTIONS,
                         value="activity",
                         inline=True,
+                        className="timeline-segment",
                         style={"fontFamily": FONT_SANS, "fontSize": FONT_SIZE_SMALL},
                     ),
                 ],
-                style={"display": "flex", "flexDirection": "column", "gap": "2px"},
+                style={"display": "flex", "alignItems": "center", "gap": "6px"},
             ),
         ],
         id="timeline-toolbar",
@@ -553,7 +570,7 @@ def build_idle_bar(run: dict[str, Any], *, expanded: bool = False) -> html.Butto
     )
 
 
-def build_grid_body(
+def build_grid_body(  # pylint: disable=too-many-arguments,too-many-locals
     rows: list[dict[str, Any]],
     lanes: list[dict[str, Any]],
     lane_colors: dict[str, str],

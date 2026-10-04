@@ -1736,3 +1736,57 @@ input::placeholder {
     transform: rotate(180deg);
 }
 
+/* ---------------------------------------------------------------------------
+   Activity Timeline — Scope control rendered as a segmented button group
+--------------------------------------------------------------------------- */
+.timeline-segment {
+    display: inline-flex;
+}
+
+.timeline-segment .form-check {
+    margin: 0;
+    padding: 0;
+    min-height: 0;
+}
+
+.timeline-segment .form-check-input {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.timeline-segment .form-check-label {
+    display: inline-block;
+    border: 1px solid var(--color-border);
+    background-color: var(--color-background-white);
+    color: var(--color-gray-medium);
+    font-family: 'Inter', sans-serif;
+    font-size: 11px;
+    line-height: 1.4;
+    padding: 3px 10px;
+    cursor: pointer;
+}
+
+.timeline-segment .form-check:first-child .form-check-label {
+    border-radius: 2px 0 0 2px;
+}
+
+.timeline-segment .form-check:last-child .form-check-label {
+    border-radius: 0 2px 2px 0;
+}
+
+.timeline-segment .form-check:not(:first-child) .form-check-label {
+    border-left: none;
+}
+
+.timeline-segment .form-check-input:checked + .form-check-label {
+    background-color: var(--color-navy);
+    border-color: var(--color-navy);
+    color: var(--color-background-white);
+}
+
+.timeline-segment .form-check-input:focus + .form-check-label {
+    outline: 2px solid var(--color-navy);
+    outline-offset: 1px;
+}
+

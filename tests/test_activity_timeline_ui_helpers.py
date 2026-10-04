@@ -21,10 +21,14 @@ from app.dash_app.pages.timeline.helpers import (
     assign_lane_colors,
     build_grid,
     bucket_by_period,
+    card_summary,
+    entity_type_color,
     entity_type_label,
+    entity_type_token,
     extract_mock_scenario,
+    extract_scope,
     find_idle_runs,
-    placeholder_summary,
+    humanize_relationship,
     remove_selection,
 )
 
@@ -207,11 +211,57 @@ def test_extract_mock_scenario() -> None:
     assert extract_mock_scenario("?q=foo") is None
 
 
-def test_placeholder_summary_fallback() -> None:
-    """Placeholder cards fall back to the relationship type when summary is null."""
-    assert placeholder_summary({"summary": "Hi", "relationship_type": "CREATED"}) == "Hi"
+def test_extract_scope() -> None:
+    """The scope is read from the URL, defaulting to activity."""
+    assert extract_scope(None) == "activity"
+    assert extract_scope("?scope=history") == "history"
+    assert extract_scope("?scope=activity&x=1") == "activity"
+    assert extract_scope("?scope=bogus") == "activity"
+
+
+# ---------------------------------------------------------------------------
+# UI-3 — card helpers
+# ---------------------------------------------------------------------------
+
+
+def test_humanize_relationship() -> None:
+    """Relationships are humanized; STATE_CHANGE reads 'Updated'."""
+    assert humanize_relationship("CREATED") == "Created"
+    assert humanize_relationship("STATE_CHANGE") == "Updated"
+    assert humanize_relationship("") == ""
+
+
+def test_card_summary_fallback() -> None:
+    """A null summary falls back to relationship + entity type."""
+    assert card_summary({"summary": "Did a thing"}) == "Did a thing"
     assert (
-        placeholder_summary({"summary": None, "relationship_type": "CREATED"})
-        == "CREATED"
+        card_summary(
+            {"summary": None, "relationship_type": "CREATED", "entity_type": "PullRequest"}
+        )
+        == "Created · PR"
     )
-    assert placeholder_summary({}) == ""
+    assert (
+        card_summary(
+            {"summary": "  ", "relationship_type": "STATE_CHANGE", "entity_type": "Page"}
+        )
+        == "Updated · Page"
+    )
+
+
+def test_entity_type_token_mapping() -> None:
+    """PascalCase entity types map to graph-node token keys; unknown → default."""
+    assert entity_type_token("PullRequest") == "graph.node.pull_request"
+    assert entity_type_token("Page") == "graph.node.page"
+    assert entity_type_token("IdentityMapping") == "graph.node.identity_mapping"
+    assert entity_type_token("UnknownThing") == "graph.node.default"
+
+
+def test_entity_type_color_resolution() -> None:
+    """Effective-theme overrides win; otherwise the base token is used."""
+    base = {"graph.node.default": "#B8B8B8", "graph.node.page": "#F43F5E"}
+    assert entity_type_color("Page", None, base) == "#F43F5E"
+    assert (
+        entity_type_color("Page", {"Page": {"background-color": "#123456"}}, base)
+        == "#123456"
+    )
+    assert entity_type_color("Nope", None, base) == "#B8B8B8"

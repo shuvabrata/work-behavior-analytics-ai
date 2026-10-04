@@ -315,7 +315,9 @@ Every phase below lists **Unit tests** (pure helper tests) and **Manual validati
 **In scope** — exactly these files:
 
 - **New:** `src/app/dash_app/pages/timeline/{__init__,layout,callbacks,helpers,api}.py`,
-  `tests/test_activity_timeline_ui_helpers.py`.
+  `tests/test_activity_timeline_ui_helpers.py`, `tests/conftest.py` (test infra — forces
+  the UI-2P dev mock off for the suite so a developer's `TIMELINE_MOCK_SCENARIO` cannot
+  leak mock data into assertions).
 - **New (UI-2P, dev-only):** `src/app/api/activity/v1/mock_data.py`,
   `tests/test_activity_timeline_mock.py`.
 - **Modified:** `src/app/analytics/registry.py`, `src/app/dash_app/layout.py`,
@@ -817,7 +819,7 @@ with placeholder cards. Loading + error handling.
 
 **Objective:** The real 2-line card with colors, formatting, and truncation.
 
-**Progress:** [ ] Not started
+**Progress:** [x] Complete
 
 #### Files
 
@@ -829,9 +831,9 @@ with placeholder cards. Loading + error handling.
 
 #### Tasks
 
-- [ ] **1.** Card: left accent border in the **lane color**; line 1 = `summary`,
+- [x] **1.** Card: left accent border in the **lane color**; line 1 = `summary`,
       one line, ellipsised; fallback when null = humanized relationship + entity type.
-- [ ] **2.** Line 2 = `<EntityType (colored)> · <relationship> · <time>` — e.g.
+- [x] **2.** Line 2 = `<EntityType (colored)> · <relationship> · <time>` — e.g.
       `PR · Created · 2:30 PM`. Color the type via a new pure helper
       `entity_type_token(entity_type) -> str`: lower-case and snake_case the PascalCase
       API value (`PullRequest`→`graph.node.pull_request`, `Page`→`graph.node.page`,
@@ -851,24 +853,31 @@ with placeholder cards. Loading + error handling.
       it returns the static light-theme snapshot and will not follow a dark-mode toggle
       or Graph-Styling overrides. Relationship humanized to Title Case via
       `humanize_relationship` (`relationship_type` is the API field name).
-- [ ] **3.** Time rendered from `event_time` via `to_app_timezone` + `UI_DATE_FORMAT`-time
+- [x] **3.** Time rendered from `event_time` via `to_app_timezone` + `UI_DATE_FORMAT`-time
       (time only). Full datetime reserved for the popup.
-- [ ] **4.** Fixed/semi-fixed card height; `text-overflow: ellipsis` on the summary;
+- [x] **4.** Fixed/semi-fixed card height; `text-overflow: ellipsis` on the summary;
       tooltip via `title` as a fallback when hover popup is unavailable (touch).
+
+> Note: time is rendered with a fixed 12-hour `%I:%M %p` — there is no runtime
+> time-format setting (only `UI_DATE_FORMAT`/`UI_DATETIME_FORMAT`); revisit if one
+> is added. `entity_type_color` resolution is covered by `test_entity_type_color_resolution`.
+> A `?scope=activity|history` URL passthrough was added here (mirroring the UI-2
+> `?mock=` hook) so V3.4 could be validated before the UI-6 toolbar exists; UI-6/UI-11
+> generalise it.
 
 #### Unit tests
 
-- [ ] `test_humanize_relationship` — `CREATED→"Created"`, `STATE_CHANGE→"Updated"`.
-- [ ] `test_card_summary_fallback` — null summary falls back to relationship + type.
-- [ ] `test_entity_type_token_mapping` — `PullRequest→"graph.node.pull_request"`,
+- [x] `test_humanize_relationship` — `CREATED→"Created"`, `STATE_CHANGE→"Updated"`.
+- [x] `test_card_summary_fallback` — null summary falls back to relationship + type.
+- [x] `test_entity_type_token_mapping` — `PullRequest→"graph.node.pull_request"`,
       `Page→"graph.node.page"`; an unknown type returns `"graph.node.default"`.
 
 #### Manual validation
 
-- [ ] **V3.1** Cards show summary + colored type + relationship + time.
-- [ ] **V3.2** Long summaries truncate with an ellipsis; no overflow.
-- [ ] **V3.3** Lane accent matches the lane header color; type colors are distinct (PR/Issue/Commit/Page).
-- [ ] **V3.4** `scope=history` cards read "Updated" (STATE_CHANGE) with the lane's own type.
+- [x] **V3.1** Cards show summary + colored type + relationship + time.
+- [x] **V3.2** Long summaries truncate with an ellipsis; no overflow.
+- [x] **V3.3** Lane accent matches the lane header color; type colors are distinct (PR/Issue/Commit/Page).
+- [x] **V3.4** `scope=history` cards read "Updated" (STATE_CHANGE) with the lane's own type.
 
 > **Mock scenarios:** V3.1/V3.3 `even`; V3.2 and the unknown-type / missing-url paths
 > `card_variety`; V3.4 `history`.

@@ -7,6 +7,7 @@ phases extend this module with bucketing/card helpers.
 
 from __future__ import annotations
 
+import re
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
 from urllib.parse import parse_qs
@@ -275,8 +276,100 @@ def extract_mock_scenario(search: str | None) -> str | None:
     return values[0] if values else None
 
 
-def placeholder_summary(event: dict[str, Any]) -> str:
-    """UI-2 placeholder text for a card: ``summary`` or, when null, the
-    ``relationship_type`` so the card is never blank (the real 2-line card with
-    its own fallback lands in UI-3)."""
-    return str(event.get("summary") or event.get("relationship_type") or "")
+def extract_scope(search: str | None) -> str:
+    """Return the timeline scope from a URL search string.
+
+    ``activity`` (default) or ``history``; anything else falls back to activity.
+    This pre-stages the UI-6 toolbar / UI-11 deep-link parsing.
+    """
+    if not search:
+        return "activity"
+    values = parse_qs(search.lstrip("?")).get("scope") or []
+    scope = values[0] if values else "activity"
+    return scope if scope in ("activity", "history") else "activity"
+
+
+# ---------------------------------------------------------------------------
+# Card helpers (UI-3)
+# ---------------------------------------------------------------------------
+
+# Base graph node token keys that exist in THEME_TOKENS; anything else falls
+# back to the neutral default.
+_ENTITY_TYPE_TOKEN_KEYS: frozenset[str] = frozenset(
+    {
+        "default",
+        "project",
+        "person",
+        "branch",
+        "epic",
+        "issue",
+        "repository",
+        "team",
+        "identity_mapping",
+        "initiative",
+        "sprint",
+        "commit",
+        "file",
+        "pull_request",
+        "space",
+        "page",
+        "blogpost",
+    }
+)
+
+
+def humanize_relationship(relationship_type: str) -> str:
+    """Return a human-readable relationship label (``STATE_CHANGE`` → "Updated")."""
+    if not relationship_type:
+        return ""
+    if relationship_type.upper() == "STATE_CHANGE":
+        return "Updated"
+    return relationship_type.replace("_", " ").title()
+
+
+def card_summary(event: dict[str, Any]) -> str:
+    """Return the card's first line: the summary, or a relationship+type fallback.
+
+    ``activity``-scope events may carry ``summary=None`` (e.g. File events), so
+    fall back to ``<Relationship> · <EntityType>`` rather than an empty card.
+    """
+    summary = event.get("summary")
+    if isinstance(summary, str) and summary.strip():
+        return summary.strip()
+    relationship = humanize_relationship(str(event.get("relationship_type") or ""))
+    entity_type = entity_type_label(str(event.get("entity_type") or ""))
+    fallback = " · ".join(part for part in (relationship, entity_type) if part)
+    return fallback or "Event"
+
+
+def entity_type_token(entity_type: str) -> str:
+    """Map a PascalCase API ``entity_type`` to its base graph-node token key.
+
+    ``PullRequest`` → ``graph.node.pull_request``, ``Page`` → ``graph.node.page``;
+    unknown types return ``graph.node.default``.
+    """
+    snake = re.sub(r"(?<!^)(?=[A-Z])", "_", entity_type or "").lower()
+    token = f"graph.node.{snake}"
+    return token if snake in _ENTITY_TYPE_TOKEN_KEYS else "graph.node.default"
+
+
+def entity_type_color(
+    entity_type: str,
+    effective_nodes: dict[str, Any] | None,
+    base_tokens: dict[str, Any],
+) -> str:
+    """Resolve an entity type's colour.
+
+    Prefers the effective graph theme (``/graph-themes/effective``, which merges
+    user Graph-Styling overrides) keyed by the PascalCase ``entity_type``;
+    falls back to the base theme token for the type, then to the neutral default.
+    """
+    if effective_nodes:
+        node = effective_nodes.get(entity_type)
+        if isinstance(node, dict) and node.get("background-color"):
+            return str(node["background-color"])
+    return str(
+        base_tokens.get(
+            entity_type_token(entity_type), base_tokens.get("graph.node.default", "")
+        )
+    )

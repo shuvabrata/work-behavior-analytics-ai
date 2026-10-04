@@ -27,6 +27,7 @@ from dash.exceptions import PreventUpdate
 
 from app.common.timezone import get_app_timezone
 from app.dash_app.components.common import create_alert, register_loading_overlay_hider
+from app.dash_app.pages.graph.utils import fetch_effective_theme
 from app.dash_app.pages.timeline.api import (
     TimelineFetchError,
     fetch_suggestions,
@@ -40,6 +41,7 @@ from app.dash_app.pages.timeline.helpers import (
     entity_type_icon,
     entity_type_label,
     extract_mock_scenario,
+    extract_scope,
     is_full,
     remove_selection,
 )
@@ -478,7 +480,6 @@ def render_lanes(
 # ---------------------------------------------------------------------------
 
 _DEFAULT_RANGE_DAYS = 30
-_DEFAULT_SCOPE = "activity"
 _DEFAULT_LIMIT = 20
 
 # Flip the loading overlay on as soon as a fetch is about to start; the server
@@ -500,7 +501,6 @@ register_loading_overlay_hider("timeline-loading-store", "timeline-grid-overlay"
 
 @callback(
     Output("timeline-data-store", "data"),
-    Output("timeline-grid-body", "children"),
     Output("timeline-alert-slot", "children"),
     Output("timeline-loading-store", "data"),
     Input("timeline-selected-store", "data"),
@@ -509,25 +509,28 @@ register_loading_overlay_hider("timeline-loading-store", "timeline-grid-overlay"
 def load_timeline(
     selection: list[dict[str, Any]] | None,
     search: str | None,
-) -> tuple[Any, Any, Any, bool]:
-    """Fetch events for the selected lanes and render the period grid.
+) -> tuple[Any, Any, bool]:
+    """Fetch events for the selected lanes into the data store.
 
-    On error the previous grid is preserved (``no_update``) and a persistent
-    danger alert is shown above it. The ``mock`` query param (dev-only) is
-    forwarded so ``?mock=<scenario>`` switches scenarios without a restart.
+    Rendering is done separately in :func:`render_grid`, so a theme toggle does
+    not refetch. On error the stored data is left untouched (``no_update``) and a
+    persistent danger alert is shown, preserving the last good render. The
+    ``mock`` query param (dev-only) is forwarded so ``?mock=<scenario>`` switches
+    scenarios without a restart.
     """
     current = selection or []
     if not current:
-        return None, [], [], False
+        return None, [], False
 
     to_dt = datetime.now(timezone.utc)
     from_dt = to_dt - timedelta(days=_DEFAULT_RANGE_DAYS)
     mock = extract_mock_scenario(search)
+    scope = extract_scope(search)
 
     try:
         payload = fetch_timeline(
             wba_ids=[str(item.get("wba_id")) for item in current],
-            scope=_DEFAULT_SCOPE,
+            scope=scope,
             from_iso=from_dt.isoformat(),
             to_iso=to_dt.isoformat(),
             limit=_DEFAULT_LIMIT,
@@ -538,20 +541,65 @@ def load_timeline(
         alert = create_alert(
             f"Could not load timeline data: {exc}", color="danger", dismissable=True
         )
-        return no_update, no_update, [alert], False
+        return no_update, [alert], False
 
-    lanes = payload.get("lanes") or []
     data = {
-        "lanes": lanes,
+        "lanes": payload.get("lanes") or [],
         "params": {
-            "scope": _DEFAULT_SCOPE,
+            "scope": scope,
             "from": from_dt.isoformat(),
             "to": to_dt.isoformat(),
             "limit": _DEFAULT_LIMIT,
         },
         "time_range": (payload.get("meta") or {}).get("time_range") or {},
     }
+    return data, [], False
+
+
+@callback(
+    Output("timeline-theme-store", "data"),
+    Input("theme-store", "data"),
+)
+def populate_timeline_theme_store(
+    theme_name: str | None,
+) -> dict[str, Any] | None:
+    """Fetch the effective graph theme (base tokens ⊕ Graph-Styling overrides)."""
+    return fetch_effective_theme(theme_name or _FALLBACK_THEME)
+
+
+@callback(
+    Output("timeline-grid-body", "children"),
+    Input("timeline-data-store", "data"),
+    Input("timeline-selected-store", "data"),
+    Input("theme-store", "data"),
+    Input("timeline-theme-store", "data"),
+)
+def render_grid(
+    data: dict[str, Any] | None,
+    selection: list[dict[str, Any]] | None,
+    theme_name: str | None,
+    effective_theme: dict[str, Any] | None,
+) -> list[Any]:
+    """Render the period grid from stored data.
+
+    Resolves lane-accent colours from the active theme and entity-type colours
+    from the effective theme (``effective_theme["nodes"][<Type>]["background-color"]``),
+    falling back to the base token. One cell per *selected* lane keeps the body
+    aligned with the sticky header row even if the API reordered a lane.
+    """
+    current = selection or []
+    if not data or not current:
+        return []
+
+    lanes = data.get("lanes") or []
+    tokens = get_theme_tokens(theme_name or _FALLBACK_THEME)
+    lane_keys = assign_lane_colors(len(current))
+    lane_colors = {
+        str(item.get("wba_id") or ""): tokens[token_key]
+        for item, token_key in zip(current, lane_keys)
+    }
+    effective_nodes = (
+        effective_theme.get("nodes") if isinstance(effective_theme, dict) else None
+    )
     rows = build_grid(lanes, "day", get_app_timezone())
-    # Render one cell per *selected* lane (grid rows are keyed by wba_id), so the
-    # body always aligns with the header row even if the API reordered a lane.
-    return data, build_grid_body(rows, current), [], False
+    return build_grid_body(rows, current, lane_colors, effective_nodes, tokens)

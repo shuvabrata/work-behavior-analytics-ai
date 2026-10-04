@@ -7,23 +7,26 @@ until UI-2 wires the timeline fetch.
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
 import dash_bootstrap_components as dbc
 from dash import dcc, html
 
+from app.common.timezone import to_app_timezone
 from app.dash_app.components.common import (
     create_empty_state,
     create_loading_overlay_container,
     create_page_header,
 )
 from app.dash_app.pages.timeline.helpers import (
+    card_summary,
+    entity_type_color,
     entity_type_icon,
     entity_type_label,
-    placeholder_summary,
+    humanize_relationship,
 )
 from app.dash_app.styles import (
-    COLOR_BACKGROUND_LIGHT,
     COLOR_BACKGROUND_WHITE,
     COLOR_BORDER,
     COLOR_CHARCOAL_MEDIUM,
@@ -190,19 +193,7 @@ _CELL_STYLE: dict[str, Any] = {
     "minHeight": "28px",
 }
 
-_PLACEHOLDER_CARD_STYLE: dict[str, Any] = {
-    "fontFamily": FONT_SANS,
-    "fontSize": FONT_SIZE_XTINY,
-    "color": COLOR_CHARCOAL_MEDIUM,
-    "backgroundColor": COLOR_BACKGROUND_LIGHT,
-    "border": f"1px solid {COLOR_BORDER}",
-    "borderRadius": "2px",
-    "padding": "4px 6px",
-    "marginBottom": "4px",
-    "whiteSpace": "nowrap",
-    "overflow": "hidden",
-    "textOverflow": "ellipsis",
-}
+_EVENT_TIME_FORMAT = "%I:%M %p"
 
 
 def grid_inner_style(lane_count: int) -> dict[str, Any]:
@@ -328,24 +319,86 @@ def build_row_axis_cell(label: str) -> html.Div:
     return html.Div(label, style=_ROW_AXIS_STYLE, title=label)
 
 
-def build_placeholder_card(event: dict[str, Any]) -> html.Div:
-    """UI-2 placeholder card: summary text, falling back to the relationship
-    type when the API sends ``summary=None`` (the real card lands in UI-3)."""
-    text = placeholder_summary(event)
-    return html.Div(text, style=_PLACEHOLDER_CARD_STYLE, title=text)
+def _format_event_time(raw: Any) -> str:
+    """Render an event timestamp as time-of-day in the app timezone."""
+    if not isinstance(raw, str) or not raw:
+        return ""
+    try:
+        parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except ValueError:
+        return ""
+    return to_app_timezone(parsed).strftime(_EVENT_TIME_FORMAT)
 
 
-def build_cell(events: list[dict[str, Any]]) -> html.Div:
-    """One lane cell for a period row (empty cells render as a bare guide)."""
-    if not events:
-        return html.Div(style={**_CELL_STYLE, "backgroundColor": "transparent"})
+def build_event_card(
+    event: dict[str, Any], lane_color: str, type_color: str
+) -> html.Div:
+    """Build the 2-line event card.
+
+    Line 1: the summary (with fallback). Line 2: ``<Type(colored)> · <relationship>
+    · <time>``. The lane accent is a left border; the type colour comes from the
+    effective theme. The summary is also set as the card ``title`` (a touch
+    fallback until the UI-4 hover popup exists).
+    """
+    summary = card_summary(event)
+    relationship = humanize_relationship(str(event.get("relationship_type") or ""))
+    type_label = entity_type_label(str(event.get("entity_type") or ""))
+    time_text = _format_event_time(event.get("event_time"))
+
+    meta: list[Any] = [
+        html.Span(
+            type_label, className="timeline-card-type", style={"color": type_color}
+        )
+    ]
+    if relationship:
+        meta.append(html.Span("·", className="timeline-card-sep"))
+        meta.append(html.Span(relationship, className="timeline-card-rel"))
+    if time_text:
+        meta.append(html.Span("·", className="timeline-card-sep"))
+        meta.append(html.Span(time_text, className="timeline-card-time"))
+
+    card_style: dict[str, Any] = (
+        {"borderLeft": f"3px solid {lane_color}"} if lane_color else {}
+    )
     return html.Div(
-        [build_placeholder_card(event) for event in events], style=_CELL_STYLE
+        [
+            html.Div(summary, className="timeline-card-summary", title=summary),
+            html.Div(meta, className="timeline-card-meta"),
+        ],
+        className="timeline-card",
+        style=card_style,
+        title=summary,
     )
 
 
+def build_cell(
+    events: list[dict[str, Any]],
+    lane_color: str,
+    effective_nodes: dict[str, Any] | None,
+    base_tokens: dict[str, Any],
+) -> html.Div:
+    """One lane cell: the cards for a period, or a bare guide when empty."""
+    if not events:
+        return html.Div(style={**_CELL_STYLE, "backgroundColor": "transparent"})
+    cards = [
+        build_event_card(
+            event,
+            lane_color,
+            entity_type_color(
+                str(event.get("entity_type") or ""), effective_nodes, base_tokens
+            ),
+        )
+        for event in events
+    ]
+    return html.Div(cards, style=_CELL_STYLE)
+
+
 def build_grid_body(
-    rows: list[dict[str, Any]], lanes: list[dict[str, Any]]
+    rows: list[dict[str, Any]],
+    lanes: list[dict[str, Any]],
+    lane_colors: dict[str, str],
+    effective_nodes: dict[str, Any] | None,
+    base_tokens: dict[str, Any],
 ) -> list[Any]:
     """Return the flat grid-item list for the body.
 
@@ -357,7 +410,15 @@ def build_grid_body(
         children.append(build_row_axis_cell(str(row.get("label") or "")))
         cells = row.get("cells") or {}
         for lane in lanes:
-            children.append(build_cell(list(cells.get(lane.get("wba_id")) or [])))
+            wba_id = str(lane.get("wba_id") or "")
+            children.append(
+                build_cell(
+                    list(cells.get(wba_id) or []),
+                    lane_colors.get(wba_id, ""),
+                    effective_nodes,
+                    base_tokens,
+                )
+            )
     return children
 
 

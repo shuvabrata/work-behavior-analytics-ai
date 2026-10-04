@@ -1562,3 +1562,55 @@ input::placeholder {
     filter: invert(1) grayscale(100%) brightness(200%);
 }
 
+/* ---------------------------------------------------------------------------
+   Activity Timeline — event cards (UI-3)
+   Token-driven so they follow the runtime light/dark theme automatically. The
+   lane accent (border-left colour) and entity-type colour are set inline from
+   resolved theme tokens.
+--------------------------------------------------------------------------- */
+.timeline-card {
+    background-color: var(--color-background-white);
+    border: 1px solid var(--color-border);
+    border-left-width: 3px;
+    border-radius: 2px;
+    padding: 5px 7px;
+    margin-bottom: 4px;
+    box-sizing: border-box;
+    min-height: 40px;
+    overflow: hidden;
+}
+
+.timeline-card-summary {
+    font-family: 'Inter', sans-serif;
+    font-size: 12px;
+    color: var(--color-charcoal-medium);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.timeline-card-meta {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 2px;
+    font-family: 'Inter', sans-serif;
+    font-size: 10px;
+    color: var(--color-gray-medium);
+    white-space: nowrap;
+    overflow: hidden;
+}
+
+.timeline-card-type {
+    font-weight: 600;
+}
+
+.timeline-card-sep {
+    color: var(--color-gray-medium);
+    opacity: 0.7;
+}
+
+.timeline-card-time {
+    margin-left: auto;
+}
+

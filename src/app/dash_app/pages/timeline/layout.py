@@ -16,7 +16,6 @@ from dash import dcc, html
 
 from app.common.timezone import to_app_timezone
 from app.dash_app.components.common import (
-    create_empty_state,
     create_loading_overlay_container,
     create_page_header,
 )
@@ -251,6 +250,38 @@ _EVENT_TIME_FORMAT = "%I:%M %p"
 POPUP_PORTAL_ID = "timeline-popup-portal"
 
 
+def _empty_state() -> html.Div:
+    """Timeline empty state with a muted Font Awesome icon.
+
+    Replaces the shared ``create_empty_state`` default mailbox emoji, which read
+    as a large, out-of-place glyph.
+    """
+    return html.Div(
+        [
+            html.I(
+                className="fas fa-timeline",
+                style={
+                    "display": "block",
+                    "textAlign": "center",
+                    "fontSize": "36px",
+                    "color": COLOR_GRAY_MEDIUM,
+                    "marginBottom": SPACING_SMALL,
+                },
+            ),
+            html.Div(
+                "Add people or objects to compare their activity.",
+                style={
+                    "fontFamily": FONT_SANS,
+                    "fontSize": FONT_SIZE_MEDIUM,
+                    "color": COLOR_GRAY_MEDIUM,
+                    "textAlign": "center",
+                    "fontStyle": "italic",
+                },
+            ),
+        ]
+    )
+
+
 def grid_inner_style(lane_count: int) -> dict[str, Any]:
     """Return the CSS-grid template for the swimlane table.
 
@@ -280,11 +311,7 @@ def get_layout() -> html.Div:
             html.Div(id="timeline-alert-slot"),
             html.Div(
                 id="timeline-empty-state",
-                children=[
-                    create_empty_state(
-                        "Add people or objects to compare their activity."
-                    )
-                ],
+                children=[_empty_state()],
                 style=_EMPTY_STATE_WRAPPER_STYLE,
             ),
             create_loading_overlay_container(
@@ -356,6 +383,7 @@ def _selector_bar() -> html.Div:
                         debounce=False,
                         autocomplete="off",
                         size="sm",
+                        className="global-search-input",
                         style={"width": "320px"},
                     ),
                     html.Div(id="timeline-suggestions"),

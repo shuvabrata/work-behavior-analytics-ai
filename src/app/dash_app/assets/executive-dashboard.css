@@ -1780,13 +1780,16 @@ input::placeholder {
 }
 
 .timeline-segment .form-check-input:checked + .form-check-label {
-    background-color: var(--color-navy);
-    border-color: var(--color-navy);
-    color: var(--color-background-white);
+    /* !important to beat `.theme-executive-dark .form-check-label { color … !important }`
+       so the selected label text follows the fill (dark text on the light fill in
+       dark mode; light text on the dark fill in light mode). */
+    background-color: var(--color-charcoal-medium) !important;
+    border-color: var(--color-charcoal-medium) !important;
+    color: var(--color-background-white) !important;
 }
 
 .timeline-segment .form-check-input:focus + .form-check-label {
-    outline: 2px solid var(--color-navy);
+    outline: 2px solid var(--color-charcoal-medium);
     outline-offset: 1px;
 }
 

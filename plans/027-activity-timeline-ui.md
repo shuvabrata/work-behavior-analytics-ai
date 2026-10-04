@@ -1042,7 +1042,11 @@ UI-4 is verified by the `V4.*` items only.
 #### Tasks
 
 - [x] **1.** Toolbar: `dbc.Select` Time Range (Last 7 / 30 / 90 days, Custom…) +
-      `dcc.DatePickerRange` revealed only for Custom; a segmented Activity/History control.
+      native **From/To** date inputs revealed only for Custom; a segmented
+      Activity/History control. *(The original plan used `dcc.DatePickerRange`; replaced
+      with two `dbc.Input(type="date")` to match the Search page's FROM/TO filter and
+      the app's theme-aware `.form-control` styling — ids `timeline-range-from` /
+      `timeline-range-to`.)*
 - [x] **2.** `resolve_range` maps presets to `(from, to)` ending at Now; Custom yields
       the picked dates (validated: start ≤ end).
 - [x] **3.** Changing range or scope resets pagination cursors and refetches all lanes
@@ -1050,10 +1054,13 @@ UI-4 is verified by the `V4.*` items only.
 - [x] **4.** Group by (UI-7) is **not** wired here; keep it a client-side concern.
 
 > Notes: the toolbar is a new row under the selector bar (Range select + hidden Custom
-> picker + Activity/History radios, ids `timeline-range` / `timeline-custom-range` /
-> `timeline-scope`). `?scope=` on the page URL now seeds the Scope control
-> (`?range=` is UI-11). Changing range/scope replaces the data store, which is already
-> "first page"; the explicit cursor reset is exercised once UI-9 adds cursors.
+> **From/To** native date inputs + a segmented Activity/History control; ids
+> `timeline-range` / `timeline-range-from` / `timeline-range-to` / `timeline-scope`,
+> wrapper `timeline-custom-range-wrapper`). The Scope control is a **segmented button
+> group** (`.timeline-segment`) with an **(i)** tooltip explaining Activity vs History.
+> `?scope=` on the page URL now seeds the Scope control (`?range=` is UI-11). Changing
+> range/scope replaces the data store, which is already "first page"; the explicit cursor
+> reset is exercised once UI-9 adds cursors.
 
 #### Unit tests
 

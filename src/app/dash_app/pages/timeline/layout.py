@@ -399,13 +399,34 @@ def _toolbar() -> html.Div:
                 style={"display": "flex", "alignItems": "center", "gap": "6px"},
             ),
             html.Div(
-                dcc.DatePickerRange(
-                    id="timeline-custom-range",
-                    display_format="MMM D, YYYY",
-                    style={"fontFamily": FONT_SANS},
-                ),
+                [
+                    html.Div(
+                        [
+                            html.Label("From", style=_TOOLBAR_LABEL_STYLE),
+                            dbc.Input(
+                                id="timeline-range-from",
+                                type="date",
+                                size="sm",
+                                style={"width": "150px"},
+                            ),
+                        ],
+                        style={"display": "flex", "alignItems": "center", "gap": "6px"},
+                    ),
+                    html.Div(
+                        [
+                            html.Label("To", style=_TOOLBAR_LABEL_STYLE),
+                            dbc.Input(
+                                id="timeline-range-to",
+                                type="date",
+                                size="sm",
+                                style={"width": "150px"},
+                            ),
+                        ],
+                        style={"display": "flex", "alignItems": "center", "gap": "6px"},
+                    ),
+                ],
                 id="timeline-custom-range-wrapper",
-                style={"display": "none"},
+                style={"display": "none", "alignItems": "center", "gap": SPACING_XSMALL},
             ),
             html.Div(
                 [
@@ -423,6 +444,29 @@ def _toolbar() -> html.Div:
             html.Div(
                 [
                     html.Label("Scope", style=_TOOLBAR_LABEL_STYLE),
+                    html.I(
+                        className="fas fa-info-circle",
+                        id="timeline-scope-info",
+                        style={
+                            "cursor": "help",
+                            "marginLeft": "4px",
+                            "color": COLOR_GRAY_MEDIUM,
+                            "fontSize": FONT_SIZE_XTINY,
+                        },
+                    ),
+                    dbc.Popover(
+                        dbc.PopoverBody(
+                            "Activity: actions involving the entity — what it did or "
+                            "what happened around it (e.g. created an issue, reviewed a "
+                            "PR). History: the entity's own state changes over time "
+                            "(its attribute snapshots).",
+                            style={"maxWidth": "320px"},
+                        ),
+                        target="timeline-scope-info",
+                        trigger="hover focus",
+                        placement="top",
+                        class_name="popover-inverted",
+                    ),
                     dbc.RadioItems(
                         id="timeline-scope",
                         options=_SCOPE_OPTIONS,

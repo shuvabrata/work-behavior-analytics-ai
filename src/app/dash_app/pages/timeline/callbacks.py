@@ -497,8 +497,8 @@ clientside_callback(
     Input("url", "search"),
     Input("timeline-range", "value"),
     Input("timeline-scope", "value"),
-    Input("timeline-custom-range", "start_date"),
-    Input("timeline-custom-range", "end_date"),
+    Input("timeline-range-from", "value"),
+    Input("timeline-range-to", "value"),
     prevent_initial_call=True,
 )
 
@@ -513,8 +513,8 @@ register_loading_overlay_hider("timeline-loading-store", "timeline-grid-overlay"
     Input("url", "search"),
     Input("timeline-range", "value"),
     Input("timeline-scope", "value"),
-    Input("timeline-custom-range", "start_date"),
-    Input("timeline-custom-range", "end_date"),
+    Input("timeline-range-from", "value"),
+    Input("timeline-range-to", "value"),
 )
 def load_timeline(
     selection: list[dict[str, Any]] | None,
@@ -581,7 +581,7 @@ def load_timeline(
 )
 def toggle_custom_range(range_value: str | None) -> dict[str, Any]:
     """Reveal the custom date picker only when the Custom range is selected."""
-    return {"display": "block"} if range_value == "custom" else {"display": "none"}
+    return {"display": "flex"} if range_value == "custom" else {"display": "none"}
 
 
 @callback(

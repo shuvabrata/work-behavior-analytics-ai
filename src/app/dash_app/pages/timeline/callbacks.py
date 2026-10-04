@@ -9,8 +9,8 @@ UI-2 onwards.
 from __future__ import annotations
 
 import json
-from datetime import datetime, timedelta, timezone
 from typing import Any
+from urllib.parse import parse_qs
 
 from dash import (
     ALL,
@@ -41,8 +41,9 @@ from app.dash_app.pages.timeline.helpers import (
     entity_type_icon,
     entity_type_label,
     extract_mock_scenario,
-    extract_scope,
+    extract_range,
     is_full,
+    resolve_range,
     toggle_expanded,
     remove_selection,
 )
@@ -480,20 +481,23 @@ def render_lanes(
 # Timeline fetch & grid render (UI-2)
 # ---------------------------------------------------------------------------
 
-_DEFAULT_RANGE_DAYS = 30
 _DEFAULT_LIMIT = 20
 
 # Flip the loading overlay on as soon as a fetch is about to start; the server
 # callback below flips it back to False when the request completes.
 clientside_callback(
     """
-    function(_selection, _search) {
+    function(_selection, _search, _range, _scope, _from, _to) {
         return true;
     }
     """,
     Output("timeline-loading-store", "data", allow_duplicate=True),
     Input("timeline-selected-store", "data"),
     Input("url", "search"),
+    Input("timeline-range", "value"),
+    Input("timeline-scope", "value"),
+    Input("timeline-custom-range", "start_date"),
+    Input("timeline-custom-range", "end_date"),
     prevent_initial_call=True,
 )
 
@@ -506,27 +510,40 @@ register_loading_overlay_hider("timeline-loading-store", "timeline-grid-overlay"
     Output("timeline-loading-store", "data"),
     Input("timeline-selected-store", "data"),
     Input("url", "search"),
+    Input("timeline-range", "value"),
+    Input("timeline-scope", "value"),
+    Input("timeline-custom-range", "start_date"),
+    Input("timeline-custom-range", "end_date"),
 )
 def load_timeline(
     selection: list[dict[str, Any]] | None,
     search: str | None,
+    range_value: str | None,
+    scope_value: str | None,
+    custom_from: str | None,
+    custom_to: str | None,
 ) -> tuple[Any, Any, bool]:
     """Fetch events for the selected lanes into the data store.
 
-    Rendering is done separately in :func:`render_grid`, so a theme toggle does
-    not refetch. On error the stored data is left untouched (``no_update``) and a
-    persistent danger alert is shown, preserving the last good render. The
-    ``mock`` query param (dev-only) is forwarded so ``?mock=<scenario>`` switches
-    scenarios without a restart.
+    The time range comes from the toolbar (preset or custom dates) and the
+    Activity/History scope from the toolbar control; both reset the fetch to the
+    first page. Rendering is separate (:func:`render_grid`), so a theme toggle
+    does not refetch. On error the stored data is left untouched (``no_update``)
+    and a persistent danger alert is shown. The ``mock`` query param (dev-only)
+    is forwarded.
     """
     current = selection or []
     if not current:
         return None, [], False
 
-    to_dt = datetime.now(timezone.utc)
-    from_dt = to_dt - timedelta(days=_DEFAULT_RANGE_DAYS)
+    try:
+        from_dt, to_dt = resolve_range(range_value or "30d", custom_from, custom_to)
+    except ValueError as exc:
+        logger.warning(f"[Timeline] invalid range: {exc}")
+        return no_update, no_update, False
+
     mock = extract_mock_scenario(search)
-    scope = extract_scope(search)
+    scope = scope_value or "activity"
 
     try:
         payload = fetch_timeline(
@@ -555,6 +572,40 @@ def load_timeline(
         "time_range": (payload.get("meta") or {}).get("time_range") or {},
     }
     return data, [], False
+
+
+@callback(
+    Output("timeline-custom-range-wrapper", "style"),
+    Input("timeline-range", "value"),
+)
+def toggle_custom_range(range_value: str | None) -> dict[str, Any]:
+    """Reveal the custom date picker only when the Custom range is selected."""
+    return {"display": "block"} if range_value == "custom" else {"display": "none"}
+
+
+@callback(
+    Output("timeline-scope", "value"),
+    Input("url", "search"),
+)
+def sync_scope_from_url(search: str | None) -> Any:
+    """Seed the Scope control from ``?scope=`` on the page URL (deep-link stub)."""
+    values = parse_qs((search or "").lstrip("?")).get("scope") or []
+    if not values:
+        raise PreventUpdate
+    scope = values[0]
+    return scope if scope in ("activity", "history") else "activity"
+
+
+@callback(
+    Output("timeline-range", "value"),
+    Input("url", "search"),
+)
+def sync_range_from_url(search: str | None) -> Any:
+    """Seed the Range control from ``?range=`` on the page URL (deep-link stub)."""
+    value = extract_range(search)
+    if value is None:
+        raise PreventUpdate
+    return value
 
 
 @callback(

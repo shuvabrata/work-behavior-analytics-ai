@@ -90,7 +90,7 @@ backend Phases 0–2.
 | 16 | Loading / errors | Overlay spinner; danger alert preserving last good render |
 | 17 | Scroll | Page scrolls; lane headers sticky-top; time axis sticky-left |
 | 18 | Theme | Token-driven light/dark via `executive-dashboard.css` |
-| 19 | Entry | Analytics gallery card + "Open Visualization" + "Show Options" presets encoded in URL |
+| 19 | Entry | Analytics gallery card + "Open Visualization" only. Range/Group/Scope are chosen on the timeline page toolbar; the URL is an **inbound-only** deep-link contract. *(Amended: the gallery "Show Options" presets were removed to avoid two sources of truth for the same settings.)* |
 | 20 | Deep links | **Inbound only** (`wba_ids`, `range`, `group`, `scope`, `from`, `to`); outbound "View Timeline" buttons deferred |
 | 21 | In-day order | Newest-first |
 | 22 | Verification | Unit-test pure helpers in pytest; manual-validate visuals per phase |
@@ -509,7 +509,7 @@ Stop and report back (do not improvise) if:
             footer = dbc.Button("Open Visualization", href=analytic.href, color="primary", size="sm")
         ```
 - [x] **6.** `_create_timeline_controls()` mirrors `_create_collaboration_controls()`:
-      "Open Visualization" (href `/app/analytics/timeline`) + "Show Options" collapse
+      ~~"Open Visualization" (href `/app/analytics/timeline`) + "Show Options" collapse~~ — **superseded**: the gallery card is now just the "Open Visualization" button (presets removed; see decision #19).
       containing Default Range / Group by / View selects. Use `timeline-`-prefixed ids
       (e.g. `timeline-open-btn`, `timeline-controls-toggle-btn`,
       `timeline-controls-collapse`) — the gallery renders every card on one page, so
@@ -1029,7 +1029,7 @@ UI-4 is verified by the `V4.*` items only.
 
 **Objective:** Range presets + custom picker; Activity/History scope; refetch semantics.
 
-**Progress:** [ ] Not started
+**Progress:** [~] In progress (implementation + unit tests done; V6.1–V6.3 pending; V6.4 deferred to UI-9)
 
 #### Files
 
@@ -1041,18 +1041,24 @@ UI-4 is verified by the `V4.*` items only.
 
 #### Tasks
 
-- [ ] **1.** Toolbar: `dbc.Select` Time Range (Last 7 / 30 / 90 days, Custom…) +
+- [x] **1.** Toolbar: `dbc.Select` Time Range (Last 7 / 30 / 90 days, Custom…) +
       `dcc.DatePickerRange` revealed only for Custom; a segmented Activity/History control.
-- [ ] **2.** `resolve_range` maps presets to `(from, to)` ending at Now; Custom yields
+- [x] **2.** `resolve_range` maps presets to `(from, to)` ending at Now; Custom yields
       the picked dates (validated: start ≤ end).
-- [ ] **3.** Changing range or scope resets pagination cursors and refetches all lanes
+- [x] **3.** Changing range or scope resets pagination cursors and refetches all lanes
       with `from`/`to`/`scope`. First page only.
-- [ ] **4.** Group by (UI-7) is **not** wired here; keep it a client-side concern.
+- [x] **4.** Group by (UI-7) is **not** wired here; keep it a client-side concern.
+
+> Notes: the toolbar is a new row under the selector bar (Range select + hidden Custom
+> picker + Activity/History radios, ids `timeline-range` / `timeline-custom-range` /
+> `timeline-scope`). `?scope=` on the page URL now seeds the Scope control
+> (`?range=` is UI-11). Changing range/scope replaces the data store, which is already
+> "first page"; the explicit cursor reset is exercised once UI-9 adds cursors.
 
 #### Unit tests
 
-- [ ] `test_resolve_range_presets` — 7/30/90 produce windows ending at Now.
-- [ ] `test_resolve_range_custom` — explicit from/to passed through; invalid reversed range rejected.
+- [x] `test_resolve_range_presets` — 7/30/90 produce windows ending at Now.
+- [x] `test_resolve_range_custom` — explicit from/to passed through; invalid reversed range rejected.
 
 #### Manual validation
 
@@ -1060,6 +1066,8 @@ UI-4 is verified by the `V4.*` items only.
 - [ ] **V6.2** Custom reveals date pickers; picking a range refetches.
 - [ ] **V6.3** Toggling Activity/History re-renders cards (History cards show STATE_CHANGE/"Updated").
 - [ ] **V6.4** Changing range/scope resets "Load more" back to the first page.
+
+> **Deferred:** V6.4 depends on UI-9's "Load more" (pagination) — verify it after UI-9.
 
 > **Mock scenarios:** V6.1/V6.2 `even`; V6.3 `history`; V6.4 `pagination`.
 
@@ -1263,7 +1271,7 @@ UI-4 is verified by the `V4.*` items only.
       This guard is necessary because `url.search` is an `Input` that also fires when
       the global-search box writes it (`layout.py:227-239`) and on any later
       navigation — without it, re-applying would clobber the user's in-page state.
-- [ ] **4.** Gallery "Show Options" href (UI-0) uses the same param names.
+- [ ] **4.** *(Amended)* The gallery "Show Options" href was **removed** — the card is a plain launcher. Inbound URL params (`range`/`group`/`scope`/`from`/`to`) seed the page controls (`range`/`scope` done in UI-6; `group` in UI-7; `from`/`to` here).
 
 #### Unit tests
 
@@ -1277,7 +1285,7 @@ UI-4 is verified by the `V4.*` items only.
 
 - [ ] **V11.1** Navigating to `/app/analytics/timeline?wba_ids=jira::Person::…,jira::Person::…` pre-loads those lanes.
 - [ ] **V11.2** `?range=7d&group=week&scope=history` applies range, grouping, and scope.
-- [ ] **V11.3** A gallery-generated link (Show Options) opens with the chosen presets applied.
+- [ ] **V11.3** An external link carrying `?range=&group=&scope=` opens with the page controls set accordingly (the gallery no longer generates these).
 - [ ] **V11.4** A bad lane id is dropped with a warning; the rest load.
 
 > **Mock scenarios:** V11.1 use the `suggest_variants` ids from UI-2P's

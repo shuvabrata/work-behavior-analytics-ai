@@ -289,6 +289,31 @@ def extract_scope(search: str | None) -> str:
     return scope if scope in ("activity", "history") else "activity"
 
 
+def extract_range(search: str | None) -> str | None:
+    """Return a valid ``range`` preset from the URL, else ``None``.
+
+    Valid values are the :data:`RANGE_PRESETS` keys plus ``custom``. Used to seed
+    the Range control for inbound deep-links (no gallery presets any more).
+    """
+    values = parse_qs((search or "").lstrip("?")).get("range") or []
+    if not values:
+        return None
+    value = values[0]
+    return value if value in (*RANGE_PRESETS, CUSTOM_RANGE) else None
+
+
+def extract_group(search: str | None) -> str | None:
+    """Return a valid ``group`` granularity from the URL, else ``None``.
+
+    Parsed for the inbound deep-link contract; wired to the Group control in UI-7.
+    """
+    values = parse_qs((search or "").lstrip("?")).get("group") or []
+    if not values:
+        return None
+    value = values[0]
+    return value if value in GRANULARITIES else None
+
+
 # ---------------------------------------------------------------------------
 # Card helpers (UI-3)
 # ---------------------------------------------------------------------------
@@ -471,3 +496,45 @@ def toggle_expanded(expanded: list[str], key: str) -> list[str]:
     if key in expanded:
         return [item for item in expanded if item != key]
     return [*expanded, key]
+
+
+# ---------------------------------------------------------------------------
+# Time range (UI-6)
+# ---------------------------------------------------------------------------
+
+# Preset → number of days, all ending at "now".
+RANGE_PRESETS: dict[str, int] = {"7d": 7, "30d": 30, "90d": 90}
+CUSTOM_RANGE = "custom"
+
+
+def _date_bound(value: str, *, end_of_day: bool) -> datetime:
+    """Parse an ISO date string into a UTC datetime bound of that day."""
+    day = date.fromisoformat(value)
+    if end_of_day:
+        return datetime(day.year, day.month, day.day, 23, 59, 59, tzinfo=timezone.utc)
+    return datetime(day.year, day.month, day.day, tzinfo=timezone.utc)
+
+
+def resolve_range(
+    preset: str,
+    custom_from: str | None = None,
+    custom_to: str | None = None,
+    *,
+    now: datetime | None = None,
+) -> tuple[datetime, datetime]:
+    """Resolve a range preset (or custom dates) to ``(from_dt, to_dt)`` in UTC.
+
+    Presets (``7d``/``30d``/``90d``) end at ``now`` (defaults to the current UTC
+    time). ``custom`` uses the supplied ISO dates — start at 00:00:00, end at
+    23:59:59 — and raises ``ValueError`` if either is missing or start > end.
+    """
+    now_dt = now or datetime.now(timezone.utc)
+    if preset in RANGE_PRESETS:
+        return now_dt - timedelta(days=RANGE_PRESETS[preset]), now_dt
+    if not custom_from or not custom_to:
+        raise ValueError("custom range requires both start and end dates")
+    start = _date_bound(custom_from, end_of_day=False)
+    end = _date_bound(custom_to, end_of_day=True)
+    if start > end:
+        raise ValueError("range start must be on or before the end date")
+    return start, end

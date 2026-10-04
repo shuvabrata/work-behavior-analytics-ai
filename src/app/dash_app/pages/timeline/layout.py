@@ -60,6 +60,34 @@ _SELECTOR_BAR_STYLE: dict[str, Any] = {
     "flexWrap": "wrap",
 }
 
+_TOOLBAR_STYLE: dict[str, Any] = {
+    "display": "flex",
+    "alignItems": "flex-end",
+    "gap": SPACING_SMALL,
+    "marginBottom": SPACING_SMALL,
+    "flexWrap": "wrap",
+}
+
+_TOOLBAR_LABEL_STYLE: dict[str, Any] = {
+    "fontFamily": FONT_SANS,
+    "fontSize": FONT_SIZE_XTINY,
+    "color": COLOR_GRAY_MEDIUM,
+    "textTransform": "uppercase",
+    "letterSpacing": "0.5px",
+}
+
+_RANGE_OPTIONS: list[dict[str, str]] = [
+    {"label": "Last 7 days", "value": "7d"},
+    {"label": "Last 30 days", "value": "30d"},
+    {"label": "Last 90 days", "value": "90d"},
+    {"label": "Custom…", "value": "custom"},
+]
+
+_SCOPE_OPTIONS: list[dict[str, str]] = [
+    {"label": "Activity", "value": "activity"},
+    {"label": "History", "value": "history"},
+]
+
 _SEARCH_WRAPPER_STYLE: dict[str, Any] = {
     "position": "relative",
     "flex": "0 0 auto",
@@ -233,6 +261,7 @@ def get_layout() -> html.Div:
                 "Compare the chronological activity of people and objects side by side.",
             ),
             _selector_bar(),
+            _toolbar(),
             html.Div(id="timeline-alert-slot"),
             html.Div(
                 id="timeline-empty-state",
@@ -327,6 +356,51 @@ def _selector_bar() -> html.Div:
         ],
         id="timeline-selector-bar",
         style=_SELECTOR_BAR_STYLE,
+    )
+
+
+def _toolbar() -> html.Div:
+    """Toolbar: time range (presets + custom picker) and Activity/History scope."""
+    return html.Div(
+        [
+            html.Div(
+                [
+                    html.Label("Range", style=_TOOLBAR_LABEL_STYLE),
+                    dbc.Select(
+                        id="timeline-range",
+                        options=_RANGE_OPTIONS,
+                        value="30d",
+                        size="sm",
+                        style={"minWidth": "150px"},
+                    ),
+                ],
+                style={"display": "flex", "flexDirection": "column", "gap": "2px"},
+            ),
+            html.Div(
+                dcc.DatePickerRange(
+                    id="timeline-custom-range",
+                    display_format="MMM D, YYYY",
+                    style={"fontFamily": FONT_SANS},
+                ),
+                id="timeline-custom-range-wrapper",
+                style={"display": "none"},
+            ),
+            html.Div(
+                [
+                    html.Label("Scope", style=_TOOLBAR_LABEL_STYLE),
+                    dbc.RadioItems(
+                        id="timeline-scope",
+                        options=_SCOPE_OPTIONS,
+                        value="activity",
+                        inline=True,
+                        style={"fontFamily": FONT_SANS, "fontSize": FONT_SIZE_SMALL},
+                    ),
+                ],
+                style={"display": "flex", "flexDirection": "column", "gap": "2px"},
+            ),
+        ],
+        id="timeline-toolbar",
+        style=_TOOLBAR_STYLE,
     )
 
 

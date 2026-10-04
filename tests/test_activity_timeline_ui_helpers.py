@@ -6,7 +6,7 @@ Later phases append their own pure-helper tests here.
 
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 import dash
@@ -25,7 +25,9 @@ from app.dash_app.pages.timeline.helpers import (
     entity_type_color,
     entity_type_label,
     entity_type_token,
+    extract_group,
     extract_mock_scenario,
+    extract_range,
     extract_scope,
     find_idle_runs,
     humanize_relationship,
@@ -33,6 +35,7 @@ from app.dash_app.pages.timeline.helpers import (
     idle_run_label,
     popup_fields,
     remove_selection,
+    resolve_range,
     toggle_expanded,
 )
 
@@ -223,6 +226,18 @@ def test_extract_scope() -> None:
     assert extract_scope("?scope=bogus") == "activity"
 
 
+def test_extract_range_and_group() -> None:
+    """Range/group URL params validate against the allowed sets."""
+    assert extract_range(None) is None
+    assert extract_range("?range=7d") == "7d"
+    assert extract_range("?range=custom") == "custom"
+    assert extract_range("?range=bogus") is None
+
+    assert extract_group(None) is None
+    assert extract_group("?group=week") == "week"
+    assert extract_group("?group=decade") is None
+
+
 # ---------------------------------------------------------------------------
 # UI-3 — card helpers
 # ---------------------------------------------------------------------------
@@ -348,3 +363,29 @@ def test_idle_run_key_is_stable() -> None:
     """A run's key is derived from granularity + span."""
     run = {"granularity": "day", "start_ordinal": 5, "end_ordinal": 9}
     assert idle_run_key(run) == "day:5:9"
+
+
+# ---------------------------------------------------------------------------
+# UI-6 — time range
+# ---------------------------------------------------------------------------
+
+
+def test_resolve_range_presets() -> None:
+    """Presets produce a window ending at ``now``."""
+    now = datetime(2026, 3, 31, 12, 0, tzinfo=timezone.utc)
+    for preset, days in (("7d", 7), ("30d", 30), ("90d", 90)):
+        start, end = resolve_range(preset, now=now)
+        assert end == now
+        assert start == now - timedelta(days=days)
+
+
+def test_resolve_range_custom() -> None:
+    """Custom dates pass through (start 00:00, end 23:59:59 UTC); reversed rejected."""
+    start, end = resolve_range("custom", "2026-03-01", "2026-03-15")
+    assert start == datetime(2026, 3, 1, 0, 0, 0, tzinfo=timezone.utc)
+    assert end == datetime(2026, 3, 15, 23, 59, 59, tzinfo=timezone.utc)
+
+    with pytest.raises(ValueError):
+        resolve_range("custom", "2026-03-15", "2026-03-01")
+    with pytest.raises(ValueError):
+        resolve_range("custom", "2026-03-01", None)

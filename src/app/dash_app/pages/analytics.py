@@ -70,8 +70,6 @@ def get_layout() -> html.Div:
 def _create_analytic_card(analytic: Any) -> dbc.Card:
     if analytic.key == "collaboration_network":
         footer = _create_collaboration_controls()
-    elif analytic.key == "activity_timeline":
-        footer = _create_timeline_controls()
     else:
         footer = dbc.Button("Open Visualization", href=analytic.href, color="primary", size="sm")
 
@@ -412,107 +410,8 @@ def _create_collaboration_controls() -> html.Div:
     )
 
 
-def _create_timeline_controls() -> html.Div:
-    """Controls footer for the Activity Timeline analytic card."""
-    label_style = {"fontFamily": FONT_SANS, "fontSize": FONT_SIZE_SMALL}
-    return html.Div(
-        [
-            dbc.Row(
-                [
-                    dbc.Col(
-                        dbc.Button(
-                            "Open Visualization",
-                            id="timeline-open-btn",
-                            href="/app/analytics/timeline",
-                            color="primary",
-                            size="sm",
-                        ),
-                        width="auto",
-                    ),
-                    dbc.Col(
-                        dbc.Button(
-                            "Show Options",
-                            id="timeline-controls-toggle-btn",
-                            color="secondary",
-                            outline=True,
-                            size="sm",
-                        ),
-                        width="auto",
-                    ),
-                ],
-                className="g-2 align-items-center",
-            ),
-            dbc.Collapse(
-                [
-                    html.Div(
-                        "Choose the default time range, grouping, and scope for the timeline. "
-                        "These can be changed once the visualization is open.",
-                        style={
-                            "fontFamily": FONT_SANS,
-                            "fontSize": FONT_SIZE_SMALL,
-                            "color": COLOR_GRAY_MEDIUM,
-                            "marginBottom": SPACING_SMALL,
-                            "marginTop": SPACING_SMALL,
-                        },
-                    ),
-                    dbc.Row(
-                        [
-                            dbc.Col(
-                                [
-                                    html.Label("Default Range", style=label_style),
-                                    dbc.Select(
-                                        id="timeline-default-range",
-                                        options=[
-                                            {"label": "Last 7 days", "value": "7d"},
-                                            {"label": "Last 30 days", "value": "30d"},
-                                            {"label": "Last 90 days", "value": "90d"},
-                                        ],
-                                        value="30d",
-                                        size="sm",
-                                    ),
-                                ],
-                                md=4,
-                            ),
-                            dbc.Col(
-                                [
-                                    html.Label("Group By", style=label_style),
-                                    dbc.Select(
-                                        id="timeline-default-group",
-                                        options=[
-                                            {"label": "Day", "value": "day"},
-                                            {"label": "Week", "value": "week"},
-                                            {"label": "Month", "value": "month"},
-                                        ],
-                                        value="day",
-                                        size="sm",
-                                    ),
-                                ],
-                                md=4,
-                            ),
-                            dbc.Col(
-                                [
-                                    html.Label("Scope", style=label_style),
-                                    dbc.Select(
-                                        id="timeline-default-scope",
-                                        options=[
-                                            {"label": "Activity", "value": "activity"},
-                                            {"label": "History", "value": "history"},
-                                        ],
-                                        value="activity",
-                                        size="sm",
-                                    ),
-                                ],
-                                md=4,
-                            ),
-                        ],
-                        className="g-2",
-                    ),
-                ],
-                id="timeline-controls-collapse",
-                is_open=False,
-            ),
-        ]
-    )
+# (Activity Timeline card uses the default "Open Visualization" button; its
+# range/group/scope are chosen on the timeline page, not preset in the gallery.)
 
 
 # ---------------------------------------------------------------------------
@@ -696,29 +595,5 @@ def toggle_collaboration_controls(_n_clicks: int | None, is_open: bool) -> tuple
     return next_state, label, preview_style
 
 
-@callback(
-    Output("timeline-open-btn", "href"),
-    Input("timeline-default-range", "value"),
-    Input("timeline-default-group", "value"),
-    Input("timeline-default-scope", "value"),
-)
-def build_timeline_href(range_value: Any, group_value: Any, scope_value: Any) -> str:
-    """Build the timeline page URL carrying the selected default options."""
-    params = {"range": range_value, "group": group_value, "scope": scope_value}
-    return f"/app/analytics/timeline?{urlencode(params)}"
-
-
-@callback(
-    [
-        Output("timeline-controls-collapse", "is_open"),
-        Output("timeline-controls-toggle-btn", "children"),
-    ],
-    Input("timeline-controls-toggle-btn", "n_clicks"),
-    State("timeline-controls-collapse", "is_open"),
-    prevent_initial_call=True,
-)
-def toggle_timeline_controls(_n_clicks: int | None, is_open: bool) -> tuple[bool, str]:
-    """Toggle timeline options visibility in the analytics card."""
-    next_state = not is_open
-    label = "Hide Options" if next_state else "Show Options"
-    return next_state, label
+# (The Activity Timeline card no longer carries range/group/scope presets —
+# see the comment above _create_analytic_card.)

@@ -45,13 +45,16 @@ from app.dash_app.styles import (
     FONT_SIZE_SMALL,
     FONT_SIZE_XTINY,
     FONT_WEIGHT_MEDIUM,
+    FONT_WEIGHT_SEMIBOLD,
     SPACING_SMALL,
     SPACING_XSMALL,
 )
 
 # Width reserved for the time-axis label column so lane headers line up with the
-# grid that UI-2 renders.
-TIME_AXIS_WIDTH = "90px"
+# grid that UI-2 renders. Kept near its original size — the date reads as small
+# because of its font, not the column — but with a hair of extra room so the
+# longest label ("March 2026") still fits at the larger axis font size.
+TIME_AXIS_WIDTH = "96px"
 
 _SELECTOR_BAR_STYLE: dict[str, Any] = {
     "display": "flex",
@@ -210,11 +213,14 @@ GRID_SCROLL_HIDDEN_STYLE: dict[str, Any] = {
 }
 
 _AXIS_CELL_BASE_STYLE: dict[str, Any] = {
-    "padding": "6px 8px",
+    "padding": "4px 6px",
     "fontFamily": FONT_SANS,
-    "fontSize": FONT_SIZE_XTINY,
-    "color": COLOR_GRAY_MEDIUM,
-    "textAlign": "right",
+    "fontSize": FONT_SIZE_MEDIUM,
+    "fontWeight": FONT_WEIGHT_SEMIBOLD,
+    "color": COLOR_CHARCOAL_MEDIUM,
+    # Centered so the date spans the full axis column rather than hugging the
+    # cell's right edge.
+    "textAlign": "center",
     "whiteSpace": "nowrap",
     "borderRight": f"1px solid {COLOR_BORDER}",
     "borderBottom": f"1px solid {COLOR_BORDER}",
@@ -824,6 +830,7 @@ def build_lane_header(item: dict[str, Any], lane_color: str) -> html.Div:
                 id={"type": "timeline-lane-remove", "index": item.get("wba_id")},
                 n_clicks=0,
                 title="Remove lane",
+                className="timeline-lane-remove",
                 style=_REMOVE_BTN_STYLE,
                 **remove_attrs,
             ),

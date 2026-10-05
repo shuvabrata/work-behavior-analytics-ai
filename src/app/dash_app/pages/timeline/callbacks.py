@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import json
 from typing import Any
-from urllib.parse import parse_qs
 
 from dash import (
     ALL,
@@ -42,14 +41,13 @@ from app.dash_app.pages.timeline.helpers import (
     build_grid,
     entity_type_icon,
     entity_type_label,
-    extract_from,
-    extract_group,
     extract_mock_scenario,
-    extract_to,
     has_more,
     is_full,
     merge_lane_page,
+    parse_deeplink_params,
     resolve_range,
+    selection_from_wba_ids,
     toggle_expanded,
     remove_selection,
 )
@@ -399,6 +397,7 @@ def _first_changed_trigger() -> Any:
 @callback(
     Output("timeline-selected-store", "data"),
     Output("timeline-search-input", "value"),
+    Output("timeline-deeplink-alert", "children"),
     Input({"type": "timeline-suggestion", "index": ALL}, "n_clicks"),
     Input({"type": "timeline-lane-remove", "index": ALL}, "n_clicks"),
     Input("timeline-clear-all", "n_clicks"),
@@ -412,12 +411,13 @@ def update_selection(
     _clear_clicks: Any,
     selection: list[dict[str, Any]] | None,
     suggestions: list[dict[str, Any]] | None,
-) -> tuple[Any, Any]:
+) -> tuple[Any, Any, Any]:
     """Handle add (suggestion click / Enter), remove (✕), and clear-all.
 
     Every add/remove routes through an explicit clicked component id — the
     input's own ``n_submit`` is deliberately not a trigger, so Enter has a
     single deterministic path (the clientside handler clicks a specific row).
+    Any user edit also dismisses the deep-link feedback banner.
     """
     triggered = _first_changed_trigger()
 
@@ -431,12 +431,12 @@ def update_selection(
             item = _find_suggestion(pool, wba_id)
             if item is None:
                 raise PreventUpdate
-            return add_selection(current, item), ""
+            return add_selection(current, item), "", None
         if kind == "timeline-lane-remove":
-            return remove_selection(current, wba_id), no_update
+            return remove_selection(current, wba_id), no_update, None
 
     if triggered == "timeline-clear-all":
-        return [], no_update
+        return [], no_update, None
 
     raise PreventUpdate
 
@@ -518,12 +518,14 @@ register_loading_overlay_hider("timeline-loading-store", "timeline-grid-overlay"
     Output("timeline-data-store", "data"),
     Output("timeline-alert-slot", "children"),
     Output("timeline-loading-store", "data"),
+    Output("timeline-selected-store", "data", allow_duplicate=True),
     Input("timeline-selected-store", "data"),
     Input("url", "search"),
     Input("timeline-range", "value"),
     Input("timeline-scope", "value"),
     Input("timeline-range-from", "value"),
     Input("timeline-range-to", "value"),
+    prevent_initial_call="initial_duplicate",
 )
 def load_timeline(
     selection: list[dict[str, Any]] | None,
@@ -532,25 +534,29 @@ def load_timeline(
     scope_value: str | None,
     custom_from: str | None,
     custom_to: str | None,
-) -> tuple[Any, Any, bool]:
+) -> tuple[Any, Any, bool, Any]:
     """Fetch events for the selected lanes into the data store.
 
-    The time range comes from the toolbar (preset or custom dates) and the
+    The time range comes from the Range filter (All time or custom dates) and the
     Activity/History scope from the toolbar control; both reset the fetch to the
     first page. Rendering is separate (:func:`render_grid`), so a theme toggle
     does not refetch. On error the stored data is left untouched (``no_update``)
     and a persistent danger alert is shown. The ``mock`` query param (dev-only)
     is forwarded.
+
+    Belt-and-braces (UI-11): if the backend still 400s on a specific id (a bug in
+    client-side validation, or a stale link), drop that lane from the selection —
+    the changed store re-runs this callback with the remaining lanes and retries.
     """
     current = selection or []
     if not current:
-        return None, [], False
+        return None, [], False, no_update
 
     try:
         from_dt, to_dt = resolve_range(range_value or ALL_TIME, custom_from, custom_to)
     except ValueError as exc:
         logger.warning(f"[Timeline] invalid range: {exc}")
-        return no_update, no_update, False
+        return no_update, no_update, False, no_update
 
     mock = extract_mock_scenario(search)
     scope = scope_value or "activity"
@@ -566,10 +572,18 @@ def load_timeline(
         )
     except TimelineFetchError as exc:
         logger.warning(f"[Timeline] timeline fetch failed: {exc}")
+        bad_wba_id = exc.wba_id
+        if bad_wba_id and len(current) > 1:
+            alert = create_alert(
+                f"Lane {bad_wba_id} was rejected and removed. Please re-add it.",
+                color="warning",
+                dismissable=True,
+            )
+            return no_update, [alert], False, remove_selection(current, bad_wba_id)
         alert = create_alert(
             f"Could not load timeline data: {exc}", color="danger", dismissable=True
         )
-        return no_update, [alert], False
+        return no_update, [alert], False, no_update
 
     data = {
         "lanes": payload.get("lanes") or [],
@@ -581,7 +595,7 @@ def load_timeline(
         },
         "time_range": (payload.get("meta") or {}).get("time_range") or {},
     }
-    return data, [], False
+    return data, [], False, no_update
 
 
 @callback(
@@ -594,47 +608,63 @@ def toggle_custom_range(range_value: str | None) -> dict[str, Any]:
 
 
 @callback(
+    Output("timeline-selected-store", "data", allow_duplicate=True),
     Output("timeline-scope", "value"),
-    Input("url", "search"),
-)
-def sync_scope_from_url(search: str | None) -> Any:
-    """Seed the Scope control from ``?scope=`` on the page URL (deep-link stub)."""
-    values = parse_qs((search or "").lstrip("?")).get("scope") or []
-    if not values:
-        raise PreventUpdate
-    scope = values[0]
-    return scope if scope in ("activity", "history") else "activity"
-
-
-@callback(
+    Output("timeline-group", "value"),
     Output("timeline-range", "value"),
     Output("timeline-range-from", "value"),
     Output("timeline-range-to", "value"),
+    Output("timeline-deeplink-applied", "data"),
+    Output("timeline-deeplink-alert", "children"),
     Input("url", "search"),
+    State("timeline-deeplink-applied", "data"),
+    prevent_initial_call="initial_duplicate",
 )
-def sync_range_from_url(search: str | None) -> Any:
-    """Seed the Range filter from ``?from=``/``?to=`` on the page URL.
+def apply_deeplink(
+    search: str | None, applied: bool | None
+) -> tuple[Any, Any, Any, Any, Any, Any, bool, Any]:
+    """Apply the inbound URL contract once, seeding lanes and the toolbar.
 
-    A deep link carrying both bounds selects Custom and fills the date inputs;
-    without both, the control stays on *All time*.
+    Runs on first load only, guarded by ``timeline-deeplink-applied`` (a memory
+    store inside the page layout, so a fresh navigation re-mounts it as ``False``).
+    The guard matters because ``url.search`` is also written by the global-search
+    box and on in-page navigation — without it, re-applying would clobber the
+    user's state. Malformed ``wba_ids`` are dropped with a non-fatal warning.
     """
-    from_value = extract_from(search)
-    to_value = extract_to(search)
-    if not from_value or not to_value:
+    if applied:
         raise PreventUpdate
-    return CUSTOM_RANGE, from_value, to_value
 
+    params = parse_deeplink_params(search)
+    alerts: list[Any] = []
+    dropped = params["dropped"]
+    if dropped:
+        alerts.append(
+            create_alert(
+                f"Ignored {len(dropped)} invalid id(s): {', '.join(dropped)}",
+                color="warning",
+                dismissable=True,
+            )
+        )
 
-@callback(
-    Output("timeline-group", "value"),
-    Input("url", "search"),
-)
-def sync_group_from_url(search: str | None) -> Any:
-    """Seed the Group-by control from ``?group=`` on the page URL (deep-link stub)."""
-    value = extract_group(search)
-    if value is None:
-        raise PreventUpdate
-    return value
+    selection = selection_from_wba_ids(params["wba_ids"])
+    scope = params["scope"]
+    group = params["group"]
+    if params["from"] and params["to"]:
+        range_value = CUSTOM_RANGE
+        range_from, range_to = params["from"], params["to"]
+    else:
+        range_value, range_from, range_to = ALL_TIME, None, None
+
+    return (
+        selection,
+        scope,
+        group,
+        range_value,
+        range_from,
+        range_to,
+        True,
+        alerts,
+    )
 
 
 @callback(

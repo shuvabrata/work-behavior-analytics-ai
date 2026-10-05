@@ -1336,7 +1336,7 @@ lower edge.
 
 **Objective:** Parse and apply URL params on load for inbound deep links.
 
-**Progress:** [ ] Not started
+**Progress:** [x] Complete — consolidated onto a single apply-once handler (`apply_deeplink`); V11.1–V11.4 verified
 
 #### Files
 
@@ -1347,11 +1347,11 @@ lower edge.
 
 #### Tasks
 
-- [ ] **1.** Read `dcc.Location(id="url").search` (clientside/`Input`) and parse
+- [x] **1.** Read `dcc.Location(id="url").search` (clientside/`Input`) and parse
       `wba_ids` (comma-separated), `group` (`day|week|month`), `scope`
       (`activity|history`), `from`, `to`. *(Amended, decision #23: the `range` preset
       param is removed; a bounded window is expressed directly as `from`/`to`.)*
-- [ ] **2. Validate `wba_ids` client-side before fetching.** The router rejects the
+- [x] **2. Validate `wba_ids` client-side before fetching.** The router rejects the
       **whole** request with HTTP 400 if *any* id is malformed (`router.py:69-88`), so
       "drop only the bad lane" is impossible unless the UI pre-validates. Add a pure
       helper `is_valid_wba_id(wba_id) -> bool` that mirrors `service.parse_wba_id`
@@ -1362,29 +1362,47 @@ lower edge.
       **Belt-and-braces:** if a fetch still returns 400, read `detail.wba_id` from the
       response, drop that lane, and retry once; if it fails again, show the danger
       alert preserving the last good render.
-- [ ] **3.** Applying params populates the selection store + toolbar controls, then
+- [x] **3.** Applying params populates the selection store + toolbar controls, then
       triggers the normal fetch. Applies **once** on initial load, guarded by a
       `dcc.Store(id="timeline-deeplink-applied", storage_type="memory")` boolean:
       once it is `True`, the handler raises `PreventUpdate` and does not re-apply.
       This guard is necessary because `url.search` is an `Input` that also fires when
       the global-search box writes it (`layout.py:227-239`) and on any later
       navigation — without it, re-applying would clobber the user's in-page state.
-- [ ] **4.** *(Amended)* The gallery "Show Options" href was **removed** — the card is a plain launcher. Inbound URL params (`group`/`scope`/`from`/`to`) seed the page controls (`scope` done in UI-6; `group` in UI-7; `from`/`to` here).
+- [x] **4.** *(Amended)* The gallery "Show Options" href was **removed** — the card is a plain launcher. Inbound URL params (`group`/`scope`/`from`/`to`) seed the page controls (`scope` done in UI-6; `group` in UI-7; `from`/`to` here).
+
+> **Implementation notes.** The three per-control `sync_*_from_url` callbacks were
+> **consolidated** into one `apply_deeplink` handler (8 outputs: selection, scope,
+> group, range + dates, the applied-flag, and the alert slot), so there is a single
+> source of truth and the once-guard actually holds. Because it writes duplicated
+> outputs, it uses `prevent_initial_call="initial_duplicate"`. Labels for deep-linked
+> ids fall back to the key's **id segment** (`mock::Person::alice` → `alice`) with the
+> entity type from the middle segment — no extra API call.
+> *Belt-and-braces deviation:* rather than retrying inside one callback, a 400 carrying
+> `detail.wba_id` drops that lane from the selection store (`TimelineFetchError.wba_id`,
+> surfaced from `api.py`); the store change re-runs `load_timeline` with the remaining
+> lanes. It is bounded by the lane count and reports a warning alert.
+> *Feedback region:* the dropped-id warning renders into its **own**
+> `timeline-deeplink-alert` div, not the fetch `timeline-alert-slot` — otherwise
+> `load_timeline`'s success path (which returns `[]` for that slot) cleared the warning
+> the moment the follow-up fetch completed. It is dismissed when the user edits the
+> selection. *(Reviewed: the split is deliberate — two producers cannot share one
+> `children` prop without the last writer winning; kept as-is.)*
 
 #### Unit tests
 
-- [ ] `test_parse_deeplink_full` — all params parsed.
-- [ ] `test_parse_deeplink_missing_wba` — returns empty selection, no crash.
-- [ ] `test_parse_deeplink_custom_dates` — `from`/`to` parsed; a bad or reversed pair falls back to *All time*.
-- [ ] `test_is_valid_wba_id` — `"jira::Person::x"` valid; `"bad"`, `"a::b"`, and
+- [x] `test_parse_deeplink_full` — all params parsed.
+- [x] `test_parse_deeplink_missing_wba` — returns empty selection, no crash.
+- [x] `test_parse_deeplink_custom_dates` — `from`/`to` parsed; a bad or reversed pair falls back to *All time*.
+- [x] `test_is_valid_wba_id` — `"jira::Person::x"` valid; `"bad"`, `"a::b"`, and
       `"jira::::x"` invalid (mirrors `service.parse_wba_id`).
 
 #### Manual validation
 
-- [ ] **V11.1** Navigating to `/app/analytics/timeline?wba_ids=jira::Person::…,jira::Person::…` pre-loads those lanes.
-- [ ] **V11.2** `?group=week&scope=history&from=…&to=…` applies the date filter, grouping, and scope.
-- [ ] **V11.3** An external link carrying `?group=&scope=&from=&to=` opens with the page controls set accordingly (the gallery no longer generates these).
-- [ ] **V11.4** A bad lane id is dropped with a warning; the rest load.
+- [x] **V11.1** Navigating to `/app/analytics/timeline?wba_ids=jira::Person::…,jira::Person::…` pre-loads those lanes.
+- [x] **V11.2** `?group=week&scope=history&from=…&to=…` applies the date filter, grouping, and scope.
+- [x] **V11.3** An external link carrying `?group=&scope=&from=&to=` opens with the page controls set accordingly (the gallery no longer generates these).
+- [x] **V11.4** A bad lane id is dropped with a warning; the rest load.
 
 > **Mock scenarios:** V11.1 use the `suggest_variants` ids from UI-2P's
 > **"Mock entities"** table (`mock::Person::alice`, `mock::Person::bob`,

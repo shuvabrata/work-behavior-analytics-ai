@@ -39,12 +39,15 @@ from app.dash_app.pages.timeline.helpers import (
     humanize_relationship,
     idle_run_key,
     idle_run_label,
+    is_valid_wba_id,
     merge_lane_page,
+    parse_deeplink_params,
     period_key,
     period_label,
     popup_fields,
     remove_selection,
     resolve_range,
+    selection_from_wba_ids,
     toggle_expanded,
 )
 
@@ -246,6 +249,60 @@ def test_extract_range_and_group() -> None:
     assert extract_group(None) is None
     assert extract_group("?group=week") == "week"
     assert extract_group("?group=decade") is None
+
+
+# ---------------------------------------------------------------------------
+# UI-11 — inbound deep-linking
+# ---------------------------------------------------------------------------
+
+
+def test_parse_deeplink_full() -> None:
+    """All URL params are parsed; malformed ids are split out, not fatal."""
+    search = (
+        "?wba_ids=mock::Person::alice,bad,mock::Issue::BUG-7"
+        "&group=week&scope=history&from=2026-01-01&to=2026-03-31"
+    )
+    params = parse_deeplink_params(search)
+    assert params["wba_ids"] == ["mock::Person::alice", "mock::Issue::BUG-7"]
+    assert params["dropped"] == ["bad"]
+    assert params["group"] == "week"
+    assert params["scope"] == "history"
+    assert params["from"] == "2026-01-01"
+    assert params["to"] == "2026-03-31"
+
+    # Unknown params / invalid group / scope fall back to defaults.
+    fallback = parse_deeplink_params("?group=decade&scope=bogus&nope=1")
+    assert fallback["group"] == "day"
+    assert fallback["scope"] == "activity"
+
+
+def test_parse_deeplink_missing_wba() -> None:
+    """No wba_ids yields an empty, non-crashing selection."""
+    params = parse_deeplink_params(None)
+    assert params["wba_ids"] == []
+    assert params["dropped"] == []
+    assert selection_from_wba_ids(params["wba_ids"]) == []
+    # Ids are deduped and capped through add_selection.
+    assert len(selection_from_wba_ids(["mock::Person::alice"] * 3)) == 1
+
+
+def test_parse_deeplink_custom_dates() -> None:
+    """A reversed or partial date pair falls back to All time (no bounds)."""
+    reversed_pair = parse_deeplink_params("?from=2026-05-01&to=2026-01-01")
+    assert reversed_pair["from"] is None and reversed_pair["to"] is None
+
+    partial = parse_deeplink_params("?from=2026-01-01")
+    assert partial["from"] is None and partial["to"] is None
+
+
+def test_is_valid_wba_id() -> None:
+    """Mirrors service.parse_wba_id (first two :: split; all parts non-empty)."""
+    assert is_valid_wba_id("jira::Person::x") is True
+    assert is_valid_wba_id("github::PullRequest::org/repo#1") is True
+    assert is_valid_wba_id("bad") is False
+    assert is_valid_wba_id("a::b") is False
+    assert is_valid_wba_id("jira::::x") is False
+    assert is_valid_wba_id("::Person::x") is False
 
 
 # ---------------------------------------------------------------------------

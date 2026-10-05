@@ -327,6 +327,75 @@ def extract_group(search: str | None) -> str | None:
     return value if value in GRANULARITIES else None
 
 
+def is_valid_wba_id(wba_id: str) -> bool:
+    """Return whether *wba_id* is a well-formed ``{source}::{type}::{id}`` key.
+
+    Mirrors ``service.parse_wba_id`` (the router rejects the whole request with a
+    400 if any id is malformed, so the UI must filter client-side first). Only the
+    first two ``::`` separators split — the id itself may contain ``::``.
+    """
+    parts = (wba_id or "").split("::", 2)
+    return len(parts) == 3 and all(parts)
+
+
+def selection_from_wba_ids(wba_ids: list[str]) -> list[dict[str, Any]]:
+    """Build selection entries from deep-linked ids (idempotent, capped).
+
+    A URL carries only the canonical key, so there is no display name: the label
+    falls back to the key's id segment and the entity type comes from the middle
+    segment. Entries are added through :func:`add_selection`, so duplicates are
+    ignored and the :data:`MAX_LANES` cap holds.
+    """
+    selection: list[dict[str, Any]] = []
+    for wba_id in wba_ids:
+        parts = wba_id.split("::", 2)
+        selection = add_selection(
+            selection,
+            {
+                "wba_id": wba_id,
+                "label": parts[2] or wba_id,
+                "entity_type": parts[1],
+                "avatar_url": None,
+            },
+        )
+    return selection
+
+
+def parse_deeplink_params(search: str | None) -> dict[str, Any]:
+    """Parse the inbound deep-link contract from a URL search string.
+
+    Returns ``{wba_ids, dropped, group, scope, from, to}`` where ``wba_ids`` holds
+    only the well-formed keys (in URL order) and ``dropped`` the rejected ones.
+    ``group``/``scope`` fall back to their defaults; ``from``/``to`` are returned
+    only as a valid pair — a missing, malformed, or reversed pair becomes *All
+    time* (``None``/``None``). Unknown params are ignored. Dev-only ``mock`` is
+    handled separately (read per-request by the fetch).
+    """
+    raw = (parse_qs((search or "").lstrip("?").strip("?")).get("wba_ids") or [""])[0]
+    candidates = [part.strip() for part in raw.split(",") if part.strip()]
+    wba_ids = [key for key in candidates if is_valid_wba_id(key)]
+    dropped = [key for key in candidates if not is_valid_wba_id(key)]
+
+    from_value = extract_from(search)
+    to_value = extract_to(search)
+    if not from_value or not to_value:
+        from_value = to_value = None
+    else:
+        try:
+            resolve_range(CUSTOM_RANGE, from_value, to_value)
+        except ValueError:
+            from_value = to_value = None
+
+    return {
+        "wba_ids": wba_ids,
+        "dropped": dropped,
+        "group": extract_group(search) or DAY,
+        "scope": extract_scope(search),
+        "from": from_value,
+        "to": to_value,
+    }
+
+
 # ---------------------------------------------------------------------------
 # Card helpers (UI-3)
 # ---------------------------------------------------------------------------

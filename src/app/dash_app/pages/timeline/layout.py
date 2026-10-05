@@ -308,6 +308,9 @@ def get_layout() -> html.Div:
                 "Compare the chronological activity of people and objects side by side.",
             ),
             _selector_bar(),
+            # Deep-link feedback (e.g. dropped invalid ids), kept separate from the
+            # fetch alert slot so a successful fetch cannot clear it (UI-11).
+            html.Div(id="timeline-deeplink-alert"),
             html.Div(id="timeline-alert-slot"),
             html.Div(
                 id="timeline-empty-state",

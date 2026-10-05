@@ -21,7 +21,17 @@ _DEFAULT_LIMIT = 10
 
 
 class TimelineFetchError(RuntimeError):
-    """Raised when the timeline request fails (non-200 or transport error)."""
+    """Raised when the timeline request fails (non-200 or transport error).
+
+    When the backend rejects a specific WBA id (HTTP 400 with
+    ``detail.wba_id``), that key is carried on :attr:`wba_id` so the caller can
+    drop the offending lane and retry (belt-and-braces behind client-side
+    validation).
+    """
+
+    def __init__(self, message: str, *, wba_id: str | None = None) -> None:
+        super().__init__(message)
+        self.wba_id = wba_id
 
 
 def get_api_base_url() -> str:
@@ -110,16 +120,22 @@ def fetch_timeline(
 
     if response.status_code != 200:
         detail = ""
+        bad_wba_id: str | None = None
         try:
             body = response.json()
             raw_detail = body.get("detail") if isinstance(body, dict) else None
             if isinstance(raw_detail, dict):
                 detail = f": {raw_detail.get('message', raw_detail)}"
+                candidate = raw_detail.get("wba_id")
+                if isinstance(candidate, str) and candidate:
+                    bad_wba_id = candidate
             elif raw_detail:
                 detail = f": {raw_detail}"
         except ValueError:
             pass
-        raise TimelineFetchError(f"HTTP {response.status_code}{detail}")
+        raise TimelineFetchError(
+            f"HTTP {response.status_code}{detail}", wba_id=bad_wba_id
+        )
 
     try:
         payload = response.json()

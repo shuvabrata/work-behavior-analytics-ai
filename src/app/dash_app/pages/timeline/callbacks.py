@@ -1,9 +1,9 @@
 """Dash callbacks for the Activity Timeline page.
 
-UI-1 wires the entity selector: a debounced typeahead backed by
+Covers the entity selector (a debounced typeahead backed by
 ``GET /api/v1/activity/suggest``, an idempotent selection store, a lane-header
-row, and the soft lane cap. Fetching, bucketing, and card rendering land in
-UI-2 onwards.
+row, and the soft lane cap), the timeline fetch and grid render, cell overflow,
+pagination, deep-linking, and the hover popup.
 """
 
 from __future__ import annotations
@@ -485,7 +485,7 @@ def render_lanes(
 
 
 # ---------------------------------------------------------------------------
-# Timeline fetch & grid render (UI-2)
+# Timeline fetch & grid render
 # ---------------------------------------------------------------------------
 
 _DEFAULT_LIMIT = 20
@@ -544,7 +544,7 @@ def load_timeline(
     and a persistent danger alert is shown. The ``mock`` query param (dev-only)
     is forwarded.
 
-    Belt-and-braces (UI-11): if the backend still 400s on a specific id (a bug in
+    Belt-and-braces: if the backend still 400s on a specific id (a bug in
     client-side validation, or a stale link), drop that lane from the selection —
     the changed store re-runs this callback with the remaining lanes and retries.
     """
@@ -765,7 +765,7 @@ def toggle_idle_run(
 
 
 # ---------------------------------------------------------------------------
-# Cell overflow (UI-8) — expand one cell's already-loaded events
+# Cell overflow — expand one cell's already-loaded events
 # ---------------------------------------------------------------------------
 
 
@@ -804,7 +804,7 @@ def reset_cell_expansion(*_changed: Any) -> list[Any]:
 
 
 # ---------------------------------------------------------------------------
-# Pagination (UI-9) — global "Load more" across every lane's cursor
+# Pagination — global "Load more" across every lane's cursor
 # ---------------------------------------------------------------------------
 
 
@@ -918,7 +918,7 @@ def load_more(  # pylint: disable=too-many-arguments,too-many-locals
 
 
 # ---------------------------------------------------------------------------
-# Hover popup (UI-4) — install-once delegated listeners driving the portal
+# Hover popup — install-once delegated listeners driving the portal
 # ---------------------------------------------------------------------------
 # Dash cannot bind a callback to a DOM event, so install one delegated set of
 # listeners on ``document`` and drive the portal div imperatively. The portal

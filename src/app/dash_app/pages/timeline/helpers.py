@@ -1,8 +1,9 @@
 """Pure helpers for the Activity Timeline page.
 
 These functions are deliberately free of Dash and network dependencies so they
-can be unit-tested directly. UI-1 uses the selection and colour helpers; later
-phases extend this module with bucketing/card helpers.
+can be unit-tested directly: selection and colour helpers, period bucketing,
+card and popup payloads, idle-run spans, the time range, cell overflow,
+pagination, and deep-link parsing.
 """
 
 from __future__ import annotations
@@ -122,7 +123,7 @@ def is_full(selection: list[dict[str, Any]]) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# Period bucketing (UI-2)
+# Period bucketing
 # ---------------------------------------------------------------------------
 
 DAY = "day"
@@ -251,7 +252,7 @@ def find_idle_runs(
     Idle periods are exactly the gaps between consecutive present rows, so each
     run excludes the bounding (present) periods. Each run is
     ``{count, start_ordinal, end_ordinal}``; the units follow ``granularity``.
-    Used by UI-5 to render collapsed idle separators.
+    Used to render collapsed idle separators.
     """
     runs: list[dict[str, Any]] = []
     for newer, older in zip(rows, rows[1:]):
@@ -280,7 +281,7 @@ def extract_scope(search: str | None) -> str:
     """Return the timeline scope from a URL search string.
 
     ``activity`` (default) or ``history``; anything else falls back to activity.
-    This pre-stages the UI-6 toolbar / UI-11 deep-link parsing.
+    Seeds the Scope control from the inbound deep-link contract.
     """
     if not search:
         return "activity"
@@ -318,7 +319,7 @@ def extract_to(search: str | None) -> str | None:
 def extract_group(search: str | None) -> str | None:
     """Return a valid ``group`` granularity from the URL, else ``None``.
 
-    Parsed for the inbound deep-link contract; wired to the Group control in UI-7.
+    Parsed for the inbound deep-link contract; seeds the Group-by control.
     """
     values = parse_qs((search or "").lstrip("?")).get("group") or []
     if not values:
@@ -397,7 +398,7 @@ def parse_deeplink_params(search: str | None) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
-# Card helpers (UI-3)
+# Card helpers
 # ---------------------------------------------------------------------------
 
 # Base graph node token keys that exist in THEME_TOKENS; anything else falls
@@ -483,7 +484,7 @@ def entity_type_color(
 
 
 def popup_fields(event: dict[str, Any], datetime_text: str) -> dict[str, Any]:
-    """Build the JSON payload carried on each card for the UI-4 hover popup.
+    """Build the JSON payload carried on each card for the hover popup.
 
     Includes the source ``url`` key **only** when the event has one, so the
     popup renders the "Open source" link only when there is somewhere to go.
@@ -504,7 +505,7 @@ def popup_fields(event: dict[str, Any], datetime_text: str) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
-# Idle runs (UI-5)
+# Idle runs
 # ---------------------------------------------------------------------------
 
 
@@ -581,7 +582,7 @@ def toggle_expanded(expanded: list[str], key: str) -> list[str]:
 
 
 # ---------------------------------------------------------------------------
-# Cell overflow (UI-8)
+# Cell overflow
 # ---------------------------------------------------------------------------
 
 # Maximum cards rendered per cell before the "+N more" link appears.
@@ -614,7 +615,7 @@ def is_cell_expanded(
 
 
 # ---------------------------------------------------------------------------
-# Pagination (UI-9)
+# Pagination
 # ---------------------------------------------------------------------------
 
 
@@ -647,7 +648,7 @@ def has_more(lanes: list[dict[str, Any]]) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# Time range (UI-6)
+# Time range
 # ---------------------------------------------------------------------------
 
 # Range control values: "all" (default, unbounded) or "custom" (explicit dates).

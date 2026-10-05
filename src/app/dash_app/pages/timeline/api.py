@@ -1,7 +1,7 @@
 """HTTP access for the Activity Timeline page.
 
-Centralizes the calls to ``GET /api/v1/activity/suggest`` (UI-1) and, later,
-``GET /api/v1/activity/timeline`` (UI-2). Mirrors the synchronous ``requests``
+Centralizes the calls to ``GET /api/v1/activity/suggest`` and
+``GET /api/v1/activity/timeline``. Mirrors the synchronous ``requests``
 convention used by ``pages/search.py``.
 """
 

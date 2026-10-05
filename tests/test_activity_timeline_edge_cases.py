@@ -1,8 +1,8 @@
-"""UI-12 — edge-case render sweep for the Activity Timeline grid.
+"""Edge-case render sweep for the Activity Timeline grid.
 
-Exercises the combinations the plan calls out (single lane, empty lanes, the
-5-lane cap, a Custom range with no events, history scope, and the optimistic
-cursor) to confirm the grid renders without error and degrades sensibly.
+Exercises single lane, empty lanes, the 5-lane cap, a Custom range with no
+events, history scope, and the optimistic cursor, to confirm the grid renders
+without error and degrades sensibly.
 """
 
 from __future__ import annotations

@@ -1,7 +1,8 @@
 """Unit tests for the Activity Timeline UI helpers.
 
-Covers UI-0 (scaffold/route) and UI-1 (selector helpers + callback wiring).
-Later phases append their own pure-helper tests here.
+Covers the page scaffold/route and callback wiring, plus the pure helpers:
+selection, bucketing, cards, popup payloads, idle runs, cell overflow,
+pagination, the time range, grouping, and deep-link parsing.
 """
 
 from __future__ import annotations
@@ -56,7 +57,7 @@ pytestmark = pytest.mark.unit
 
 
 # ---------------------------------------------------------------------------
-# UI-0
+
 # ---------------------------------------------------------------------------
 
 
@@ -66,13 +67,13 @@ def test_timeline_analytic_href() -> None:
 
 
 def test_timeline_layout_renders() -> None:
-    """The UI-0 scaffold renders as a Dash Div."""
+    """The page scaffold renders as a Dash Div."""
     layout = get_layout()
     assert isinstance(layout, html.Div)
 
 
 # ---------------------------------------------------------------------------
-# UI-1 — selection helpers
+# selection helpers
 # ---------------------------------------------------------------------------
 
 
@@ -113,7 +114,7 @@ def test_selection_add_remove_dedup() -> None:
 def test_timeline_callbacks_registered() -> None:
     """Importing the timeline package registers its callbacks.
 
-    Guards the UI-0 ``__init__`` → ``callbacks`` import: without it the page
+    Guards the ``__init__`` → ``callbacks`` import: without it the page
     renders (suppress_callback_exceptions=True) but interactions silently no-op.
     The package is imported at module top via ``get_layout``, which is what
     registers the callbacks; this asserts they landed in the global map.
@@ -124,7 +125,7 @@ def test_timeline_callbacks_registered() -> None:
 
 
 # ---------------------------------------------------------------------------
-# UI-2 — bucketing, grid, idle runs, mock param
+# bucketing, grid, idle runs, mock param
 # ---------------------------------------------------------------------------
 
 _UTC = ZoneInfo("UTC")
@@ -252,7 +253,7 @@ def test_extract_range_and_group() -> None:
 
 
 # ---------------------------------------------------------------------------
-# UI-11 — inbound deep-linking
+# inbound deep-linking
 # ---------------------------------------------------------------------------
 
 
@@ -306,7 +307,7 @@ def test_is_valid_wba_id() -> None:
 
 
 # ---------------------------------------------------------------------------
-# UI-3 — card helpers
+# card helpers
 # ---------------------------------------------------------------------------
 
 
@@ -354,7 +355,7 @@ def test_entity_type_color_resolution() -> None:
 
 
 # ---------------------------------------------------------------------------
-# UI-4 — popup payload
+# popup payload
 # ---------------------------------------------------------------------------
 
 
@@ -384,7 +385,7 @@ def test_popup_fields_from_event() -> None:
 
 
 # ---------------------------------------------------------------------------
-# UI-5 — idle runs
+# idle runs
 # ---------------------------------------------------------------------------
 
 
@@ -433,7 +434,7 @@ def test_idle_run_key_is_stable() -> None:
 
 
 # ---------------------------------------------------------------------------
-# UI-8 — cell overflow
+# cell overflow
 # ---------------------------------------------------------------------------
 
 
@@ -456,7 +457,7 @@ def test_cap_cell_hidden_count() -> None:
 
 
 # ---------------------------------------------------------------------------
-# UI-9 — pagination
+# pagination
 # ---------------------------------------------------------------------------
 
 
@@ -490,7 +491,7 @@ def test_load_more_hidden_when_all_exhausted() -> None:
 
 
 # ---------------------------------------------------------------------------
-# UI-6 — time range
+# time range
 # ---------------------------------------------------------------------------
 
 
@@ -516,7 +517,7 @@ def test_resolve_range_custom() -> None:
 
 
 # ---------------------------------------------------------------------------
-# UI-7 — group by
+# group by
 # ---------------------------------------------------------------------------
 
 

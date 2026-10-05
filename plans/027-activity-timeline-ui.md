@@ -12,6 +12,9 @@
 
 ## Status
 
+**COMPLETE** — all 14 phases (UI-0 … UI-12, incl. UI-2P) implemented and manually
+verified on branch `feature/activity-timeline-2`.
+
 - **Priority**: P1
 - **Effort**: L (~8.5 focused days; 13 independently reviewable phases)
 - **Risk**: MED — large net-new UI. Highest-risk areas: sticky-axis + horizontal
@@ -372,17 +375,18 @@ Every phase below lists **Unit tests** (pure helper tests) and **Manual validati
 
 ## Global done criteria (ALL must hold when the whole plan lands)
 
-- [ ] `pytest -m unit tests -q` exits 0 with the new helper tests passing.
-- [ ] `mypy src/` exits 0; `pylint src --score=y` reports a score ≥ 9.0 and not lower
-      than before the change.
-- [ ] `/app/analytics/timeline` renders from the Analytics gallery card and via the
+- [x] `pytest -m unit tests -q` exits 0 with the new helper tests passing.
+      *(1668 passed.)*
+- [x] `mypy src/` exits 0; `pylint src --score=y` reports a score ≥ 9.0 and not lower
+      than before the change. *(mypy clean; pylint 9.67, unchanged.)*
+- [x] `/app/analytics/timeline` renders from the Analytics gallery card and via the
       direct route; every `V*` item for every executed phase was manually checked.
-- [ ] Toggling the topbar theme re-renders entity-type and lane colors (no stale
+- [x] Toggling the topbar theme re-renders entity-type and lane colors (no stale
       light-theme hex remains on cards in dark mode).
-- [ ] `git status` shows no files modified outside the Scope list.
-- [ ] No hardcoded hex in timeline components:
+- [x] `git status` shows no files modified outside the Scope list.
+- [x] No hardcoded hex in timeline components:
       `grep -rnE '#[0-9a-fA-F]{6}' src/app/dash_app/pages/timeline/` returns nothing.
-- [ ] `plans/README.md` status row for plan 027 updated.
+- [x] `plans/README.md` status row for plan 027 updated.
 
 ## STOP conditions
 
@@ -1416,7 +1420,7 @@ lower edge.
 
 **Objective:** Accessibility, performance, and edge-case sweep.
 
-**Progress:** [ ] Not started
+**Progress:** [x] Complete — V12.1–V12.3 verified
 
 #### Tasks
 
@@ -1427,9 +1431,15 @@ lower edge.
       `.timeline-idle-bar` / `.timeline-load-more` / `.timeline-lane-remove` (the ✕
       gained that class), and `aria-expanded` on the two disclosure toggles. The
       popup already handles `focusin`/`focusout`.)*
-- [ ] **2. Performance:** avoid re-rendering the whole grid on unrelated state changes
+- [x] **2. Performance:** avoid re-rendering the whole grid on unrelated state changes
       (split callbacks / `prevent_initial_call`); confirm a 5-lane × 20-event render is
       smooth; memoize bucketing per `(data, granularity)`.
+      *(Verified — memoization deliberately **not** added: a full render of the target
+      case is ~35 ms, of which bucketing is **~1 ms** (the rest is Dash component
+      construction, which caching cannot avoid), and ~128 ms at a deeply-paged
+      125 events/lane. A theme toggle re-renders the grid (expected — it re-resolves
+      lane/entity colours) but does **not** refetch: `load_timeline` is not wired to
+      `theme-store`.)*
 - [x] **3. Edge cases:** single lane; one lane empty; all lanes empty in range; exactly
       5 lanes; custom range with no events; history scope on a Person; a lane whose
       only page is exactly `limit` (so `next_cursor` is set but no more data exists —
@@ -1449,9 +1459,9 @@ lower edge.
 
 #### Manual validation
 
-- [ ] **V12.1** Tab through the page: cards, expanders, and remove buttons are reachable and operable.
-- [ ] **V12.2** All edge cases above render without errors.
-- [ ] **V12.3** Dark mode final pass.
+- [x] **V12.1** Tab through the page: cards, expanders, and remove buttons are reachable and operable.
+- [x] **V12.2** All edge cases above render without errors.
+- [x] **V12.3** Dark mode final pass.
 
 > **Mock scenarios (edge-case sweep, V12.2):** single lane / exactly 5 lanes `even`;
 > one empty lane `empty_lane`; all lanes empty in range `empty_range`; custom range

@@ -1563,7 +1563,7 @@ input::placeholder {
 }
 
 /* ---------------------------------------------------------------------------
-   Activity Timeline — event cards (UI-3)
+   Activity Timeline — event cards
    Token-driven so they follow the runtime light/dark theme automatically. The
    lane accent (border-left colour) and entity-type colour are set inline from
    resolved theme tokens.
@@ -1622,7 +1622,7 @@ input::placeholder {
 }
 
 /* Hover popup portal — page-level, outside the scrolling grid, so it is never
-   clipped. Position/visibility are set imperatively by the UI-4 listener.
+   clipped. Position/visibility are set imperatively by the clientside listener.
    Uses an INVERSE (contrast) palette mirroring `.popover-inverted`, so it reads
    against the current theme instead of blending into it. */
 :root .timeline-popup-portal,
@@ -1681,7 +1681,7 @@ input::placeholder {
 }
 
 /* ---------------------------------------------------------------------------
-   Activity Timeline — empty cells, empty lanes, idle separators (UI-5)
+   Activity Timeline — empty cells, empty lanes, idle separators
 --------------------------------------------------------------------------- */
 .timeline-cell-guide {
     min-height: 28px;
@@ -1736,7 +1736,7 @@ input::placeholder {
     transform: rotate(180deg);
 }
 
-/* Activity Timeline — per-cell "+N more" overflow link (UI-8) */
+/* Activity Timeline — per-cell "+N more" overflow link */
 .timeline-cell-more {
     display: flex;
     align-items: center;
@@ -1766,7 +1766,7 @@ input::placeholder {
     transform: rotate(180deg);
 }
 
-/* Activity Timeline — global "Load more events" button (UI-9) */
+/* Activity Timeline — global "Load more events" button */
 .timeline-load-more {
     display: flex;
     align-items: center;
@@ -1794,7 +1794,7 @@ input::placeholder {
     cursor: default;
 }
 
-/* Activity Timeline — keyboard focus rings (UI-12)
+/* Activity Timeline — keyboard focus rings
    Mirrors the app-wide pattern: the UA default ring is replaced with the design
    system's navy ring under :focus-visible (keyboard), never on mouse click. */
 .timeline-card:focus-visible,

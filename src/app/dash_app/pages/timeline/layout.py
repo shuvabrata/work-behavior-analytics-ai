@@ -1,8 +1,9 @@
 """Layout for the Activity Timeline page.
 
-UI-0 shipped a reachable, empty page; UI-1 adds the entity selector bar and the
-lane-header row. Events are not fetched yet — lanes render as empty columns
-until UI-2 wires the timeline fetch.
+Builds the page scaffold: the selector bar (search, Range/Group/Scope toolbar,
+lane hint, Clear all), the lane-header row, the swimlane grid (axes, event
+cards, empty-cell guides, idle separators), pagination, and the hover-popup
+portal. Data is fetched separately by the callbacks.
 """
 
 from __future__ import annotations
@@ -51,7 +52,7 @@ from app.dash_app.styles import (
 )
 
 # Width reserved for the time-axis label column so lane headers line up with the
-# grid that UI-2 renders. Kept near its original size — the date reads as small
+# grid. Kept near its original size — the date reads as small
 # because of its font, not the column — but with a hair of extra room so the
 # longest label ("March 2026") still fits at the larger axis font size.
 TIME_AXIS_WIDTH = "96px"
@@ -191,7 +192,7 @@ _REMOVE_BTN_STYLE: dict[str, Any] = {
 }
 
 # ---------------------------------------------------------------------------
-# Grid (UI-2): shared-row swimlane table
+# Grid: shared-row swimlane table
 # ---------------------------------------------------------------------------
 
 _AXIS_CELL_WIDTH_PX = int(TIME_AXIS_WIDTH.rstrip("px"))
@@ -315,7 +316,7 @@ def get_layout() -> html.Div:
             ),
             _selector_bar(),
             # Deep-link feedback (e.g. dropped invalid ids), kept separate from the
-            # fetch alert slot so a successful fetch cannot clear it (UI-11).
+            # fetch alert slot so a successful fetch cannot clear it.
             html.Div(id="timeline-deeplink-alert"),
             html.Div(id="timeline-alert-slot"),
             html.Div(
@@ -348,7 +349,7 @@ def get_layout() -> html.Div:
             ),
             # Hover-popup portal — a direct child of the page root, outside the
             # scrolling grid, so it is never clipped. Filled imperatively by the
-            # UI-4 clientside listener; contents are built with createElement /
+            # clientside listener; contents are built with createElement /
             # textContent (never innerHTML) because they carry ingested data.
             html.Div(
                 id=POPUP_PORTAL_ID,
@@ -357,7 +358,7 @@ def get_layout() -> html.Div:
             ),
             html.Div(id="timeline-popup-dummy", style={"display": "none"}),
             # Dummy output target for the "preserve scroll on Load more" clientside
-            # callback (UI-9 follow-up).
+            # callback.
             html.Div(id="timeline-scroll-dummy", style={"display": "none"}),
             # Dummy output target for the install-once keyboard-navigation
             # clientside callback (ArrowUp/Down/Enter over the suggestion list).
@@ -564,7 +565,7 @@ def build_event_card(
     Line 1: the summary (with fallback). Line 2: ``<Type(colored)> · <relationship>
     · <time>``. The lane accent is a left border; the type colour comes from the
     effective theme. The summary is also set as the card ``title`` (a touch
-    fallback until the UI-4 hover popup exists).
+    fallback alongside the hover popup).
     """
     summary = card_summary(event)
     relationship = humanize_relationship(str(event.get("relationship_type") or ""))
@@ -622,8 +623,8 @@ def build_cell(  # pylint: disable=too-many-arguments
     """One lane cell: the cards for a period, an empty-lane note, or a dashed
     vertical guide continuing the lane through the gap.
 
-    UI-8 caps a cell at :data:`MAX_CELL_CARDS` cards and appends a "+N more"
-    toggle for the withheld, already-loaded events; ``expanded`` reveals them.
+    A cell is capped at :data:`MAX_CELL_CARDS` cards with a "+N more" toggle for
+    the withheld, already-loaded events; ``expanded`` reveals them.
     """
     if not events:
         if show_empty_note:
@@ -786,7 +787,7 @@ def build_grid_body(  # pylint: disable=too-many-arguments,too-many-locals
 def build_load_more() -> html.Div:
     """The global "Load more events" button spanning the whole grid row.
 
-    Fetches older events for every lane that still has a cursor (UI-9). It is
+    Fetches older events for every lane that still has a cursor. It is
     appended by the grid renderer only while :func:`helpers.has_more` is true.
     """
     return html.Div(

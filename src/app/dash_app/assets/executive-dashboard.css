@@ -1794,6 +1794,19 @@ input::placeholder {
     cursor: default;
 }
 
+/* Activity Timeline — keyboard focus rings (UI-12)
+   Mirrors the app-wide pattern: the UA default ring is replaced with the design
+   system's navy ring under :focus-visible (keyboard), never on mouse click. */
+.timeline-card:focus-visible,
+.timeline-cell-more:focus-visible,
+.timeline-idle-bar:focus-visible,
+.timeline-load-more:focus-visible,
+.timeline-lane-remove:focus-visible {
+    outline: 2px solid var(--color-navy);
+    outline-offset: 2px;
+    border-radius: 2px;
+}
+
 /* ---------------------------------------------------------------------------
    Activity Timeline — Scope control rendered as a segmented button group
 --------------------------------------------------------------------------- */

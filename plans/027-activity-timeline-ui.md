@@ -1436,7 +1436,16 @@ lower edge.
       the next "Load more" returns empty and clears the cursor).
       *(Covered by `tests/test_activity_timeline_edge_cases.py` — 7 render-level tests;
       visual sweep remains V12.2.)*
-- [ ] **4. Copy review:** toolbar labels, hints, idle-bar text, empty-state text.
+- [x] **4. Copy review:** toolbar labels, hints, idle-bar text, empty-state text.
+      *(Applied the high-impact fixes: dropped the internal term "lane" from the
+      cap hint → "Maximum 5 — remove one to add another." and from the fetch error,
+      which now names the user's own label, never the raw `source::Type::id` key
+      ("Couldn't load <label> and removed it. Please re-add it."); the deeplink alert
+      became "Skipped N unrecognised link(s) in this URL." (proper pluralization, no
+      jargon); the cell-toggle tooltip no longer hardcodes the cap
+      ("Show fewer events"); the lone emoji (🔒) is gone. Left as-is by choice:
+      "+N more" vs "Load more events" (#4) and the empty-message punctuation
+      mismatch (#6); card `title=summary` redundancy (#7) is harmless.)*
 
 #### Manual validation
 

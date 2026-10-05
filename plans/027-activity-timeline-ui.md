@@ -1285,7 +1285,7 @@ lower edge.
 
 **Objective:** Token-driven light/dark across all timeline surfaces.
 
-**Progress:** [ ] Not started
+**Progress:** [x] Complete — verified by audit (tokens since UI-1…UI-9) + manual V10.1–V10.3
 
 #### Files
 
@@ -1296,22 +1296,36 @@ lower edge.
 
 #### Tasks
 
-- [ ] **1.** Define `.timeline-card`, `.timeline-popup`, `.timeline-idle-bar`,
+- [x] **1.** Define `.timeline-card`, `.timeline-popup`, `.timeline-idle-bar`,
       `.timeline-guide`, `.timeline-lane-header`, `.timeline-axis` using `var(--color-*)`.
-- [ ] **2.** Lane palette: calibrate dark-theme variants / contrast for the
+      *(No change needed: surfaces are driven by the `COLOR_*` constants, which are
+      `"var(--color-…)"` strings — see `styles.py:311-346` — plus the `.timeline-*` CSS rules.)*
+- [x] **2.** Lane palette: calibrate dark-theme variants / contrast for the
       `timeline.lane.1`–`.5` tokens added in UI-1 (the palette is *defined* in UI-1,
       not here); verify entity-type colors remain legible on dark card backgrounds.
-- [ ] **3.** Ensure the popup, sticky headers, and hover states all adapt (no hardcoded hex).
+      *(Verified: lane accents are identical across themes by design (matching the
+      theme-invariant graph palette) and used as 3px marks; measured contrast ≥3.6 in
+      dark. Entity-type labels ≥4.1 in dark — see audit below.)*
+- [x] **3.** Ensure the popup, sticky headers, and hover states all adapt (no hardcoded hex).
+      *(Verified: the only hex literals are the popup's theme-scoped `--timeline-popup-*`
+      variable definitions — the token mechanism itself, mirroring `.popover-inverted`.)*
 
 #### Unit tests
 
-- [ ] None (CSS only) — covered by manual validation.
+- [x] None (CSS only) — covered by manual validation.
+
+> **Audit (this phase):** no code change was required. Every timeline colour resolves
+> through `var(--color-*)` (Python) or `var(--color-*)` (CSS); the sole raw value is a
+> theme-neutral `box-shadow: rgba(0,0,0,0.15)`. Measured dark-mode contrast: entity
+> labels `graph.node.*` ≥ 4.1 on `--color-background-white` (#1f262f); lane accents
+> ≥ 3.6. The weakest ratios are in *light* mode (yellow entity labels on white) — those
+> colours are shared with the Graph page and out of scope here.
 
 #### Manual validation
 
-- [ ] **V10.1** Toggling the topbar theme switches all timeline surfaces sensibly.
-- [ ] **V10.2** Cards, popups, guides, and separators remain readable in dark mode.
-- [ ] **V10.3** Lane accent colors stay distinguishable in both themes.
+- [x] **V10.1** Toggling the topbar theme switches all timeline surfaces sensibly.
+- [x] **V10.2** Cards, popups, guides, and separators remain readable in dark mode.
+- [x] **V10.3** Lane accent colors stay distinguishable in both themes.
 
 > **Mock scenarios:** `card_variety` (mixed/unknown types, long + non-ASCII + HTML
 > strings, missing url/avatar) exercises every themed surface.

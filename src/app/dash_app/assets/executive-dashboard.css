@@ -1766,6 +1766,34 @@ input::placeholder {
     transform: rotate(180deg);
 }
 
+/* Activity Timeline — global "Load more events" button (UI-9) */
+.timeline-load-more {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    width: 100%;
+    margin-top: 4px;
+    padding: 6px 8px;
+    background: none;
+    border: 1px dashed var(--color-border);
+    border-radius: 2px;
+    color: var(--color-gray-medium);
+    font-family: 'Inter', sans-serif;
+    font-size: 11px;
+    cursor: pointer;
+}
+
+.timeline-load-more:hover {
+    background-color: var(--color-background-light);
+    color: var(--color-charcoal-medium);
+}
+
+.timeline-load-more:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
 /* ---------------------------------------------------------------------------
    Activity Timeline — Scope control rendered as a segmented button group
 --------------------------------------------------------------------------- */

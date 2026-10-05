@@ -34,16 +34,21 @@ from app.dash_app.pages.timeline.api import (
     fetch_timeline,
 )
 from app.dash_app.pages.timeline.helpers import (
+    ALL_TIME,
+    CUSTOM_RANGE,
     MIN_QUERY_LENGTH,
     add_selection,
     assign_lane_colors,
     build_grid,
     entity_type_icon,
     entity_type_label,
+    extract_from,
     extract_group,
     extract_mock_scenario,
-    extract_range,
+    extract_to,
+    has_more,
     is_full,
+    merge_lane_page,
     resolve_range,
     toggle_expanded,
     remove_selection,
@@ -56,6 +61,7 @@ from app.dash_app.pages.timeline.layout import (
     build_grid_body,
     build_header_axis_cell,
     build_lane_header,
+    build_load_more,
     grid_inner_style,
 )
 from app.dash_app.styles import (
@@ -485,10 +491,13 @@ def render_lanes(
 _DEFAULT_LIMIT = 20
 
 # Flip the loading overlay on as soon as a fetch is about to start; the server
-# callback below flips it back to False when the request completes.
+# callback below flips it back to False when the request completes. A refetch
+# (selection/range/scope change) also pins the grid back to the top — only
+# "Load more" preserves the reader's scroll position (see below).
 clientside_callback(
     """
     function(_selection, _search, _range, _scope, _from, _to) {
+        window.__timelinePendingScroll = 0;
         return true;
     }
     """,
@@ -538,7 +547,7 @@ def load_timeline(
         return None, [], False
 
     try:
-        from_dt, to_dt = resolve_range(range_value or "30d", custom_from, custom_to)
+        from_dt, to_dt = resolve_range(range_value or ALL_TIME, custom_from, custom_to)
     except ValueError as exc:
         logger.warning(f"[Timeline] invalid range: {exc}")
         return no_update, no_update, False
@@ -550,7 +559,7 @@ def load_timeline(
         payload = fetch_timeline(
             wba_ids=[str(item.get("wba_id")) for item in current],
             scope=scope,
-            from_iso=from_dt.isoformat(),
+            from_iso=from_dt.isoformat() if from_dt else None,
             to_iso=to_dt.isoformat(),
             limit=_DEFAULT_LIMIT,
             mock=mock,
@@ -566,7 +575,7 @@ def load_timeline(
         "lanes": payload.get("lanes") or [],
         "params": {
             "scope": scope,
-            "from": from_dt.isoformat(),
+            "from": from_dt.isoformat() if from_dt else None,
             "to": to_dt.isoformat(),
             "limit": _DEFAULT_LIMIT,
         },
@@ -599,14 +608,21 @@ def sync_scope_from_url(search: str | None) -> Any:
 
 @callback(
     Output("timeline-range", "value"),
+    Output("timeline-range-from", "value"),
+    Output("timeline-range-to", "value"),
     Input("url", "search"),
 )
 def sync_range_from_url(search: str | None) -> Any:
-    """Seed the Range control from ``?range=`` on the page URL (deep-link stub)."""
-    value = extract_range(search)
-    if value is None:
+    """Seed the Range filter from ``?from=``/``?to=`` on the page URL.
+
+    A deep link carrying both bounds selects Custom and fills the date inputs;
+    without both, the control stays on *All time*.
+    """
+    from_value = extract_from(search)
+    to_value = extract_to(search)
+    if not from_value or not to_value:
         raise PreventUpdate
-    return value
+    return CUSTOM_RANGE, from_value, to_value
 
 
 @callback(
@@ -674,7 +690,7 @@ def render_grid(
         effective_theme.get("nodes") if isinstance(effective_theme, dict) else None
     )
     rows = build_grid(lanes, granularity, get_app_timezone())
-    return build_grid_body(
+    body = build_grid_body(
         rows,
         current,
         lane_colors,
@@ -684,6 +700,9 @@ def render_grid(
         expanded_cells=expanded_cells,
         granularity=granularity,
     )
+    if has_more(lanes):
+        body.append(build_load_more())
+    return body
 
 
 @callback(
@@ -741,6 +760,120 @@ def reset_cell_expansion(*_changed: Any) -> list[Any]:
     current grid — a refetch, regroup, or scope switch invalidates them.
     """
     return []
+
+
+# ---------------------------------------------------------------------------
+# Pagination (UI-9) — global "Load more" across every lane's cursor
+# ---------------------------------------------------------------------------
+
+
+# Show the grid overlay on a Load-more click (n_clicks 0 on remount → no_update),
+# and remember the reader's scroll position so appending rows does not yank the
+# grid back to the top.
+clientside_callback(
+    """
+    function(n_clicks) {
+        if (!n_clicks) { return window.dash_clientside.no_update; }
+        var el = document.getElementById('timeline-grid-scroll');
+        window.__timelinePendingScroll = el ? el.scrollTop : 0;
+        return true;
+    }
+    """,
+    Output("timeline-loading-store", "data", allow_duplicate=True),
+    Input("timeline-load-more", "n_clicks"),
+    prevent_initial_call=True,
+)
+
+# Restore the remembered scroll position after the grid re-renders (Dash swaps
+# the whole ``timeline-grid-body`` children list on every data change).
+clientside_callback(
+    """
+    function(_children) {
+        var el = document.getElementById('timeline-grid-scroll');
+        if (el && window.__timelinePendingScroll != null) {
+            el.scrollTop = window.__timelinePendingScroll;
+        }
+        return window.dash_clientside.no_update;
+    }
+    """,
+    Output("timeline-scroll-dummy", "children"),
+    Input("timeline-grid-body", "children"),
+    prevent_initial_call=True,
+)
+
+
+@callback(
+    Output("timeline-data-store", "data", allow_duplicate=True),
+    Output("timeline-alert-slot", "children", allow_duplicate=True),
+    Output("timeline-loading-store", "data", allow_duplicate=True),
+    Input("timeline-load-more", "n_clicks"),
+    State("timeline-data-store", "data"),
+    State("timeline-selected-store", "data"),
+    State("timeline-scope", "value"),
+    State("timeline-range", "value"),
+    State("timeline-range-from", "value"),
+    State("timeline-range-to", "value"),
+    State("url", "search"),
+    prevent_initial_call=True,
+)
+def load_more(  # pylint: disable=too-many-arguments,too-many-locals
+    n_clicks: int | None,
+    data: dict[str, Any] | None,
+    selection: list[dict[str, Any]] | None,
+    scope_value: str | None,
+    range_value: str | None,
+    custom_from: str | None,
+    custom_to: str | None,
+    search: str | None,
+) -> tuple[Any, Any, bool]:
+    """Fetch the next page for every lane that still has a cursor.
+
+    Each lane is requested **sequentially** (≤5 lanes) with its own cursor; the
+    responses are merged into the stored lanes, de-duplicating by ``signal_id``.
+    A lane whose page comes back empty clears its cursor so the button can hide.
+    """
+    if not n_clicks or not data or not selection:
+        raise PreventUpdate
+
+    lanes = data.get("lanes") or []
+    if not has_more(lanes):
+        raise PreventUpdate
+
+    params = data.get("params") or {}
+    try:
+        from_dt, to_dt = resolve_range(range_value or ALL_TIME, custom_from, custom_to)
+    except ValueError as exc:
+        logger.warning(f"[Timeline] invalid range on load more: {exc}")
+        raise PreventUpdate from exc
+
+    mock = extract_mock_scenario(search)
+    merged: list[dict[str, Any]] = []
+    for lane in lanes:
+        cursor = lane.get("next_cursor")
+        if not cursor:
+            merged.append(lane)
+            continue
+        try:
+            payload = fetch_timeline(
+                wba_ids=[str(lane.get("wba_id"))],
+                scope=scope_value or "activity",
+                from_iso=from_dt.isoformat() if from_dt else None,
+                to_iso=to_dt.isoformat(),
+                limit=int(params.get("limit") or _DEFAULT_LIMIT),
+                cursor=str(cursor),
+                mock=mock,
+            )
+        except TimelineFetchError as exc:
+            logger.warning(f"[Timeline] load more failed: {exc}")
+            alert = create_alert(
+                f"Could not load more events: {exc}", color="danger", dismissable=True
+            )
+            return no_update, [alert], False
+        page_lanes = payload.get("lanes") or []
+        page_lane = page_lanes[0] if page_lanes else {}
+        merged.append(merge_lane_page(lane, page_lane))
+
+    return {**data, "lanes": merged}, [], False
 
 
 # ---------------------------------------------------------------------------

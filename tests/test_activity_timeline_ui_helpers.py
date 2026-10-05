@@ -16,6 +16,7 @@ from dash import html
 from app.analytics.registry import TIMELINE_ANALYTIC
 from app.dash_app.pages.timeline import get_layout
 from app.dash_app.pages.timeline.helpers import (
+    ALL_TIME,
     MAX_CELL_CARDS,
     MAX_LANES,
     add_selection,
@@ -28,14 +29,17 @@ from app.dash_app.pages.timeline.helpers import (
     entity_type_color,
     entity_type_label,
     entity_type_token,
+    extract_from,
     extract_group,
     extract_mock_scenario,
-    extract_range,
     extract_scope,
+    extract_to,
     find_idle_runs,
+    has_more,
     humanize_relationship,
     idle_run_key,
     idle_run_label,
+    merge_lane_page,
     period_key,
     period_label,
     popup_fields,
@@ -232,11 +236,12 @@ def test_extract_scope() -> None:
 
 
 def test_extract_range_and_group() -> None:
-    """Range/group URL params validate against the allowed sets."""
-    assert extract_range(None) is None
-    assert extract_range("?range=7d") == "7d"
-    assert extract_range("?range=custom") == "custom"
-    assert extract_range("?range=bogus") is None
+    """Date and group URL params validate against their allowed forms."""
+    assert extract_from(None) is None
+    assert extract_from("?from=2026-03-01") == "2026-03-01"
+    assert extract_from("?from=not-a-date") is None
+    assert extract_to("?to=2026-03-31") == "2026-03-31"
+    assert extract_to("?to=bogus") is None
 
     assert extract_group(None) is None
     assert extract_group("?group=week") == "week"
@@ -394,17 +399,51 @@ def test_cap_cell_hidden_count() -> None:
 
 
 # ---------------------------------------------------------------------------
+# UI-9 — pagination
+# ---------------------------------------------------------------------------
+
+
+def test_merge_lane_page_dedup() -> None:
+    """Overlapping signal_ids are not double-counted."""
+    lane = {"wba_id": "w1", "events": [{"signal_id": "a"}, {"signal_id": "b"}]}
+    page = {"events": [{"signal_id": "b"}, {"signal_id": "c"}], "next_cursor": "cur"}
+    merged = merge_lane_page(lane, page)
+    assert [event["signal_id"] for event in merged["events"]] == ["a", "b", "c"]
+
+
+def test_merge_updates_cursor() -> None:
+    """A non-empty page stores the echoed cursor; an empty page clears it."""
+    lane = {"wba_id": "w1", "events": [{"signal_id": "a"}], "next_cursor": "old"}
+    full = merge_lane_page(lane, {"events": [{"signal_id": "b"}], "next_cursor": "new"})
+    assert full["next_cursor"] == "new"
+
+    # Optimistic-cursor trap: full previous page, but the next page is empty.
+    exhausted = merge_lane_page(
+        {**lane, "next_cursor": "old"}, {"events": [], "next_cursor": "echo"}
+    )
+    assert exhausted["next_cursor"] is None
+    assert len(exhausted["events"]) == 1
+
+
+def test_load_more_hidden_when_all_exhausted() -> None:
+    """has_more is true while any lane still has a cursor."""
+    assert has_more([{"next_cursor": "c"}, {"next_cursor": None}]) is True
+    assert has_more([{"next_cursor": None}, {"next_cursor": None}]) is False
+    assert has_more([]) is False
+
+
+# ---------------------------------------------------------------------------
 # UI-6 — time range
 # ---------------------------------------------------------------------------
 
 
-def test_resolve_range_presets() -> None:
-    """Presets produce a window ending at ``now``."""
+def test_resolve_range_all_time() -> None:
+    """All time (and any non-custom value) yields no lower bound, ending at ``now``."""
     now = datetime(2026, 3, 31, 12, 0, tzinfo=timezone.utc)
-    for preset, days in (("7d", 7), ("30d", 30), ("90d", 90)):
-        start, end = resolve_range(preset, now=now)
+    for value in (ALL_TIME, "bogus", ""):
+        start, end = resolve_range(value, now=now)
+        assert start is None
         assert end == now
-        assert start == now - timedelta(days=days)
 
 
 def test_resolve_range_custom() -> None:

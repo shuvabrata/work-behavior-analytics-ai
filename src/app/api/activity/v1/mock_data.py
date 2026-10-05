@@ -65,7 +65,8 @@ MOCK_SCENARIOS: tuple[str, ...] = (
 
 _CURSOR_SEPARATOR = "|"
 _NAMESPACE = uuid.UUID("6f6e6d6f-636b-4d61-7461-000000000001")
-_DEFAULT_RANGE_DAYS = 30.0
+# "All time" (no ``from``): synthesise a deep history so pagination is exercisable.
+_ALL_TIME_RANGE_DAYS = 365.0
 
 
 class UnknownMockScenarioError(ValueError):
@@ -394,12 +395,16 @@ def _paginate(
 
 
 def build_timeline(request: TimelineRequest, scenario: str) -> TimelineResponse:
-    """Build a deterministic :class:`TimelineResponse` for ``scenario``."""
+    """Build a deterministic :class:`TimelineResponse` for ``scenario``.
+
+    With no ``from`` the request means *All time*; the mock synthesises a deep,
+    fixed-length history so "Load more" keeps yielding older events for QA.
+    """
     end = _as_utc(request.to) if request.to else datetime.now(timezone.utc)
     start = (
         _as_utc(request.from_)
         if request.from_
-        else end - timedelta(days=_DEFAULT_RANGE_DAYS)
+        else end - timedelta(days=_ALL_TIME_RANGE_DAYS)
     )
     if start > end:
         start, end = end, start

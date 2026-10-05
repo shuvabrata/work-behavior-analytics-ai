@@ -80,20 +80,21 @@ backend Phases 0–2.
 | 6 | Entity search | Live debounced typeahead → `/api/v1/activity/suggest` (min 2 chars, ~300 ms) |
 | 7 | Selection UI | **Lane headers are the selection** (avatar/icon + label + type tag + ✕); no chip row; "Clear all" link + max-lane hint in the selector bar; **no event count** |
 | 8 | Initial state | Empty state + prompt; `?wba_ids=` deep link pre-loads lanes |
-| 9 | Toolbar | Range (7/30/90/Custom, default **30**) + Group by (Day/Week/Month, default **Day**) + Scope; **no zoom** |
+| 9 | Toolbar | Range filter (**All time** default, or **Custom** from/to dates; no 7/30/90 presets) + Group by (Day/Week/Month, default **Day**) + Scope; **no zoom** |
 | 10 | Group by | Sets row granularity + idle-separator unit; **client-side re-bucket, no refetch**. Range/scope changes → refetch |
 | 11 | Card | 2 lines: `summary` (fallback if null) then `EntityType(colored) · relationship · time`; lane-color left accent |
 | 12 | Card interaction | Hover popup (details + "Open source ↗"); click → **`/app/graph` in a new tab** (entity deep-link later) |
 | 13 | Empty cells | Faint dashed lane guide; wholly-empty lane → "No activity in this range" note |
 | 14 | Overflow | Cap ~3 cards/cell + **"+N more"** revealing *already-loaded* events only |
-| 15 | Pagination | Global **"Load more"** advancing all lanes via per-lane single-lane requests |
+| 15 | Pagination | Global **"Load more"** advancing all lanes via per-lane single-lane requests; walks **backward through all history** until the server is exhausted, or to the lower edge of a Custom range |
 | 16 | Loading / errors | Overlay spinner; danger alert preserving last good render |
 | 17 | Scroll | Page scrolls; lane headers sticky-top; time axis sticky-left |
 | 18 | Theme | Token-driven light/dark via `executive-dashboard.css` |
 | 19 | Entry | Analytics gallery card + "Open Visualization" only. Range/Group/Scope are chosen on the timeline page toolbar; the URL is an **inbound-only** deep-link contract. *(Amended: the gallery "Show Options" presets were removed to avoid two sources of truth for the same settings.)* |
-| 20 | Deep links | **Inbound only** (`wba_ids`, `range`, `group`, `scope`, `from`, `to`); outbound "View Timeline" buttons deferred |
+| 20 | Deep links | **Inbound only** (`wba_ids`, `group`, `scope`, `from`, `to`); outbound "View Timeline" buttons deferred. *(Amended: the `range` preset param is gone with the presets — a bounded window is expressed as `from`/`to`.)* |
 | 21 | In-day order | Newest-first |
 | 22 | Verification | Unit-test pure helpers in pytest; manual-validate visuals per phase |
+| 23 | Range semantics | **Range is a filter, not a paging horizon.** Default *All time* sends **no `from`** — the first page is the newest `limit` events per lane and "Load more" pages backward without an artificial floor (keyset cursors make each page index-bounded, so no floor is needed for performance). A **Custom** from/to is the only thing that bounds the window; Load more stops at its edge. *(Amended after UI-9: the 7/30/90 presets were an arbitrary lower bound that made the chosen range disagree with the visible data — see "Load more vs Range" below.)* |
 
 **Minor defaults (tunable during review):** cell cap **N=3**; lane colors assigned by
 selection order from a 5-color palette; unknown entity types → neutral gray; short
@@ -192,6 +193,26 @@ this call is a client bug, not a transient API failure.
    `summary = display_name`, `entity_type` = the lane entity's own type, `url`
    extracted from `attributes.url`, and a populated `details` snapshot
    (`service.py:188-210`).
+7. **`from` is optional — omit it for "all time".** `fetch_actions_for_entity`
+   receives `from_time=request.from_` (`service.py:271-276`); `None` means no lower
+   bound, and the query is still keyset-bounded to `limit` rows per lane. So
+   "page backward through all history" needs **no backend change** — only the UI
+   must stop sending a default `from`.
+
+### Load more vs Range (design rationale, decision #23)
+
+The two controls are orthogonal and must not overlap:
+
+- **Range** answers *"which period do I care about?"* — either *All time* (no
+  bound) or a user-picked Custom from/to. It is a filter.
+- **Load more** answers *"show me more of what I'm looking at"* — it walks
+  **backward** through the events that pass the filter, `limit` per lane per click,
+  until every lane's cursor clears.
+
+The earlier 7/30/90 presets conflated the two: page 1 is only `limit` (=20) events
+per lane, so a "Last 30 days" range could render as 3 rows and look broken until
+the user clicked Load more several times. With the presets gone, the window and
+the visible data stop disagreeing: the only bound is one the user explicitly chose.
 
 ---
 
@@ -515,7 +536,8 @@ Stop and report back (do not improvise) if:
       `timeline-controls-collapse`) — the gallery renders every card on one page, so
       ids must not collide with the `collab-*` controls. A callback builds the href
       with `urlencode({"range": …, "group": …, "scope": …})`. (URL is consumed in
-      UI-11; until then it simply navigates.)
+      UI-11; until then it simply navigates.) — **Superseded** (decisions #19/#23): no
+      gallery controls and no `range` param; the toolbar owns All time / Custom dates.
 
 #### Unit tests
 
@@ -748,7 +770,8 @@ Only the six rows above are reachable through the mocked typeahead.
       (and the UI shows the danger alert without losing the last good render).
 - [x] **V2P.4** Existing unit/integration suites are unaffected (default off).
 
-> Scenarios are anchored to the selected range: `gap_30d` needs **Last 90 days**;
+> Scenarios are anchored to the selected range: `gap_30d` needs a Custom range
+> spanning **>35 days** (or its own tooltip to extend the generated span);
 > `spike_100` / `cell_boundary` need a per-lane `limit` ≥ 20. The `?mock=` switch is
 > reachable from the UI only once UI-2 forwards it from the page URL (UI-2 task 8);
 > until then use it directly against the API.
@@ -774,7 +797,8 @@ with placeholder cards. Loading + error handling.
 #### Tasks
 
 - [x] **1.** `fetch_timeline` calls `GET /api/v1/activity/timeline?wba_ids=…&scope=…&from=…&to=…&limit=20`;
-      returns parsed `lanes` + `meta`. Default range = last 30 days, scope = activity.
+      returns parsed `lanes` + `meta`. *(Amended, decision #23: default is **All time** —
+      no `from` until the user picks a Custom range; scope = activity.)*
 - [x] **2.** Store `timeline-data-store`: `{lanes: [{wba_id, label, avatar_url, entity_type, events, next_cursor}], params, time_range}`.
 - [x] **3.** `bucket_by_period(lanes, granularity)` → ordered list of *period rows*
       (union of all lanes' buckets), each row = `{period_key, label, cells: {wba_id: [events]}}`.
@@ -1027,9 +1051,9 @@ UI-4 is verified by the `V4.*` items only.
 
 ### UI-6 — Toolbar: time range & scope (est. 0.5 day)
 
-**Objective:** Range presets + custom picker; Activity/History scope; refetch semantics.
+**Objective:** All-time + custom date range filter; Activity/History scope; refetch semantics.
 
-**Progress:** [x] Complete (V6.4 deferred to UI-9)
+**Progress:** [x] Complete — presets removed (decision #23); V6.1–V6.4 re-verified
 
 #### Files
 
@@ -1037,46 +1061,76 @@ UI-4 is verified by the `V4.*` items only.
 |------|--------|---------|
 | `src/app/dash_app/pages/timeline/layout.py` | Modify | Toolbar row |
 | `src/app/dash_app/pages/timeline/callbacks.py` | Modify | Range/scope change → refetch |
-| `src/app/dash_app/pages/timeline/helpers.py` | Modify | `resolve_range(preset, custom_from, custom_to)` |
+| `src/app/dash_app/pages/timeline/helpers.py` | Modify | `resolve_range(range_value, custom_from, custom_to)` |
 
 #### Tasks
 
-- [x] **1.** Toolbar: `dbc.Select` Time Range (Last 7 / 30 / 90 days, Custom…) +
-      native **From/To** date inputs revealed only for Custom; a segmented
-      Activity/History control. *(The original plan used `dcc.DatePickerRange`; replaced
-      with two `dbc.Input(type="date")` to match the Search page's FROM/TO filter and
-      the app's theme-aware `.form-control` styling — ids `timeline-range-from` /
-      `timeline-range-to`.)*
-- [x] **2.** `resolve_range` maps presets to `(from, to)` ending at Now; Custom yields
-      the picked dates (validated: start ≤ end).
+- [x] **1.** Toolbar: `dbc.Select` Range (**All time** / **Custom…**) + native
+      **From/To** date inputs revealed only for Custom; a segmented Activity/History
+      control. *(The original plan used `dcc.DatePickerRange`; replaced with two
+      `dbc.Input(type="date")` to match the Search page's FROM/TO filter and the app's
+      theme-aware `.form-control` styling — ids `timeline-range-from` /
+      `timeline-range-to`. Amended: the 7/30/90 options are removed.)*
+- [x] **2.** `resolve_range` returns `(None, now_utc)` for **All time** (no `from`
+      sent → unbounded backward) and the picked `(from, to)` for Custom (validated:
+      start ≤ end). *(Amended: the 7/30/90 preset branch is removed.)*
 - [x] **3.** Changing range or scope resets pagination cursors and refetches all lanes
       with `from`/`to`/`scope`. First page only.
 - [x] **4.** Group by (UI-7) is **not** wired here; keep it a client-side concern.
 
-> Notes: the toolbar is a new row under the selector bar (Range select + hidden Custom
-> **From/To** native date inputs + a segmented Activity/History control; ids
-> `timeline-range` / `timeline-range-from` / `timeline-range-to` / `timeline-scope`,
-> wrapper `timeline-custom-range-wrapper`). The Scope control is a **segmented button
-> group** (`.timeline-segment`) with an **(i)** tooltip explaining Activity vs History.
-> `?scope=` on the page URL now seeds the Scope control (`?range=` is UI-11). Changing
-> range/scope replaces the data store, which is already "first page"; the explicit cursor
-> reset is exercised once UI-9 adds cursors.
+> Notes: the toolbar holds a Range select + hidden Custom **From/To** native date inputs
+> + a segmented Activity/History control (ids `timeline-range` /
+> `timeline-range-from` / `timeline-range-to` / `timeline-scope`, wrapper
+> `timeline-custom-range-wrapper`). The Scope control is a **segmented button group**
+> (`.timeline-segment`) with an **(i)** tooltip explaining Activity vs History.
+> `?scope=` on the page URL now seeds the Scope control (`?from=`/`?to=` are UI-11).
+> Changing range/scope replaces the data store, which is already "first page"; the explicit
+> cursor reset is exercised once UI-9 adds cursors.
 
 #### Unit tests
 
-- [x] `test_resolve_range_presets` — 7/30/90 produce windows ending at Now.
+- [x] `test_resolve_range_all_time` — *All time* returns `(None, now)` (no lower bound).
 - [x] `test_resolve_range_custom` — explicit from/to passed through; invalid reversed range rejected.
 
 #### Manual validation
 
-- [x] **V6.1** Switching to "Last 7 days" refetches and hides older rows.
-- [x] **V6.2** Custom reveals date pickers; picking a range refetches.
+- [x] **V6.1** *All time* is the default and loads without a `from` bound; the newest rows show first.
+- [x] **V6.2** Custom reveals date pickers; picking a range refetches to that window only.
 - [x] **V6.3** Toggling Activity/History re-renders cards (History cards show STATE_CHANGE/"Updated").
-- [ ] **V6.4** Changing range/scope resets "Load more" back to the first page.
+- [x] **V6.4** Changing range/scope resets "Load more" back to the first page.
 
-> **Deferred:** V6.4 depends on UI-9's "Load more" (pagination) — verify it after UI-9.
+> **Deferred:** V6.4 depends on UI-9's "Load more" (pagination) — verified after UI-9.
 
 > **Mock scenarios:** V6.1/V6.2 `even`; V6.3 `history`; V6.4 `pagination`.
+
+#### Amendment — implementation plan (decision #23)
+
+The presets are removed and Range becomes an optional date filter. Concrete steps:
+
+1. **`helpers.py`** — `resolve_range` gains an *All time* branch returning
+   `(None, now_utc)`; delete the `RANGE_PRESETS` table (`7d/30d/90d`) and keep
+   `CUSTOM_RANGE`. Replace the `extract_range(search) -> str | None` URL helper with
+   `extract_from(search)` / `extract_to(search)` (ISO dates, `None` when absent), so
+   the URL contract matches `from`/`to` rather than a preset name.
+2. **`layout.py`** — Range `dbc.Select` options become **All time** (value `all`,
+   default) + **Custom…** (value `custom`); the existing hidden `timeline-range-from`
+   / `timeline-range-to` native date inputs remain, revealed only for Custom.
+3. **`callbacks.py`** — `load_timeline` and `load_more` include `from` in the request
+   **only when it is set** (skip the default). `toggle_custom_range` keys off `all`
+   vs `custom` instead of the old preset values. `sync_range_from_url` seeds the
+   control from `from`/`to` (Custom) or All time.
+4. **`mock_data.py`** — treat `request.from_ is None` as **unbounded** (do not force
+   `_DEFAULT_RANGE_DAYS`); generate a deep, deterministic history anchored to a fixed
+   end so "Load more" keeps yielding older events. Add a dev-only scenario
+   (`deep_history`) if a bounded tweak is preferable to changing `from=None` globally.
+5. **Tests** — replace `test_resolve_range_presets` with `test_resolve_range_all_time`;
+   keep `test_resolve_range_custom`; add `extract_from`/`extract_to` coverage; adjust
+   any `extract_range` references.
+6. **Gates** — `pytest -m unit tests`, `mypy src/`, `pylint src --score=y`, `flake8`,
+   `bandit -c .bandit.yml -r src/ -lll`, and `create_dash_app()._setup_server()`.
+
+**Out of scope here:** the deep-link application (UI-11) still consumes `from`/`to`;
+only its parsing target changes.
 
 ---
 
@@ -1117,7 +1171,7 @@ UI-4 is verified by the `V4.*` items only.
 - [x] **V7.2** Idle separators change unit ("3 days" → "2 weeks" → "1 month").
 - [x] **V7.3** No data is lost or duplicated when regrouping.
 
-> **Mock scenarios:** V7.1 `even`; V7.2 `gap_30d` (needs Last 90 days) or
+> **Mock scenarios:** V7.1 `even`; V7.2 `gap_30d` (needs a Custom range >35 days) or
 > `gaps_global`; V7.3 `cell_boundary` (many events per day across granularities).
 
 ---
@@ -1162,9 +1216,11 @@ UI-4 is verified by the `V4.*` items only.
 
 ### UI-9 — Pagination: global "Load more" (est. 0.5 day)
 
-**Objective:** Fetch older events for all lanes together via per-lane cursors.
+**Objective:** Walk backward through all history for every lane, one per-lane cursor
+at a time, stopping at the server's oldest event (All time) or at a Custom range's
+lower edge.
 
-**Progress:** [ ] Not started
+**Progress:** [x] Complete
 
 #### Files
 
@@ -1177,35 +1233,51 @@ UI-4 is verified by the `V4.*` items only.
 
 #### Tasks
 
-- [ ] **1.** Button at the bottom of the grid: "▼ Load more events".
-- [ ] **2.** On click, for each lane with a non-null `next_cursor`, issue a
+- [x] **1.** Button at the bottom of the grid: "▼ Load more events".
+- [x] **2.** On click, for each lane with a non-null `next_cursor`, issue a
       **single-lane** request (`wba_ids=<lane>&cursor=<lane.next_cursor>&from&to&scope&limit`)
       and merge results into that lane. Requests run sequentially (≤5).
-- [ ] **3.** `merge_lane_page` appends new events and updates the lane's `next_cursor`,
+- [x] **3.** `merge_lane_page` appends new events and updates the lane's `next_cursor`,
       de-duplicating by `signal_id`. **If the single-lane response returns an empty
       `events` list, set that lane's `next_cursor = None`** instead of storing the
       cursor the server echoed — the server's `next_cursor` is optimistic (see
       "Current state" constraint 4), and clearing it is what lets Task 4's button
       actually hide.
-- [ ] **4.** Button hidden when every lane's `next_cursor` is null; shows a spinner/disabled
+- [x] **4.** Button hidden when every lane's `next_cursor` is null; shows a spinner/disabled
       state while requests are in flight.
-- [ ] **5.** Range/scope/selection changes reset cursors to the first page.
+- [x] **5.** Range/scope/selection changes reset cursors to the first page.
+- [x] **6.** *(Amended, decision #23)* Load more walks **backward through all history**
+      when the Range filter is *All time* (no `from` sent). It is bounded only by the
+      Custom range's lower edge or by the server running out of events.
+- [x] **7.** **Preserve the reader's scroll position on Load more.** Dash replaces the
+      whole `timeline-grid-body.children` list on every data change, which could yank
+      the grid's internal scroll back to the first row. A click records
+      `timeline-grid-scroll.scrollTop`; a clientside callback restores it after the
+      re-render. A *refetch* (selection/range/scope change) instead pins the grid to
+      the top — only "Load more" preserves position.
 
 #### Unit tests
 
-- [ ] `test_merge_lane_page_dedup` — overlapping `signal_id`s are not double-counted.
-- [ ] `test_merge_updates_cursor`.
-- [ ] `test_load_more_hidden_when_all_exhausted`.
+- [x] `test_merge_lane_page_dedup` — overlapping `signal_id`s are not double-counted.
+- [x] `test_merge_updates_cursor`.
+- [x] `test_load_more_hidden_when_all_exhausted`.
 
 #### Manual validation
 
-- [ ] **V9.1** Clicking "Load more" appends older rows across all lanes; no duplicates.
-- [ ] **V9.2** The button disappears once every lane is exhausted.
-- [ ] **V9.3** Changing the range resets to page 1.
+- [x] **V9.1** Clicking "Load more" appends older rows across all lanes; no duplicates.
+- [x] **V9.2** The button disappears once every lane is exhausted.
+- [x] **V9.3** Changing the range filter (All time → Custom, or Custom → All time) resets to page 1.
+- [x] **V9.4** Load more preserves the reader's scroll position (no jump to the first row).
 
 > **Mock scenarios:** V9.1–V9.3 `pagination` — lane 0 spans 3 pages, lane 1 has
 > exactly `limit` events (the *optimistic cursor* trap: page 2 is empty), lane 2 is a
 > short page.
+>
+> **Mock gap:** `build_timeline` currently derives a 30-day span when `from` is absent
+> (`_DEFAULT_RANGE_DAYS`). To QA "unbounded backward" it must honour **All time**
+> (no `from` → generate a long/arbitrary-depth history, e.g. anchored to a fixed
+> end so paging keeps yielding older events). Add a scenario (e.g. `deep_history`)
+> or make `from=None` produce an unbounded set. This is a dev-only mock tweak.
 
 ---
 
@@ -1248,7 +1320,7 @@ UI-4 is verified by the `V4.*` items only.
 
 ### UI-11 — Inbound deep-linking (est. 0.5 day)
 
-**Objective:** Parse and apply URL params on load from the gallery presets and external links.
+**Objective:** Parse and apply URL params on load for inbound deep links.
 
 **Progress:** [ ] Not started
 
@@ -1262,8 +1334,9 @@ UI-4 is verified by the `V4.*` items only.
 #### Tasks
 
 - [ ] **1.** Read `dcc.Location(id="url").search` (clientside/`Input`) and parse
-      `wba_ids` (comma-separated), `range` (`7d|30d|90d|custom`), `group`
-      (`day|week|month`), `scope` (`activity|history`), `from`, `to`.
+      `wba_ids` (comma-separated), `group` (`day|week|month`), `scope`
+      (`activity|history`), `from`, `to`. *(Amended, decision #23: the `range` preset
+      param is removed; a bounded window is expressed directly as `from`/`to`.)*
 - [ ] **2. Validate `wba_ids` client-side before fetching.** The router rejects the
       **whole** request with HTTP 400 if *any* id is malformed (`router.py:69-88`), so
       "drop only the bad lane" is impossible unless the UI pre-validates. Add a pure
@@ -1282,21 +1355,21 @@ UI-4 is verified by the `V4.*` items only.
       This guard is necessary because `url.search` is an `Input` that also fires when
       the global-search box writes it (`layout.py:227-239`) and on any later
       navigation — without it, re-applying would clobber the user's in-page state.
-- [ ] **4.** *(Amended)* The gallery "Show Options" href was **removed** — the card is a plain launcher. Inbound URL params (`range`/`group`/`scope`/`from`/`to`) seed the page controls (`range`/`scope` done in UI-6; `group` in UI-7; `from`/`to` here).
+- [ ] **4.** *(Amended)* The gallery "Show Options" href was **removed** — the card is a plain launcher. Inbound URL params (`group`/`scope`/`from`/`to`) seed the page controls (`scope` done in UI-6; `group` in UI-7; `from`/`to` here).
 
 #### Unit tests
 
 - [ ] `test_parse_deeplink_full` — all params parsed.
 - [ ] `test_parse_deeplink_missing_wba` — returns empty selection, no crash.
-- [ ] `test_parse_deeplink_bad_range` — unknown preset falls back to default 30d.
+- [ ] `test_parse_deeplink_custom_dates` — `from`/`to` parsed; a bad or reversed pair falls back to *All time*.
 - [ ] `test_is_valid_wba_id` — `"jira::Person::x"` valid; `"bad"`, `"a::b"`, and
       `"jira::::x"` invalid (mirrors `service.parse_wba_id`).
 
 #### Manual validation
 
 - [ ] **V11.1** Navigating to `/app/analytics/timeline?wba_ids=jira::Person::…,jira::Person::…` pre-loads those lanes.
-- [ ] **V11.2** `?range=7d&group=week&scope=history` applies range, grouping, and scope.
-- [ ] **V11.3** An external link carrying `?range=&group=&scope=` opens with the page controls set accordingly (the gallery no longer generates these).
+- [ ] **V11.2** `?group=week&scope=history&from=…&to=…` applies the date filter, grouping, and scope.
+- [ ] **V11.3** An external link carrying `?group=&scope=&from=&to=` opens with the page controls set accordingly (the gallery no longer generates these).
 - [ ] **V11.4** A bad lane id is dropped with a warning; the rest load.
 
 > **Mock scenarios:** V11.1 use the `suggest_variants` ids from UI-2P's

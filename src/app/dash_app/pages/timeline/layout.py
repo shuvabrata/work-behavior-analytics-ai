@@ -88,9 +88,7 @@ _TOOLBAR_LABEL_STYLE: dict[str, Any] = {
 }
 
 _RANGE_OPTIONS: list[dict[str, str]] = [
-    {"label": "Last 7 days", "value": "7d"},
-    {"label": "Last 30 days", "value": "30d"},
-    {"label": "Last 90 days", "value": "90d"},
+    {"label": "All time", "value": "all"},
     {"label": "Custom…", "value": "custom"},
 ]
 
@@ -349,6 +347,9 @@ def get_layout() -> html.Div:
                 role="tooltip",
             ),
             html.Div(id="timeline-popup-dummy", style={"display": "none"}),
+            # Dummy output target for the "preserve scroll on Load more" clientside
+            # callback (UI-9 follow-up).
+            html.Div(id="timeline-scroll-dummy", style={"display": "none"}),
             # Dummy output target for the install-once keyboard-navigation
             # clientside callback (ArrowUp/Down/Enter over the suggestion list).
             html.Div(id="timeline-keyboard-dummy", style={"display": "none"}),
@@ -421,7 +422,7 @@ def _toolbar() -> html.Div:
                     dbc.Select(
                         id="timeline-range",
                         options=_RANGE_OPTIONS,
-                        value="30d",
+                        value="all",
                         size="sm",
                         style={"minWidth": "150px"},
                     ),
@@ -765,6 +766,26 @@ def build_grid_body(  # pylint: disable=too-many-arguments,too-many-locals
                         )
                     )
     return children
+
+
+def build_load_more() -> html.Div:
+    """The global "Load more events" button spanning the whole grid row.
+
+    Fetches older events for every lane that still has a cursor (UI-9). It is
+    appended by the grid renderer only while :func:`helpers.has_more` is true.
+    """
+    return html.Div(
+        html.Button(
+            [
+                html.I(className="fas fa-chevron-down timeline-load-more-chevron"),
+                html.Span("Load more events"),
+            ],
+            id="timeline-load-more",
+            n_clicks=0,
+            className="timeline-load-more",
+        ),
+        style={"gridColumn": "1 / -1"},
+    )
 
 
 def build_lane_header(item: dict[str, Any], lane_color: str) -> html.Div:

@@ -289,17 +289,30 @@ def extract_scope(search: str | None) -> str:
     return scope if scope in ("activity", "history") else "activity"
 
 
-def extract_range(search: str | None) -> str | None:
-    """Return a valid ``range`` preset from the URL, else ``None``.
-
-    Valid values are the :data:`RANGE_PRESETS` keys plus ``custom``. Used to seed
-    the Range control for inbound deep-links (no gallery presets any more).
-    """
-    values = parse_qs((search or "").lstrip("?")).get("range") or []
+def _extract_iso_date(search: str | None, key: str) -> str | None:
+    """Return a valid ISO date query-param from the URL, else ``None``."""
+    values = parse_qs((search or "").lstrip("?")).get(key) or []
     if not values:
         return None
     value = values[0]
-    return value if value in (*RANGE_PRESETS, CUSTOM_RANGE) else None
+    try:
+        date.fromisoformat(value)
+    except ValueError:
+        return None
+    return value
+
+
+def extract_from(search: str | None) -> str | None:
+    """Return a valid ISO ``from`` date from the URL, else ``None``.
+
+    Seeds the Custom range start for inbound deep-links; absence means *All time*.
+    """
+    return _extract_iso_date(search, "from")
+
+
+def extract_to(search: str | None) -> str | None:
+    """Return a valid ISO ``to`` date from the URL, else ``None``."""
+    return _extract_iso_date(search, "to")
 
 
 def extract_group(search: str | None) -> str | None:
@@ -532,11 +545,44 @@ def is_cell_expanded(
 
 
 # ---------------------------------------------------------------------------
+# Pagination (UI-9)
+# ---------------------------------------------------------------------------
+
+
+def merge_lane_page(
+    lane: dict[str, Any], page_lane: dict[str, Any]
+) -> dict[str, Any]:
+    """Append one fetched page into a lane, de-duplicating by ``signal_id``.
+
+    The server's ``next_cursor`` is optimistic — it is echoed whenever a full
+    page is returned, even if no further rows exist. When the page carries **no
+    events**, this clears the cursor (``None``) instead of storing what the
+    server echoed, which is what lets the "Load more" button actually hide.
+    """
+    events = list(lane.get("events") or [])
+    seen = {event.get("signal_id") for event in events}
+    for event in page_lane.get("events") or []:
+        signal_id = event.get("signal_id")
+        if signal_id in seen:
+            continue
+        seen.add(signal_id)
+        events.append(event)
+    page_events = page_lane.get("events") or []
+    next_cursor = None if not page_events else page_lane.get("next_cursor")
+    return {**lane, "events": events, "next_cursor": next_cursor}
+
+
+def has_more(lanes: list[dict[str, Any]]) -> bool:
+    """Return whether any lane still has a cursor to page from."""
+    return any(lane.get("next_cursor") for lane in lanes)
+
+
+# ---------------------------------------------------------------------------
 # Time range (UI-6)
 # ---------------------------------------------------------------------------
 
-# Preset → number of days, all ending at "now".
-RANGE_PRESETS: dict[str, int] = {"7d": 7, "30d": 30, "90d": 90}
+# Range control values: "all" (default, unbounded) or "custom" (explicit dates).
+ALL_TIME = "all"
 CUSTOM_RANGE = "custom"
 
 
@@ -549,21 +595,22 @@ def _date_bound(value: str, *, end_of_day: bool) -> datetime:
 
 
 def resolve_range(
-    preset: str,
+    range_value: str,
     custom_from: str | None = None,
     custom_to: str | None = None,
     *,
     now: datetime | None = None,
-) -> tuple[datetime, datetime]:
-    """Resolve a range preset (or custom dates) to ``(from_dt, to_dt)`` in UTC.
+) -> tuple[datetime | None, datetime]:
+    """Resolve the Range control to ``(from_dt, to_dt)`` in UTC.
 
-    Presets (``7d``/``30d``/``90d``) end at ``now`` (defaults to the current UTC
-    time). ``custom`` uses the supplied ISO dates — start at 00:00:00, end at
-    23:59:59 — and raises ``ValueError`` if either is missing or start > end.
+    *All time* (the default) returns ``(None, now)`` — no lower bound, so the
+    server pages backward through all history (decision #23). ``custom`` uses the
+    supplied ISO dates — start at 00:00:00, end at 23:59:59 — and raises
+    ``ValueError`` if either is missing or start > end.
     """
     now_dt = now or datetime.now(timezone.utc)
-    if preset in RANGE_PRESETS:
-        return now_dt - timedelta(days=RANGE_PRESETS[preset]), now_dt
+    if range_value != CUSTOM_RANGE:
+        return None, now_dt
     if not custom_from or not custom_to:
         raise ValueError("custom range requires both start and end dates")
     start = _date_bound(custom_from, end_of_day=False)

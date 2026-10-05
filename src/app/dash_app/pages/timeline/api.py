@@ -53,7 +53,8 @@ def fetch_suggestions(query: str, limit: int = _DEFAULT_LIMIT) -> list[dict[str,
 
     params: dict[str, str | int] = {"q": term, "limit": limit}
     try:
-        response = requests.get(
+        # Bandit's B113 only recognises literal timeouts; ours is runtime-configured.
+        response = requests.get(  # nosec B113
             f"{get_api_base_url()}/api/v1/activity/suggest",
             params=params,
             timeout=runtime_settings.get_int("HTTP_REQUEST_TIMEOUT"),
@@ -110,7 +111,8 @@ def fetch_timeline(
         params["mock"] = mock
 
     try:
-        response = requests.get(
+        # Bandit's B113 only recognises literal timeouts; ours is runtime-configured.
+        response = requests.get(  # nosec B113
             f"{get_api_base_url()}/api/v1/activity/timeline",
             params=params,
             timeout=runtime_settings.get_int("HTTP_REQUEST_TIMEOUT"),

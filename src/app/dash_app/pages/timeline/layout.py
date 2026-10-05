@@ -671,7 +671,7 @@ def _cell_more_link(
         },
         n_clicks=0,
         className="timeline-cell-more expanded" if expanded else "timeline-cell-more",
-        title="Collapse to 3" if expanded else "Expand to show all loaded events",
+        title="Show fewer events" if expanded else "Expand to show all loaded events",
         **aria_attrs,
     )
 

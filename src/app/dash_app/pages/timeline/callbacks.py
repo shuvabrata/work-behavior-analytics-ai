@@ -77,7 +77,7 @@ from common.logger import logger
 
 _SUGGESTION_LIMIT = 10
 _FALLBACK_THEME = "executive-light"
-_MAX_LANE_HINT = "🔒 Maximum 5 lanes — remove one first"
+_MAX_LANE_HINT = "Maximum 5 — remove one to add another."
 
 _SUGGESTIONS_VISIBLE_STYLE: dict[str, Any] = {
     "position": "absolute",
@@ -574,8 +574,17 @@ def load_timeline(
         logger.warning(f"[Timeline] timeline fetch failed: {exc}")
         bad_wba_id = exc.wba_id
         if bad_wba_id and len(current) > 1:
+            # Show the user's own label, never the internal source::Type::id key.
+            dropped_label = next(
+                (
+                    str(item.get("label") or bad_wba_id)
+                    for item in current
+                    if item.get("wba_id") == bad_wba_id
+                ),
+                bad_wba_id,
+            )
             alert = create_alert(
-                f"Lane {bad_wba_id} was rejected and removed. Please re-add it.",
+                f"Couldn't load {dropped_label} and removed it. Please re-add it.",
                 color="warning",
                 dismissable=True,
             )
@@ -638,9 +647,11 @@ def apply_deeplink(
     alerts: list[Any] = []
     dropped = params["dropped"]
     if dropped:
+        count = len(dropped)
+        noun = "link" if count == 1 else "links"
         alerts.append(
             create_alert(
-                f"Ignored {len(dropped)} invalid id(s): {', '.join(dropped)}",
+                f"Skipped {count} unrecognised {noun} in this URL.",
                 color="warning",
                 dismissable=True,
             )

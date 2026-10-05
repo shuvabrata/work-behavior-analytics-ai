@@ -682,6 +682,7 @@ def build_idle_bar(run: dict[str, Any], *, expanded: bool = False) -> html.Butto
     Rendered in both states so it stays the toggle target — expanding shows the
     hidden rows *below* the bar and flips the chevron; clicking again collapses.
     """
+    aria_attrs: Any = {"aria-expanded": "true" if expanded else "false"}
     return html.Button(
         [
             html.I(className="fas fa-chevron-down timeline-idle-chevron"),
@@ -690,7 +691,7 @@ def build_idle_bar(run: dict[str, Any], *, expanded: bool = False) -> html.Butto
         id={"type": "timeline-idle-toggle", "index": idle_run_key(run)},
         n_clicks=0,
         className="timeline-idle-bar expanded" if expanded else "timeline-idle-bar",
-        **{"aria-expanded": "true" if expanded else "false"},
+        **aria_attrs,
     )
 
 

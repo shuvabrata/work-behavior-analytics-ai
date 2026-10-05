@@ -657,6 +657,9 @@ def _cell_more_link(
     global "Load more"), hence the "loaded events" tooltip.
     """
     label = "Show less" if expanded else f"+{hidden} more"
+    # ``Any`` keeps mypy happy with the hyphenated ARIA attribute (mirrors the
+    # lane-remove button's ``remove_attrs``).
+    aria_attrs: Any = {"aria-expanded": "true" if expanded else "false"}
     return html.Button(
         [
             html.Span(label),
@@ -669,6 +672,7 @@ def _cell_more_link(
         n_clicks=0,
         className="timeline-cell-more expanded" if expanded else "timeline-cell-more",
         title="Collapse to 3" if expanded else "Expand to show all loaded events",
+        **aria_attrs,
     )
 
 
@@ -686,6 +690,7 @@ def build_idle_bar(run: dict[str, Any], *, expanded: bool = False) -> html.Butto
         id={"type": "timeline-idle-toggle", "index": idle_run_key(run)},
         n_clicks=0,
         className="timeline-idle-bar expanded" if expanded else "timeline-idle-bar",
+        **{"aria-expanded": "true" if expanded else "false"},
     )
 
 

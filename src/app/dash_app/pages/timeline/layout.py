@@ -20,7 +20,9 @@ from app.dash_app.components.common import (
     create_page_header,
 )
 from app.dash_app.pages.timeline.helpers import (
+    cap_cell,
     card_summary,
+    cell_expansion_key,
     entity_type_color,
     entity_type_icon,
     entity_type_label,
@@ -596,23 +598,32 @@ def build_event_card(
     )
 
 
-def build_cell(
+def build_cell(  # pylint: disable=too-many-arguments
     events: list[dict[str, Any]],
     lane_color: str,
     effective_nodes: dict[str, Any] | None,
     base_tokens: dict[str, Any],
     *,
     show_empty_note: bool = False,
+    expanded: bool = False,
+    row_key: str = "",
+    lane_key: str = "",
 ) -> html.Div:
     """One lane cell: the cards for a period, an empty-lane note, or a dashed
-    vertical guide continuing the lane through the gap."""
+    vertical guide continuing the lane through the gap.
+
+    UI-8 caps a cell at :data:`MAX_CELL_CARDS` cards and appends a "+N more"
+    toggle for the withheld, already-loaded events; ``expanded`` reveals them.
+    """
     if not events:
         if show_empty_note:
             return html.Div(
                 "No activity in this range", className="timeline-empty-note"
             )
         return html.Div(className="timeline-cell-guide")
-    cards = [
+    visible, hidden = cap_cell(events)
+    shown = list(events) if expanded else visible
+    cards: list[Any] = [
         build_event_card(
             event,
             lane_color,
@@ -620,9 +631,35 @@ def build_cell(
                 str(event.get("entity_type") or ""), effective_nodes, base_tokens
             ),
         )
-        for event in events
+        for event in shown
     ]
+    if hidden > 0:
+        cards.append(_cell_more_link(hidden, expanded, row_key, lane_key))
     return html.Div(cards, style=_CELL_STYLE)
+
+
+def _cell_more_link(
+    hidden: int, expanded: bool, row_key: str, lane_key: str
+) -> html.Button:
+    """The per-cell "+N more ▾" overflow toggle.
+
+    Expands the *already-loaded* events only (server paging stays with the
+    global "Load more"), hence the "loaded events" tooltip.
+    """
+    label = "Show less" if expanded else f"+{hidden} more"
+    return html.Button(
+        [
+            html.Span(label),
+            html.I(className="fas fa-chevron-down timeline-cell-more-chevron"),
+        ],
+        id={
+            "type": "timeline-cell-toggle",
+            "index": cell_expansion_key(row_key, lane_key),
+        },
+        n_clicks=0,
+        className="timeline-cell-more expanded" if expanded else "timeline-cell-more",
+        title="Collapse to 3" if expanded else "Expand to show all loaded events",
+    )
 
 
 def build_idle_bar(run: dict[str, Any], *, expanded: bool = False) -> html.Button:
@@ -650,6 +687,7 @@ def build_grid_body(  # pylint: disable=too-many-arguments,too-many-locals
     base_tokens: dict[str, Any],
     *,
     expanded_runs: list[str] | None = None,
+    expanded_cells: list[str] | None = None,
     granularity: str = "day",
 ) -> list[Any]:
     """Return the flat grid-item list for the body.
@@ -657,9 +695,11 @@ def build_grid_body(  # pylint: disable=too-many-arguments,too-many-locals
     One axis cell plus one cell per lane per period row, with collapsed idle-run
     separators inserted between rows (expanded runs render as empty period rows).
     A lane with no events at all shows a "No activity in this range" note in its
-    top cell; every other empty cell gets a dashed guide.
+    top cell; every other empty cell gets a dashed guide. Cells whose
+    ``(row, lane)`` key is in ``expanded_cells`` render all loaded events.
     """
     expanded = set(expanded_runs or [])
+    expanded_cell_set = set(expanded_cells or [])
     lane_ids = [str(lane.get("wba_id") or "") for lane in lanes]
     children: list[Any] = []
 
@@ -691,6 +731,7 @@ def build_grid_body(  # pylint: disable=too-many-arguments,too-many-locals
     for row in rows:
         children.append(build_row_axis_cell(str(row.get("label") or "")))
         cells = row.get("cells") or {}
+        row_key = str(row.get("period_key") or "")
         for wba_id in lane_ids:
             children.append(
                 build_cell(
@@ -699,6 +740,9 @@ def build_grid_body(  # pylint: disable=too-many-arguments,too-many-locals
                     effective_nodes,
                     base_tokens,
                     show_empty_note=first_row and lane_empty.get(wba_id, False),
+                    expanded=cell_expansion_key(row_key, wba_id) in expanded_cell_set,
+                    row_key=row_key,
+                    lane_key=wba_id,
                 )
             )
         first_row = False

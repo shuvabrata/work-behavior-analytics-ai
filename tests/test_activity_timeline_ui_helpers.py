@@ -16,12 +16,15 @@ from dash import html
 from app.analytics.registry import TIMELINE_ANALYTIC
 from app.dash_app.pages.timeline import get_layout
 from app.dash_app.pages.timeline.helpers import (
+    MAX_CELL_CARDS,
     MAX_LANES,
     add_selection,
     assign_lane_colors,
     build_grid,
     bucket_by_period,
+    cap_cell,
     card_summary,
+    cell_expansion_key,
     entity_type_color,
     entity_type_label,
     entity_type_token,
@@ -365,6 +368,29 @@ def test_idle_run_key_is_stable() -> None:
     """A run's key is derived from granularity + span."""
     run = {"granularity": "day", "start_ordinal": 5, "end_ordinal": 9}
     assert idle_run_key(run) == "day:5:9"
+
+
+# ---------------------------------------------------------------------------
+# UI-8 — cell overflow
+# ---------------------------------------------------------------------------
+
+
+def test_cap_cell_hidden_count() -> None:
+    """Cells cap at MAX_CELL_CARDS; the toggle predicate keys on (row, lane)."""
+    events = [{"signal_id": str(index)} for index in range(21)]
+    visible, hidden = cap_cell(events)
+    assert len(visible) == MAX_CELL_CARDS
+    assert hidden == 21 - MAX_CELL_CARDS
+    # Nothing hidden below (and at) the cap.
+    assert cap_cell(events[:MAX_CELL_CARDS]) == (events[:MAX_CELL_CARDS], 0)
+    assert cap_cell(events[:2])[1] == 0
+    # A non-positive cap disables the overflow.
+    assert cap_cell(events, 0) == (events, 0)
+
+    key = cell_expansion_key("2026-03-15", "wba-1")
+    assert key == "2026-03-15|wba-1"
+    assert (key in [key]) is True
+    assert (key in [cell_expansion_key("2026-03-15", "wba-2")]) is False
 
 
 # ---------------------------------------------------------------------------

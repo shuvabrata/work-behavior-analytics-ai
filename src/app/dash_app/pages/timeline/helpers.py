@@ -499,6 +499,39 @@ def toggle_expanded(expanded: list[str], key: str) -> list[str]:
 
 
 # ---------------------------------------------------------------------------
+# Cell overflow (UI-8)
+# ---------------------------------------------------------------------------
+
+# Maximum cards rendered per cell before the "+N more" link appears.
+MAX_CELL_CARDS = 3
+
+
+def cap_cell(
+    events: list[dict[str, Any]], cap: int = MAX_CELL_CARDS
+) -> tuple[list[dict[str, Any]], int]:
+    """Return ``(visible_events, hidden_count)`` for one cell.
+
+    ``visible_events`` is the first ``cap`` events; ``hidden_count`` is how many
+    already-loaded events are withheld. A non-positive ``cap`` hides nothing.
+    """
+    if cap <= 0:
+        return list(events), 0
+    return list(events[:cap]), max(0, len(events) - cap)
+
+
+def cell_expansion_key(row_key: str, lane_key: str) -> str:
+    """Return the expansion-state key for one cell, keyed by (row, lane)."""
+    return f"{row_key}|{lane_key}"
+
+
+def is_cell_expanded(
+    expanded: list[str], row_key: str, lane_key: str
+) -> bool:
+    """Return whether the (row, lane) cell is currently expanded."""
+    return cell_expansion_key(row_key, lane_key) in expanded
+
+
+# ---------------------------------------------------------------------------
 # Time range (UI-6)
 # ---------------------------------------------------------------------------
 

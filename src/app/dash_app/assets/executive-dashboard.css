@@ -1736,6 +1736,36 @@ input::placeholder {
     transform: rotate(180deg);
 }
 
+/* Activity Timeline — per-cell "+N more" overflow link (UI-8) */
+.timeline-cell-more {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    width: 100%;
+    margin-top: 2px;
+    padding: 2px 6px;
+    background: none;
+    border: none;
+    color: var(--color-gray-medium);
+    font-family: 'Inter', sans-serif;
+    font-size: 10px;
+    cursor: pointer;
+}
+
+.timeline-cell-more:hover {
+    color: var(--color-charcoal-medium);
+    text-decoration: underline;
+}
+
+.timeline-cell-more .timeline-cell-more-chevron {
+    transition: transform 0.15s ease;
+}
+
+.timeline-cell-more.expanded .timeline-cell-more-chevron {
+    transform: rotate(180deg);
+}
+
 /* ---------------------------------------------------------------------------
    Activity Timeline — Scope control rendered as a segmented button group
 --------------------------------------------------------------------------- */

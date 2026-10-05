@@ -1126,7 +1126,7 @@ UI-4 is verified by the `V4.*` items only.
 
 **Objective:** Cap visible cards per cell; expand loaded events on demand.
 
-**Progress:** [ ] Not started
+**Progress:** [x] Complete
 
 #### Files
 
@@ -1138,22 +1138,22 @@ UI-4 is verified by the `V4.*` items only.
 
 #### Tasks
 
-- [ ] **1.** Each cell shows up to **3** cards, then a "+N more ▾" link.
-- [ ] **2.** Click expands that cell to show all **already-loaded** events (may grow the row for all lanes); click again collapses.
-- [ ] **3.** Expansion state keyed by `(row_key, lane_key)` in
+- [x] **1.** Each cell shows up to **3** cards, then a "+N more ▾" link.
+- [x] **2.** Click expands that cell to show all **already-loaded** events (may grow the row for all lanes); click again collapses.
+- [x] **3.** Expansion state keyed by `(row_key, lane_key)` in
       `timeline-cell-expansion-store`; reset when selection/range/scope changes.
-- [ ] **4.** Server paging is **not** triggered here — that stays with global "Load more" (UI-9). Add a subtle note on the link's tooltip: "loaded events".
-- [ ] **5.** Do **not** render the link when `len(events) <= 3`.
+- [x] **4.** Server paging is **not** triggered here — that stays with global "Load more" (UI-9). Add a subtle note on the link's tooltip: "loaded events".
+- [x] **5.** Do **not** render the link when `len(events) <= 3`.
 
 #### Unit tests
 
-- [ ] `test_cap_cell_hidden_count` — returns (visible=3, hidden=N-3) and the toggle predicate.
+- [x] `test_cap_cell_hidden_count` — returns (visible=3, hidden=N-3) and the toggle predicate.
 
 #### Manual validation
 
-- [ ] **V8.1** A day with >3 events shows 3 cards + "+N more".
-- [ ] **V8.2** Clicking expands that cell only; the row grows while other lanes keep whitespace.
-- [ ] **V8.3** Collapsing restores the capped view; state resets on range change.
+- [x] **V8.1** A day with >3 events shows 3 cards + "+N more".
+- [x] **V8.2** Clicking expands that cell only; the row grows while other lanes keep whitespace.
+- [x] **V8.3** Collapsing restores the capped view; state resets on range change.
 
 > **Mock scenarios:** V8.1–V8.3 `cell_boundary` (days with 3/4/20/21 events);
 > `spike_100` for the stress case.

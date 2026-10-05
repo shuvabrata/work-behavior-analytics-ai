@@ -639,6 +639,7 @@ def populate_timeline_theme_store(
     Input("theme-store", "data"),
     Input("timeline-theme-store", "data"),
     Input("timeline-expanded-runs-store", "data"),
+    Input("timeline-cell-expansion-store", "data"),
     Input("timeline-group", "value"),
 )
 def render_grid(
@@ -647,6 +648,7 @@ def render_grid(
     theme_name: str | None,
     effective_theme: dict[str, Any] | None,
     expanded_runs: list[str] | None,
+    expanded_cells: list[str] | None,
     group_value: str | None,
 ) -> list[Any]:
     """Render the period grid from stored data (no refetch).
@@ -679,6 +681,7 @@ def render_grid(
         effective_nodes,
         tokens,
         expanded_runs=expanded_runs,
+        expanded_cells=expanded_cells,
         granularity=granularity,
     )
 
@@ -699,6 +702,45 @@ def toggle_idle_run(
     if not key:
         raise PreventUpdate
     return toggle_expanded(expanded or [], str(key))
+
+
+# ---------------------------------------------------------------------------
+# Cell overflow (UI-8) — expand one cell's already-loaded events
+# ---------------------------------------------------------------------------
+
+
+@callback(
+    Output("timeline-cell-expansion-store", "data"),
+    Input({"type": "timeline-cell-toggle", "index": ALL}, "n_clicks"),
+    State("timeline-cell-expansion-store", "data"),
+    prevent_initial_call=True,
+)
+def toggle_cell(
+    _clicks: list[Any],
+    expanded: list[str] | None,
+) -> list[str]:
+    """Expand/collapse a single grid cell (keyed by ``row_key|lane_key``)."""
+    triggered = _first_changed_trigger()
+    key = triggered.get("index") if isinstance(triggered, dict) else None
+    if not key:
+        raise PreventUpdate
+    return toggle_expanded(expanded or [], str(key))
+
+
+@callback(
+    Output("timeline-cell-expansion-store", "data", allow_duplicate=True),
+    Input("timeline-data-store", "data"),
+    Input("timeline-group", "value"),
+    Input("timeline-scope", "value"),
+    prevent_initial_call=True,
+)
+def reset_cell_expansion(*_changed: Any) -> list[Any]:
+    """Collapse every expanded cell when the data, grouping, or scope changes.
+
+    The store holds ``row_key|lane_key`` keys, which only make sense against the
+    current grid — a refetch, regroup, or scope switch invalidates them.
+    """
+    return []
 
 
 # ---------------------------------------------------------------------------

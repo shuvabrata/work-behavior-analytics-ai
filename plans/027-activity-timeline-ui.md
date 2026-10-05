@@ -1420,15 +1420,22 @@ lower edge.
 
 #### Tasks
 
-- [ ] **1. Accessibility:** keyboard reachability for cards, expanders, idle bars, and
+- [x] **1. Accessibility:** keyboard reachability for cards, expanders, idle bars, and
       lane ✕; `aria-label`s; focus-visible styles; popup on focus-within.
+      *(Elements were already natively focusable (`<a>`/`<button>`); added a
+      `:focus-visible` navy ring for `.timeline-card` / `.timeline-cell-more` /
+      `.timeline-idle-bar` / `.timeline-load-more` / `.timeline-lane-remove` (the ✕
+      gained that class), and `aria-expanded` on the two disclosure toggles. The
+      popup already handles `focusin`/`focusout`.)*
 - [ ] **2. Performance:** avoid re-rendering the whole grid on unrelated state changes
       (split callbacks / `prevent_initial_call`); confirm a 5-lane × 20-event render is
       smooth; memoize bucketing per `(data, granularity)`.
-- [ ] **3. Edge cases:** single lane; one lane empty; all lanes empty in range; exactly
+- [x] **3. Edge cases:** single lane; one lane empty; all lanes empty in range; exactly
       5 lanes; custom range with no events; history scope on a Person; a lane whose
       only page is exactly `limit` (so `next_cursor` is set but no more data exists —
       the next "Load more" returns empty and clears the cursor).
+      *(Covered by `tests/test_activity_timeline_edge_cases.py` — 7 render-level tests;
+      visual sweep remains V12.2.)*
 - [ ] **4. Copy review:** toolbar labels, hints, idle-bar text, empty-state text.
 
 #### Manual validation

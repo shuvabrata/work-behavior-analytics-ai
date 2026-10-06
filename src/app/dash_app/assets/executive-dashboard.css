@@ -1576,7 +1576,9 @@ input::placeholder {
     border: 1px solid var(--color-border);
     border-left-width: 3px;
     border-radius: 2px;
-    padding: 5px 7px;
+    /* Tight vertical padding: the reclaimed height pays for the larger text,
+       keeping the per-row height (and so the number of visible cards) unchanged. */
+    padding: 3px 7px;
     margin-bottom: 4px;
     box-sizing: border-box;
     min-height: 40px;
@@ -1589,7 +1591,7 @@ input::placeholder {
 
 .timeline-card-summary {
     font-family: 'Inter', sans-serif;
-    font-size: 12px;
+    font-size: 14px;
     color: var(--color-charcoal-medium);
     white-space: nowrap;
     overflow: hidden;
@@ -1602,7 +1604,7 @@ input::placeholder {
     gap: 4px;
     margin-top: 2px;
     font-family: 'Inter', sans-serif;
-    font-size: 10px;
+    font-size: 12px;
     color: var(--color-gray-medium);
     white-space: nowrap;
     overflow: hidden;

@@ -245,7 +245,7 @@ _ROW_AXIS_STYLE: dict[str, Any] = {
 }
 
 _CELL_STYLE: dict[str, Any] = {
-    "padding": "4px 6px",
+    "padding": "3px 6px",
     "borderBottom": f"1px solid {COLOR_BORDER}",
     "minHeight": "28px",
 }

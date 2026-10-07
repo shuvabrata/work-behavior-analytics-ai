@@ -137,7 +137,7 @@ def create_dash_app() -> dash.Dash:
     def display_page(pathname: str | None) -> Any:
         if pathname in ("/app/analytics", "/app/analytics/"):
             return analytics.get_layout()
-        if pathname == "/app/analytics/timeline":
+        if pathname in ("/app/analytics/timeline", "/app/analytics/timeline/"):
             return timeline.get_layout()
         if pathname == "/app/collaboration":
             return collaboration_network.get_layout()

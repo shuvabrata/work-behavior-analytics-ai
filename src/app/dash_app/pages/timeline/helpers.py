@@ -14,6 +14,8 @@ from typing import Any
 from urllib.parse import parse_qs
 from zoneinfo import ZoneInfo
 
+from app.common.timezone import get_app_timezone
+
 # Soft cap on the number of lanes (design decision #4).
 MAX_LANES = 5
 
@@ -677,12 +679,19 @@ ALL_TIME = "all"
 CUSTOM_RANGE = "custom"
 
 
-def _date_bound(value: str, *, end_of_day: bool) -> datetime:
-    """Parse an ISO date string into a UTC datetime bound of that day."""
+def _date_bound(value: str, *, end_of_day: bool, tz: ZoneInfo) -> datetime:
+    """Parse an ISO date into the UTC instant bounding that day in ``tz``.
+
+    The date is interpreted as a wall-clock day in the display timezone (so
+    "Oct 1" means Oct 1 local, matching the grid's bucketing), then converted to
+    UTC for the API, which takes an offset-bearing ISO timestamp.
+    """
     day = date.fromisoformat(value)
     if end_of_day:
-        return datetime(day.year, day.month, day.day, 23, 59, 59, tzinfo=timezone.utc)
-    return datetime(day.year, day.month, day.day, tzinfo=timezone.utc)
+        local = datetime(day.year, day.month, day.day, 23, 59, 59, tzinfo=tz)
+    else:
+        local = datetime(day.year, day.month, day.day, tzinfo=tz)
+    return local.astimezone(timezone.utc)
 
 
 def resolve_range(
@@ -691,21 +700,26 @@ def resolve_range(
     custom_to: str | None = None,
     *,
     now: datetime | None = None,
+    tz: ZoneInfo | None = None,
 ) -> tuple[datetime | None, datetime]:
-    """Resolve the Range control to ``(from_dt, to_dt)`` in UTC.
+    """Resolve the Range control to ``(from_dt, to_dt)``; the returned bounds are
+    always UTC.
 
     *All time* (the default) returns ``(None, now)`` — no lower bound, so the
     server pages backward through all history (decision #23). ``custom`` uses the
-    supplied ISO dates — start at 00:00:00, end at 23:59:59 — and raises
-    ``ValueError`` if either is missing or start > end.
+    supplied ISO dates — start at local 00:00:00, end at local 23:59:59 — where
+    the days are read as wall-clock days in ``tz`` (default: the app timezone)
+    and converted to UTC. Raises ``ValueError`` if either date is missing or
+    start > end.
     """
     now_dt = now or datetime.now(timezone.utc)
     if range_value != CUSTOM_RANGE:
         return None, now_dt
     if not custom_from or not custom_to:
         raise ValueError("custom range requires both start and end dates")
-    start = _date_bound(custom_from, end_of_day=False)
-    end = _date_bound(custom_to, end_of_day=True)
+    display_tz = tz or get_app_timezone()
+    start = _date_bound(custom_from, end_of_day=False, tz=display_tz)
+    end = _date_bound(custom_to, end_of_day=True, tz=display_tz)
     if start > end:
         raise ValueError("range start must be on or before the end date")
     return start, end

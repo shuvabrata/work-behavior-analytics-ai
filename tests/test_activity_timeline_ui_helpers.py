@@ -8,6 +8,7 @@ pagination, the time range, grouping, and deep-link parsing.
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta, timezone
+from typing import Any
 from zoneinfo import ZoneInfo
 
 import dash
@@ -550,14 +551,43 @@ def test_resolve_range_all_time() -> None:
 
 def test_resolve_range_custom() -> None:
     """Custom dates pass through (start 00:00, end 23:59:59 UTC); reversed rejected."""
-    start, end = resolve_range("custom", "2026-03-01", "2026-03-15")
+    start, end = resolve_range(
+        "custom", "2026-03-01", "2026-03-15", tz=ZoneInfo("UTC")
+    )
     assert start == datetime(2026, 3, 1, 0, 0, 0, tzinfo=timezone.utc)
     assert end == datetime(2026, 3, 15, 23, 59, 59, tzinfo=timezone.utc)
 
     with pytest.raises(ValueError):
-        resolve_range("custom", "2026-03-15", "2026-03-01")
+        resolve_range("custom", "2026-03-15", "2026-03-01", tz=ZoneInfo("UTC"))
     with pytest.raises(ValueError):
-        resolve_range("custom", "2026-03-01", None)
+        resolve_range("custom", "2026-03-01", None, tz=ZoneInfo("UTC"))
+
+
+@pytest.fixture
+def app_timezone(request: pytest.FixtureRequest) -> Any:
+    """Set ``TIMEZONE`` in the runtime settings cache for the duration of a test."""
+    from app.runtime_settings import runtime_settings
+    from common.runtime_settings import RuntimeConfig
+
+    previous = runtime_settings.get("TIMEZONE")
+    runtime_settings.refresh(RuntimeConfig(TIMEZONE=request.param))
+    try:
+        yield request.param
+    finally:
+        runtime_settings.refresh(RuntimeConfig(TIMEZONE=previous))
+
+
+@pytest.mark.parametrize("app_timezone", ["Asia/Kolkata"], indirect=True)
+def test_resolve_range_custom_uses_app_timezone(app_timezone: str) -> None:
+    """The Custom range is interpreted in the app timezone, not fixed UTC.
+
+    With TIMEZONE=Asia/Kolkata (UTC+05:30), the local day 2026-03-01 00:00:00
+    is 2026-02-28T18:30:00Z, and 2026-03-15 23:59:59 local is
+    2026-03-15T18:29:59Z. The current code hard-codes UTC and ignores TIMEZONE.
+    """
+    start, end = resolve_range("custom", "2026-03-01", "2026-03-15")
+    assert start == datetime(2026, 2, 28, 18, 30, tzinfo=timezone.utc)
+    assert end == datetime(2026, 3, 15, 18, 29, 59, tzinfo=timezone.utc)
 
 
 # ---------------------------------------------------------------------------

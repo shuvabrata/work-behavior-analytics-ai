@@ -32,7 +32,14 @@ verified on branch `feature/activity-timeline-2`.
 > **Plan provenance**: feature design `plans/activity-timeline-feature.md` (decisions log) ·
 > superseded backend UI phase in `plans/026-activity-timeline-implementation.md` ·
 > visual reference `plans/timeline-samples/03-swimlane-multi-user.html`
-> **Route**: `/app/analytics/timeline`
+> **Route**: `/app/timeline` — **changed 2026-10-07** by
+> `plans/033-timeline-sidebar-nav.md`. The page was promoted from the Analytics
+> gallery card (its original entry point, described throughout this plan as
+> built) to a dedicated sidebar item directly after **Graph**. The original
+> nested path `/app/analytics/timeline` is retained as a route alias. Every
+> mention of "the Analytics gallery card", `/app/analytics/timeline`, or
+> `TimelineAnalytic` below is a record of what was actually built at the time and
+> has since been superseded — see plan 033 for the current state.
 
 ## Why this matters
 
@@ -434,9 +441,9 @@ Stop and report back (do not improvise) if:
 | `src/app/dash_app/pages/timeline/__init__.py` | Create | Re-export `get_layout` + import `callbacks` to register them |
 | `src/app/dash_app/pages/timeline/callbacks.py` | Create | Docstring-only stub (filled in UI-1); `__init__` import target |
 | `src/app/dash_app/pages/timeline/layout.py` | Create | Header + empty state + placeholder stores |
-| `src/app/analytics/registry.py` | Modify | Add `TimelineAnalytic` dataclass + `TIMELINE_ANALYTIC` |
-| `src/app/dash_app/layout.py` | Modify | Route `/app/analytics/timeline` |
-| `src/app/dash_app/pages/analytics.py` | Modify | Render timeline card + `_create_timeline_controls()` |
+| `src/app/analytics/registry.py` | Modify | Add `TimelineAnalytic` dataclass + `TIMELINE_ANALYTIC` — **reverted 2026-10-07 by plan 033** (both removed) |
+| `src/app/dash_app/layout.py` | Modify | Route `/app/analytics/timeline` — **now also `/app/timeline`; plan 033 promoted the page to a sidebar item and kept the old path as an alias** |
+| `src/app/dash_app/pages/analytics.py` | Modify | Render timeline card + `_create_timeline_controls()` — **card removed 2026-10-07 by plan 033** |
 
 #### Tasks
 
@@ -546,6 +553,8 @@ Stop and report back (do not improvise) if:
 #### Unit tests
 
 - [x] `test_timeline_analytic_href` — `TIMELINE_ANALYTIC.href == "/app/analytics/timeline"`.
+      *(Test deleted 2026-10-07 by plan 033, which removed `TIMELINE_ANALYTIC` and
+      replaced this with `test_sidebar_timeline_nav_link` asserting the sidebar item.)*
 - [x] `test_timeline_layout_renders` — `get_layout()` returns an `html.Div` without error.
 
 #### Manual validation

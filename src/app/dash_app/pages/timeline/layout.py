@@ -311,7 +311,7 @@ def get_layout() -> html.Div:
     return html.Div(
         [
             create_page_header(
-                [("Analytics", "/app/analytics"), ("Timeline", None)],
+                [("Timeline", None)],
                 "Compare the chronological activity of people and objects side by side.",
             ),
             _selector_bar(),

@@ -19,7 +19,7 @@ from app.analytics.collaboration.config import (
     LAYER_LABELS,
     LAYER_ORDER,
 )
-from app.analytics.registry import GRAPH_ANALYTICS, TIMELINE_ANALYTIC
+from app.analytics.registry import GRAPH_ANALYTICS
 from app.dash_app.components.common import create_page_header
 from app.dash_app.styles import (
     CARD_CONTAINER_STYLE,
@@ -56,7 +56,7 @@ def get_layout() -> html.Div:
                     dbc.Row(
                         [
                             dbc.Col(_create_analytic_card(analytic), md=6, className="mb-3")
-                            for analytic in [*GRAPH_ANALYTICS, TIMELINE_ANALYTIC]
+                            for analytic in GRAPH_ANALYTICS
                         ],
                         className="g-3",
                     ),
@@ -410,10 +410,6 @@ def _create_collaboration_controls() -> html.Div:
     )
 
 
-# (Activity Timeline card uses the default "Open Visualization" button; its
-# range/group/scope are chosen on the timeline page, not preset in the gallery.)
-
-
 # ---------------------------------------------------------------------------
 # Callbacks
 # ---------------------------------------------------------------------------
@@ -593,7 +589,3 @@ def toggle_collaboration_controls(_n_clicks: int | None, is_open: bool) -> tuple
         "display": "block" if next_state else "none",
     }
     return next_state, label, preview_style
-
-
-# (The Activity Timeline card no longer carries range/group/scope presets —
-# see the comment above _create_analytic_card.)

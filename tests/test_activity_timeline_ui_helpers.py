@@ -15,7 +15,6 @@ import dash
 import pytest
 from dash import html
 
-from app.analytics.registry import TIMELINE_ANALYTIC
 from app.dash_app.pages.timeline import get_layout
 from app.dash_app.pages.timeline.helpers import (
     ALL_TIME,
@@ -60,11 +59,6 @@ pytestmark = pytest.mark.unit
 # ---------------------------------------------------------------------------
 
 # ---------------------------------------------------------------------------
-
-
-def test_timeline_analytic_href() -> None:
-    """The timeline analytic points at the dedicated timeline route."""
-    assert TIMELINE_ANALYTIC.href == "/app/analytics/timeline"
 
 
 def test_timeline_layout_renders() -> None:

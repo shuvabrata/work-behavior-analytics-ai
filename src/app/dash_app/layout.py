@@ -40,6 +40,7 @@ def create_dash_app() -> dash.Dash:
             dbc.NavLink([html.I(className="fas fa-comment-dots fa-fw me-2", title="Chat"), html.Span("Chat", className="sidebar-text")], href="/app/chat", active="exact", id="nav-genai", className="executive-nav-link d-flex align-items-center text-nowrap"),
             dbc.NavLink([html.I(className="fas fa-search fa-fw me-2", title="Search"), html.Span("Search", className="sidebar-text")], href="/app/search", active="exact", id="nav-search", className="executive-nav-link d-flex align-items-center text-nowrap"),
             dbc.NavLink([html.I(className="fas fa-project-diagram fa-fw me-2", title="Graph"), html.Span("Graph", className="sidebar-text")], href="/app/graph", active="exact", id="nav-graph", className="executive-nav-link d-flex align-items-center text-nowrap"),
+            dbc.NavLink([html.I(className="fas fa-timeline fa-fw me-2", title="Timeline"), html.Span("Timeline", className="sidebar-text")], href="/app/timeline", active="exact", id="nav-timeline", className="executive-nav-link d-flex align-items-center text-nowrap"),
             dbc.NavLink([html.I(className="fas fa-chart-pie fa-fw me-2", title="Analytics"), html.Span("Analytics", className="sidebar-text")], href="/app/analytics", active="exact", id="nav-analytics", className="executive-nav-link d-flex align-items-center text-nowrap"),
             dbc.NavLink([html.I(className="fas fa-plug fa-fw me-2", title="Connectors"), html.Span("Connectors", className="sidebar-text")], href="/app/connectors", active="exact", id="nav-connectors", className="executive-nav-link d-flex align-items-center text-nowrap"),
             dbc.NavLink([html.I(className="fas fa-cog fa-fw me-2", title="Settings"), html.Span("Settings", className="sidebar-text")], href="/app/settings", active="exact", id="nav-settings", className="executive-nav-link d-flex align-items-center text-nowrap"),
@@ -139,6 +140,10 @@ def create_dash_app() -> dash.Dash:
         route = (pathname or "").rstrip("/")
         routes = {
             "/app/analytics": analytics.get_layout,
+            # Timeline is a top-level page now (sidebar item after Graph); the old
+            # nested path is kept as an alias so existing bookmarks and ?wba_ids=
+            # deep links keep resolving.
+            "/app/timeline": timeline.get_layout,
             "/app/analytics/timeline": timeline.get_layout,
             "/app/collaboration": collaboration_network.get_layout,
             "/app/graph": graph.get_layout,

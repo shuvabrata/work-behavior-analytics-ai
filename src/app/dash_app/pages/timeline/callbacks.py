@@ -826,7 +826,9 @@ clientside_callback(
 )
 
 # Restore the remembered scroll position after the grid re-renders (Dash swaps
-# the whole ``timeline-grid-body`` children list on every data change).
+# the whole ``timeline-grid-body`` children list on every data change). The saved
+# offset is cleared after it is applied, so a later cell/idle/theme re-render does
+# not re-apply a stale position.
 clientside_callback(
     """
     function(_children) {
@@ -834,6 +836,7 @@ clientside_callback(
         if (el && window.__timelinePendingScroll != null) {
             el.scrollTop = window.__timelinePendingScroll;
         }
+        window.__timelinePendingScroll = null;
         return window.dash_clientside.no_update;
     }
     """,

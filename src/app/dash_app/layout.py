@@ -135,29 +135,26 @@ def create_dash_app() -> dash.Dash:
         Input("url", "pathname")
     )
     def display_page(pathname: str | None) -> Any:
-        if pathname in ("/app/analytics", "/app/analytics/"):
-            return analytics.get_layout()
-        if pathname in ("/app/analytics/timeline", "/app/analytics/timeline/"):
-            return timeline.get_layout()
-        if pathname == "/app/collaboration":
-            return collaboration_network.get_layout()
-        if pathname == "/app/graph":
-            return graph.get_layout()
-        if pathname and pathname.startswith("/app/connectors/"):
-            connector_type = pathname.split("/app/connectors/")[-1]
-            return connectors.get_detail_layout(connector_type)
-        if pathname in ("/app/connectors", "/app/connectors/"):
-            return connectors.get_layout()
-        if pathname in ("/app/settings", "/app/settings/"):
-            return settings.get_layout()
-        if pathname in ("/app/settings/runtime", "/app/settings/runtime/"):
-            return settings.get_runtime_layout()
-        if pathname in ("/app/settings/graph-styling", "/app/settings/graph-styling/"):
-            return settings.get_graph_styling_layout()
-        if pathname == "/app/search":
-            return search.get_layout()
-        if pathname == "/app/chat":
-            return chat.get_layout()
+        # Normalize the trailing slash once so every route is matched uniformly.
+        route = (pathname or "").rstrip("/")
+        routes = {
+            "/app/analytics": analytics.get_layout,
+            "/app/analytics/timeline": timeline.get_layout,
+            "/app/collaboration": collaboration_network.get_layout,
+            "/app/graph": graph.get_layout,
+            "/app/connectors": connectors.get_layout,
+            "/app/settings": settings.get_layout,
+            "/app/settings/runtime": settings.get_runtime_layout,
+            "/app/settings/graph-styling": settings.get_graph_styling_layout,
+            "/app/search": search.get_layout,
+            "/app/chat": chat.get_layout,
+        }
+        if route in routes:
+            return routes[route]()
+        # Detail routes are matched by prefix after the exact routes above, so
+        # "/app/connectors" itself resolves to the index page.
+        if route.startswith("/app/connectors/"):
+            return connectors.get_detail_layout(route.removeprefix("/app/connectors/"))
         # Default to chat page
         return chat.get_layout()
 

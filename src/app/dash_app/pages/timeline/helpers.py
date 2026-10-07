@@ -619,10 +619,31 @@ def is_cell_expanded(
 # ---------------------------------------------------------------------------
 
 
+def _event_identity(event: dict[str, Any]) -> tuple[Any, ...]:
+    """Return a key that is equal only for events a user cannot tell apart.
+
+    ``signal_id`` alone is not unique per event — one ActivitySignal can produce
+    several ``activity_actions`` rows (see ``db/models/activity_action.py``), all
+    sharing the same ``signal_id``. De-duplicating on this fuller tuple keeps
+    those distinct events while still collapsing a genuinely repeated row.
+    ``details`` is excluded: it is a dict (unhashable) and carries no identity.
+    """
+    return (
+        event.get("signal_id"),
+        event.get("event_time"),
+        event.get("relationship_type"),
+        event.get("entity_type"),
+        event.get("source"),
+        event.get("url"),
+        event.get("summary"),
+    )
+
+
 def merge_lane_page(
     lane: dict[str, Any], page_lane: dict[str, Any]
 ) -> dict[str, Any]:
-    """Append one fetched page into a lane, de-duplicating by ``signal_id``.
+    """Append one fetched page into a lane, de-duplicating on the event's
+    identity (see :func:`_event_identity`).
 
     The server's ``next_cursor`` is optimistic — it is echoed whenever a full
     page is returned, even if no further rows exist. When the page carries **no
@@ -630,12 +651,12 @@ def merge_lane_page(
     server echoed, which is what lets the "Load more" button actually hide.
     """
     events = list(lane.get("events") or [])
-    seen = {event.get("signal_id") for event in events}
+    seen = {_event_identity(event) for event in events}
     for event in page_lane.get("events") or []:
-        signal_id = event.get("signal_id")
-        if signal_id in seen:
+        key = _event_identity(event)
+        if key in seen:
             continue
-        seen.add(signal_id)
+        seen.add(key)
         events.append(event)
     page_events = page_lane.get("events") or []
     next_cursor = None if not page_events else page_lane.get("next_cursor")

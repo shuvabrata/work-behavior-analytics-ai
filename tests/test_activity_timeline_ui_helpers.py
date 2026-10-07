@@ -483,6 +483,50 @@ def test_merge_updates_cursor() -> None:
     assert len(exhausted["events"]) == 1
 
 
+def test_merge_keeps_distinct_events_sharing_signal_id() -> None:
+    """One signal can yield several actions for a lane; all must survive a merge.
+
+    Regression for the signal_id-only de-dup key, which treated the second
+    action of the same signal as a duplicate and dropped it.
+    """
+    existing = _event("s1", "2026-03-15T10:00:00+00:00")
+    lane = {"wba_id": "mock::Person::alice", "events": [existing]}
+    page = {
+        "events": [
+            {**_event("s1", "2026-03-14T10:00:00+00:00"), "relationship_type": "ASSIGNED"}
+        ],
+        "next_cursor": "cur",
+    }
+    merged = merge_lane_page(lane, page)
+    assert len(merged["events"]) == 2
+    assert {event["signal_id"] for event in merged["events"]} == {"s1"}
+    assert {event["relationship_type"] for event in merged["events"]} == {"CREATED", "ASSIGNED"}
+
+
+def test_merge_keeps_same_signal_split_across_pages() -> None:
+    """Two actions of one signal differing only by entity_type both survive."""
+    existing = {**_event("s2", "2026-03-15T10:00:00+00:00"), "entity_type": "Issue"}
+    lane = {"wba_id": "mock::Person::alice", "events": [existing]}
+    page = {
+        "events": [
+            {**_event("s2", "2026-03-14T10:00:00+00:00"), "entity_type": "PullRequest"}
+        ],
+        "next_cursor": None,
+    }
+    merged = merge_lane_page(lane, page)
+    assert len(merged["events"]) == 2
+    assert {event["entity_type"] for event in merged["events"]} == {"Issue", "PullRequest"}
+
+
+def test_merge_still_drops_identical_duplicate() -> None:
+    """A genuinely repeated row is still collapsed (the reason de-dup exists)."""
+    event = _event("s3", "2026-03-15T10:00:00+00:00")
+    lane = {"wba_id": "mock::Person::alice", "events": [event]}
+    page = {"events": [dict(event)], "next_cursor": "cur"}
+    merged = merge_lane_page(lane, page)
+    assert len(merged["events"]) == 1
+
+
 def test_load_more_hidden_when_all_exhausted() -> None:
     """has_more is true while any lane still has a cursor."""
     assert has_more([{"next_cursor": "c"}, {"next_cursor": None}]) is True

@@ -156,7 +156,7 @@ def create_dash_app() -> dash.Dash:
         if route.startswith("/app/connectors/"):
             return connectors.get_detail_layout(route.removeprefix("/app/connectors/"))
         # Default to chat page
-        return chat.get_layout()
+        return graph.get_layout()
 
     # Callback for sidebar toggle
     @app.callback(

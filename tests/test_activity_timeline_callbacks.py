@@ -271,22 +271,57 @@ def test_load_timeline_drops_bad_lane() -> None:
     assert [item["wba_id"] for item in selection] == ["mock::Person::alice"]
 
 
-def test_load_timeline_invalid_custom_range() -> None:
-    """An incomplete Custom range leaves the stored data untouched."""
+def test_load_timeline_missing_custom_dates_is_silent() -> None:
+    """Custom selected with no dates yet: no alert, last render kept."""
     data, alerts, loading, selection = load_timeline(
         [_ALICE], None, "custom", "activity", None, None
     )
     assert data is no_update
-    assert alerts is no_update
+    assert alerts == []
     assert loading is False
     assert selection is no_update
 
 
-def test_load_more_no_cursor_is_noop() -> None:
-    """Load more with no lane cursor raises PreventUpdate."""
+def test_load_timeline_partial_custom_range_is_silent() -> None:
+    """Custom selected with only the start date: no alert until both are set."""
+    data, alerts, loading, selection = load_timeline(
+        [_ALICE], None, "custom", "activity", "2026-03-15", None
+    )
+    assert data is no_update
+    assert alerts == []
+    assert loading is False
+    assert selection is no_update
+
+
+def test_load_timeline_invalid_custom_range_alerts() -> None:
+    """A reversed Custom range leaves the data untouched but raises an alert."""
+    data, alerts, loading, selection = load_timeline(
+        [_ALICE], None, "custom", "activity", "2026-03-15", "2026-03-01"
+    )
+    assert data is no_update
+    assert len(alerts) == 1
+    assert alerts[0].color == "danger"
+    assert loading is False
+    assert selection is no_update
+
+
+def test_load_more_no_cursor_clears_overlay() -> None:
+    """Load more with no lane cursor clears the loading overlay, no fetch."""
     data = {"lanes": [{"next_cursor": None}], "params": {}}
-    with pytest.raises(PreventUpdate):
-        load_more(1, data, [_ALICE], "activity", "all", None, None, None)
+    assert load_more(1, data, [_ALICE], "activity", "all", None, None, None) == (
+        no_update,
+        no_update,
+        False,
+    )
+
+
+def test_load_more_guard_clears_overlay() -> None:
+    """Load more with an empty data store clears the overlay rather than wedging."""
+    assert load_more(1, None, [_ALICE], "activity", "all", None, None, None) == (
+        no_update,
+        no_update,
+        False,
+    )
 
 
 def test_load_more_merges_page() -> None:

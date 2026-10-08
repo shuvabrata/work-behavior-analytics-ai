@@ -552,11 +552,20 @@ def load_timeline(
     if not current:
         return None, [], False, no_update
 
+    # A Custom range with a date still missing is a normal transient state while
+    # the user is picking dates — not an error. Stay quiet and keep the last good
+    # render; the danger alert is reserved for a range that is genuinely invalid.
+    if (range_value or ALL_TIME) == CUSTOM_RANGE and not (custom_from and custom_to):
+        return no_update, [], False, no_update
+
     try:
         from_dt, to_dt = resolve_range(range_value or ALL_TIME, custom_from, custom_to)
     except ValueError as exc:
         logger.warning(f"[Timeline] invalid range: {exc}")
-        return no_update, no_update, False, no_update
+        alert = create_alert(
+            f"Check the date range: {exc}", color="danger", dismissable=True
+        )
+        return no_update, [alert], False, no_update
 
     mock = extract_mock_scenario(search)
     scope = scope_value or "activity"
@@ -878,12 +887,14 @@ def load_more(  # pylint: disable=too-many-arguments,too-many-locals
     event-identity tuple (see ``helpers._event_identity``).
     A lane whose page comes back empty clears its cursor so the button can hide.
     """
-    if not n_clicks or not data or not selection:
+    if not n_clicks:
         raise PreventUpdate
 
-    lanes = data.get("lanes") or []
-    if not has_more(lanes):
-        raise PreventUpdate
+    lanes = (data or {}).get("lanes") or []
+    if not data or not selection or not has_more(lanes):
+        # The clientside handler already switched the overlay on for this click;
+        # nothing to fetch, so clear it rather than leaving the grid spinning.
+        return no_update, no_update, False
 
     params = data.get("params") or {}
     # Page with the SAME contract the lanes were fetched under. The cursor is a

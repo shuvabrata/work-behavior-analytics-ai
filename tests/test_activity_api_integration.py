@@ -17,12 +17,14 @@ Run with:
 
 from __future__ import annotations
 
+import re
 from datetime import datetime, timezone
 from typing import Any
 
 import httpx
 import pytest
 
+from app.api.activity.v1.service import _decode_cursor
 from app.db.models.activity_action import ActivityAction
 from app.db.models.activity_event import ActivityEvent
 from app.main import app
@@ -168,6 +170,11 @@ def _make_event(
         relationships=None,
         content_hash="abc",
     )
+
+
+def _compiled_sql(stmt: Any) -> str:
+    """Return *stmt* as whitespace-normalised SQL text for substring assertions."""
+    return re.sub(r"\s+", "", str(stmt.compile(compile_kwargs={"literal_binds": True})))
 
 
 # ---------------------------------------------------------------------------
@@ -344,6 +351,107 @@ class TestTimelineEndpoint:
         assert event["details"]["status"] == "open"
         # url is extracted from attributes.url so history cards are clickable.
         assert event["url"] == "https://github.com/org/repo/issues/42"
+
+    async def test_full_page_emits_cursor_matching_last_row(
+        self, client: httpx.AsyncClient, fake_db: FakeSession
+    ) -> None:
+        """A full page echoes a cursor that decodes to the last row's key."""
+        limit = len(fake_db.actions)
+        async with client:
+            resp = await client.get(
+                TIMELINE_URL,
+                params={"wba_ids": "github::Person::alice", "limit": limit},
+            )
+        assert resp.status_code == 200
+        lane = resp.json()["lanes"][0]
+        assert isinstance(lane["next_cursor"], str)
+        assert lane["next_cursor"]
+        last_action = fake_db.actions[-1]
+        decoded_time, decoded_id = _decode_cursor(lane["next_cursor"])
+        assert decoded_time == last_action.event_time
+        assert decoded_id == last_action.id
+
+    async def test_second_page_sends_keyset_predicate(
+        self, client: httpx.AsyncClient, fake_db: FakeSession
+    ) -> None:
+        """A page-2 request carries the row-value keyset predicate to the query."""
+        limit = len(fake_db.actions)
+        async with client:
+            page1 = await client.get(
+                TIMELINE_URL,
+                params={"wba_ids": "github::Person::alice", "limit": limit},
+            )
+            assert page1.status_code == 200
+            cursor = page1.json()["lanes"][0]["next_cursor"]
+            assert cursor
+            page2 = await client.get(
+                TIMELINE_URL,
+                params={
+                    "wba_ids": "github::Person::alice",
+                    "limit": limit,
+                    "cursor": cursor,
+                },
+            )
+        assert page2.status_code == 200
+        sql = _compiled_sql(fake_db.statements[-1])
+        # Row-value comparison: (event_time, id) < (cursor_time, cursor_id).
+        assert "(activity_actions.event_time,activity_actions.id)<(" in sql
+
+    async def test_short_page_omits_cursor(
+        self, client: httpx.AsyncClient, fake_db: FakeSession
+    ) -> None:
+        """A page shorter than the limit emits no cursor."""
+        async with client:
+            resp = await client.get(
+                TIMELINE_URL,
+                params={"wba_ids": "github::Person::alice", "limit": 5},
+            )
+        assert resp.status_code == 200
+        lane = resp.json()["lanes"][0]
+        assert len(lane["events"]) == len(fake_db.actions)
+        assert lane["next_cursor"] is None
+
+    async def test_empty_lane_omits_cursor(
+        self, client: httpx.AsyncClient, fake_db: FakeSession
+    ) -> None:
+        """An empty lane returns no events and no cursor."""
+        fake_db.actions = []
+        async with client:
+            resp = await client.get(
+                TIMELINE_URL,
+                params={"wba_ids": "github::Person::alice", "limit": 5},
+            )
+        assert resp.status_code == 200
+        lane = resp.json()["lanes"][0]
+        assert lane["events"] == []
+        assert lane["next_cursor"] is None
+
+    async def test_history_scope_uses_row_value_predicate(
+        self, client: httpx.AsyncClient, fake_db: FakeSession
+    ) -> None:
+        """History scope sends the row-value predicate against activity_events."""
+        wba_id = "github::Issue::org/repo#42"
+        limit = len(fake_db.events)
+        async with client:
+            page1 = await client.get(
+                TIMELINE_URL,
+                params={"wba_ids": wba_id, "scope": "history", "limit": limit},
+            )
+            assert page1.status_code == 200
+            cursor = page1.json()["lanes"][0]["next_cursor"]
+            assert cursor
+            page2 = await client.get(
+                TIMELINE_URL,
+                params={
+                    "wba_ids": wba_id,
+                    "scope": "history",
+                    "limit": limit,
+                    "cursor": cursor,
+                },
+            )
+        assert page2.status_code == 200
+        sql = _compiled_sql(fake_db.statements[-1])
+        assert "(activity_events.event_time,activity_events.id)<(" in sql
 
     async def test_limit_validation(self, client: httpx.AsyncClient) -> None:
         async with client:

@@ -160,7 +160,9 @@ def create_dash_app() -> dash.Dash:
         # "/app/connectors" itself resolves to the index page.
         if route.startswith("/app/connectors/"):
             return connectors.get_detail_layout(route.removeprefix("/app/connectors/"))
-        # Default to chat page
+        # Unknown paths fall back to the Graph page (the app default since the
+        # sidebar rework) so a typo or a stale bookmark still lands somewhere
+        # useful instead of erroring.
         return graph.get_layout()
 
     # Callback for sidebar toggle

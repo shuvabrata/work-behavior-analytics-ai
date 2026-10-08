@@ -316,6 +316,57 @@ def test_load_more_merges_page() -> None:
     assert signal_ids == ["s1", "s2"]
 
 
+def test_load_more_uses_stored_scope_not_live_state() -> None:
+    """Paging resumes under the stored query scope/range, not the live toolbar."""
+    lane = {
+        **_lane("mock::Person::alice", [_event("s1", "2026-03-15T10:00:00+00:00")]),
+        "next_cursor": "c",
+    }
+    data = {
+        "lanes": [lane],
+        "params": {
+            "scope": "history",
+            "from": None,
+            "to": "2026-03-31T12:00:00+00:00",
+            "limit": 20,
+        },
+    }
+    with patch(f"{_CB}.fetch_timeline", return_value={"lanes": []}) as mock_call:
+        load_more(1, data, [_ALICE], "activity", "all", None, None, None)
+    assert mock_call.call_args.kwargs["scope"] == "history"
+    assert mock_call.call_args.kwargs["to_iso"] == "2026-03-31T12:00:00+00:00"
+
+
+def test_load_more_uses_stored_mock() -> None:
+    """The stored mock scenario wins over the live URL query param."""
+    lane = {
+        **_lane("mock::Person::alice", [_event("s1", "2026-03-15T10:00:00+00:00")]),
+        "next_cursor": "c",
+    }
+    data = {
+        "lanes": [lane],
+        "params": {
+            "scope": "activity",
+            "from": None,
+            "to": "2026-03-31T12:00:00+00:00",
+            "limit": 20,
+            "mock": "even",
+        },
+    }
+    with patch(f"{_CB}.fetch_timeline", return_value={"lanes": []}) as mock_call:
+        load_more(1, data, [_ALICE], "activity", "all", None, None, "?mock=other")
+    assert mock_call.call_args.kwargs["mock"] == "even"
+
+
+def test_load_timeline_stores_mock_in_params() -> None:
+    """load_timeline records the mock scenario in the stored params."""
+    with patch(f"{_CB}.fetch_timeline", return_value={"lanes": [], "meta": {}}):
+        data, _, _, _ = load_timeline(
+            [_ALICE], "?mock=even", "all", "activity", None, None
+        )
+    assert data["params"]["mock"] == "even"
+
+
 def test_apply_deeplink_applied_is_noop() -> None:
     """Once applied, a second URL change is ignored."""
     with pytest.raises(PreventUpdate):

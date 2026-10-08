@@ -601,6 +601,7 @@ def load_timeline(
             "from": from_dt.isoformat() if from_dt else None,
             "to": to_dt.isoformat(),
             "limit": _DEFAULT_LIMIT,
+            "mock": mock,
         },
         "time_range": (payload.get("meta") or {}).get("time_range") or {},
     }
@@ -865,15 +866,16 @@ def load_more(  # pylint: disable=too-many-arguments,too-many-locals
     data: dict[str, Any] | None,
     selection: list[dict[str, Any]] | None,
     scope_value: str | None,
-    range_value: str | None,
-    custom_from: str | None,
-    custom_to: str | None,
-    search: str | None,
+    _range_value: str | None,
+    _custom_from: str | None,
+    _custom_to: str | None,
+    _search: str | None,
 ) -> tuple[Any, Any, bool]:
     """Fetch the next page for every lane that still has a cursor.
 
     Each lane is requested **sequentially** (≤5 lanes) with its own cursor; the
-    responses are merged into the stored lanes, de-duplicating by ``signal_id``.
+    responses are merged into the stored lanes, de-duplicating by the
+    event-identity tuple (see ``helpers._event_identity``).
     A lane whose page comes back empty clears its cursor so the button can hide.
     """
     if not n_clicks or not data or not selection:
@@ -884,13 +886,16 @@ def load_more(  # pylint: disable=too-many-arguments,too-many-locals
         raise PreventUpdate
 
     params = data.get("params") or {}
-    try:
-        from_dt, to_dt = resolve_range(range_value or ALL_TIME, custom_from, custom_to)
-    except ValueError as exc:
-        logger.warning(f"[Timeline] invalid range on load more: {exc}")
-        raise PreventUpdate from exc
+    # Page with the SAME contract the lanes were fetched under. The cursor is a
+    # position inside that query; pairing it with the live toolbar values would
+    # resume from the wrong place whenever a filter changed without a
+    # successful refetch (the displayed lanes would still be the old query).
+    scope = str(params.get("scope") or scope_value or "activity")
+    from_iso = params.get("from")
+    to_iso = params.get("to")
+    limit = int(params.get("limit") or _DEFAULT_LIMIT)
+    page_mock = params.get("mock")
 
-    mock = extract_mock_scenario(search)
     merged: list[dict[str, Any]] = []
     for lane in lanes:
         cursor = lane.get("next_cursor")
@@ -900,12 +905,12 @@ def load_more(  # pylint: disable=too-many-arguments,too-many-locals
         try:
             payload = fetch_timeline(
                 wba_ids=[str(lane.get("wba_id"))],
-                scope=scope_value or "activity",
-                from_iso=from_dt.isoformat() if from_dt else None,
-                to_iso=to_dt.isoformat(),
-                limit=int(params.get("limit") or _DEFAULT_LIMIT),
+                scope=scope,
+                from_iso=from_iso,
+                to_iso=to_iso,
+                limit=limit,
                 cursor=str(cursor),
-                mock=mock,
+                mock=page_mock,
             )
         except TimelineFetchError as exc:
             logger.warning(f"[Timeline] load more failed: {exc}")

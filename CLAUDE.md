@@ -212,6 +212,7 @@ Consult these before working in the area; they define patterns that must be foll
 | `docs/design/design-system.md` | Any UI work — canonical tokens; do not invent styles |
 | `docs/design/frontend-design-skill.md` | UI work — "Executive Dashboard" aesthetic (Cormorant Garamond + Inter, navy/charcoal, 2px radius) |
 | `docs/design/spec-activity-signal.md` | Connector/producer/sync work — canonical `ActivitySignal` schema |
+| `docs/design/activity-timeline-design.md` | Activity Timeline work — history store, `/api/v1/activity` API, page deep-link URL contract, dev-only mock catalog |
 | `docs/design/producer-development-guide.md` | Writing or changing a producer |
 | `docs/design/consumer-development-guide.md` | Changing the consumer service or adding a sink |
 | `docs/design/rabbitmq-design.md` | RabbitMQ topology, routing keys, bindings |

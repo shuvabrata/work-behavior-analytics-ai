@@ -15,6 +15,16 @@
 **COMPLETE** — all 14 phases (UI-0 … UI-12, incl. UI-2P) implemented and manually
 verified on branch `feature/activity-timeline-2`.
 
+> **Amended 2026-10-08 by plan [041](041-typeahead-min-query-length-3.md)**: the
+> entity typeahead's minimum query length was raised from **2 to 3 characters**,
+> both in the client constant `MIN_QUERY_LENGTH`
+> (`dash_app/pages/timeline/helpers.py`) and in the `/api/v1/activity/suggest`
+> router's `q` validation — aligning it with the Graph and Collaboration Network
+> spotlights and the persons search endpoint, which already use 3. Every
+> "min 2 chars" / `min_length=2` statement elsewhere in this plan (the UI
+> deliverable table, the API-contract notes, and the V1.1 acceptance line) is
+> superseded by that. The excerpts below are left unedited as the historical record.
+
 - **Priority**: P1
 - **Effort**: L (~8.5 focused days; 13 independently reviewable phases)
 - **Risk**: MED — large net-new UI. Highest-risk areas: sticky-axis + horizontal

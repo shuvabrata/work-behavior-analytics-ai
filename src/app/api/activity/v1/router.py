@@ -16,6 +16,7 @@ from app.db.session import get_async_db
 from common.logger import logger
 
 from . import service
+from .mock_data import UnknownMockScenarioError
 from .model import SuggestResponse, TimelineRequest, TimelineResponse
 from .service import InvalidCursorError, InvalidWbaIdError, validate_cursor
 
@@ -120,6 +121,13 @@ async def get_timeline(
 
     try:
         response = await service.get_timeline(db, request, mock_scenario=mock)
+    except UnknownMockScenarioError as exc:
+        # Dev-only switch: an unknown scenario name is a client/config error,
+        # not a server failure. Mirrors the existing 400 validation blocks.
+        raise HTTPException(
+            status_code=400,
+            detail={"error": "Invalid mock scenario", "message": str(exc)},
+        ) from exc
     except Exception as exc:
         logger.exception(f"[Activity] Unhandled error during timeline fetch: {exc}")
         raise HTTPException(
@@ -160,6 +168,11 @@ async def suggest(
     logger.info(f"[Activity] suggest q={q!r} limit={limit}")
     try:
         results = await service.get_suggestions(db, q=q, limit=limit, mock_scenario=mock)
+    except UnknownMockScenarioError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={"error": "Invalid mock scenario", "message": str(exc)},
+        ) from exc
     except Exception as exc:
         logger.exception(f"[Activity] Unhandled error during suggest: {exc}")
         raise HTTPException(

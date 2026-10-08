@@ -26,6 +26,7 @@ import pytest
 from app.db.models.activity_action import ActivityAction
 from app.db.models.activity_event import ActivityEvent
 from app.main import app
+from app.settings import settings
 
 pytestmark = [pytest.mark.unit, pytest.mark.asyncio]
 
@@ -351,6 +352,89 @@ class TestTimelineEndpoint:
                 params={"wba_ids": "github::Person::alice", "limit": 0},
             )
         assert resp.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# Mock scenario gate (end-to-end wiring)
+# ---------------------------------------------------------------------------
+
+
+class TestMockScenarioGate:
+    async def test_mock_off_ignores_query_param(
+        self, client: httpx.AsyncClient, fake_db: FakeSession
+    ) -> None:
+        async with client:
+            resp = await client.get(
+                TIMELINE_URL,
+                params={"wba_ids": "github::Person::alice", "mock": "even"},
+            )
+        assert resp.status_code == 200
+        # The real DB path ran: mock mode cannot be turned on by ?mock= alone.
+        assert fake_db.statements
+
+    async def test_mock_on_serves_invented_data(
+        self, client: httpx.AsyncClient, fake_db: FakeSession, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(settings, "TIMELINE_MOCK_SCENARIO", "even")
+        async with client:
+            resp = await client.get(
+                TIMELINE_URL,
+                params={"wba_ids": "mock::Person::alice", "mock": "even"},
+            )
+        assert resp.status_code == 200
+        assert resp.json()["lanes"][0]["wba_id"] == "mock::Person::alice"
+        # Mock mode serves without touching the database.
+        assert fake_db.statements == []
+
+    async def test_mock_on_override_switch_is_per_request(
+        self, client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(settings, "TIMELINE_MOCK_SCENARIO", "even")
+        async with client:
+            resp = await client.get(
+                TIMELINE_URL,
+                params={"wba_ids": "mock::Person::alice", "mock": "pagination", "limit": 5},
+            )
+        assert resp.status_code == 200
+        # The pagination scenario honours limit; even would not necessarily.
+        assert len(resp.json()["lanes"][0]["events"]) == 5
+
+    async def test_unknown_mock_scenario_returns_400(
+        self, client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(settings, "TIMELINE_MOCK_SCENARIO", "even")
+        async with client:
+            resp = await client.get(
+                TIMELINE_URL,
+                params={"wba_ids": "mock::Person::alice", "mock": "nonsense"},
+            )
+        assert resp.status_code == 400
+        assert resp.status_code != 500
+        assert resp.json()["detail"]["error"] == "Invalid mock scenario"
+
+    async def test_unknown_env_scenario_returns_400(
+        self, client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(settings, "TIMELINE_MOCK_SCENARIO", "not_a_scenario")
+        async with client:
+            resp = await client.get(
+                TIMELINE_URL,
+                params={"wba_ids": "github::Person::alice"},
+            )
+        assert resp.status_code == 400
+        assert resp.json()["detail"]["error"] == "Invalid mock scenario"
+
+    async def test_unknown_mock_scenario_returns_400_for_suggest(
+        self, client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(settings, "TIMELINE_MOCK_SCENARIO", "even")
+        async with client:
+            resp = await client.get(
+                SUGGEST_URL,
+                params={"q": "abc", "mock": "nonsense"},
+            )
+        assert resp.status_code == 400
+        assert resp.json()["detail"]["error"] == "Invalid mock scenario"
 
 
 # ---------------------------------------------------------------------------

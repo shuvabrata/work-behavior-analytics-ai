@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Classic Alternating Timeline</title>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --navy: #2c5282;
+      --navy-dark: #1e3a5f;
+      --charcoal: #1a202c;
+      --charcoal-medium: #2d3748;
+      --gray-dark: #4a5568;
+      --gray-medium: #718096;
+      --gray-light: #a0aec0;
+      --gray-lighter: #cbd5e0;
+      --bg-white: #ffffff;
+      --bg-light: #f7fafc;
+      --border: #e2e8f0;
+      --success: #48bb78;
+      --warning: #ed8936;
+      --error: #f56565;
+      --info: #4299e1;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--bg-light);
+      color: var(--charcoal-medium);
+      padding: 40px;
+    }
+    h1 {
+      font-family: 'Cormorant Garamond', serif;
+      font-weight: 700;
+      font-size: 42px;
+      color: var(--charcoal);
+      margin-bottom: 8px;
+    }
+    .subtitle {
+      color: var(--gray-medium);
+      font-size: 14px;
+      margin-bottom: 48px;
+    }
+    .page-header {
+      max-width: 900px;
+      margin: 0 auto 16px;
+    }
+    .page-header h3 {
+      font-family: 'Cormorant Garamond', serif;
+      font-weight: 600;
+      font-size: 24px;
+      color: var(--charcoal);
+    }
+    .page-header .breadcrumb {
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: var(--gray-medium);
+      margin-bottom: 8px;
+    }
+    .page-header .breadcrumb a {
+      color: var(--navy);
+      text-decoration: none;
+    }
+    .page-header .divider {
+      width: 100%;
+      height: 1px;
+      background: var(--border);
+      margin-top: 12px;
+    }
+
+    /* === TIMELINE === */
+    .timeline-container {
+      max-width: 900px;
+      margin: 0 auto;
+      position: relative;
+      padding: 20px 0;
+    }
+    /* The vertical line */
+    .timeline-container::before {
+      content: '';
+      position: absolute;
+      left: 50%;
+      top: 0;
+      bottom: 0;
+      width: 2px;
+      background: linear-gradient(to bottom, var(--navy), var(--gray-lighter));
+      transform: translateX(-50%);
+    }
+
+    .timeline-item {
+      display: flex;
+      align-items: flex-start;
+      margin-bottom: 40px;
+      position: relative;
+    }
+    /* Left card */
+    .timeline-item.left {
+      flex-direction: row;
+    }
+    /* Right card */
+    .timeline-item.right {
+      flex-direction: row-reverse;
+    }
+
+    .timeline-item .card {
+      width: 42%;
+      background: var(--bg-white);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 16px 20px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+      transition: box-shadow 0.2s;
+      position: relative;
+    }
+    .timeline-item .card:hover {
+      box-shadow: 0 4px 12px rgba(44,82,130,0.08);
+      border-color: var(--navy);
+    }
+
+    /* The dot on the line */
+    .timeline-item .dot {
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: var(--navy);
+      border: 3px solid var(--bg-white);
+      box-shadow: 0 0 0 2px var(--navy);
+      position: absolute;
+      left: 50%;
+      top: 20px;
+      transform: translateX(-50%);
+      z-index: 2;
+    }
+    .timeline-item .dot.success { background: var(--success); box-shadow: 0 0 0 2px var(--success); }
+    .timeline-item .dot.warning { background: var(--warning); box-shadow: 0 0 0 2px var(--warning); }
+    .timeline-item .dot.error { background: var(--error); box-shadow: 0 0 0 2px var(--error); }
+    .timeline-item .dot.info { background: var(--info); box-shadow: 0 0 0 2px var(--info); }
+
+    /* Card content */
+    .card .meta {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+    .card .meta .icon {
+      width: 28px;
+      height: 28px;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      color: white;
+    }
+    .card .meta .icon.pr { background: #6f42c1; }
+    .card .meta .icon.issue { background: var(--success); }
+    .card .meta .icon.commit { background: var(--warning); }
+    .card .meta .icon.page { background: var(--info); }
+    .card .meta .icon.review { background: #e83e8c; }
+
+    .card .meta .type-label {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--gray-medium);
+    }
+    .card .meta .timestamp {
+      font-size: 11px;
+      color: var(--gray-light);
+      margin-left: auto;
+    }
+    .card h4 {
+      font-family: 'Inter', sans-serif;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--charcoal);
+      margin-bottom: 4px;
+      line-height: 1.4;
+    }
+    .card p {
+      font-size: 12px;
+      color: var(--gray-dark);
+      line-height: 1.5;
+    }
+    .card .details {
+      display: flex;
+      gap: 12px;
+      margin-top: 10px;
+      font-size: 11px;
+      color: var(--gray-medium);
+    }
+    .card .details span {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    /* Arrow pointing to dot */
+    .timeline-item.left .card::after {
+      content: '';
+      position: absolute;
+      right: -8px;
+      top: 22px;
+      width: 0;
+      height: 0;
+      border-top: 8px solid transparent;
+      border-bottom: 8px solid transparent;
+      border-left: 8px solid var(--bg-white);
+    }
+    .timeline-item.right .card::after {
+      content: '';
+      position: absolute;
+      left: -8px;
+      top: 22px;
+      width: 0;
+      height: 0;
+      border-top: 8px solid transparent;
+      border-bottom: 8px solid transparent;
+      border-right: 8px solid var(--bg-white);
+    }
+
+    /* Load more */
+    .load-more {
+      text-align: center;
+      padding: 20px 0 60px;
+    }
+    .load-more button {
+      background: var(--bg-white);
+      border: 1px solid var(--border);
+      color: var(--navy);
+      font-size: 13px;
+      font-weight: 500;
+      padding: 10px 32px;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .load-more button:hover {
+      background: var(--navy);
+      color: white;
+      border-color: var(--navy);
+    }
+
+    /* Multi-lane demo hint */
+    .lane-hint {
+      max-width: 900px;
+      margin: 0 auto 24px;
+      background: #ebf4ff;
+      border: 1px solid #bee3f8;
+      border-radius: 6px;
+      padding: 12px 16px;
+      font-size: 12px;
+      color: var(--navy-dark);
+    }
+  </style>
+</head>
+<body>
+
+  <div class="page-header">
+    <div class="breadcrumb">
+      <a href="#">Analytics</a> / <a href="#">Timeline</a> / <span>Alice Johnson</span>
+    </div>
+    <h3>Activity Timeline: Alice Johnson</h3>
+    <div class="divider"></div>
+  </div>
+
+  <div class="lane-hint">
+    🔵 <strong>Single-object view</strong> — Classic alternating left/right. Each dot is an event.
+    Scroll down to load more. (Sample data for illustration.)
+  </div>
+
+  <div class="timeline-container">
+
+    <!-- Event 1: PR Created -->
+    <div class="timeline-item left">
+      <div class="card">
+        <div class="meta">
+          <div class="icon pr">↖</div>
+          <span class="type-label">Pull Request</span>
+          <span class="timestamp">Mar 15, 2026 02:30 PM</span>
+        </div>
+        <h4>feat: add user activity timeline API</h4>
+        <p>Created PR #142 in <strong>org/analytics-service</strong> — 342 lines added, 12 files changed</p>
+        <div class="details">
+          <span>📂 +342 / -28</span>
+          <span>👀 3 reviewers</span>
+          <span>💬 5 comments</span>
+        </div>
+      </div>
+      <div class="dot success"></div>
+    </div>
+
+    <!-- Event 2: Commit -->
+    <div class="timeline-item right">
+      <div class="card">
+        <div class="meta">
+          <div class="icon commit">〈</div>
+          <span class="type-label">Commit</span>
+          <span class="timestamp">Mar 14, 2026 11:15 AM</span>
+        </div>
+        <h4>fix: resolve null pointer in signal dedup</h4>
+        <p>Commit <code>a3f2b1c</code> in <strong>org/analytics-service</strong></p>
+        <div class="details">
+          <span>📂 3 files changed</span>
+          <span>➕ 24 / ➖ 8</span>
+        </div>
+      </div>
+      <div class="dot warning"></div>
+    </div>
+
+    <!-- Event 3: Issue Created -->
+    <div class="timeline-item left">
+      <div class="card">
+        <div class="meta">
+          <div class="icon issue">◉</div>
+          <span class="type-label">Issue</span>
+          <span class="timestamp">Mar 13, 2026 09:45 AM</span>
+        </div>
+        <h4>Support filtering timeline by entity type</h4>
+        <p>Created <strong>AN-456</strong> in Jira project Analytics — Priority: High, Type: Feature</p>
+        <div class="details">
+          <span>🏷️ backend, api</span>
+          <span>📅 Due: Mar 28</span>
+        </div>
+      </div>
+      <div class="dot info"></div>
+    </div>
+
+    <!-- Event 4: PR Review -->
+    <div class="timeline-item right">
+      <div class="card">
+        <div class="meta">
+          <div class="icon review">✓</div>
+          <span class="type-label">Review</span>
+          <span class="timestamp">Mar 12, 2026 04:20 PM</span>
+        </div>
+        <h4>Reviewed PR #138 — Refactor query builder</h4>
+        <p>Approved with suggestions — 2 inline comments on query performance</p>
+        <div class="details">
+          <span>⏱ 15 min review</span>
+          <span>💬 2 comments</span>
+        </div>
+      </div>
+      <div class="dot success"></div>
+    </div>
+
+    <!-- Event 5: Page Created -->
+    <div class="timeline-item left">
+      <div class="card">
+        <div class="meta">
+          <div class="icon page">📄</div>
+          <span class="type-label">Page</span>
+          <span class="timestamp">Mar 10, 2026 10:00 AM</span>
+        </div>
+        <h4>Timeline Feature Design Document</h4>
+        <p>Created page in <strong>Confluence / Engineering Wiki</strong> — v1, 1,200 words</p>
+        <div class="details">
+          <span>📖 3 sections</span>
+          <span>👥 2 collaborators</span>
+        </div>
+      </div>
+      <div class="dot info"></div>
+    </div>
+
+    <!-- Event 6: Commit -->
+    <div class="timeline-item right">
+      <div class="card">
+        <div class="meta">
+          <div class="icon commit">〈</div>
+          <span class="type-label">Commit</span>
+          <span class="timestamp">Mar 9, 2026 03:55 PM</span>
+        </div>
+        <h4>Add migration for activity_events table</h4>
+        <p>Commit <code>b7e8d9f</code> in <strong>org/analytics-service</strong></p>
+        <div class="details">
+          <span>📂 5 files changed</span>
+          <span>➕ 156 / ➖ 0</span>
+        </div>
+      </div>
+      <div class="dot warning"></div>
+    </div>
+
+    <!-- Event 7: Issue Comment -->
+    <div class="timeline-item left">
+      <div class="card">
+        <div class="meta">
+          <div class="icon issue">💬</div>
+          <span class="type-label">Comment</span>
+          <span class="timestamp">Mar 8, 2026 01:10 PM</span>
+        </div>
+        <h4>Commented on AN-412: "The dedup logic should use content_hash"</h4>
+        <p>Suggested SHA256 of attributes + relationships to detect meaningful changes</p>
+        <div class="details">
+          <span>📎 Attached design sketch</span>
+        </div>
+      </div>
+      <div class="dot info"></div>
+    </div>
+
+  </div>
+
+  <div class="load-more">
+    <button onclick="alert('Infinite scroll: would load next 20 events')">⬇ Load More</button>
+  </div>
+
+  <p style="text-align:center;font-size:11px;color:var(--gray-light);max-width:900px;margin:0 auto 40px;">
+    Infinite scroll: as user nears bottom, next page loads automatically. Cursor-based pagination via API.
+  </p>
+
+</body>
+</html>

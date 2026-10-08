@@ -68,13 +68,10 @@ def get_layout() -> html.Div:
 
 
 def _create_analytic_card(analytic: Any) -> dbc.Card:
-    is_collaboration = analytic.key == "collaboration_network"
-
-    footer = (
-        _create_collaboration_controls()
-        if is_collaboration
-        else dbc.Button("Open Visualization", href=analytic.href, color="primary", size="sm")
-    )
+    if analytic.key == "collaboration_network":
+        footer = _create_collaboration_controls()
+    else:
+        footer = dbc.Button("Open Visualization", href=analytic.href, color="primary", size="sm")
 
     return dbc.Card(
         dbc.CardBody(

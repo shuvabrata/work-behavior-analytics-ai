@@ -25,6 +25,9 @@ Each assertion in this file corresponds to a specific user-visible feature
 that broke silently in production when its Output was accidentally removed.
 """
 
+from collections.abc import Iterator
+from typing import Any
+
 import pytest
 
 pytestmark = pytest.mark.unit
@@ -163,3 +166,40 @@ def test_display_page_output_registered(registered_outputs):
         "Page navigation will render a blank content area — "
         "check the @app.callback decorator of display_page in layout.py."
     )
+
+
+# ---------------------------------------------------------------------------
+# Sidebar navigation
+# ---------------------------------------------------------------------------
+
+@pytest.fixture(scope="module")
+def app_layout() -> Any:
+    """Return the booted Dash app's top-level layout component."""
+    from app.dash_app.layout import create_dash_app  # noqa: PLC0415
+    return create_dash_app().layout
+
+
+def _iter_components(node: Any) -> Iterator[Any]:
+    """Yield every component in a Dash layout tree, depth-first."""
+    yield node
+    children = getattr(node, "children", None)
+    if children is None:
+        return
+    if not isinstance(children, (list, tuple)):
+        children = [children]
+    for child in children:
+        yield from _iter_components(child)
+
+
+def test_sidebar_timeline_nav_link(app_layout: Any) -> None:
+    """The sidebar must offer a dedicated 'Timeline' item at /app/timeline.
+
+    Guards the Activity Timeline's primary entry point: the page is reachable
+    from the sidebar after Graph, not from the Analytics gallery card (removed).
+    """
+    nav_links = [
+        node for node in _iter_components(app_layout)
+        if getattr(node, "id", None) == "nav-timeline"
+    ]
+    assert len(nav_links) == 1, "sidebar is missing the Timeline nav item"
+    assert nav_links[0].href == "/app/timeline"

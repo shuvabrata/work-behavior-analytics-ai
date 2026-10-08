@@ -16,6 +16,7 @@ from app.db.session import get_async_db
 from common.logger import logger
 
 from . import service
+from .mock_data import UnknownMockScenarioError
 from .model import SuggestResponse, TimelineRequest, TimelineResponse
 from .service import InvalidCursorError, InvalidWbaIdError, validate_cursor
 
@@ -53,6 +54,13 @@ async def get_timeline(
         ge=1,
         le=100,
         description="Events per lane. Default 20, max 100.",
+    ),
+    mock: str | None = Query(
+        default=None,
+        description=(
+            "DEV ONLY: switch the mock scenario for this request. Only takes "
+            "effect while TIMELINE_MOCK_SCENARIO mock mode is enabled."
+        ),
     ),
     db: AsyncSession = Depends(get_async_db),
 ) -> TimelineResponse:
@@ -112,7 +120,14 @@ async def get_timeline(
     )
 
     try:
-        response = await service.get_timeline(db, request)
+        response = await service.get_timeline(db, request, mock_scenario=mock)
+    except UnknownMockScenarioError as exc:
+        # Dev-only switch: an unknown scenario name is a client/config error,
+        # not a server failure. Mirrors the existing 400 validation blocks.
+        raise HTTPException(
+            status_code=400,
+            detail={"error": "Invalid mock scenario", "message": str(exc)},
+        ) from exc
     except Exception as exc:
         logger.exception(f"[Activity] Unhandled error during timeline fetch: {exc}")
         raise HTTPException(
@@ -131,8 +146,8 @@ async def get_timeline(
 async def suggest(
     q: str = Query(
         ...,
-        min_length=2,
-        description="Search term for typeahead (min 2 characters).",
+        min_length=3,
+        description="Search term for typeahead (min 3 characters).",
     ),
     limit: int = Query(
         default=10,
@@ -140,12 +155,24 @@ async def suggest(
         le=20,
         description="Max suggestions to return. Default 10, max 20.",
     ),
+    mock: str | None = Query(
+        default=None,
+        description=(
+            "DEV ONLY: switch the mock scenario for this request. Only takes "
+            "effect while TIMELINE_MOCK_SCENARIO mock mode is enabled."
+        ),
+    ),
     db: AsyncSession = Depends(get_async_db),
 ) -> SuggestResponse:
     """Typeahead suggestions for the timeline entity selector."""
     logger.info(f"[Activity] suggest q={q!r} limit={limit}")
     try:
-        results = await service.get_suggestions(db, q=q, limit=limit)
+        results = await service.get_suggestions(db, q=q, limit=limit, mock_scenario=mock)
+    except UnknownMockScenarioError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={"error": "Invalid mock scenario", "message": str(exc)},
+        ) from exc
     except Exception as exc:
         logger.exception(f"[Activity] Unhandled error during suggest: {exc}")
         raise HTTPException(

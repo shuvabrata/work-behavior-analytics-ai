@@ -121,3 +121,61 @@ class TestServiceHelpers:
         # helper remains importable and functional.
         assert callable(service._decode_cursor)  # noqa: SLF001
         assert callable(service._encode_cursor)  # noqa: SLF001
+
+
+# ---------------------------------------------------------------------------
+# Defensive malformed-cursor branch
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_fetch_lane_malformed_cursor_returns_empty_lane() -> None:
+    """A cursor the service cannot decode yields an empty lane, not an error."""
+    from typing import Any
+
+    from app.api.activity.v1.model import TimelineRequest
+    from app.api.activity.v1.service import _fetch_lane
+
+    class _EmptyResult:
+        """Stand-in for the label lookup: no row found."""
+
+        def first(self) -> None:
+            return None
+
+    class _LabelOnlySession:
+        """Answers the label lookup, then fails if the action query is reached.
+
+        ``_fetch_lane`` resolves the display label *before* decoding the cursor
+        (``service.py:224-247``), so exactly one ``execute`` — the label query,
+        which returns no rows — is legitimate here.
+        """
+
+        def __init__(self) -> None:
+            self.calls = 0
+
+        async def execute(self, stmt: Any) -> _EmptyResult:
+            self.calls += 1
+            if self.calls > 1:
+                raise AssertionError("the action query must not run for a malformed cursor")
+            return _EmptyResult()
+
+    request = TimelineRequest(
+        wba_ids=["github::Person::alice"],
+        scope="activity",  # type: ignore[arg-type]
+        from_=None,
+        to=datetime(2026, 3, 31, 12, 0, tzinfo=timezone.utc),
+        cursor="not-a-cursor",
+        limit=20,
+    )
+    session = _LabelOnlySession()
+    lane = await _fetch_lane(
+        session,  # type: ignore[arg-type]
+        request,
+        "github",
+        "Person",
+        "alice",
+    )
+    assert lane.events == []
+    assert lane.next_cursor is None
+    assert lane.wba_id == "github::Person::alice"
+    assert session.calls == 1

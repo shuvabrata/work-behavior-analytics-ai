@@ -17,15 +17,18 @@ Run with:
 
 from __future__ import annotations
 
+import re
 from datetime import datetime, timezone
 from typing import Any
 
 import httpx
 import pytest
 
+from app.api.activity.v1.service import _decode_cursor
 from app.db.models.activity_action import ActivityAction
 from app.db.models.activity_event import ActivityEvent
 from app.main import app
+from app.settings import settings
 
 pytestmark = [pytest.mark.unit, pytest.mark.asyncio]
 
@@ -167,6 +170,11 @@ def _make_event(
         relationships=None,
         content_hash="abc",
     )
+
+
+def _compiled_sql(stmt: Any) -> str:
+    """Return *stmt* as whitespace-normalised SQL text for substring assertions."""
+    return re.sub(r"\s+", "", str(stmt.compile(compile_kwargs={"literal_binds": True})))
 
 
 # ---------------------------------------------------------------------------
@@ -344,6 +352,107 @@ class TestTimelineEndpoint:
         # url is extracted from attributes.url so history cards are clickable.
         assert event["url"] == "https://github.com/org/repo/issues/42"
 
+    async def test_full_page_emits_cursor_matching_last_row(
+        self, client: httpx.AsyncClient, fake_db: FakeSession
+    ) -> None:
+        """A full page echoes a cursor that decodes to the last row's key."""
+        limit = len(fake_db.actions)
+        async with client:
+            resp = await client.get(
+                TIMELINE_URL,
+                params={"wba_ids": "github::Person::alice", "limit": limit},
+            )
+        assert resp.status_code == 200
+        lane = resp.json()["lanes"][0]
+        assert isinstance(lane["next_cursor"], str)
+        assert lane["next_cursor"]
+        last_action = fake_db.actions[-1]
+        decoded_time, decoded_id = _decode_cursor(lane["next_cursor"])
+        assert decoded_time == last_action.event_time
+        assert decoded_id == last_action.id
+
+    async def test_second_page_sends_keyset_predicate(
+        self, client: httpx.AsyncClient, fake_db: FakeSession
+    ) -> None:
+        """A page-2 request carries the row-value keyset predicate to the query."""
+        limit = len(fake_db.actions)
+        async with client:
+            page1 = await client.get(
+                TIMELINE_URL,
+                params={"wba_ids": "github::Person::alice", "limit": limit},
+            )
+            assert page1.status_code == 200
+            cursor = page1.json()["lanes"][0]["next_cursor"]
+            assert cursor
+            page2 = await client.get(
+                TIMELINE_URL,
+                params={
+                    "wba_ids": "github::Person::alice",
+                    "limit": limit,
+                    "cursor": cursor,
+                },
+            )
+        assert page2.status_code == 200
+        sql = _compiled_sql(fake_db.statements[-1])
+        # Row-value comparison: (event_time, id) < (cursor_time, cursor_id).
+        assert "(activity_actions.event_time,activity_actions.id)<(" in sql
+
+    async def test_short_page_omits_cursor(
+        self, client: httpx.AsyncClient, fake_db: FakeSession
+    ) -> None:
+        """A page shorter than the limit emits no cursor."""
+        async with client:
+            resp = await client.get(
+                TIMELINE_URL,
+                params={"wba_ids": "github::Person::alice", "limit": 5},
+            )
+        assert resp.status_code == 200
+        lane = resp.json()["lanes"][0]
+        assert len(lane["events"]) == len(fake_db.actions)
+        assert lane["next_cursor"] is None
+
+    async def test_empty_lane_omits_cursor(
+        self, client: httpx.AsyncClient, fake_db: FakeSession
+    ) -> None:
+        """An empty lane returns no events and no cursor."""
+        fake_db.actions = []
+        async with client:
+            resp = await client.get(
+                TIMELINE_URL,
+                params={"wba_ids": "github::Person::alice", "limit": 5},
+            )
+        assert resp.status_code == 200
+        lane = resp.json()["lanes"][0]
+        assert lane["events"] == []
+        assert lane["next_cursor"] is None
+
+    async def test_history_scope_uses_row_value_predicate(
+        self, client: httpx.AsyncClient, fake_db: FakeSession
+    ) -> None:
+        """History scope sends the row-value predicate against activity_events."""
+        wba_id = "github::Issue::org/repo#42"
+        limit = len(fake_db.events)
+        async with client:
+            page1 = await client.get(
+                TIMELINE_URL,
+                params={"wba_ids": wba_id, "scope": "history", "limit": limit},
+            )
+            assert page1.status_code == 200
+            cursor = page1.json()["lanes"][0]["next_cursor"]
+            assert cursor
+            page2 = await client.get(
+                TIMELINE_URL,
+                params={
+                    "wba_ids": wba_id,
+                    "scope": "history",
+                    "limit": limit,
+                    "cursor": cursor,
+                },
+            )
+        assert page2.status_code == 200
+        sql = _compiled_sql(fake_db.statements[-1])
+        assert "(activity_events.event_time,activity_events.id)<(" in sql
+
     async def test_limit_validation(self, client: httpx.AsyncClient) -> None:
         async with client:
             resp = await client.get(
@@ -351,6 +460,89 @@ class TestTimelineEndpoint:
                 params={"wba_ids": "github::Person::alice", "limit": 0},
             )
         assert resp.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# Mock scenario gate (end-to-end wiring)
+# ---------------------------------------------------------------------------
+
+
+class TestMockScenarioGate:
+    async def test_mock_off_ignores_query_param(
+        self, client: httpx.AsyncClient, fake_db: FakeSession
+    ) -> None:
+        async with client:
+            resp = await client.get(
+                TIMELINE_URL,
+                params={"wba_ids": "github::Person::alice", "mock": "even"},
+            )
+        assert resp.status_code == 200
+        # The real DB path ran: mock mode cannot be turned on by ?mock= alone.
+        assert fake_db.statements
+
+    async def test_mock_on_serves_invented_data(
+        self, client: httpx.AsyncClient, fake_db: FakeSession, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(settings, "TIMELINE_MOCK_SCENARIO", "even")
+        async with client:
+            resp = await client.get(
+                TIMELINE_URL,
+                params={"wba_ids": "mock::Person::alice", "mock": "even"},
+            )
+        assert resp.status_code == 200
+        assert resp.json()["lanes"][0]["wba_id"] == "mock::Person::alice"
+        # Mock mode serves without touching the database.
+        assert fake_db.statements == []
+
+    async def test_mock_on_override_switch_is_per_request(
+        self, client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(settings, "TIMELINE_MOCK_SCENARIO", "even")
+        async with client:
+            resp = await client.get(
+                TIMELINE_URL,
+                params={"wba_ids": "mock::Person::alice", "mock": "pagination", "limit": 5},
+            )
+        assert resp.status_code == 200
+        # The pagination scenario honours limit; even would not necessarily.
+        assert len(resp.json()["lanes"][0]["events"]) == 5
+
+    async def test_unknown_mock_scenario_returns_400(
+        self, client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(settings, "TIMELINE_MOCK_SCENARIO", "even")
+        async with client:
+            resp = await client.get(
+                TIMELINE_URL,
+                params={"wba_ids": "mock::Person::alice", "mock": "nonsense"},
+            )
+        assert resp.status_code == 400
+        assert resp.status_code != 500
+        assert resp.json()["detail"]["error"] == "Invalid mock scenario"
+
+    async def test_unknown_env_scenario_returns_400(
+        self, client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(settings, "TIMELINE_MOCK_SCENARIO", "not_a_scenario")
+        async with client:
+            resp = await client.get(
+                TIMELINE_URL,
+                params={"wba_ids": "github::Person::alice"},
+            )
+        assert resp.status_code == 400
+        assert resp.json()["detail"]["error"] == "Invalid mock scenario"
+
+    async def test_unknown_mock_scenario_returns_400_for_suggest(
+        self, client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(settings, "TIMELINE_MOCK_SCENARIO", "even")
+        async with client:
+            resp = await client.get(
+                SUGGEST_URL,
+                params={"q": "abc", "mock": "nonsense"},
+            )
+        assert resp.status_code == 400
+        assert resp.json()["detail"]["error"] == "Invalid mock scenario"
 
 
 # ---------------------------------------------------------------------------
@@ -362,6 +554,11 @@ class TestSuggestEndpoint:
     async def test_suggest_requires_min_length(self, client: httpx.AsyncClient) -> None:
         async with client:
             resp = await client.get(SUGGEST_URL, params={"q": "a"})
+        assert resp.status_code == 422
+
+    async def test_suggest_rejects_two_char_query(self, client: httpx.AsyncClient) -> None:
+        async with client:
+            resp = await client.get(SUGGEST_URL, params={"q": "ab"})
         assert resp.status_code == 422
 
     async def test_suggest_delegates_to_search_service(

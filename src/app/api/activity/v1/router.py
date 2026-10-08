@@ -138,8 +138,8 @@ async def get_timeline(
 async def suggest(
     q: str = Query(
         ...,
-        min_length=2,
-        description="Search term for typeahead (min 2 characters).",
+        min_length=3,
+        description="Search term for typeahead (min 3 characters).",
     ),
     limit: int = Query(
         default=10,

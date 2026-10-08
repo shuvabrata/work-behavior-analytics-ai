@@ -14,13 +14,17 @@ here.
 from __future__ import annotations
 
 from typing import Any
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import pytest
 from dash import no_update
 from dash.exceptions import PreventUpdate
 
-from app.dash_app.pages.timeline.api import TimelineFetchError
+from app.dash_app.pages.timeline.api import (
+    SuggestionFetchError,
+    TimelineFetchError,
+    fetch_suggestions,
+)
 from app.dash_app.pages.timeline.callbacks import (
     apply_deeplink,
     load_more,
@@ -45,6 +49,7 @@ pytestmark = pytest.mark.unit
 # ---------------------------------------------------------------------------
 
 _CB = "app.dash_app.pages.timeline.callbacks"
+_API = "app.dash_app.pages.timeline.api"
 
 
 def _event(signal_id: str, iso: str, summary: str = "event") -> dict[str, Any]:
@@ -120,6 +125,24 @@ def test_render_suggestions_short_query_hides() -> None:
     assert store == []
 
 
+def test_render_suggestions_two_char_query_hides() -> None:
+    """Two characters is now below the typeahead minimum: no dropdown, no fetch."""
+    children, style, store = render_suggestions("ab")
+    assert children == []
+    assert style["display"] == "none"
+    assert store == []
+
+
+def test_render_suggestions_three_char_query_fetches() -> None:
+    """Three characters is the new minimum and must reach the fetch."""
+    with patch(f"{_CB}.fetch_suggestions", return_value=[_ALICE_SUGGESTION]) as spy:
+        children, style, store = render_suggestions("abc")
+    assert spy.call_count == 1
+    assert isinstance(children, list) and children
+    assert style.get("display") != "none"
+    assert store == [_ALICE_SUGGESTION]
+
+
 def test_render_suggestions_renders_rows() -> None:
     """Suggestion results render as rows and are echoed into the store."""
     with patch(f"{_CB}.fetch_suggestions", return_value=[_ALICE_SUGGESTION]):
@@ -127,6 +150,38 @@ def test_render_suggestions_renders_rows() -> None:
     assert isinstance(children, list) and children
     assert style.get("display") != "none"
     assert store == [_ALICE_SUGGESTION]
+
+
+def test_render_suggestions_failure_shows_error() -> None:
+    """A fetch failure renders an error row, distinct from "No matches"."""
+    with patch(
+        f"{_CB}.fetch_suggestions", side_effect=SuggestionFetchError("boom")
+    ):
+        children, style, store = render_suggestions("alice")
+    assert isinstance(children, list) and len(children) == 1
+    row = children[0]
+    assert "Couldn't load" in row.children
+    assert row.children != "No matches"
+    assert style.get("display") != "none"
+    assert store == []
+
+
+def test_render_suggestions_empty_shows_no_matches() -> None:
+    """A genuine empty result still renders "No matches" (not the error row)."""
+    with patch(f"{_CB}.fetch_suggestions", return_value=[]):
+        children, style, store = render_suggestions("alice")
+    assert isinstance(children, list) and len(children) == 1
+    assert children[0].children == "No matches"
+    assert style.get("display") != "none"
+    assert store == []
+
+
+def test_fetch_suggestions_raises_on_http_error() -> None:
+    """A non-200 suggest response raises rather than returning an empty list."""
+    response = Mock(status_code=500)
+    with patch(f"{_API}.requests.get", return_value=response):
+        with pytest.raises(SuggestionFetchError):
+            fetch_suggestions("alice")
 
 
 def test_update_selection_adds_suggestion() -> None:

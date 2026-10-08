@@ -28,6 +28,7 @@ from app.common.timezone import get_app_timezone
 from app.dash_app.components.common import create_alert, register_loading_overlay_hider
 from app.dash_app.pages.graph.utils import fetch_effective_theme
 from app.dash_app.pages.timeline.api import (
+    SuggestionFetchError,
     TimelineFetchError,
     fetch_suggestions,
     fetch_timeline,
@@ -66,6 +67,7 @@ from app.dash_app.styles import (
     COLOR_BACKGROUND_WHITE,
     COLOR_BORDER,
     COLOR_CHARCOAL_MEDIUM,
+    COLOR_ERROR,
     COLOR_GRAY_MEDIUM,
     FONT_SANS,
     FONT_SIZE_MEDIUM,
@@ -157,6 +159,13 @@ _NO_MATCH_STYLE: dict[str, Any] = {
     "fontFamily": FONT_SANS,
     "fontSize": FONT_SIZE_SMALL,
     "color": COLOR_GRAY_MEDIUM,
+    "padding": "8px 10px",
+}
+
+_SUGGESTIONS_ERROR_STYLE: dict[str, Any] = {
+    "fontFamily": FONT_SANS,
+    "fontSize": FONT_SIZE_SMALL,
+    "color": COLOR_ERROR,
     "padding": "8px 10px",
 }
 
@@ -349,7 +358,21 @@ def render_suggestions(
     if len(term) < MIN_QUERY_LENGTH:
         return [], _SUGGESTIONS_HIDDEN_STYLE, []
 
-    results = fetch_suggestions(term, limit=_SUGGESTION_LIMIT)
+    try:
+        results = fetch_suggestions(term, limit=_SUGGESTION_LIMIT)
+    except SuggestionFetchError as exc:
+        logger.warning(f"[Timeline] suggestions unavailable for {term!r}: {exc}")
+        return (
+            [
+                html.Div(
+                    "Couldn't load suggestions — try again",
+                    style=_SUGGESTIONS_ERROR_STYLE,
+                )
+            ],
+            _SUGGESTIONS_VISIBLE_STYLE,
+            [],
+        )
+
     if not results:
         return (
             [html.Div("No matches", style=_NO_MATCH_STYLE)],

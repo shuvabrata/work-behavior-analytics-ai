@@ -34,6 +34,14 @@ class TimelineFetchError(RuntimeError):
         self.wba_id = wba_id
 
 
+class SuggestionFetchError(RuntimeError):
+    """Raised when the typeahead request fails (non-200 or transport error).
+
+    Distinct from an empty result: an empty list means the search genuinely
+    matched nothing, while this signals the suggestions could not be loaded.
+    """
+
+
 def get_api_base_url() -> str:
     """Return the backend API base URL (falls back to localhost for dev)."""
     return os.getenv("API_BASE_URL", "http://localhost:8000")
@@ -42,9 +50,11 @@ def get_api_base_url() -> str:
 def fetch_suggestions(query: str, limit: int = _DEFAULT_LIMIT) -> list[dict[str, Any]]:
     """Fetch typeahead suggestions for the entity selector.
 
-    Returns the ``results`` list on success, or an empty list on a short query,
-    a non-200 response, or a transport error. The router declares ``q`` with
-    ``min_length=2``, so a shorter query would otherwise be a 422 — it is gated
+    Returns the ``results`` list on success, or an empty list **only** for a
+    short query or a genuinely empty result. Every other failure (non-200
+    response, transport error, malformed JSON) raises
+    :class:`SuggestionFetchError`. The router declares ``q`` with
+    ``min_length=3``, so a shorter query would otherwise be a 422 — it is gated
     here rather than allowed onto the wire.
     """
     term = (query or "").strip()
@@ -61,19 +71,19 @@ def fetch_suggestions(query: str, limit: int = _DEFAULT_LIMIT) -> list[dict[str,
         )
     except requests.RequestException as exc:
         logger.warning(f"[Timeline] suggest request failed for q={term!r}: {exc}")
-        return []
+        raise SuggestionFetchError(f"request failed: {exc}") from exc
 
     if response.status_code != 200:
         logger.warning(
             f"[Timeline] suggest returned {response.status_code} for q={term!r}"
         )
-        return []
+        raise SuggestionFetchError(f"HTTP {response.status_code}")
 
     try:
         payload = response.json()
     except ValueError as exc:
         logger.warning(f"[Timeline] suggest returned invalid JSON for q={term!r}: {exc}")
-        return []
+        raise SuggestionFetchError(f"invalid JSON: {exc}") from exc
 
     results = payload.get("results", []) if isinstance(payload, dict) else []
     return results if isinstance(results, list) else []

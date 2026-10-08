@@ -21,7 +21,7 @@ MAX_LANES = 5
 
 # Minimum query length accepted by ``GET /api/v1/activity/suggest``. Shorter
 # queries are rejected with 422 by the router, so the UI must gate client-side.
-MIN_QUERY_LENGTH = 2
+MIN_QUERY_LENGTH = 3
 
 # Lane accent token keys, resolved to colours through ``get_theme_tokens(...)``
 # at render time (never treated as hex here).

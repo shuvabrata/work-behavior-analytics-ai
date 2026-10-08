@@ -364,6 +364,11 @@ class TestSuggestEndpoint:
             resp = await client.get(SUGGEST_URL, params={"q": "a"})
         assert resp.status_code == 422
 
+    async def test_suggest_rejects_two_char_query(self, client: httpx.AsyncClient) -> None:
+        async with client:
+            resp = await client.get(SUGGEST_URL, params={"q": "ab"})
+        assert resp.status_code == 422
+
     async def test_suggest_delegates_to_search_service(
         self, client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
     ) -> None:

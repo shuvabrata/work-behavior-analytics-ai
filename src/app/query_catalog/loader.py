@@ -2,19 +2,81 @@
 
 from pathlib import Path
 import re
+import threading
 from typing import Any
 
 import yaml
 
 from app.api.graph.v1.query import validate_read_only_query
+from common.logger import logger
 
 from .model import CatalogNamespace, CatalogParameter, CatalogQuery, CatalogView
 
-_SAFE_ID_SEGMENT = re.compile(r"^[a-z0-9][a-z0-9_]*$")
+try:  # libyaml-backed loader when available — ~10x faster on the catalog
+    from yaml import CSafeLoader as _SafeLoader
+except ImportError:  # pragma: no cover - depends on the PyYAML build
+    from yaml import SafeLoader as _SafeLoader  # type: ignore[assignment]
+
+    # Do not fail: the pure-Python loader is a correct fallback. But it is
+    # roughly 10x slower parsing the catalog, so make the degradation loud
+    # rather than silent. The app image asserts CSafeLoader at build time
+    # (Dockerfile.app); this warning covers dev/venv runs on a sdist build.
+    logger.warning(
+        "PyYAML was built without libyaml: falling back to the pure-Python "
+        "SafeLoader (~10x slower parsing the query catalog). Install a PyYAML "
+        "wheel or build against libyaml."
+    )
+
+SAFE_ID_SEGMENT = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_]*$")
+
+USER_DEFINED_DIR = "user_defined"
+
+# Parsed-catalog cache. Keyed on (resolved catalog dir, validate_cypher) —
+# extend the key if load_catalog gains another argument that changes its
+# result. The fingerprint is every input file's (relative path, mtime_ns,
+# size); the cache is only reused while it is unchanged, so the loader's
+# "validate everything on read" guarantee is preserved.
+_CATALOG_CACHE: dict[tuple[str, bool], tuple[tuple[tuple[str, int, int], ...], list[CatalogQuery]]] = {}
+_CATALOG_CACHE_LOCK = threading.Lock()
 
 
 class CatalogLoadError(ValueError):
     """Raised when the query catalog cannot be loaded or validated."""
+
+
+def clear_catalog_cache() -> None:
+    """Drop the parsed-catalog cache.
+
+    Not needed for correctness (each entry is invalidated by its fingerprint);
+    it exists so tests and operators have a deterministic reset.
+    """
+    with _CATALOG_CACHE_LOCK:
+        _CATALOG_CACHE.clear()
+
+
+def _catalog_fingerprint(base_dir: Path) -> tuple[tuple[str, int, int], ...]:
+    """Return a cheap fingerprint of every file that affects a catalog load.
+
+    One ``stat`` per catalog file (~140 in the shipped catalog, ~1-2 ms) versus
+    a full YAML parse and model construction, which is two orders of magnitude
+    slower.
+    """
+    paths: dict[Path, None] = {
+        base_dir / "catalog.yaml": None,
+        base_dir / USER_DEFINED_DIR / "catalog.yaml": None,
+    }
+    for pattern in ("*/*.yaml", f"{USER_DEFINED_DIR}/*/*.yaml"):
+        for path in sorted(base_dir.glob(pattern)):
+            paths.setdefault(path, None)
+
+    entries: list[tuple[str, int, int]] = []
+    for path in sorted(paths):
+        try:
+            stat = path.stat()
+        except OSError:
+            continue
+        entries.append((str(path.relative_to(base_dir)), stat.st_mtime_ns, stat.st_size))
+    return tuple(entries)
 
 
 def get_default_catalog_dir() -> Path:
@@ -59,6 +121,46 @@ def load_namespaces(catalog_dir: str | Path | None = None) -> list[CatalogNamesp
         seen_directories.add(namespace.directory)
         namespaces.append(namespace)
 
+    # Merge user-defined namespaces declared in user_defined/catalog.yaml.
+    user_catalog_file = base_dir / USER_DEFINED_DIR / "catalog.yaml"
+    if user_catalog_file.exists():
+        user_data = _load_yaml_mapping(user_catalog_file)
+        raw_user_namespaces = user_data.get("namespaces")
+        if not isinstance(raw_user_namespaces, list) or not raw_user_namespaces:
+            raise CatalogLoadError(
+                f"{user_catalog_file} must define a non-empty namespaces list"
+            )
+
+        for raw_namespace in raw_user_namespaces:
+            if not isinstance(raw_namespace, dict):
+                raise CatalogLoadError(
+                    f"{user_catalog_file} namespace must be a mapping"
+                )
+
+            order = len(namespaces)
+            try:
+                namespace = CatalogNamespace(
+                    **raw_namespace, order=order, is_user_defined=True
+                )
+            except ValueError as exc:
+                raise CatalogLoadError(
+                    f"Invalid user namespace in {user_catalog_file}: {exc}"
+                ) from exc
+
+            if namespace.directory in seen_directories:
+                raise CatalogLoadError(
+                    f"Duplicate namespace directory: {namespace.directory}"
+                )
+
+            namespace_dir = base_dir / USER_DEFINED_DIR / namespace.directory
+            if not namespace_dir.is_dir():
+                raise CatalogLoadError(
+                    f"User namespace directory does not exist: {namespace_dir}"
+                )
+
+            seen_directories.add(namespace.directory)
+            namespaces.append(namespace)
+
     return namespaces
 
 
@@ -67,13 +169,48 @@ def load_catalog(
     *,
     validate_cypher: bool = True,
 ) -> list[CatalogQuery]:
-    """Load all catalog query YAML files as normalized query definitions."""
+    """Load all catalog query YAML files as normalized query definitions.
+
+    Results are cached and reused while the catalog's files are unchanged
+    (see ``_catalog_fingerprint``). The returned list is a fresh list on every
+    call, but the ``CatalogQuery`` objects inside it are shared — treat them as
+    read-only.
+
+    Raises:
+        CatalogLoadError: if any catalog file is missing, malformed, or fails
+            validation.
+    """
     base_dir = (Path(catalog_dir) if catalog_dir is not None else get_default_catalog_dir()).resolve()
+    key = (str(base_dir), validate_cypher)
+    fingerprint = _catalog_fingerprint(base_dir)
+
+    with _CATALOG_CACHE_LOCK:
+        cached = _CATALOG_CACHE.get(key)
+        if cached is not None and cached[0] == fingerprint:
+            return list(cached[1])
+
+    queries = _load_catalog_uncached(base_dir, validate_cypher=validate_cypher)
+    with _CATALOG_CACHE_LOCK:
+        _CATALOG_CACHE[key] = (fingerprint, queries)
+    return list(queries)
+
+
+def _load_catalog_uncached(
+    base_dir: Path,
+    *,
+    validate_cypher: bool,
+) -> list[CatalogQuery]:
+    """Load and validate the whole catalog from an already-resolved directory.
+
+    This is the uncached implementation behind ``load_catalog``.
+    """
     namespaces = load_namespaces(base_dir)
     queries: list[CatalogQuery] = []
     seen_ids: set[str] = set()
 
     for namespace in namespaces:
+        if namespace.is_user_defined:
+            continue
         namespace_dir = base_dir / namespace.directory
         if not namespace_dir.is_dir():
             raise CatalogLoadError(f"Namespace directory does not exist: {namespace_dir}")
@@ -91,6 +228,49 @@ def load_catalog(
 
             seen_ids.add(query.id)
             queries.append(query)
+
+    # Merge user-defined queries over the system list. A user query with the
+    # same id REPLACES the system query; a new id is appended. The system
+    # `seen_ids` guard must not run against user ids — replace semantics
+    # supersede it.
+    #
+    # User overrides may live in a system namespace (e.g. `user_defined/github/`)
+    # or in a custom user namespace (e.g. `user_defined/my_queries/`), so we
+    # scan every namespace's `user_defined/` subdirectory.
+    user_dir = base_dir / USER_DEFINED_DIR
+    if user_dir.is_dir():
+        user_queries: list[CatalogQuery] = []
+        user_seen_ids: set[str] = set()
+        for namespace in namespaces:
+            namespace_dir = user_dir / namespace.directory
+            if not namespace_dir.is_dir():
+                continue
+            for query_file in sorted(namespace_dir.glob("*.yaml")):
+                query = _load_query_file(
+                    query_file=query_file,
+                    namespace=namespace,
+                    base_dir=base_dir,
+                    validate_cypher=validate_cypher,
+                )
+                if query.id in user_seen_ids:
+                    raise CatalogLoadError(
+                        f"Duplicate catalog query id: {query.id}"
+                    )
+                user_seen_ids.add(query.id)
+                user_queries.append(query)
+
+        by_id = {query.id: query for query in queries}
+        for user_query in user_queries:
+            # A user query whose id matches a system query is an override of
+            # that built-in; a new id is a brand-new custom query. The loader
+            # is the single place that knows this, so it computes the origin
+            # here rather than leaking path logic to API consumers.
+            if user_query.id in by_id:
+                user_query = user_query.model_copy(
+                    update={"origin": "override"}
+                )
+            by_id[user_query.id] = user_query
+        queries = list(by_id.values())
 
     return sorted(queries, key=lambda query: (query.namespace.order, query.name.lower()))
 
@@ -133,7 +313,7 @@ def _load_query_file(
         queries[view] = query_text
 
     slug = query_file.stem
-    if not _SAFE_ID_SEGMENT.fullmatch(slug):
+    if not SAFE_ID_SEGMENT.fullmatch(slug):
         raise CatalogLoadError(f"{query_file} filename must be a path-safe slug")
 
     catalog_id = f"{namespace.directory}/{slug}"
@@ -162,6 +342,11 @@ def _load_query_file(
             owner=raw_query.get("owner"),
             status=raw_query.get("status"),
             source_path=str(query_file.relative_to(base_dir.parent)),
+            origin=(
+                "custom"
+                if query_file.is_relative_to(base_dir / USER_DEFINED_DIR)
+                else "builtin"
+            ),
         )
     except ValueError as exc:
         raise CatalogLoadError(f"Invalid query file {query_file}: {exc}") from exc
@@ -185,7 +370,7 @@ def _load_yaml_mapping(path: Path) -> dict[str, Any]:
         raise CatalogLoadError(f"Catalog file does not exist: {path}")
 
     with path.open("r", encoding="utf-8") as handle:
-        data = yaml.safe_load(handle)
+        data = yaml.load(handle, Loader=_SafeLoader)
 
     if not isinstance(data, dict):
         raise CatalogLoadError(f"{path} must contain a YAML mapping")

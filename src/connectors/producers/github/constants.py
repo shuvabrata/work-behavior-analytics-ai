@@ -1,8 +1,10 @@
 import os
+from datetime import datetime, timezone
 from typing import Any
 
 _SOURCE = "github"
 _VERSION = "1.0"
+_EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
 _TEXT_MAX = 2000
 
 

@@ -277,10 +277,14 @@ services:
       ELASTICSEARCH_ENABLED: ${ELASTICSEARCH_ENABLED:-false}
       ELASTICSEARCH_URL: http://elasticsearch:9200
       ELASTIC_PASSWORD: ${ELASTIC_PASSWORD:-}
+      # Override DATABASE_URL to use 'postgres' service name instead of 'localhost'
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-postgres}
     volumes:
       - ./logs/signal-consumer:/var/log/signal-consumer
     depends_on:
       app:
+        condition: service_healthy
+      postgres:
         condition: service_healthy
     restart: unless-stopped  # Long-running consumer; restart on failure
     networks:

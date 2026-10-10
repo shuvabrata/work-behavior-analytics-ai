@@ -37,14 +37,14 @@ class _GitAuthor:
 @pytest.mark.unit
 def test_fetch_github_user_none():
     result = fetch_github_user(None)
-    assert result == {"login": "unknown", "name": "Unknown", "email": ""}
+    assert result == {"login": "unknown", "name": "Unknown", "email": "", "created_at": ""}
 
 
 @pytest.mark.unit
 def test_fetch_github_user_git_author():
     author = _GitAuthor("Jane Doe", "jane@example.com")
     result = fetch_github_user(author)
-    assert result == {"login": "jane", "name": "Jane Doe", "email": "jane@example.com"}
+    assert result == {"login": "jane", "name": "Jane Doe", "email": "jane@example.com", "created_at": ""}
 
 
 @pytest.mark.unit
@@ -52,7 +52,7 @@ def test_fetch_github_user_stub_named_user_falls_back_to_unknown():
     """A NamedUser stub with no URL must not raise; it falls back to unknown."""
     stub = _StubNamedUser()
     result = fetch_github_user(stub)
-    assert result == {"login": "unknown", "name": "Unknown", "email": ""}
+    assert result == {"login": "unknown", "name": "Unknown", "email": "", "created_at": ""}
 
 
 @pytest.mark.unit
@@ -62,5 +62,6 @@ def test_fetch_github_user_named_user_with_login():
     user.login = "octocat"
     user.name = "The Octocat"
     user.email = "octo@example.com"
+    user.created_at = None
     result = fetch_github_user(user)
-    assert result == {"login": "octocat", "name": "The Octocat", "email": "octo@example.com"}
+    assert result == {"login": "octocat", "name": "The Octocat", "email": "octo@example.com", "created_at": ""}

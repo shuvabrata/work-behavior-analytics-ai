@@ -44,10 +44,18 @@ async def process_teams(
             team_name = getattr(team, "name", team_slug)
             team_id = f"github_team_{team_slug}"
             permission = getattr(team, "permission", None)
+            team_created_at = ""
+            raw_created = getattr(team, "created_at", None)
+            if raw_created is not None:
+                try:
+                    team_created_at = raw_created.isoformat()
+                except (AttributeError, TypeError, ValueError):
+                    pass  # stays "" — builder will fall back to epoch
             team_data_dict: Dict[str, Any] = {
                 "id": team_id,
                 "name": team_name,
                 "slug": team_slug,
+                "created_at": team_created_at,
             }
             # Fetch members first — gate on MAX_TEAM_SIZE before emitting anything
             try:

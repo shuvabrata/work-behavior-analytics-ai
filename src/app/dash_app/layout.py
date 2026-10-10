@@ -7,7 +7,7 @@ from dash import clientside_callback
 from dash.exceptions import PreventUpdate
 from urllib.parse import quote
 
-from app.dash_app.pages import analytics, chat, collaboration_network, connectors, graph, library, search, settings
+from app.dash_app.pages import analytics, chat, collaboration_network, connectors, graph, search, settings, timeline, library
 from app.dash_app.components.setup_banner import get_banner_layout
 from app.settings import settings as app_settings
 from .styles import (
@@ -40,6 +40,7 @@ def create_dash_app() -> dash.Dash:
             dbc.NavLink([html.I(className="fas fa-comment-dots fa-fw me-2", title="Chat"), html.Span("Chat", className="sidebar-text")], href="/app/chat", active="exact", id="nav-genai", className="executive-nav-link d-flex align-items-center text-nowrap"),
             dbc.NavLink([html.I(className="fas fa-search fa-fw me-2", title="Search"), html.Span("Search", className="sidebar-text")], href="/app/search", active="exact", id="nav-search", className="executive-nav-link d-flex align-items-center text-nowrap"),
             dbc.NavLink([html.I(className="fas fa-project-diagram fa-fw me-2", title="Graph"), html.Span("Graph", className="sidebar-text")], href="/app/graph", active="exact", id="nav-graph", className="executive-nav-link d-flex align-items-center text-nowrap"),
+            dbc.NavLink([html.I(className="fas fa-timeline fa-fw me-2", title="Timeline"), html.Span("Timeline", className="sidebar-text")], href="/app/timeline", active="exact", id="nav-timeline", className="executive-nav-link d-flex align-items-center text-nowrap"),
             dbc.NavLink([html.I(className="fas fa-chart-pie fa-fw me-2", title="Analytics"), html.Span("Analytics", className="sidebar-text")], href="/app/analytics", active="exact", id="nav-analytics", className="executive-nav-link d-flex align-items-center text-nowrap"),
             dbc.NavLink([html.I(className="fas fa-book fa-fw me-2", title="Library"), html.Span("Library", className="sidebar-text")], href="/app/library", active="exact", id="nav-library", className="executive-nav-link d-flex align-items-center text-nowrap"),
             dbc.NavLink([html.I(className="fas fa-plug fa-fw me-2", title="Connectors"), html.Span("Connectors", className="sidebar-text")], href="/app/connectors", active="exact", id="nav-connectors", className="executive-nav-link d-flex align-items-center text-nowrap"),
@@ -136,33 +137,37 @@ def create_dash_app() -> dash.Dash:
         Input("url", "pathname")
     )
     def display_page(pathname: str | None) -> Any:
-        if pathname in ("/app/analytics", "/app/analytics/"):
-            return analytics.get_layout()
-        if pathname == "/app/collaboration":
-            return collaboration_network.get_layout()
-        if pathname == "/app/graph":
-            return graph.get_layout()
-        if pathname in ("/app/library", "/app/library/"):
-            return library.get_layout()
-        if pathname and pathname.startswith("/app/library/"):
+        # Normalize the trailing slash once so every route is matched uniformly.
+        route = (pathname or "").rstrip("/")
+        routes = {
+            "/app/analytics": analytics.get_layout,
+            # Timeline is a top-level page now (sidebar item after Graph); the old
+            # nested path is kept as an alias so existing bookmarks and ?wba_ids=
+            # deep links keep resolving.
+            "/app/timeline": timeline.get_layout,
+            "/app/library": library.get_layout,
+            "/app/analytics/timeline": timeline.get_layout,
+            "/app/collaboration": collaboration_network.get_layout,
+            "/app/graph": graph.get_layout,
+            "/app/connectors": connectors.get_layout,
+            "/app/settings": settings.get_layout,
+            "/app/settings/runtime": settings.get_runtime_layout,
+            "/app/settings/graph-styling": settings.get_graph_styling_layout,
+            "/app/search": search.get_layout,
+            "/app/chat": chat.get_layout,
+        }
+        if route in routes:
+            return routes[route]()
+        # Detail routes are matched by prefix after the exact routes above, so
+        # "/app/connectors" itself resolves to the index page.
+        if route.startswith("/app/connectors/"):
+            return connectors.get_detail_layout(route.removeprefix("/app/connectors/"))
+        if route.startswith("/app/library/"):
             return library.get_editor_layout()
-        if pathname and pathname.startswith("/app/connectors/"):
-            connector_type = pathname.split("/app/connectors/")[-1]
-            return connectors.get_detail_layout(connector_type)
-        if pathname in ("/app/connectors", "/app/connectors/"):
-            return connectors.get_layout()
-        if pathname in ("/app/settings", "/app/settings/"):
-            return settings.get_layout()
-        if pathname in ("/app/settings/runtime", "/app/settings/runtime/"):
-            return settings.get_runtime_layout()
-        if pathname in ("/app/settings/graph-styling", "/app/settings/graph-styling/"):
-            return settings.get_graph_styling_layout()
-        if pathname == "/app/search":
-            return search.get_layout()
-        if pathname == "/app/chat":
-            return chat.get_layout()
-        # Default to chat page
-        return chat.get_layout()
+        # Unknown paths fall back to the Graph page (the app default since the
+        # sidebar rework) so a typo or a stale bookmark still lands somewhere
+        # useful instead of erroring.
+        return graph.get_layout()
 
     # Callback for sidebar toggle
     @app.callback(

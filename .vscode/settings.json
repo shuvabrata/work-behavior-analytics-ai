@@ -9,35 +9,6 @@
         }
     },
     "terminal.integrated.defaultProfile.linux": "zsh",
-    "chat.tools.terminal.autoApprove": {
-        "/^cd /home/shuva/github/shuvabrata/work-behavior-analytics-ai && git remote show origin \\| grep HEAD \\| awk '\\{print \\$NF\\}'$/": {
-            "approve": true,
-            "matchCommandLine": true
-        },
-        "/^cd /home/shuva/github/shuvabrata/work-behavior-analytics-ai && git merge-base origin/main HEAD$/": {
-            "approve": true,
-            "matchCommandLine": true
-        },
-        "/^cd /home/shuva/github/shuvabrata/work-behavior-analytics-ai && git diff --name-only \\$\\(git merge-base origin/main HEAD\\)\\.\\.HEAD$/": {
-            "approve": true,
-            "matchCommandLine": true
-        },
-        "/^cd /home/shuva/github/shuvabrata/work-behavior-analytics-ai && git log --oneline \\$\\(git merge-base origin/main HEAD\\)\\.\\.HEAD$/": {
-            "approve": true,
-            "matchCommandLine": true
-        },
-        "/^cd /home/shuva/github/shuvabrata/work-behavior-analytics-ai && git diff \\$\\(git merge-base origin/main HEAD\\)\\.\\.HEAD --stat$/": {
-            "approve": true,
-            "matchCommandLine": true
-        },
-        "/^cd /home/shuva/github/shuvabrata/work-behavior-analytics-ai && rtk git diff \\$\\(git merge-base origin/main HEAD\\)\\.\\.HEAD$/": {
-            "approve": true,
-            "matchCommandLine": true
-        },
-        "/^cd /home/shuva/github/shuvabrata/work-behavior-analytics-ai && rtk git log --oneline main -5$/": {
-            "approve": true,
-            "matchCommandLine": true
-        },
-        "git merge-base": true
-    }
+    "chat.byokUtilityModelDefault": "mainAgent",
+
 }

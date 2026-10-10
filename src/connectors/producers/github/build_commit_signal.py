@@ -21,9 +21,27 @@ from connectors.producers.github.map_github import (
 from connectors.producers.github.constants import (
     _SOURCE,
     _VERSION,
+    _EPOCH,
     _connector_url,
     _truncate,
 )
+
+def _commit_event_time(commit_data: Dict[str, Any]) -> datetime:
+    """Parse the commit author date from *commit_data* into a UTC datetime.
+
+    Falls back to the epoch sentinel with a warning if the field is absent.
+    """
+    raw = commit_data.get("created_at") or ""
+    if raw:
+        try:
+            ts = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+            return ts if ts.tzinfo else ts.replace(tzinfo=timezone.utc)
+        except (ValueError, TypeError):
+            pass
+    sha = commit_data.get("sha", "unknown")
+    logger.warning(f"Commit {sha[:8]!r} has no author date — using epoch sentinel.")
+    return _EPOCH
+
 
 def build_commit_signal(
     commit_data: Dict[str, Any],
@@ -34,11 +52,7 @@ def build_commit_signal(
     """Build an ActivitySignal for a GitHub Commit."""
     try:
         sha = commit_data["sha"]
-        event_time = (
-            datetime.fromisoformat(commit_data["created_at"]).replace(tzinfo=timezone.utc)
-            if commit_data.get("created_at")
-            else datetime.now(timezone.utc)
-        )
+        event_time = _commit_event_time(commit_data)
         login = author_data.get("login") or author_data.get("name", "unknown")
 
         attrs = CommitAttributes(

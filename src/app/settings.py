@@ -80,6 +80,13 @@ class Settings(BaseSettings):
     # Graph UI configuration
     GRAPH_UI_MAX_NODES_TO_EXPAND: int = 20
     GRAPH_UI_MAX_NODE_LABEL_CHARS: int = 10
+
+    # Activity Timeline mock data (DEV ONLY).
+    # Empty = disabled. When set to one of the scenario names in
+    # app.api.activity.v1.mock_data.MOCK_SCENARIOS, /api/v1/activity/timeline
+    # and /suggest serve deterministic INVENTED data instead of querying the DB.
+    # Never set this in a real deployment.
+    TIMELINE_MOCK_SCENARIO: str = ""
     
     # Number of milliseconds between scan status polls in the connector UI
     CONNECTOR_SCAN_POLL_INTERVAL: int = 5000

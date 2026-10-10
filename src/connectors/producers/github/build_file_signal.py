@@ -23,8 +23,27 @@ from common.activity_signal.models import (
 from connectors.producers.github.constants import (
     _SOURCE,
     _VERSION,
+    _EPOCH,
     _connector_url,
 )
+
+
+def _file_event_time(commit_data: Dict[str, Any]) -> datetime:
+    """Parse the commit date from *commit_data* into a UTC datetime.
+
+    A File inherits its ``event_time`` from the commit that modified it.
+    Falls back to the epoch sentinel with a warning if the field is absent.
+    """
+    raw = commit_data.get("created_at") or ""
+    if raw:
+        try:
+            ts = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+            return ts if ts.tzinfo else ts.replace(tzinfo=timezone.utc)
+        except (ValueError, TypeError):
+            pass
+    sha = commit_data.get("sha", "unknown")
+    logger.warning(f"File in commit {sha[:8]!r} has no commit date — using epoch sentinel.")
+    return _EPOCH
 
 
 def build_file_signal(
@@ -59,9 +78,7 @@ def build_file_signal(
             f"del={file_data.get('deletions')}"
         )
 
-        event_time = datetime.fromisoformat(commit_data["created_at"]).replace(
-            tzinfo=timezone.utc
-        )
+        event_time = _file_event_time(commit_data)
 
         # Build optional GitHub URL anchored to the specific commit SHA so the
         # link is stable even if the file is later renamed, moved, or deleted.

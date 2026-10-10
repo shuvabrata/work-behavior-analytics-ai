@@ -17,6 +17,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from connectors.producers.jira.main import (
+    _EPOCH,
     _SOURCE,
     _TEXT_MAX,
     _event_time_from,
@@ -406,9 +407,9 @@ class TestEventTimeFrom:
         ts = _event_time_from("", "2024-01-15")
         assert ts.year == 2024 and ts.month == 1
 
-    def test_returns_now_on_empty(self) -> None:
+    def test_returns_epoch_on_empty(self) -> None:
         ts = _event_time_from("", "")
-        assert ts.year >= 2024
+        assert ts == _EPOCH
 
     def test_z_suffix_handled(self) -> None:
         ts = _event_time_from("2024-06-01T10:00:00Z", "")

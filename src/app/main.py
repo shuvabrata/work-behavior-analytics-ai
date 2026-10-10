@@ -20,6 +20,7 @@ from app.api.search.v1.persons_router import router as persons_v1_router
 from app.api.commands.v1.router import router as commands_v1_router
 from app.api.settings.v1.router import router as settings_v1_router
 from app.api.graph_themes.v1.router import router as graph_themes_v1_router
+from app.api.activity.v1.router import router as activity_v1_router
 from app.api.graph.v1.query import close_driver
 from app.dash_app.layout import create_dash_app
 from app.db.session import ASYNC_SESSION_LOCAL
@@ -191,6 +192,7 @@ app.include_router(persons_v1_router, prefix="/api/v1")
 app.include_router(commands_v1_router, prefix="/api/v1")
 app.include_router(settings_v1_router, prefix="/api/v1")
 app.include_router(graph_themes_v1_router, prefix="/api/v1")
+app.include_router(activity_v1_router, prefix="/api/v1")
 
 dash_app = create_dash_app()  
 app.mount("/app", WSGIMiddleware(dash_app.server))  # type: ignore[arg-type] 

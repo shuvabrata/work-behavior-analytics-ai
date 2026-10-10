@@ -8,8 +8,14 @@ RUN apt-get update && apt-get install -y postgresql-client curl && rm -rf /var/l
 WORKDIR /app
 
 # Install dependencies
-COPY requirements.app.txt ./requirements.txt 
+COPY requirements.app.txt ./requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
+
+# Fail the build loudly if PyYAML was compiled without libyaml (i.e. no
+# CSafeLoader). The query catalog loader falls back to the ~10x slower
+# pure-Python parser in that case; a silent slowdown in production is worse
+# than a failed build. See src/app/query_catalog/loader.py.
+RUN python -c "import yaml; assert hasattr(yaml, 'CSafeLoader'), 'PyYAML built without libyaml: CSafeLoader is missing'"
 
 # Copy app code (includes alembic/, alembic.ini, entrypoint.sh)
 COPY src/app/ ./app/

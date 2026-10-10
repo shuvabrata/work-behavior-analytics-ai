@@ -33,7 +33,9 @@ async def list_catalog_queries(
 ) -> CatalogQueryListResponse:
     """List normalized query catalog entries."""
     try:
-        items = service.list_catalog_queries(namespace=namespace, tag=tag, q=q, view=view)
+        items = await asyncio.to_thread(
+            service.list_catalog_queries, namespace=namespace, tag=tag, q=q, view=view
+        )
     except CatalogLoadError as exc:
         logger.error("Query catalog is unreadable: %s", exc)
         raise HTTPException(
@@ -47,7 +49,7 @@ async def list_catalog_queries(
 async def list_catalog_namespaces() -> CatalogNamespaceListResponse:
     """List query catalog namespaces in display order."""
     try:
-        items = service.list_namespaces()
+        items = await asyncio.to_thread(service.list_namespaces)
     except CatalogLoadError as exc:
         logger.error("Query catalog is unreadable: %s", exc)
         raise HTTPException(
@@ -61,7 +63,9 @@ async def list_catalog_namespaces() -> CatalogNamespaceListResponse:
 async def get_catalog_query(namespace: str, slug: str) -> CatalogQuery:
     """Get one normalized query catalog entry."""
     try:
-        catalog_query = service.get_catalog_query(namespace=namespace, slug=slug)
+        catalog_query = await asyncio.to_thread(
+            service.get_catalog_query, namespace=namespace, slug=slug
+        )
     except CatalogLoadError as exc:
         logger.error("Query catalog is unreadable: %s", exc)
         raise HTTPException(

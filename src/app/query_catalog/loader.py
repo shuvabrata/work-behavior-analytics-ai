@@ -2,21 +2,81 @@
 
 from pathlib import Path
 import re
+import threading
 from typing import Any
 
 import yaml
 
 from app.api.graph.v1.query import validate_read_only_query
+from common.logger import logger
 
 from .model import CatalogNamespace, CatalogParameter, CatalogQuery, CatalogView
+
+try:  # libyaml-backed loader when available — ~10x faster on the catalog
+    from yaml import CSafeLoader as _SafeLoader
+except ImportError:  # pragma: no cover - depends on the PyYAML build
+    from yaml import SafeLoader as _SafeLoader  # type: ignore[assignment]
+
+    # Do not fail: the pure-Python loader is a correct fallback. But it is
+    # roughly 10x slower parsing the catalog, so make the degradation loud
+    # rather than silent. The app image asserts CSafeLoader at build time
+    # (Dockerfile.app); this warning covers dev/venv runs on a sdist build.
+    logger.warning(
+        "PyYAML was built without libyaml: falling back to the pure-Python "
+        "SafeLoader (~10x slower parsing the query catalog). Install a PyYAML "
+        "wheel or build against libyaml."
+    )
 
 SAFE_ID_SEGMENT = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_]*$")
 
 USER_DEFINED_DIR = "user_defined"
 
+# Parsed-catalog cache. Keyed on (resolved catalog dir, validate_cypher) —
+# extend the key if load_catalog gains another argument that changes its
+# result. The fingerprint is every input file's (relative path, mtime_ns,
+# size); the cache is only reused while it is unchanged, so the loader's
+# "validate everything on read" guarantee is preserved.
+_CATALOG_CACHE: dict[tuple[str, bool], tuple[tuple[tuple[str, int, int], ...], list[CatalogQuery]]] = {}
+_CATALOG_CACHE_LOCK = threading.Lock()
+
 
 class CatalogLoadError(ValueError):
     """Raised when the query catalog cannot be loaded or validated."""
+
+
+def clear_catalog_cache() -> None:
+    """Drop the parsed-catalog cache.
+
+    Not needed for correctness (each entry is invalidated by its fingerprint);
+    it exists so tests and operators have a deterministic reset.
+    """
+    with _CATALOG_CACHE_LOCK:
+        _CATALOG_CACHE.clear()
+
+
+def _catalog_fingerprint(base_dir: Path) -> tuple[tuple[str, int, int], ...]:
+    """Return a cheap fingerprint of every file that affects a catalog load.
+
+    One ``stat`` per catalog file (~140 in the shipped catalog, ~1-2 ms) versus
+    a full YAML parse and model construction, which is two orders of magnitude
+    slower.
+    """
+    paths: dict[Path, None] = {
+        base_dir / "catalog.yaml": None,
+        base_dir / USER_DEFINED_DIR / "catalog.yaml": None,
+    }
+    for pattern in ("*/*.yaml", f"{USER_DEFINED_DIR}/*/*.yaml"):
+        for path in sorted(base_dir.glob(pattern)):
+            paths.setdefault(path, None)
+
+    entries: list[tuple[str, int, int]] = []
+    for path in sorted(paths):
+        try:
+            stat = path.stat()
+        except OSError:
+            continue
+        entries.append((str(path.relative_to(base_dir)), stat.st_mtime_ns, stat.st_size))
+    return tuple(entries)
 
 
 def get_default_catalog_dir() -> Path:
@@ -109,8 +169,41 @@ def load_catalog(
     *,
     validate_cypher: bool = True,
 ) -> list[CatalogQuery]:
-    """Load all catalog query YAML files as normalized query definitions."""
+    """Load all catalog query YAML files as normalized query definitions.
+
+    Results are cached and reused while the catalog's files are unchanged
+    (see ``_catalog_fingerprint``). The returned list is a fresh list on every
+    call, but the ``CatalogQuery`` objects inside it are shared — treat them as
+    read-only.
+
+    Raises:
+        CatalogLoadError: if any catalog file is missing, malformed, or fails
+            validation.
+    """
     base_dir = (Path(catalog_dir) if catalog_dir is not None else get_default_catalog_dir()).resolve()
+    key = (str(base_dir), validate_cypher)
+    fingerprint = _catalog_fingerprint(base_dir)
+
+    with _CATALOG_CACHE_LOCK:
+        cached = _CATALOG_CACHE.get(key)
+        if cached is not None and cached[0] == fingerprint:
+            return list(cached[1])
+
+    queries = _load_catalog_uncached(base_dir, validate_cypher=validate_cypher)
+    with _CATALOG_CACHE_LOCK:
+        _CATALOG_CACHE[key] = (fingerprint, queries)
+    return list(queries)
+
+
+def _load_catalog_uncached(
+    base_dir: Path,
+    *,
+    validate_cypher: bool,
+) -> list[CatalogQuery]:
+    """Load and validate the whole catalog from an already-resolved directory.
+
+    This is the uncached implementation behind ``load_catalog``.
+    """
     namespaces = load_namespaces(base_dir)
     queries: list[CatalogQuery] = []
     seen_ids: set[str] = set()
@@ -277,7 +370,7 @@ def _load_yaml_mapping(path: Path) -> dict[str, Any]:
         raise CatalogLoadError(f"Catalog file does not exist: {path}")
 
     with path.open("r", encoding="utf-8") as handle:
-        data = yaml.safe_load(handle)
+        data = yaml.load(handle, Loader=_SafeLoader)
 
     if not isinstance(data, dict):
         raise CatalogLoadError(f"{path} must contain a YAML mapping")

@@ -285,3 +285,74 @@ async def test_c9_get_namespaces_includes_custom_user_ns():
     finally:
         await router.delete_catalog_query("test_c9_ns", "test_c9")
         _remove_user_namespace("test_c9_ns")
+
+
+# ── Path-safety on the DELETE route (plan 023) ────────────────────────
+# These tests never touch the real queries_catalog/ tree: the tmp_catalog
+# fixture redirects the service's catalog root to tmp_path.
+
+
+@pytest.fixture
+def tmp_catalog(tmp_path, monkeypatch):
+    """Point user_defined_service at a throwaway catalog root.
+
+    ``get_default_catalog_dir`` is imported into the service's module namespace,
+    so patching it there is enough. The stub registry file exists so a
+    traversal attempt that reached the filesystem would visibly delete it.
+    """
+    root = tmp_path / "queries_catalog"
+    (root / "user_defined" / "github").mkdir(parents=True)
+    (root / "catalog.yaml").write_text(
+        "namespaces:\n  - name: GitHub\n    directory: github\n", encoding="utf-8"
+    )
+    monkeypatch.setattr(user_defined_service, "get_default_catalog_dir", lambda: root)
+    return root
+
+
+async def test_delete_rejects_dot_dot_namespace(tmp_catalog):
+    with pytest.raises(ValueError):
+        user_defined_service.delete_query("..", "catalog")
+    assert (tmp_catalog / "catalog.yaml").exists()
+    assert (tmp_catalog / "user_defined" / "github").is_dir()
+
+
+@pytest.mark.parametrize(
+    ("namespace", "slug"),
+    [
+        ("..", "catalog"),
+        ("github", "a/b"),
+        ("github", "bad.key"),
+        ("a.b", "x"),
+        ("github", ""),
+        ("", "x"),
+    ],
+)
+async def test_delete_rejects_unsafe_segments(tmp_catalog, namespace, slug):
+    with pytest.raises(ValueError):
+        user_defined_service.delete_query(namespace, slug)
+
+
+async def test_delete_route_maps_unsafe_key_to_422(tmp_catalog):
+    with pytest.raises(HTTPException) as exc_info:
+        await router.delete_catalog_query("..", "catalog")
+    assert exc_info.value.status_code == 422
+
+
+async def test_delete_still_removes_a_real_override(tmp_catalog):
+    target = tmp_catalog / "user_defined" / "github" / "ok.yaml"
+    target.write_text("name: OK\n", encoding="utf-8")
+    assert user_defined_service.delete_query("github", "ok") is True
+    assert not target.exists()
+
+
+async def test_delete_accepts_mixed_case_key(tmp_catalog):
+    target = tmp_catalog / "user_defined" / "github" / "Mixed_Case.yaml"
+    target.write_text("name: Mixed\n", encoding="utf-8")
+    assert user_defined_service.delete_query("github", "Mixed_Case") is True
+    assert not target.exists()
+
+
+async def test_put_route_rejects_dot_dot_namespace(tmp_catalog):
+    with pytest.raises(HTTPException) as exc_info:
+        await router.put_catalog_query("..", "catalog", _write_payload())
+    assert exc_info.value.status_code == 422

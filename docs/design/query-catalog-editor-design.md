@@ -426,6 +426,7 @@ using the shared `collapse-toggle-subtle` class.
 | Condition | Surface |
 |---|---|
 | Invalid namespace/slug segment | `422` (write service raises `ValueError`, router maps it) |
+| Path-unsafe namespace or slug on PUT or DELETE | `422` naming the offending value |
 | Non-read-only Cypher in a PUT | `422` with the offending view named |
 | Missing/invalid body fields | `422` (Pydantic validation on `CatalogQueryWrite`) |
 | GET of an unknown query | `404` |

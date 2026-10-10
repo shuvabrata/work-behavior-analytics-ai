@@ -77,7 +77,15 @@ def delete_query(namespace: str, slug: str) -> bool:
 
     Returns:
         ``True`` if an override file was deleted, ``False`` if none existed.
+
+    Raises:
+        ValueError: If the namespace or slug is not path-safe. Both segments
+            are interpolated into a filesystem path, so an unvalidated ``..``
+            segment would escape ``user_defined/`` (mapped to 422 by the
+            router).
     """
+    if not SAFE_ID_SEGMENT.fullmatch(namespace) or not SAFE_ID_SEGMENT.fullmatch(slug):
+        raise ValueError(f"Invalid namespace or slug: {namespace}/{slug}")
     root = get_default_catalog_dir()
     target = root / USER_DEFINED_DIR / namespace / f"{slug}.yaml"
     if not target.exists():

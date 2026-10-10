@@ -6,8 +6,9 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from common.logger import logger
 from app.db.session import get_async_db
-from app.query_catalog import CatalogQuery, CatalogQueryWrite
+from app.query_catalog import CatalogLoadError, CatalogQuery, CatalogQueryWrite
 
 from . import service
 from . import user_defined_service
@@ -31,21 +32,42 @@ async def list_catalog_queries(
     view: Literal["graph", "tabular"] | None = Query(default=None, description="Filter by available view"),
 ) -> CatalogQueryListResponse:
     """List normalized query catalog entries."""
-    items = service.list_catalog_queries(namespace=namespace, tag=tag, q=q, view=view)
+    try:
+        items = service.list_catalog_queries(namespace=namespace, tag=tag, q=q, view=view)
+    except CatalogLoadError as exc:
+        logger.error("Query catalog is unreadable: %s", exc)
+        raise HTTPException(
+            status_code=500,
+            detail="Query catalog is unreadable; check the server logs.",
+        ) from exc
     return CatalogQueryListResponse(items=items, count=len(items))
 
 
 @router.get("/catalog/namespaces", response_model=CatalogNamespaceListResponse)
 async def list_catalog_namespaces() -> CatalogNamespaceListResponse:
     """List query catalog namespaces in display order."""
-    items = service.list_namespaces()
+    try:
+        items = service.list_namespaces()
+    except CatalogLoadError as exc:
+        logger.error("Query catalog is unreadable: %s", exc)
+        raise HTTPException(
+            status_code=500,
+            detail="Query catalog is unreadable; check the server logs.",
+        ) from exc
     return CatalogNamespaceListResponse(items=items, count=len(items))
 
 
 @router.get("/catalog/{namespace}/{slug}", response_model=CatalogQuery, response_model_exclude_none=True)
 async def get_catalog_query(namespace: str, slug: str) -> CatalogQuery:
     """Get one normalized query catalog entry."""
-    catalog_query = service.get_catalog_query(namespace=namespace, slug=slug)
+    try:
+        catalog_query = service.get_catalog_query(namespace=namespace, slug=slug)
+    except CatalogLoadError as exc:
+        logger.error("Query catalog is unreadable: %s", exc)
+        raise HTTPException(
+            status_code=500,
+            detail="Query catalog is unreadable; check the server logs.",
+        ) from exc
     if catalog_query is None:
         raise HTTPException(status_code=404, detail="Catalog query not found")
     return catalog_query

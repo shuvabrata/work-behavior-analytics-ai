@@ -36,7 +36,10 @@ USER_DEFINED_DIR = "user_defined"
 # result. The fingerprint is every input file's (relative path, mtime_ns,
 # size); the cache is only reused while it is unchanged, so the loader's
 # "validate everything on read" guarantee is preserved.
-_CATALOG_CACHE: dict[tuple[str, bool], tuple[tuple[tuple[str, int, int], ...], list[CatalogQuery]]] = {}
+_CATALOG_CACHE: dict[
+    tuple[str, bool, bool],
+    tuple[tuple[tuple[str, int, int], ...], list[CatalogQuery]],
+] = {}
 _CATALOG_CACHE_LOCK = threading.Lock()
 
 
@@ -168,6 +171,7 @@ def load_catalog(
     catalog_dir: str | Path | None = None,
     *,
     validate_cypher: bool = True,
+    include_user_overrides: bool = True,
 ) -> list[CatalogQuery]:
     """Load all catalog query YAML files as normalized query definitions.
 
@@ -176,12 +180,21 @@ def load_catalog(
     call, but the ``CatalogQuery`` objects inside it are shared — treat them as
     read-only.
 
+    Args:
+        catalog_dir: Catalog root; defaults to :func:`get_default_catalog_dir`.
+        validate_cypher: Reject files whose Cypher is not read-only.
+        include_user_overrides: When ``False``, return the shipped catalog only,
+            ignoring the ``user_defined/`` overlay. This is how a caller asks for
+            the factory version of an id that a user has overridden. Note that
+            user-defined *namespace declarations* in ``user_defined/catalog.yaml``
+            are still parsed (they contribute no queries to the result).
+
     Raises:
         CatalogLoadError: if any catalog file is missing, malformed, or fails
             validation.
     """
     base_dir = (Path(catalog_dir) if catalog_dir is not None else get_default_catalog_dir()).resolve()
-    key = (str(base_dir), validate_cypher)
+    key = (str(base_dir), validate_cypher, include_user_overrides)
     fingerprint = _catalog_fingerprint(base_dir)
 
     with _CATALOG_CACHE_LOCK:
@@ -189,7 +202,11 @@ def load_catalog(
         if cached is not None and cached[0] == fingerprint:
             return list(cached[1])
 
-    queries = _load_catalog_uncached(base_dir, validate_cypher=validate_cypher)
+    queries = _load_catalog_uncached(
+        base_dir,
+        validate_cypher=validate_cypher,
+        include_user_overrides=include_user_overrides,
+    )
     with _CATALOG_CACHE_LOCK:
         _CATALOG_CACHE[key] = (fingerprint, queries)
     return list(queries)
@@ -199,6 +216,7 @@ def _load_catalog_uncached(
     base_dir: Path,
     *,
     validate_cypher: bool,
+    include_user_overrides: bool,
 ) -> list[CatalogQuery]:
     """Load and validate the whole catalog from an already-resolved directory.
 
@@ -238,7 +256,7 @@ def _load_catalog_uncached(
     # or in a custom user namespace (e.g. `user_defined/my_queries/`), so we
     # scan every namespace's `user_defined/` subdirectory.
     user_dir = base_dir / USER_DEFINED_DIR
-    if user_dir.is_dir():
+    if include_user_overrides and user_dir.is_dir():
         user_queries: list[CatalogQuery] = []
         user_seen_ids: set[str] = set()
         for namespace in namespaces:

@@ -8,10 +8,13 @@ import dash_bootstrap_components as dbc
 from app.dash_app.components.common import create_page_header
 from app.dash_app.styles import (
     CARD_CONTAINER_STYLE,
+    COLOR_BACKGROUND_LIGHT,
     COLOR_BACKGROUND_WHITE,
     COLOR_BORDER,
+    COLOR_ERROR,
     COLOR_GRAY_DARK,
     COLOR_GRAY_MEDIUM,
+    COLOR_SUCCESS,
     FEATURE_CARD_STYLE,
     FEATURE_CARD_TITLE_STYLE,
     FONT_SANS,
@@ -91,6 +94,7 @@ def get_editor_layout() -> html.Div:
                     _render_metadata_section(),
                     _render_queries_section(),
                     _render_save_as_modal(),
+                    _render_factory_diff_modal(),
                     _render_test_results(),
                 ],
                 className="editor-form",
@@ -278,7 +282,7 @@ def _render_queries_section() -> html.Div:
                                         color="secondary",
                                         outline=True,
                                         size="sm",
-                                        className="mt-2",
+                                        className="btn-subtle-action mt-2",
                                     ),
                                 ],
                                 md=6,
@@ -298,7 +302,7 @@ def _render_queries_section() -> html.Div:
                                         color="secondary",
                                         outline=True,
                                         size="sm",
-                                        className="mt-2",
+                                        className="btn-subtle-action mt-2",
                                     ),
                                 ],
                                 md=6,
@@ -382,6 +386,23 @@ def _render_action_bar() -> html.Div:
             html.Div(
                 [
                     dbc.Button(
+                        "Compare to Factory",
+                        id="editor-view-changes",
+                        color="secondary",
+                        outline=True,
+                        size="sm",
+                        className="btn-subtle-action",
+                        style={"display": "none"},
+                    ),
+                ],
+                style={
+                    "display": "flex",
+                    "alignItems": "center",
+                },
+            ),
+            html.Div(
+                [
+                    dbc.Button(
                         "Reset to Factory",
                         id="editor-destructive",
                         color="outline-danger",
@@ -449,6 +470,41 @@ def _render_save_as_modal() -> dbc.Modal:
     )
 
 
+def _render_factory_diff_modal() -> dbc.Modal:
+    """Modal showing the factory-vs-current diff for an overridden query."""
+    return dbc.Modal(
+        [
+            dbc.ModalHeader(dbc.ModalTitle("Factory differences")),
+            dbc.ModalBody(
+                [
+                    html.P(
+                        "Red lines are the factory version; green lines are your "
+                        "current override.",
+                        style={
+                            "fontFamily": FONT_SANS,
+                            "fontSize": FONT_SIZE_XSMALL,
+                            "color": COLOR_GRAY_MEDIUM,
+                        },
+                    ),
+                    html.Div(id="editor-factory-diff"),
+                ]
+            ),
+            dbc.ModalFooter(
+                dbc.Button(
+                    "Close",
+                    id="editor-factory-diff-modal-close",
+                    color="secondary",
+                    size="sm",
+                )
+            ),
+        ],
+        id="editor-factory-diff-modal",
+        is_open=False,
+        size="xl",
+        scrollable=True,
+    )
+
+
 def _render_test_results() -> html.Div:
     """Inline pane for Test Tabular / Test Graph results."""
     return html.Div(
@@ -511,3 +567,43 @@ def render_parameter_row(index: int, parameter: dict[str, Any] | None = None) ->
         ],
         id={"type": "editor-param-row", "index": str(index)},
     )
+
+
+DIFF_BOX_STYLE = {
+    "fontFamily": FONT_MONO,
+    "fontSize": FONT_SIZE_XSMALL,
+    "whiteSpace": "pre",
+    "overflowX": "auto",
+    "backgroundColor": COLOR_BACKGROUND_LIGHT,
+    "border": f"1px solid {COLOR_BORDER}",
+    "borderRadius": "2px",
+    "padding": SPACING_XSMALL,
+    "lineHeight": "1.5",
+}
+
+
+def render_factory_diff_lines(diff_lines: list[str]) -> html.Div:
+    """Render unified-diff lines as a coloured, monospace, scrollable block.
+
+    Args:
+        diff_lines: Lines from ``difflib.unified_diff`` (no trailing newlines).
+    """
+    rendered: list[Any] = []
+    for line in diff_lines:
+        # Note the trailing spaces: "--- factory"/"+++ current" are the diff's
+        # file headers, but `_factory_diff_text` also emits its own
+        # "--- tabular ---"/"--- graph ---" separators, which appear here as
+        # "---- tabular ---" once the diff prefixes them. Matching on "--- " /
+        # "+++ " (not "---"/"+++") keeps those separators coloured as content.
+        if line.startswith("+++ ") or line.startswith("--- "):
+            color = COLOR_GRAY_MEDIUM          # file header, not a change
+        elif line.startswith("@@"):
+            color = COLOR_GRAY_MEDIUM
+        elif line.startswith("+") or line.startswith("-"):
+            color = COLOR_SUCCESS if line.startswith("+") else COLOR_ERROR
+        else:
+            color = COLOR_GRAY_DARK
+        rendered.append(
+            html.Div(line or " ", style={"color": color, "whiteSpace": "pre"})
+        )
+    return html.Div(rendered, style=DIFF_BOX_STYLE)

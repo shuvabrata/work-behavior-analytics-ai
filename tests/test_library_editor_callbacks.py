@@ -50,8 +50,8 @@ class _FakeRequests:
         self.post_calls = []
         self.delete_calls = []
 
-    def get(self, url, timeout):
-        self.get_calls.append({"url": url, "timeout": timeout})
+    def get(self, url, timeout, params=None):
+        self.get_calls.append({"url": url, "timeout": timeout, "params": params})
         return self._next()
 
     def put(self, url, json, timeout):
@@ -810,3 +810,179 @@ def test_e1d_load_query_request_exception_shows_error(monkeypatch):
     assert feedback is not None
     assert "Failed to load query" in str(feedback)
     assert result[1] == ""
+
+
+# ── Factory diff: view-changes affordance and modal ────────────────────
+
+
+def _factory_route(origin: str) -> dict:
+    """A loaded-query route store for the diff callbacks."""
+    return {
+        "mode": "edit",
+        "origin": origin,
+        "namespace": "github",
+        "slug": "top_committers",
+    }
+
+
+_DIFF_PATH = "/app/library/edit/github/top_committers"
+
+
+def test_view_changes_button_visible_only_for_override():
+    """Only an override gets the 'Compare to Factory' affordance."""
+    assert editor.update_view_changes_button({"origin": "override"})["display"] == "inline-block"
+    assert editor.update_view_changes_button({"origin": "custom"})["display"] == "none"
+    assert editor.update_view_changes_button({"origin": "builtin"})["display"] == "none"
+
+
+def test_factory_diff_modal_open_issues_no_request(monkeypatch):
+    """Opening the modal toggles locally and issues no HTTP call."""
+    fake = _FakeRequests([])
+    monkeypatch.setattr(editor, "requests", fake)
+
+    class _FakeContext:
+        triggered = True
+        triggered_id = "editor-view-changes"
+
+    monkeypatch.setattr(editor, "callback_context", _FakeContext())
+    assert editor.toggle_factory_diff_modal(1, None) is True
+    assert fake.get_calls == []
+
+    class _FakeCloseContext:
+        triggered = True
+        triggered_id = "editor-factory-diff-modal-close"
+
+    monkeypatch.setattr(editor, "callback_context", _FakeCloseContext())
+    # Closing must dispatch on triggered_id, not on the (still truthy) click count.
+    assert editor.toggle_factory_diff_modal(1, 1) is False
+    assert fake.get_calls == []
+
+
+def test_factory_diff_fetches_builtin_and_shows_changes(monkeypatch):
+    """The diff fetches current then factory and renders changed lines."""
+    current = {
+        "id": "github/top_committers",
+        "name": "Top Committers (User)",
+        "description": "User override.",
+        "queries": {"tabular": "MATCH (n) RETURN n LIMIT 5"},
+        "origin": "override",
+    }
+    builtin = {
+        "id": "github/top_committers",
+        "name": "Top Committers",
+        "description": "System query.",
+        "queries": {"tabular": "MATCH (n) RETURN n LIMIT 10"},
+        "origin": "builtin",
+    }
+    fake = _FakeRequests([_FakeResponse(current, 200), _FakeResponse(builtin, 200)])
+    monkeypatch.setattr(editor, "requests", fake)
+
+    result = editor.render_factory_diff(True, _DIFF_PATH, _factory_route("override"))
+
+    assert fake.get_calls[0]["params"] is None
+    assert fake.get_calls[1]["params"] == {"include_overrides": "false"}
+    rendered = str(result)
+    assert "-name: Top Committers" in rendered
+    assert "+name: Top Committers (User)" in rendered
+    assert "LIMIT 10" in rendered
+    assert "LIMIT 5" in rendered
+
+
+def test_factory_diff_skips_non_overrides(monkeypatch):
+    """A custom or builtin query issues no request and leaves the node alone."""
+    fake = _FakeRequests([])
+    monkeypatch.setattr(editor, "requests", fake)
+
+    for origin in ("custom", "builtin"):
+        result = editor.render_factory_diff(True, _DIFF_PATH, _factory_route(origin))
+        assert result is editor.no_update
+        assert fake.get_calls == []
+
+
+def test_factory_diff_closed_modal_is_inert(monkeypatch):
+    """A closed modal fetches nothing."""
+    fake = _FakeRequests([])
+    monkeypatch.setattr(editor, "requests", fake)
+
+    result = editor.render_factory_diff(False, _DIFF_PATH, _factory_route("override"))
+
+    assert result is editor.no_update
+    assert fake.get_calls == []
+
+
+def test_factory_diff_request_failure_returns_an_alert(monkeypatch):
+    """A connection error surfaces a diff alert, not a crash."""
+    import requests as requests_lib
+
+    def _failing_get(url, timeout, params=None):
+        raise requests_lib.exceptions.ConnectionError("Connection refused")
+
+    monkeypatch.setattr(editor.requests, "get", _failing_get)
+
+    result = editor.render_factory_diff(True, _DIFF_PATH, _factory_route("override"))
+
+    assert "Diff unavailable" in str(result)
+
+
+def test_factory_diff_non_200_returns_an_alert(monkeypatch):
+    """A non-200 from the current fetch surfaces a diff alert."""
+    fake = _FakeRequests([_FakeResponse({"detail": "Catalog query not found"}, 404)])
+    monkeypatch.setattr(editor, "requests", fake)
+
+    result = editor.render_factory_diff(True, _DIFF_PATH, _factory_route("override"))
+
+    assert "Diff unavailable" in str(result)
+
+
+def test_factory_diff_text_renders_every_diffed_field():
+    """Every author-supplied field appears in the diffed text."""
+    payload = {
+        "name": "Top Committers",
+        "description": "Top committers by count.",
+        "summary": "A summary",
+        "owner": "graph-team",
+        "status": "active",
+        "default_view": "tabular",
+        "tags": ["github", "analytics"],
+        "parameters": [
+            {"name": "limit", "required": True},
+            {"name": "owner", "required": False},
+        ],
+        "queries": {
+            "tabular": "MATCH (n) RETURN n LIMIT 10",
+            "graph": "MATCH (n) RETURN n LIMIT 10",
+        },
+    }
+
+    text = editor._factory_diff_text(payload)
+
+    assert "name: Top Committers" in text
+    assert "description: Top committers by count." in text
+    assert "summary: A summary" in text
+    assert "owner: graph-team" in text
+    assert "status: active" in text
+    assert "default_view: tabular" in text
+    assert "tags: github, analytics" in text
+    assert text.count("parameter:") == 2
+    assert "--- tabular ---" in text
+    assert "--- graph ---" in text
+
+
+def test_view_changes_button_uses_subtle_action_class():
+    """The Compare to Factory button carries the theme-aware subtle-action class."""
+    from app.dash_app.pages.library.editor_layout import _render_action_bar
+
+    def _walk(component):
+        children = getattr(component, "children", None)
+        if isinstance(children, (list, tuple)):
+            for child in children:
+                yield from _walk(child)
+        elif children is not None:
+            yield from _walk(children)
+        yield component
+
+    button = next(
+        c for c in _walk(_render_action_bar())
+        if getattr(c, "id", None) == "editor-view-changes"
+    )
+    assert button.className == "btn-subtle-action"

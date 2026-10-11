@@ -260,3 +260,55 @@ def test_b10_namespace_listing_includes_custom_user_ns(tmp_path):
     assert user_ns.is_user_defined is True
     assert user_ns.order == 1
     assert user_ns.name == "My Queries"
+
+
+def test_include_user_overrides_false_returns_the_builtin(tmp_path):
+    """The flag returns the shipped text of an overridden id."""
+    catalog_dir = tmp_path / "queries_catalog"
+    _build_system_catalog(catalog_dir)
+    _build_user_catalog(catalog_dir)
+
+    merged = {query.id: query for query in load_catalog(catalog_dir)}
+    factory = {
+        query.id: query
+        for query in load_catalog(catalog_dir, include_user_overrides=False)
+    }
+
+    assert merged["github/top_committers"].name == "Top Committers (User)"
+    assert merged["github/top_committers"].origin == "override"
+    assert merged["github/top_committers"].queries["tabular"].endswith("LIMIT 5")
+
+    assert factory["github/top_committers"].name == "Top Committers"
+    assert factory["github/top_committers"].origin == "builtin"
+    assert factory["github/top_committers"].queries["tabular"].endswith("LIMIT 10")
+
+
+def test_include_user_overrides_false_hides_custom_queries(tmp_path):
+    """A user-only id must be absent from the factory result."""
+    catalog_dir = tmp_path / "queries_catalog"
+    _build_system_catalog(catalog_dir)
+    _build_user_catalog(catalog_dir)
+
+    merged = load_catalog(catalog_dir)
+    factory = load_catalog(catalog_dir, include_user_overrides=False)
+
+    assert any(query.id == "my_queries/custom_query" for query in merged)
+    assert all(query.id != "my_queries/custom_query" for query in factory)
+    assert all(query.origin != "override" for query in factory)
+
+
+def test_include_user_overrides_default_still_merges(tmp_path):
+    """The default (True) preserves the existing merge behaviour."""
+    catalog_dir = tmp_path / "queries_catalog"
+    _build_system_catalog(catalog_dir)
+    _build_user_catalog(catalog_dir)
+
+    default = load_catalog(catalog_dir)
+    explicit = load_catalog(catalog_dir, include_user_overrides=True)
+    assert [query.id for query in default] == [query.id for query in explicit]
+
+    by_id = {query.id: query for query in default}
+    assert by_id["github/top_committers"].name == "Top Committers (User)"
+    assert by_id["github/top_committers"].origin == "override"
+    assert by_id["my_queries/custom_query"].origin == "custom"
+    assert "github/open_prs" in by_id

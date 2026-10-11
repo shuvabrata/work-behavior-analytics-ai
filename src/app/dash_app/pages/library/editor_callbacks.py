@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import difflib
+import json
 from typing import Any
 
 import requests
@@ -25,7 +27,7 @@ from app.dash_app.pages.graph.utils import (
 )
 from app.dash_app.styles import COLOR_GRAY_MEDIUM
 from ._utils import get_api_base_url
-from .editor_layout import render_parameter_row
+from .editor_layout import render_factory_diff_lines, render_parameter_row
 
 TIMEOUT_SECONDS = runtime_settings.get_int("HTTP_REQUEST_TIMEOUT")
 
@@ -513,6 +515,117 @@ def toggle_custom_namespace(namespace_value: str | None) -> dict[str, Any]:
 
 
 @callback(
+    Output("editor-factory-diff-modal", "is_open"),
+    Input("editor-view-changes", "n_clicks"),
+    Input("editor-factory-diff-modal-close", "n_clicks"),
+    prevent_initial_call=True,
+)
+def toggle_factory_diff_modal(
+    open_clicks: int | None, close_clicks: int | None
+) -> bool:
+    """Open the factory-diff modal, or close it. Deliberately issues no HTTP call."""
+    if not callback_context.triggered:
+        raise PreventUpdate
+    triggered = callback_context.triggered_id
+    if triggered == "editor-view-changes":
+        return True
+    if triggered == "editor-factory-diff-modal-close":
+        return False
+    raise PreventUpdate
+
+
+def _factory_diff_text(query: dict[str, Any]) -> str:
+    """Render one catalog entry as stable, line-oriented text for diffing."""
+    lines = [
+        f"name: {query.get('name') or ''}",
+        f"description: {query.get('description') or ''}",
+        f"summary: {query.get('summary') or ''}",
+        f"owner: {query.get('owner') or ''}",
+        f"status: {query.get('status') or ''}",
+        f"default_view: {query.get('default_view') or ''}",
+        f"tags: {', '.join(query.get('tags') or [])}",
+    ]
+    for param in query.get("parameters") or []:
+        lines.append(f"parameter: {json.dumps(param, sort_keys=True)}")
+    for view in ("tabular", "graph"):
+        query_text = (query.get("queries") or {}).get(view)
+        if query_text:
+            lines.append(f"--- {view} ---")
+            lines.extend(query_text.splitlines())
+    return "\n".join(lines) + "\n"
+
+
+@callback(
+    Output("editor-factory-diff", "children"),
+    Input("editor-factory-diff-modal", "is_open"),
+    State("url", "pathname"),
+    State("editor-route", "data"),
+)
+def render_factory_diff(
+    is_open: bool | None, pathname: str | None, route: dict[str, Any] | None
+) -> Any:
+    """Render a factory-vs-current diff for an overridden query.
+
+    Fires when the modal opens, so the two reads only happen if the user asks
+    for them. The override replaces the built-in at load time, so the factory
+    text is only reachable via ``include_overrides=false``.
+    """
+    if not is_open:
+        return no_update
+
+    origin = (route or {}).get("origin", "builtin") if isinstance(route, dict) else "builtin"
+    if origin != "override":
+        return no_update
+
+    _, namespace, slug = _parse_route(pathname)
+    if not namespace or not slug:
+        return no_update
+
+    api_base = get_api_base_url()
+    url = f"{api_base}/api/v1/queries/catalog/{namespace}/{slug}"
+    try:
+        # Fetch current first, then factory: the diff below is
+        # ``unified_diff(factory, current)``, so this order decides which side
+        # is ``-``/red and which is ``+``/green.
+        current_resp = requests.get(url, timeout=TIMEOUT_SECONDS)
+        if current_resp.status_code != 200:
+            detail = current_resp.json().get("detail", "Unknown error")
+            return create_alert(
+                f"Diff unavailable: {detail}", color="danger", class_name="mb-3"
+            )
+        current_resp.raise_for_status()
+        current = current_resp.json()
+
+        factory_resp = requests.get(
+            url, timeout=TIMEOUT_SECONDS, params={"include_overrides": "false"}
+        )
+        if factory_resp.status_code != 200:
+            detail = factory_resp.json().get("detail", "Unknown error")
+            return create_alert(
+                f"Diff unavailable: {detail}", color="danger", class_name="mb-3"
+            )
+        factory_resp.raise_for_status()
+        factory = factory_resp.json()
+    except requests.exceptions.RequestException as exc:
+        return create_alert(
+            f"Diff unavailable: {exc}", color="danger", class_name="mb-3"
+        )
+
+    diff_lines = list(
+        difflib.unified_diff(
+            _factory_diff_text(factory).splitlines(),
+            _factory_diff_text(current).splitlines(),
+            fromfile="factory",
+            tofile="current",
+            lineterm="",
+        )
+    )
+    if not diff_lines:
+        return create_alert("No differences from the factory version.", color="info")
+    return render_factory_diff_lines(diff_lines)
+
+
+@callback(
     Output("editor-feedback", "children", allow_duplicate=True),
     Output("editor-save-as-modal", "is_open", allow_duplicate=True),
     Input("editor-save-as-submit", "n_clicks"),
@@ -705,6 +818,20 @@ def update_destructive_button(route: dict[str, Any] | None) -> tuple[str, dict[s
     if origin == "custom":
         return "Delete", {"display": "inline-block"}
     return "Delete", {"display": "none"}
+
+
+@callback(
+    Output("editor-view-changes", "style"),
+    Input("editor-route", "data"),
+)
+def update_view_changes_button(route: dict[str, Any] | None) -> dict[str, str]:
+    """Show "Compare to Factory" only for an override.
+
+    A custom query has no factory version to diff against, and a builtin has no
+    destructive action at all, so neither gets the affordance.
+    """
+    origin = (route or {}).get("origin", "builtin") if isinstance(route, dict) else "builtin"
+    return {"display": "inline-block"} if origin == "override" else {"display": "none"}
 
 
 @callback(

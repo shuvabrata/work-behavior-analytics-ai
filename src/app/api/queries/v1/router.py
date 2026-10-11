@@ -60,11 +60,28 @@ async def list_catalog_namespaces() -> CatalogNamespaceListResponse:
 
 
 @router.get("/catalog/{namespace}/{slug}", response_model=CatalogQuery, response_model_exclude_none=True)
-async def get_catalog_query(namespace: str, slug: str) -> CatalogQuery:
-    """Get one normalized query catalog entry."""
+async def get_catalog_query(
+    namespace: str,
+    slug: str,
+    include_overrides: bool = Query(
+        default=True,
+        description="Include user-defined overrides; set false to read the shipped catalog",
+    ),
+) -> CatalogQuery:
+    """Get one normalized query catalog entry.
+
+    With ``include_overrides=false`` the shipped catalog is read without the
+    ``user_defined/`` overlay, which is how the editor obtains the factory
+    version of an overridden query. The HTTP parameter is named
+    ``include_overrides``; the Python/loader vocabulary is
+    ``include_user_overrides``.
+    """
     try:
         catalog_query = await asyncio.to_thread(
-            service.get_catalog_query, namespace=namespace, slug=slug
+            service.get_catalog_query,
+            namespace=namespace,
+            slug=slug,
+            include_user_overrides=include_overrides,
         )
     except CatalogLoadError as exc:
         logger.error("Query catalog is unreadable: %s", exc)

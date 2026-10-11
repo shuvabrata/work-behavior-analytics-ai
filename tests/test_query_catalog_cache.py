@@ -203,3 +203,44 @@ def test_mtime_preserving_write_is_not_detected(tmp_catalog):
     # A deterministic reset picks up the new content.
     clear_catalog_cache()
     assert {q.id: q for q in load_catalog(tmp_catalog)}["github/open_prs"].name == "Open Prs"
+
+
+def test_cache_keeps_flag_variants_separate(tmp_catalog):
+    """The factory view and the merged view must not share a cache entry.
+
+    The factory variant is loaded first, so an unwidened cache key would serve
+    it to the merged call and the ``merged`` assertions below would fail.
+    """
+    _write_yaml(
+        tmp_catalog / "user_defined" / "catalog.yaml",
+        {"namespaces": [{"name": "My Queries", "directory": "my_queries"}]},
+    )
+    _write_yaml(
+        tmp_catalog / "user_defined" / "github" / "top_committers.yaml",
+        {
+            "name": "Top Committers (User)",
+            "description": "User override.",
+            "queries": {"tabular": "MATCH (n) RETURN n LIMIT 5"},
+        },
+    )
+    _write_yaml(
+        tmp_catalog / "user_defined" / "my_queries" / "custom_query.yaml",
+        {
+            "name": "Custom Query",
+            "description": "Brand new query.",
+            "queries": {"tabular": "MATCH (n) RETURN n LIMIT 1"},
+        },
+    )
+    clear_catalog_cache()
+
+    factory = {
+        q.id: q
+        for q in load_catalog(tmp_catalog, include_user_overrides=False)
+    }
+    merged = {q.id: q for q in load_catalog(tmp_catalog)}
+
+    assert merged["github/top_committers"].name == "Top Committers (User)"
+    assert merged["github/top_committers"].origin == "override"
+    assert factory["github/top_committers"].name == "Top Committers"
+    assert factory["github/top_committers"].origin == "builtin"
+    assert all(q.origin != "override" for q in factory.values())

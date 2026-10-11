@@ -16,9 +16,9 @@ from app.query_catalog import (
 )
 
 
-def list_catalog_queries() -> list[CatalogQuery]:
+def list_catalog_queries(*, include_user_overrides: bool = True) -> list[CatalogQuery]:
     """Return all normalized catalog queries."""
-    return load_catalog()
+    return load_catalog(include_user_overrides=include_user_overrides)
 
 
 def list_catalog_namespaces() -> list[CatalogNamespace]:

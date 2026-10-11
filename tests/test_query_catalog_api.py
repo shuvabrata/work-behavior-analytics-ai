@@ -176,6 +176,21 @@ async def test_get_catalog_query_missing_returns_404():
     assert exc_info.value.detail == "Catalog query not found"
 
 
+async def test_detail_include_overrides_false_is_accepted():
+    """The detail endpoint accepts include_overrides and keeps its 404 path.
+
+    ``include_overrides`` is passed explicitly: a direct route call bypasses
+    FastAPI's parameter resolution, so an omitted argument would arrive as the
+    ``Query(...)`` object (truthy), not as ``False``.
+    """
+    with pytest.raises(HTTPException) as exc_info:
+        await router.get_catalog_query(
+            "github", "does_not_exist", include_overrides=False
+        )
+
+    assert exc_info.value.status_code == 404
+
+
 async def test_list_catalog_namespaces():
     response = await router.list_catalog_namespaces()
     data = response.model_dump()

@@ -572,6 +572,24 @@ input::placeholder {
     box-shadow: none !important;
 }
 
+/* Neutral / secondary action button. Bootstrap's stock
+   .btn-outline-secondary (#6c757d) fails contrast against both theme
+   backgrounds, and the theme CSS does not restyle that variant, so this
+   class supplies the theme-aware tokens instead. */
+.btn-subtle-action.btn {
+    color: var(--color-text-secondary) !important;
+    border-color: var(--color-text-secondary) !important;
+    background-color: transparent !important;
+}
+
+.btn-subtle-action.btn:hover,
+.btn-subtle-action.btn:focus,
+.btn-subtle-action.btn:active {
+    color: var(--color-text-secondary) !important;
+    border-color: var(--color-navy) !important;
+    background-color: var(--color-background-light) !important;
+}
+
 /* ============================================================
    Right Panel Workbench Tab Bar
    ============================================================ */

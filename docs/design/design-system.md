@@ -212,19 +212,11 @@ card = create_feature_card(
 
 ### Chat Messages
 
-**Style Tokens**: `CHAT_MESSAGE_USER_STYLE`, `CHAT_MESSAGE_AI_STYLE`, `CHAT_MESSAGE_TIMESTAMP_STYLE`, etc.
-
-```python
-from app.dash_app.components.common import create_user_message, create_ai_message
-
-# Usage
-user_msg = create_user_message(text="Hello", timestamp="10:30 AM")
-ai_msg = create_ai_message(text="Hi there!", timestamp="10:30 AM")
-```
+**Implementation**: Built inline in the chat page — see `render_messages` in `src/app/dash_app/pages/chat.py`. There are no chat-message style tokens.
 
 **Visual**: 
 - User messages: Navy background with white text, right-aligned
-- AI messages: Light gray background with charcoal text, left-aligned
+- Assistant messages: Light background with charcoal text, left-aligned
 
 ---
 
@@ -261,7 +253,7 @@ placeholder = create_placeholder_section(
 
 ### Graph Components
 
-**Style Tokens**: `GRAPH_SECTION_CONTAINER_STYLE`, `GRAPH_QUERY_TEXTAREA_STYLE`, `GRAPH_EXECUTE_BUTTON_STYLE`, etc.
+**Style Tokens**: `GRAPH_QUERY_TEXTAREA_STYLE`, `GRAPH_CYTOSCAPE_STYLE`, `GRAPH_HELPER_TEXT_STYLE`, etc.
 
 **Visual**:
 - Query console: Light gray background container

@@ -430,43 +430,6 @@ PLACEHOLDER_MESSAGE_STYLE = {
     "fontStyle": "italic"
 }
 
-# Chat Message Styles
-CHAT_MESSAGE_USER_STYLE = {
-    "backgroundColor": COLOR_NAVY,
-    "color": COLOR_BACKGROUND_WHITE,
-    "padding": SPACING_SMALL,
-    "borderRadius": "2px",
-    "marginBottom": SPACING_XSMALL,
-    "fontFamily": FONT_SANS,
-    "fontSize": FONT_SIZE_SMALL,
-    "lineHeight": "1.6"
-}
-
-CHAT_MESSAGE_AI_CONTAINER_STYLE = {
-    "backgroundColor": COLOR_BACKGROUND_LIGHT,
-    "padding": SPACING_SMALL,
-    "borderRadius": "2px",
-    "marginBottom": SPACING_XSMALL,
-    "borderLeft": f"3px solid {COLOR_NAVY}"
-}
-
-CHAT_MESSAGE_AI_HEADER_STYLE = {
-    "fontFamily": FONT_SANS,
-    "fontSize": FONT_SIZE_XSMALL,
-    "color": COLOR_GRAY_MEDIUM,
-    "marginBottom": SPACING_XXSMALL,
-    "display": "flex",
-    "alignItems": "center",
-    "gap": SPACING_XXSMALL
-}
-
-CHAT_MESSAGE_AI_CONTENT_STYLE = {
-    "fontFamily": FONT_SANS,
-    "fontSize": FONT_SIZE_SMALL,
-    "color": COLOR_CHARCOAL_MEDIUM,
-    "lineHeight": "1.7"
-}
-
 # Input Styles
 INPUT_STYLE = {
     "fontFamily": FONT_SANS,
@@ -474,53 +437,6 @@ INPUT_STYLE = {
     "padding": SPACING_XSMALL,
     "border": f"1px solid {COLOR_BORDER}",
     "width": "100%"
-}
-
-INPUT_FOCUS_STYLE = {
-    **INPUT_STYLE,
-    "borderColor": COLOR_NAVY,
-    "outline": "none",
-    "boxShadow": "0 0 0 3px var(--color-focus-ring)"
-}
-
-# Button Styles
-BUTTON_PRIMARY_STYLE = {
-    "fontFamily": FONT_SANS,
-    "fontSize": FONT_SIZE_SMALL,
-    "fontWeight": FONT_WEIGHT_MEDIUM,
-    "backgroundColor": COLOR_NAVY,
-    "color": COLOR_BACKGROUND_WHITE,
-    "border": "none",
-    "borderRadius": "2px",
-    "padding": f"{SPACING_XSMALL} {SPACING_MEDIUM}",
-    "cursor": "pointer",
-    "textTransform": "uppercase",
-    "letterSpacing": "0.5px"
-}
-
-BUTTON_SECONDARY_STYLE = {
-    **BUTTON_PRIMARY_STYLE,
-    "backgroundColor": COLOR_BACKGROUND_WHITE,
-    "color": COLOR_NAVY,
-    "border": f"1px solid {COLOR_NAVY}"
-}
-
-# Graph Controls
-GRAPH_CONTROL_LABEL_STYLE = {
-    "fontFamily": FONT_SANS,
-    "fontSize": FONT_SIZE_SMALL,
-    "fontWeight": FONT_WEIGHT_MEDIUM,
-    "color": COLOR_CHARCOAL_MEDIUM,
-    "marginBottom": SPACING_XXSMALL,
-    "textTransform": "uppercase",
-    "letterSpacing": "0.5px"
-}
-
-GRAPH_CONTAINER_STYLE = {
-    "backgroundColor": COLOR_BACKGROUND_WHITE,
-    "border": f"1px solid {COLOR_BORDER}",
-    "borderRadius": "2px",
-    "padding": SPACING_XSMALL
 }
 
 # Navigation & Layout
@@ -564,11 +480,6 @@ TOGGLE_BUTTON_STYLE = {
     "backgroundColor": "transparent"
 }
 
-DROPDOWN_MENU_STYLE = {
-    "fontFamily": FONT_SANS,
-    "fontSize": FONT_SIZE_XSMALL
-}
-
 SIDEBAR_COL_STYLE = {
     "minWidth": "180px",
     "maxWidth": "180px"
@@ -577,24 +488,6 @@ SIDEBAR_COL_STYLE = {
 # =============================================================================
 # GRAPH PAGE COMPONENTS
 # =============================================================================
-
-GRAPH_SECTION_CONTAINER_STYLE = {
-    "backgroundColor": COLOR_BACKGROUND_WHITE,
-    "borderRadius": "2px",
-    "border": f"1px solid {COLOR_BORDER}",
-    "padding": SPACING_XSMALL,
-    "marginBottom": SPACING_XSMALL
-}
-
-GRAPH_SECTION_TITLE_STYLE = {
-    "fontFamily": FONT_SANS,
-    "fontSize": FONT_SIZE_XSMALL,
-    "fontWeight": "600",
-    "color": COLOR_CHARCOAL_MEDIUM,
-    "marginBottom": SPACING_XSMALL,
-    "textTransform": "uppercase",
-    "letterSpacing": "0.5px"
-}
 
 GRAPH_QUERY_TEXTAREA_STYLE = {
     "fontFamily": FONT_SANS,
@@ -609,33 +502,11 @@ GRAPH_QUERY_TEXTAREA_STYLE = {
     "color": COLOR_CHARCOAL_MEDIUM
 }
 
-GRAPH_EXECUTE_BUTTON_STYLE = {
-    "fontFamily": FONT_SANS,
-    "borderRadius": "2px",
-    "fontWeight": "500",
-    "fontSize": FONT_SIZE_SMALL,
-    "height": "90px",
-    "width": "100%",
-    "backgroundColor": COLOR_NAVY,
-    "border": "none",
-    "letterSpacing": "0.5px",
-    "textTransform": "uppercase",
-    "transition": "all 0.2s ease"
-}
-
 GRAPH_HELPER_TEXT_STYLE = {
     "fontFamily": FONT_SANS,
     "fontSize": "11px",
     "color": COLOR_GRAY_LIGHT,
     "letterSpacing": "0.3px"
-}
-
-GRAPH_QUERY_SECTION_CONTAINER_STYLE = {
-    "backgroundColor": COLOR_BACKGROUND_LIGHT,
-    "borderRadius": "2px",
-    "border": f"1px solid {COLOR_BORDER}",
-    "padding": SPACING_SMALL,
-    "marginTop": SPACING_XSMALL
 }
 
 GRAPH_CYTOSCAPE_STYLE = {
@@ -664,10 +535,6 @@ GRAPH_DETAILS_PANEL_STYLE = {
     "borderRadius": "4px",
     "border": f"1px solid {COLOR_BORDER_GRAY}",
     "padding": SPACING_XXSMALL,
-}
-
-GRAPH_DETAILS_PANEL_ICON_STYLE = {
-    "color": "var(--color-details-icon)"
 }
 
 GRAPH_NODE_HOVER_TOOLTIP_STYLE = {
@@ -739,42 +606,9 @@ VALIDATION_CODE_STYLE = {
 }
 
 # Details Panel Styles
-DETAILS_LABEL_STYLE = {
-    "color": COLOR_TEXT_MUTED,
-    "fontSize": FONT_SIZE_SMALL
-}
-
-DETAILS_VALUE_STYLE = {
-    "color": COLOR_TEXT_DARK,
-    "fontSize": FONT_SIZE_SMALL
-}
-
-DETAILS_HEADING_STYLE = {
-    "fontWeight": FONT_WEIGHT_SEMIBOLD,
-    "color": COLOR_CHARCOAL_MEDIUM
-}
-
-DETAILS_SUBHEADING_STYLE = {
-    "fontSize": FONT_SIZE_MEDIUM,
-    "fontWeight": FONT_WEIGHT_SEMIBOLD,
-    "color": COLOR_TEXT_SECONDARY,
-    "marginBottom": SPACING_XSMALL
-}
-
-DETAILS_CODE_STYLE = {
-    "fontSize": FONT_SIZE_TINY,
-    "backgroundColor": COLOR_CODE_BACKGROUND,
-    "padding": "2px 6px",
-    "borderRadius": "3px"
-}
-
 DETAILS_MUTED_TEXT_STYLE = {
     "fontSize": FONT_SIZE_SMALL,
     "fontStyle": "italic"
-}
-
-DETAILS_SEPARATOR_STYLE = {
-    "margin": "12px 0"
 }
 
 # Properties Table — Executive Dashboard tabular layout
@@ -908,10 +742,6 @@ PERFORMANCE_TIP_ICON_STYLE = {
 }
 
 # Alert Component Styles  
-ALERT_HEADING_ICON_STYLE = {
-    "fontSize": FONT_SIZE_MEDIUM
-}
-
 ALERT_TEXT_STYLE = {
     "fontSize": FONT_SIZE_MEDIUM
 }

@@ -319,7 +319,8 @@ Stop and report (do not improvise) if:
 
 ### ✅ Executed 2026-10-11 — with one approved deviation
 
-Implemented on `feature/editor-test-buttons` (uncommitted). All Phase 1 done
+Implemented on `feature/editor-test-buttons` (committed by the operator as
+`bf0a851`, with the plan-doc updates in `44ac24c`). All Phase 1 done
 criteria pass: `pytest -m unit tests -q` → 1820 passed; `mypy src/` clean;
 `pylint src` 9.68/10; `bandit … -lll` exit 0; the rendered `graph-*` id set is
 **byte-identical** to `a7ce365` (24 ids, compared against `git archive a7ce365`).
@@ -432,9 +433,19 @@ mypy src/ && pylint src --score=y
 > the shared modal shell, and delete the old test-results section. No callbacks
 > are wired yet — the buttons are inert.
 
+### ✅ Executed 2026-10-11
+
+Two files: `editor_layout.py` modified, `tests/test_catalog_editor_layout.py`
+created (7 tests, all exact-id tree walks). Verified: 1827 unit tests pass
+(+7), mypy clean, pylint 9.68, the 14 required ids all present by independent
+tree walk, `editor-test-results` and both old buttons absent, and
+`import app.main` + `create_dash_app()` still succeed with the old callbacks
+dangling (safe because `suppress_callback_exceptions=True`). `editor_callbacks.py`
+is untouched, as the phase boundary requires.
+
 ### Tasks
 
-- [ ] Edit `src/app/dash_app/pages/catalog/editor_layout.py`.
+- [x] Edit `src/app/dash_app/pages/catalog/editor_layout.py`.
 
   **In `_render_queries_section()`**, replace the "Test Tabular" block
   (lines 279-286) with:
@@ -458,7 +469,7 @@ mypy src/ && pylint src --score=y
   **Delete** the `_render_test_results()` function (lines 508-516) and its call
   in `get_editor_layout()` (line 98).
 
-- [ ] Add `_render_test_results_modal()` to `editor_layout.py`, and call it from
+- [x] Add `_render_test_results_modal()` to `editor_layout.py`, and call it from
   `get_editor_layout()` right after `_render_factory_diff_modal()` (line 97).
   Use a module-level import of the Phase 1 builders (no import cycle — verified):
 
@@ -498,7 +509,7 @@ mypy src/ && pylint src --score=y
 
   Add `from app.dash_app.components.result_pane import (create_graph_result_container, create_results_empty_state, create_table_result_container)` to the module's imports.
 
-- [ ] **Do not** add any `dcc.Store` — no callback in this plan needs one.
+- [x] **Do not** add any `dcc.Store` — no callback in this plan needs one.
 
 ### Tests to add (Phase 2)
 
@@ -1097,7 +1108,7 @@ ALL must hold:
 | Phase | Status | Notes |
 |---|---|---|
 | Phase 1 — Extract `result_pane.py` | `[x]` | DONE 2026-10-11 + approved stylesheet move; operator-verified; uncommitted on `feature/editor-test-buttons` |
-| Phase 2 — Editor layout (buttons + modal shell) | `[ ]` | |
+| Phase 2 — Editor layout (buttons + modal shell) | `[x]` | DONE 2026-10-11; buttons inert pending Phase 3 |
 | Phase 3 — Quick Test callbacks | `[ ]` | |
 | Phase 4 — View Test modal callback | `[ ]` | |
 | Phase 5 — Cleanup & regression | `[ ]` | |

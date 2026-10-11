@@ -869,6 +869,24 @@ inputs → open with an `html.Div` error at index 6.
 Note the operator committed Phases 1–3 and the badge fix; this phase's two files
 are the only dirty ones.
 
+**Follow-up fix (operator-reported, 2026-10-11): the modal's graph rendered as a
+circle.** `components/result_pane.py` hardcoded `layout={'name': 'circle',
+'animate': True}` — copied verbatim from the graph page in Phase 1, where it was
+only ever the *initial* prop, because the graph page overwrites it from
+`pages/graph/callbacks/display.py:51-105`. The modal has no layout callback, so
+nothing replaced it. (The layout prop is re-applied by react-cytoscape whenever
+`elements` change, which is why a static `circle` actually drew a circle — and
+why a static `cose` now works too. It is also why the graph page's Reset button
+perturbs a `stop` integer, to force a re-run of an otherwise-identical dict.)
+
+**Operator chose to change the shared default to cose**, so the graph page's
+first render also matches its `Force-Directed (cose)` dropdown. New default:
+`{'name': 'cose', 'animate': True, 'spacingFactor': 1.5}` — the exact options
+`display.py:72` already uses for cose. Pinned by two new tests in
+`tests/test_result_pane.py` (nothing asserted the layout before). Note this
+makes the graph page's first render run a force-directed layout, which is
+costlier than the previous instant circle on large result sets.
+
 ### Tasks
 
 - [x] Add to `editor_test_callbacks.py`:
@@ -1164,5 +1182,5 @@ ALL must hold:
 | Phase 1 — Extract `result_pane.py` | `[x]` | DONE 2026-10-11 + approved stylesheet move; operator-verified; uncommitted on `feature/editor-test-buttons` |
 | Phase 2 — Editor layout (buttons + modal shell) | `[x]` | DONE 2026-10-11; operator-verified; buttons inert pending Phase 3 |
 | Phase 3 — Quick Test callbacks | `[x]` | DONE 2026-10-11; uncommitted |
-| Phase 4 — View Test modal callback | `[x]` | DONE 2026-10-11; uncommitted |
+| Phase 4 — View Test modal callback | `[x]` | DONE 2026-10-11; + cose default fix; uncommitted |
 | Phase 5 — Cleanup & regression | `[ ]` | |

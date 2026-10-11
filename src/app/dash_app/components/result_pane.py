@@ -31,7 +31,7 @@ def create_graph_result_container(id_prefix: str = "graph") -> html.Div:
             cyto.Cytoscape(
                 id=f"{id_prefix}-cytoscape",
                 elements=[],
-                layout={'name': 'circle', 'animate': True},
+                layout={'name': 'cose', 'animate': True, 'spacingFactor': 1.5},
                 style=GRAPH_CYTOSCAPE_STYLE,
                 stylesheet=CYTOSCAPE_STYLESHEET,
                 userZoomingEnabled=True,

@@ -34,6 +34,22 @@ def _collect_ids(component) -> set:
     return ids
 
 
+def _find_cytoscape(component, target_id):
+    """Return the dash_cytoscape.Cytoscape with `target_id`, or None."""
+    if component is not None and getattr(component, "id", None) == target_id:
+        return component
+    children = getattr(component, "children", None)
+    if children is None:
+        return None
+    if not isinstance(children, (list, tuple)):
+        children = [children]
+    for child in children:
+        found = _find_cytoscape(child, target_id)
+        if found is not None:
+            return found
+    return None
+
+
 def test_create_graph_result_container_default_ids():
     result = create_graph_result_container()
     assert isinstance(result, html.Div)
@@ -66,3 +82,17 @@ def test_id_prefix_applied():
 
     empty_ids = _collect_ids(create_results_empty_state(id_prefix="editor-test"))
     assert "editor-test-results-container" in empty_ids
+
+
+def test_default_layout_is_cose():
+    cyto = _find_cytoscape(create_graph_result_container(), "graph-cytoscape")
+    assert cyto is not None
+    assert cyto.layout == {"name": "cose", "animate": True, "spacingFactor": 1.5}
+
+
+def test_default_layout_applies_to_custom_prefix():
+    cyto = _find_cytoscape(
+        create_graph_result_container(id_prefix="editor-test"), "editor-test-cytoscape"
+    )
+    assert cyto is not None
+    assert cyto.layout["name"] == "cose"

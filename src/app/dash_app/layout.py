@@ -7,7 +7,7 @@ from dash import clientside_callback
 from dash.exceptions import PreventUpdate
 from urllib.parse import quote
 
-from app.dash_app.pages import analytics, chat, collaboration_network, connectors, graph, search, settings, timeline
+from app.dash_app.pages import analytics, chat, collaboration_network, connectors, graph, search, settings, timeline, catalog
 from app.dash_app.components.setup_banner import get_banner_layout
 from app.settings import settings as app_settings
 from .styles import (
@@ -42,12 +42,13 @@ def create_dash_app() -> dash.Dash:
             dbc.NavLink([html.I(className="fas fa-project-diagram fa-fw me-2", title="Graph"), html.Span("Graph", className="sidebar-text")], href="/app/graph", active="exact", id="nav-graph", className="executive-nav-link d-flex align-items-center text-nowrap"),
             dbc.NavLink([html.I(className="fas fa-timeline fa-fw me-2", title="Timeline"), html.Span("Timeline", className="sidebar-text")], href="/app/timeline", active="exact", id="nav-timeline", className="executive-nav-link d-flex align-items-center text-nowrap"),
             dbc.NavLink([html.I(className="fas fa-chart-pie fa-fw me-2", title="Analytics"), html.Span("Analytics", className="sidebar-text")], href="/app/analytics", active="exact", id="nav-analytics", className="executive-nav-link d-flex align-items-center text-nowrap"),
+            dbc.NavLink([html.I(className="fas fa-book-open fa-fw me-2", title="Catalog"), html.Span("Catalog", className="sidebar-text")], href="/app/catalog", active="exact", id="nav-catalog", className="executive-nav-link d-flex align-items-center text-nowrap"),
             dbc.NavLink([html.I(className="fas fa-plug fa-fw me-2", title="Connectors"), html.Span("Connectors", className="sidebar-text")], href="/app/connectors", active="exact", id="nav-connectors", className="executive-nav-link d-flex align-items-center text-nowrap"),
             dbc.NavLink([html.I(className="fas fa-cog fa-fw me-2", title="Settings"), html.Span("Settings", className="sidebar-text")], href="/app/settings", active="exact", id="nav-settings", className="executive-nav-link d-flex align-items-center text-nowrap"),
         ],
         vertical=True,
         pills=False,
-        className="vh-100 sidebar executive-sidebar",
+        className="sidebar executive-sidebar",
         style={**SIDEBAR_STYLE, "overflowX": "hidden"}
     )
 
@@ -126,8 +127,8 @@ def create_dash_app() -> dash.Dash:
                 className="sidebar-col",
                 style=SIDEBAR_COL_STYLE
             ),
-            dbc.Col(content, id="content-col", width=True, style={"minWidth": 0})
-        ], className="g-0 flex-nowrap"),
+            dbc.Col(content, id="content-col", width=True, className="app-content-col", style={"minWidth": 0})
+        ], className="g-0 flex-nowrap app-body-row"),
     ], fluid=True, id="app-shell", className="app-shell theme-executive-light")
 
     # Callbacks for page routing
@@ -144,6 +145,10 @@ def create_dash_app() -> dash.Dash:
             # nested path is kept as an alias so existing bookmarks and ?wba_ids=
             # deep links keep resolving.
             "/app/timeline": timeline.get_layout,
+            "/app/catalog": catalog.get_layout,
+            # Library → Catalog rename: the old path is kept as an alias so existing
+            # bookmarks and deep links keep resolving (same pattern as /app/analytics/timeline above).
+            "/app/library": catalog.get_layout,
             "/app/analytics/timeline": timeline.get_layout,
             "/app/collaboration": collaboration_network.get_layout,
             "/app/graph": graph.get_layout,
@@ -160,6 +165,10 @@ def create_dash_app() -> dash.Dash:
         # "/app/connectors" itself resolves to the index page.
         if route.startswith("/app/connectors/"):
             return connectors.get_detail_layout(route.removeprefix("/app/connectors/"))
+        if route.startswith("/app/catalog/"):
+            return catalog.get_editor_layout()
+        if route.startswith("/app/library/"):
+            return catalog.get_editor_layout()
         # Unknown paths fall back to the Graph page (the app default since the
         # sidebar rework) so a typo or a stale bookmark still lands somewhere
         # useful instead of erroring.

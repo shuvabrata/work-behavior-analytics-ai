@@ -353,7 +353,6 @@ def _build_person_activity_buttons(wba_id: str) -> list[Any]:
                 style={
                     "fontFamily": FONT_SANS,
                     "fontSize": FONT_SIZE_TINY,
-                    "borderRadius": "2px",
                     "padding": "2px 8px",
                     "letterSpacing": "0.3px",
                     "marginRight": SPACING_XXSMALL,
@@ -464,7 +463,6 @@ def _build_result_card(result: dict[str, Any], full: bool, badge_colors: dict[st
                             "fontFamily": FONT_SANS,
                             "fontSize": FONT_SIZE_TINY,
                             "padding": "2px 10px",
-                            "borderRadius": "2px",
                             "letterSpacing": "0.3px",
                         },
                     ),
@@ -808,7 +806,6 @@ def get_layout() -> html.Div:
                                 n_submit=0,
                                 style={
                                     **INPUT_STYLE,
-                                    "borderRadius": "24px",
                                     "height": "44px",
                                     "fontSize": FONT_SIZE_MEDIUM,
                                     "paddingLeft": "20px",

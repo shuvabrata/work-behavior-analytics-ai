@@ -85,6 +85,23 @@ This preserves current visuals while making it easier to add future themes (for 
 | `COLOR_BORDER` | `#e2e8f0` | Standard borders |
 | `COLOR_BORDER_LIGHT` | `#e2e8f0` | Light borders (same as standard) |
 
+### Corner Radius
+
+| Surface | Radius | Source |
+|---------|--------|--------|
+| Form controls (`.form-control`, `.form-select`, `textarea`, `.Select-control`, `.Select-menu-outer`) | 6px | `var(--bs-border-radius)` theme token |
+| Buttons (`.btn`, `.btn-sm`, `.btn-lg`) | 6px | `var(--bs-border-radius)` via `--bs-btn-border-radius` |
+| Chat message surfaces (user / assistant bubbles, inline cards) | 6px | inline `var(--bs-border-radius, 6px)` — `pages/chat.py` |
+| Surfaces / containers / cards | 2px | `var(--border-radius, 2px)` |
+
+**Enforcement.** The form-control radius is declared with `!important` so it can beat
+Bootswatch Materia's hardcoded `.form-control { border-radius: 0 }`. Consequence: an
+inline `borderRadius` on a `.form-control` / `.form-select` / `textarea` / react-select
+control is silently ignored — set it in `assets/executive-dashboard.css`, not in a
+component. Buttons work the opposite way: the button radius overrides Bootstrap's
+`--bs-btn-border-radius` variable, which an inline `border-radius` *does* beat, so a
+button carrying an inline radius keeps that value instead of 6px.
+
 ### Utility Colors
 
 | Token | Value | Usage |
@@ -204,19 +221,11 @@ card = create_feature_card(
 
 ### Chat Messages
 
-**Style Tokens**: `CHAT_MESSAGE_USER_STYLE`, `CHAT_MESSAGE_AI_STYLE`, `CHAT_MESSAGE_TIMESTAMP_STYLE`, etc.
-
-```python
-from app.dash_app.components.common import create_user_message, create_ai_message
-
-# Usage
-user_msg = create_user_message(text="Hello", timestamp="10:30 AM")
-ai_msg = create_ai_message(text="Hi there!", timestamp="10:30 AM")
-```
+**Implementation**: Built inline in the chat page — see `render_messages` in `src/app/dash_app/pages/chat.py`. There are no chat-message style tokens.
 
 **Visual**: 
 - User messages: Navy background with white text, right-aligned
-- AI messages: Light gray background with charcoal text, left-aligned
+- Assistant messages: Light background with charcoal text, left-aligned
 
 ---
 
@@ -253,7 +262,7 @@ placeholder = create_placeholder_section(
 
 ### Graph Components
 
-**Style Tokens**: `GRAPH_SECTION_CONTAINER_STYLE`, `GRAPH_QUERY_TEXTAREA_STYLE`, `GRAPH_EXECUTE_BUTTON_STYLE`, etc.
+**Style Tokens**: `GRAPH_QUERY_TEXTAREA_STYLE`, `GRAPH_CYTOSCAPE_STYLE`, `GRAPH_HELPER_TEXT_STYLE`, etc.
 
 **Visual**:
 - Query console: Light gray background container
@@ -325,6 +334,25 @@ def perform_connector_delete(submit_clicks):
 ```
 
 The dialog message must state the scope of destruction and include the phrase "This cannot be undone."
+
+---
+
+### Neutral / Secondary Buttons
+
+**App Standard**: The app MUST NOT rely on Bootstrap's stock `secondary` variant (`.btn-outline-secondary`). The theme CSS does not restyle that variant, and its `#6c757d` text fails contrast against both theme backgrounds. Pair `color="secondary", outline=True` with `className="btn-subtle-action"`, which supplies theme-aware tokens instead.
+
+```python
+import dash_bootstrap_components as dbc
+
+compare_btn = dbc.Button(
+    "Compare to Factory",
+    id="editor-view-changes",
+    color="secondary",
+    outline=True,
+    className="btn-subtle-action",
+    size="sm",
+)
+```
 
 ---
 

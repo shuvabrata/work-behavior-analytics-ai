@@ -316,7 +316,6 @@ def _console_card() -> dbc.Card:
                         id="graph-execute-btn",
                         color="primary",
                         size="sm",
-                        style={"borderRadius": "2px"},
                         className="graph-execute-btn w-100"
                     ),
                 ], width=2, className="d-flex align-items-start")

@@ -183,7 +183,6 @@ def _layer_row(layer: str) -> html.Div:
                     "fontSize": FONT_SIZE_SMALL,
                     "padding": SPACING_XXSMALL,
                     "border": f"1px solid {COLOR_BORDER}",
-                    "borderRadius": "2px",
                     "width": "100%",
                 },
             ),

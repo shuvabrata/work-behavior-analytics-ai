@@ -1,4 +1,4 @@
-"""Library pages — query catalog browser and editor."""
+"""Catalog pages — query catalog browser and editor."""
 
 __all__ = ["get_editor_layout", "get_layout"]
 

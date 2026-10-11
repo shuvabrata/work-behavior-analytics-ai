@@ -1,7 +1,7 @@
 # Query Catalog Editor Design
 
 **Audience:** Developers extending, debugging, or maintaining the user-defined
-query catalog layer and the Library UI.
+query catalog layer and the Catalog UI.
 **Status:** Implemented. Landed on branch `feature/query-editor` (PR #318).
 **Related docs:** [`design-system.md`](design-system.md) (UI tokens),
 [`frontend-design-skill.md`](frontend-design-skill.md) (Executive Dashboard
@@ -24,7 +24,7 @@ settings layer this feature borrows UI patterns from).
 9. [Namespace management](#9-namespace-management)
 10. [On-disk format](#10-on-disk-format)
 11. [Persistence and deployment model](#11-persistence-and-deployment-model)
-12. [Library UI design](#12-library-ui-design)
+12. [Catalog UI design](#12-catalog-ui-design)
 13. [Error handling and status mapping](#13-error-handling-and-status-mapping)
 14. [Key design decisions and rationale](#14-key-design-decisions-and-rationale)
 15. [Known limitations and future work](#15-known-limitations-and-future-work)
@@ -49,7 +49,7 @@ the catalog loader, not stored separately and not reconciled per consumer.
 Every consumer that already reads the catalog through `load_catalog()` picks up
 user edits with **no changes to its own code**.
 
-The UI adds a **Library** page (listing, filter, search) and a full **query
+The UI adds a **Catalog** page (listing, filter, search) and a full **query
 editor** (metadata, tabular/graph Cypher, parameters, save / save-as / test /
 reset).
 
@@ -358,21 +358,23 @@ true at the filesystem level, not just by convention.
 
 ---
 
-## 12. Library UI design
+## 12. Catalog UI design
 
 ### Routes
 
 | Route | Renders |
 |---|---|
-| `/app/library` | Listing page |
-| `/app/library/new` | Blank editor |
-| `/app/library/edit/{namespace}/{slug}` | Editor for an existing query |
+| `/app/catalog` | Listing page |
+| `/app/catalog/new` | Blank editor |
+| `/app/catalog/edit/{namespace}/{slug}` | Editor for an existing query |
 
-The sidebar gains a **Library** entry (book icon) between Analytics and
+The sidebar gains a **Catalog** entry (book icon) between Analytics and
 Connectors. `display_page` matches the listing exactly and matches *any*
-`/app/library/...` prefix to the editor, so `/new` and `/edit/...` share one
+`/app/catalog/...` prefix to the editor, so `/new` and `/edit/...` share one
 layout. The editor itself branches on the pathname: `/new` starts blank; an
-edit path fetches the query and populates the form.
+edit path fetches the query and populates the form. The legacy `/app/library`
+path (including its `/new` and `/edit/...` sub-paths) is kept as an alias so
+existing bookmarks and deep links keep resolving.
 
 ### Listing page
 
@@ -613,5 +615,5 @@ Design-level expectations for anything touching this feature:
 - **UI callback tests mock HTTP** and assert on request URL and payload, so
   they run without Neo4j or a live server. The "Test" paths are covered by
   mocking the graph execute endpoint.
-- **Route parsing is tested for both** `/app/library/new` and
-  `/app/library/edit/{ns}/{slug}`, including trailing slashes.
+- **Route parsing is tested for both** `/app/catalog/new` and
+  `/app/catalog/edit/{ns}/{slug}`, including trailing slashes.

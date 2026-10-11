@@ -323,6 +323,9 @@ Implemented on `feature/editor-test-buttons` (uncommitted). All Phase 1 done
 criteria pass: `pytest -m unit tests -q` → 1820 passed; `mypy src/` clean;
 `pylint src` 9.68/10; `bandit … -lll` exit 0; the rendered `graph-*` id set is
 **byte-identical** to `a7ce365` (24 ids, compared against `git archive a7ce365`).
+**Operator-verified manually 2026-10-11** — graph page empty state, graph and
+tabular queries against live Neo4j, graph interactions, theme round-trip, and
+the collaboration-network page all behaved unchanged.
 
 **Deviation (operator-approved):** the plan's claim that `pages.graph.styles` is
 "a leaf module" was **wrong**. Importing *any* submodule of `pages.graph` runs
@@ -1093,7 +1096,7 @@ ALL must hold:
 
 | Phase | Status | Notes |
 |---|---|---|
-| Phase 1 — Extract `result_pane.py` | `[x]` | DONE 2026-10-11 + approved stylesheet move; uncommitted on `feature/editor-test-buttons` |
+| Phase 1 — Extract `result_pane.py` | `[x]` | DONE 2026-10-11 + approved stylesheet move; operator-verified; uncommitted on `feature/editor-test-buttons` |
 | Phase 2 — Editor layout (buttons + modal shell) | `[ ]` | |
 | Phase 3 — Quick Test callbacks | `[ ]` | |
 | Phase 4 — View Test modal callback | `[ ]` | |

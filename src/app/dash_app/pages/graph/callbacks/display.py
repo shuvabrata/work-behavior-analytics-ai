@@ -7,7 +7,7 @@ from typing import Any
 from dash import Input, Output, State, callback, callback_context
 
 from app.dash_app.components.common import build_element_properties_content, register_edge_hover_dimming_callback, register_fullwidth_callback
-from ..styles import build_cytoscape_stylesheet
+from app.dash_app.graph_styles import build_cytoscape_stylesheet
 from ..utils import create_node_legend, fetch_effective_theme, is_node_element
 
 register_fullwidth_callback("graph")

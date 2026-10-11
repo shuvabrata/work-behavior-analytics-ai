@@ -17,7 +17,7 @@ from app.dash_app.components.common import (
     create_loading_overlay_container,
     create_page_header,
 )
-from app.dash_app.pages.graph.styles import CYTOSCAPE_STYLESHEET
+from app.dash_app.graph_styles import CYTOSCAPE_STYLESHEET
 from app.dash_app.styles import (
     COLOR_GRAY_DARK,
     COLOR_GRAY_LIGHTER,

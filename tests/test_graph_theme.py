@@ -20,7 +20,7 @@ from app.common.graph_theme import (
     merge_theme_overrides,
     overrides_to_cytoscape_rules,
 )
-from app.dash_app.pages.graph.styles import build_cytoscape_stylesheet
+from app.dash_app.graph_styles import build_cytoscape_stylesheet
 
 pytestmark = pytest.mark.unit
 

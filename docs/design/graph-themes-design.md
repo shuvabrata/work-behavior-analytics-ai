@@ -272,7 +272,7 @@ on any error so callers fall back to the base palette. The timeout comes from
 ### Stylesheet builder
 
 `build_cytoscape_stylesheet(theme_name, effective=None)` in
-`src/app/dash_app/pages/graph/styles.py`:
+`src/app/dash_app/graph_styles.py`:
 
 - Theme-derived rules (generic node, per-nodeType, edge, selected) come from
   the shared `overrides_to_cytoscape_rules(effective)`.
@@ -400,7 +400,7 @@ flowchart LR
 | DB model | `src/app/db/models/graph_theme.py` |
 | Migration | `src/app/alembic/versions/..._add_graph_themes.py` |
 | API | `src/app/api/graph_themes/v1/{models,query,service,router}.py` |
-| Stylesheet builder | `src/app/dash_app/pages/graph/styles.py` |
+| Stylesheet builder | `src/app/dash_app/graph_styles.py` |
 | Shared fetch helper | `src/app/dash_app/pages/graph/utils/graph_operations.py` |
 | Consumers | Graph `callbacks/display.py`, Collab `callbacks/display.py`, `search.py` |
 | Editor page | `src/app/dash_app/pages/settings/graph_styling/` |

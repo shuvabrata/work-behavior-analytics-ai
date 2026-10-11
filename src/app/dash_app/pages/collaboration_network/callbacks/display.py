@@ -4,7 +4,7 @@ from typing import Any
 from dash import Input, Output, callback, html
 
 from app.dash_app.components.common import build_element_properties_content, register_edge_hover_dimming_callback
-from app.dash_app.pages.graph.styles import build_cytoscape_stylesheet
+from app.dash_app.graph_styles import build_cytoscape_stylesheet
 from app.dash_app.pages.graph.utils import fetch_effective_theme
 from app.dash_app.styles import FONT_SIZE_XSMALL
 

@@ -853,9 +853,25 @@ mypy src/ && pylint src --score=y
 > Cytoscape for graph queries, a data table for tabular — using the same
 > utilities as the graph page, plus a Fit button.
 
+### ✅ Executed 2026-10-11
+
+Two files: `editor_test_callbacks.py` (+82) and
+`tests/test_catalog_editor_test_callbacks.py` (+86, 4 new tests). Verified: 1835
+unit tests pass (+4), mypy clean, pylint 9.68, `import app.main` +
+`create_dash_app()` OK, and the Fit JS targets `editor-test-cytoscape`.
+
+Independently re-verified against the **live** API (`localhost:8000`, real Neo4j):
+graph → open, title `Test Results — Graph`, **51** real elements, cytoscape
+`block` / table `none`; tabular → open, cytoscape `none` / table `block`;
+close → `False` with the other 7 outputs `no_update`; write-Cypher and empty
+inputs → open with an `html.Div` error at index 6.
+
+Note the operator committed Phases 1–3 and the badge fix; this phase's two files
+are the only dirty ones.
+
 ### Tasks
 
-- [ ] Add to `editor_test_callbacks.py`:
+- [x] Add to `editor_test_callbacks.py`:
 
   ```python
   from app.dash_app.pages.graph.utils import (
@@ -919,7 +935,7 @@ mypy src/ && pylint src --score=y
       return True, label, [], hide, table, show, None, hide
   ```
 
-- [ ] Add a **Fit** clientside callback, mirroring the graph page's fit handler
+- [x] Add a **Fit** clientside callback, mirroring the graph page's fit handler
   (`src/app/dash_app/pages/graph/callbacks/navigation.py:12-29`) but targeting the
   modal's Cytoscape — note the id inside the JS string is `editor-test-cytoscape`:
 
@@ -1148,5 +1164,5 @@ ALL must hold:
 | Phase 1 — Extract `result_pane.py` | `[x]` | DONE 2026-10-11 + approved stylesheet move; operator-verified; uncommitted on `feature/editor-test-buttons` |
 | Phase 2 — Editor layout (buttons + modal shell) | `[x]` | DONE 2026-10-11; operator-verified; buttons inert pending Phase 3 |
 | Phase 3 — Quick Test callbacks | `[x]` | DONE 2026-10-11; uncommitted |
-| Phase 4 — View Test modal callback | `[ ]` | |
+| Phase 4 — View Test modal callback | `[x]` | DONE 2026-10-11; uncommitted |
 | Phase 5 — Cleanup & regression | `[ ]` | |

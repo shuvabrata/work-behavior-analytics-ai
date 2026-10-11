@@ -6,8 +6,21 @@ from typing import Any
 
 import requests
 import dash_bootstrap_components as dbc
-from dash import Input, Output, State, callback, ctx, no_update
+from dash import (
+    Input,
+    Output,
+    State,
+    callback,
+    clientside_callback,
+    ctx,
+    no_update,
+)
 
+from app.dash_app.pages.graph.utils import (
+    create_error_alert,
+    create_table_display,
+    neo4j_to_cytoscape,
+)
 from app.runtime_settings import runtime_settings
 from ._utils import get_api_base_url
 
@@ -85,3 +98,71 @@ def quick_test(
     if triggered == "editor-quick-test-tabular":
         return badge, no_update
     return no_update, badge
+
+
+@callback(
+    Output("editor-test-modal",               "is_open"),
+    Output("editor-test-modal-title",         "children"),
+    Output("editor-test-cytoscape",           "elements"),
+    Output("editor-test-cytoscape-container", "style"),
+    Output("editor-test-table-container",     "children"),
+    Output("editor-test-table-container",     "style"),
+    Output("editor-test-results-container",   "children"),
+    Output("editor-test-results-container",   "style"),
+    Input("editor-view-test-tabular", "n_clicks"),
+    Input("editor-view-test-graph",   "n_clicks"),
+    Input("editor-test-modal-close",  "n_clicks"),
+    State("editor-query-tabular", "value"),
+    State("editor-query-graph",   "value"),
+    prevent_initial_call=True,
+)
+def view_test(
+    tab_clicks: int | None,
+    graph_clicks: int | None,
+    close_clicks: int | None,
+    tab_query: str | None,
+    graph_query: str | None,
+) -> tuple[Any, ...]:
+    """Open the shared modal with tabular or graph results."""
+    hide = {"display": "none"}
+    show = {"display": "block"}
+    empty_show = {"minHeight": "300px", "padding": "16px"}
+
+    if ctx.triggered_id == "editor-test-modal-close":
+        return (False,) + (no_update,) * 7
+
+    if ctx.triggered_id == "editor-view-test-tabular":
+        query, label = tab_query,   "Test Results — Tabular"
+    else:
+        query, label = graph_query, "Test Results — Graph"
+
+    result = _run_test(query)
+
+    if not result["ok"]:
+        error = create_error_alert(result["error"], heading="Query Failed")
+        return True, label, [], hide, None, hide, error, empty_show
+
+    data = result["data"]
+    if data.get("isGraph"):
+        elements = neo4j_to_cytoscape(data)
+        return True, label, elements, show, None, hide, None, hide
+    table = create_table_display(data.get("rawResults") or [])
+    return True, label, [], hide, table, show, None, hide
+
+
+clientside_callback(
+    """
+    function(n_clicks) {
+        if (n_clicks) {
+            const elem = document.getElementById('editor-test-cytoscape');
+            if (elem && elem._cyreg && elem._cyreg.cy) {
+                elem._cyreg.cy.fit(null, 30);
+            }
+        }
+        return window.dash_clientside.no_update;
+    }
+    """,
+    Output("editor-test-fit", "className"),   # dummy output
+    Input("editor-test-fit", "n_clicks"),
+    prevent_initial_call=True,
+)

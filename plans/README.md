@@ -14,7 +14,7 @@ Only the plans below remain.
 |------|-------|----------|--------|------------|--------|
 | 005  | [MCP thread join timeout](005-mcp-thread-join-timeout.md) | P2 | S | — | TODO |
 | 022  | [Retire AUTHORED_BY → CREATED_BY](022-retire-authored-by-unify-created-by.md) | P1 | M | — | DONE ✓ — merged to `main` at `b28598b` |
-| 023  | [Catalog Editor — Quick Test & View Test Buttons](023-catalog-editor-test-buttons.md) | P1 | M | — | IN PROGRESS — Phases 1–3 done (Phase 1 committed `bf0a851`; Phases 2–3 uncommitted) |
+| 023  | [Catalog Editor — Quick Test & View Test Buttons](023-catalog-editor-test-buttons.md) | P1 | M | — | IN PROGRESS — Phases 1–4 done (1–3 committed `bff99d9`/`f5ede75`; Phase 4 uncommitted) |
 
 ## Notes
 

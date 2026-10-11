@@ -492,7 +492,6 @@ SIDEBAR_COL_STYLE = {
 GRAPH_QUERY_TEXTAREA_STYLE = {
     "fontFamily": FONT_SANS,
     "height": "90px",
-    "borderRadius": "2px",
     "border": f"1px solid {COLOR_GRAY_LIGHTER}",
     "padding": f"{SPACING_XSMALL} {SPACING_SMALL}",
     "fontSize": FONT_SIZE_SMALL,

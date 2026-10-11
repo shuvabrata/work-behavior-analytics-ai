@@ -134,7 +134,6 @@ def _number_input(
             "fontSize": FONT_SIZE_SMALL,
             "padding": SPACING_XXSMALL,
             "border": f"1px solid {COLOR_BORDER}",
-            "borderRadius": "2px",
             "width": "100%",
         },
     )
@@ -157,7 +156,6 @@ def _shape_input(input_id: dict[str, Any], value: Any = None) -> dbc.Select:
             "height": "34px",
             "padding": f"0 {SPACING_XSMALL}",
             "border": f"1px solid {COLOR_BORDER}",
-            "borderRadius": "2px",
             "width": "100%",
         },
     )
@@ -328,7 +326,6 @@ def build_edges_card(base_theme: str, overrides: dict[str, Any] | None = None) -
                     "height": "34px",
                     "padding": f"0 {SPACING_XSMALL}",
                     "border": f"1px solid {COLOR_BORDER}",
-                    "borderRadius": "2px",
                     "width": "100%",
                 },
             ),
@@ -573,7 +570,6 @@ def build_theme_toolbar(base_theme: str) -> html.Div:
                                     "height": "34px",
                                     "padding": f"0 {SPACING_XSMALL}",
                                     "border": f"1px solid {COLOR_BORDER}",
-                                    "borderRadius": "2px",
                                 },
                             ),
                         ],
@@ -674,7 +670,6 @@ def build_save_as_modal(base_theme: str) -> dbc.Modal:
                             "fontFamily": FONT_SANS,
                             "fontSize": FONT_SIZE_SMALL,
                             "border": f"1px solid {COLOR_BORDER}",
-                            "borderRadius": "2px",
                         },
                     ),
                     html.Div(

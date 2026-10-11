@@ -593,7 +593,6 @@ def create_controls_bar(id_prefix: str, *, layout_enabled: bool = True) -> dbc.R
                     "display": "inline-block",
                     "fontSize": "12px",
                     "border": f"1px solid {COLOR_GRAY_LIGHTER}",
-                    "borderRadius": "2px",
                     "opacity": "1" if layout_enabled else "0.45",
                     "cursor": "not-allowed" if not layout_enabled else "default",
                 },

@@ -126,9 +126,35 @@
     --color-overlay-bg: rgba(31, 38, 47, 0.92);
 }
 
+/* App shell: a fixed-viewport flex column so the page itself never scrolls.
+   The top bar takes its natural height, the body row absorbs the remainder,
+   and each column scrolls internally. Using height (not min-height) plus
+   overflow: hidden is what prevents the perpetual ~topbar-height overflow
+   that appeared when the sidebar was a full 100vh element stacked under
+   the top bar. */
 .app-shell {
     background-color: var(--color-background-light);
-    min-height: 100vh;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+/* Top bar keeps its intrinsic height and never gets squeezed by the row. */
+.app-shell .executive-topbar {
+    flex: 0 0 auto;
+}
+
+/* Body row: absorbs the remaining height. min-height: 0 is required so the
+   flex item may shrink below its content size and let children scroll. */
+.app-body-row {
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+.app-content-col {
+    height: 100%;
+    overflow-y: auto;
 }
 
 .theme-toggle-btn,
@@ -957,6 +983,14 @@ input::placeholder {
 
 .executive-sidebar {
     background-color: var(--color-background-white);
+    /* Fill the body row and scroll the nav links internally instead of
+       extending the document (was height: 100vh via the vh-100 class). */
+    height: 100%;
+    overflow-y: auto;
+}
+
+.sidebar-col {
+    height: 100%;
 }
 
 .executive-nav-link {

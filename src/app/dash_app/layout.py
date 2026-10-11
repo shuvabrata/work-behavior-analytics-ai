@@ -48,7 +48,7 @@ def create_dash_app() -> dash.Dash:
         ],
         vertical=True,
         pills=False,
-        className="vh-100 sidebar executive-sidebar",
+        className="sidebar executive-sidebar",
         style={**SIDEBAR_STYLE, "overflowX": "hidden"}
     )
 
@@ -127,8 +127,8 @@ def create_dash_app() -> dash.Dash:
                 className="sidebar-col",
                 style=SIDEBAR_COL_STYLE
             ),
-            dbc.Col(content, id="content-col", width=True, style={"minWidth": 0})
-        ], className="g-0 flex-nowrap"),
+            dbc.Col(content, id="content-col", width=True, className="app-content-col", style={"minWidth": 0})
+        ], className="g-0 flex-nowrap app-body-row"),
     ], fluid=True, id="app-shell", className="app-shell theme-executive-light")
 
     # Callbacks for page routing

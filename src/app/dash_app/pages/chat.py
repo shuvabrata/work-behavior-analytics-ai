@@ -122,7 +122,7 @@ def get_layout() -> html.Div:
                             id="send-button",
                             color="primary",
                             size="sm",
-                            style={"borderRadius": "2px", "height": "68px"},
+                            style={"height": "68px"},
                             className="chat-submit-btn w-100"
                         )
                     ], width=2)

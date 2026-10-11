@@ -90,6 +90,7 @@ This preserves current visuals while making it easier to add future themes (for 
 | Surface | Radius | Source |
 |---------|--------|--------|
 | Form controls (`.form-control`, `.form-select`, `textarea`, `.Select-control`, `.Select-menu-outer`) | 6px | `var(--bs-border-radius)` theme token |
+| Buttons (`.btn`, `.btn-sm`, `.btn-lg`) | 6px | `var(--bs-border-radius)` via `--bs-btn-border-radius` |
 | Surfaces / containers / cards | 2px | `var(--border-radius, 2px)` |
 
 ### Utility Colors

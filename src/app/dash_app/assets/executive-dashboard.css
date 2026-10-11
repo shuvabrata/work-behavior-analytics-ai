@@ -142,7 +142,6 @@
     display: flex !important;
     align-items: center;
     justify-content: center;
-    border-radius: 2px !important;
     box-shadow: none !important;
     font-size: 13px !important;
 }
@@ -266,6 +265,16 @@ textarea,
 .Select-control,
 .Select-menu-outer {
     border-radius: var(--bs-border-radius, 6px) !important;
+}
+
+/* Buttons share the form-control radius so controls and buttons agree.
+   `.btn-sm` / `.btn-lg` each re-declare --bs-btn-border-radius themselves, so
+   they must be listed here or small and large buttons would keep Materia's
+   4px / 8px. `!important` is needed to beat those size declarations. */
+.btn,
+.btn-sm,
+.btn-lg {
+    --bs-btn-border-radius: var(--bs-border-radius, 6px) !important;
 }
 
 .form-control::placeholder,

@@ -321,7 +321,7 @@ def register_fullwidth_callback(id_prefix: str) -> None:
     def _toggle_fullwidth(_n_clicks: int, is_fullwidth: bool) -> tuple[Any, ...]:
         new_state = not is_fullwidth
         viz_width, panel_style = toggle_details_panel(new_state)
-        btn_label = "Exit" if new_state else "Full"
+        btn_label = "Restore" if new_state else "Maximize"
         return new_state, viz_width, panel_style, btn_label
 
 
@@ -552,7 +552,7 @@ _LAYOUT_OPTIONS = [
 
 
 def create_controls_bar(id_prefix: str, *, layout_enabled: bool = True) -> dbc.Row:
-    """Create a graph controls bar (layout selector, spotlight, Fit/Reset/Full).
+    """Create a graph controls bar (layout selector, spotlight, Fit/Reset/Maximize).
 
     Produces identical chrome for every graph visualization page. Non-applicable
     controls are rendered ``disabled=True`` (grayed out) rather than omitted, to
@@ -635,7 +635,7 @@ def create_controls_bar(id_prefix: str, *, layout_enabled: bool = True) -> dbc.R
                     style=_CONTROLS_BUTTON_STYLE,
                 ),
                 dbc.Button(
-                    "Full",
+                    "Maximize",
                     id=f"{id_prefix}-fullwidth-btn",
                     outline=True,
                     color="secondary",

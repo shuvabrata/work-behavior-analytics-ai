@@ -388,7 +388,10 @@ def _load_yaml_mapping(path: Path) -> dict[str, Any]:
         raise CatalogLoadError(f"Catalog file does not exist: {path}")
 
     with path.open("r", encoding="utf-8") as handle:
-        data = yaml.load(handle, Loader=_SafeLoader)
+        # _SafeLoader is CSafeLoader (SafeLoader as fallback) — see the import
+        # block above. B506 matches only the literal names "SafeLoader" and
+        # "CSafeLoader", so the alias needs the nosec.
+        data = yaml.load(handle, Loader=_SafeLoader)  # nosec B506
 
     if not isinstance(data, dict):
         raise CatalogLoadError(f"{path} must contain a YAML mapping")

@@ -473,7 +473,6 @@ INPUT_STYLE = {
     "fontSize": FONT_SIZE_SMALL,
     "padding": SPACING_XSMALL,
     "border": f"1px solid {COLOR_BORDER}",
-    "borderRadius": "2px",
     "width": "100%"
 }
 

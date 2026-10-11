@@ -170,7 +170,7 @@
     color: var(--color-charcoal) !important;
     font-size: 13px !important;
     height: 32px !important;
-    border-radius: 20px !important;
+    /* radius: inherited from the global .form-control rule (6px) */
     box-shadow: 0 1px 4px rgba(0,0,0,0.07) !important;
     padding-left: 14px !important;
     padding-right: 14px !important;
@@ -207,7 +207,7 @@
     border-color: var(--color-navy-dark) !important;
 }
 
-/* Library page search input — matches the top-nav global search pill */
+/* Catalog page search field — mirrors the top-nav search field's styling */
 .catalog-search-input,
 .catalog-search-input.form-control {
     background-color: var(--color-background-light) !important;
@@ -215,7 +215,7 @@
     color: var(--color-charcoal) !important;
     font-size: 13px !important;
     height: 32px !important;
-    border-radius: 20px !important;
+    /* radius: inherited from the global .form-control rule (6px) */
     box-shadow: 0 1px 4px rgba(0,0,0,0.07) !important;
     padding-left: 14px !important;
     padding-right: 14px !important;
@@ -252,6 +252,20 @@
 .form-select,
 textarea {
     background-color: var(--color-input-background) !important;
+}
+
+/* Form-control radius. Materia hardcodes `.form-control { border-radius: 0 }`,
+   and the react-select control sets no radius of its own, so every text box in
+   the app was square while the theme's other surfaces use --bs-border-radius
+   (6px). Opt form controls back into the theme's own radius.
+   `!important` is needed to beat Materia's rule and any inline style (e.g. the
+   2px previously hardcoded in styles.py INPUT_STYLE). */
+.form-control,
+.form-select,
+textarea,
+.Select-control,
+.Select-menu-outer {
+    border-radius: var(--bs-border-radius, 6px) !important;
 }
 
 .form-control::placeholder,
@@ -1003,7 +1017,6 @@ input::placeholder {
     background-color: var(--color-background-light);
     border: 1px solid var(--color-border);
     color: var(--color-charcoal);
-    border-radius: 2px;
     padding: 3px 8px;
 }
 

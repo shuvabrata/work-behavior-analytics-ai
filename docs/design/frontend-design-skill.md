@@ -11,7 +11,7 @@ license: Complete terms in LICENSE.txt
 **Characteristics**:
 - Refined serif (Cormorant Garamond) + geometric sans (Inter) typography pairing
 - Light theme with sophisticated navy (#2c5282) and charcoal (#1a202c, #2d3748) palette
-- Clean lines, generous whitespace, minimal border-radius (2px)
+- Clean lines, generous whitespace, minimal radius (surfaces/containers 2px; form controls 6px via `--bs-border-radius`)
 - Uppercase subtitles with letter-spacing for hierarchy
 - Financial Times / Bloomberg editorial quality
 - Professional boardroom sophistication

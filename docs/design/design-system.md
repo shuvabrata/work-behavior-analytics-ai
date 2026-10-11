@@ -85,6 +85,13 @@ This preserves current visuals while making it easier to add future themes (for 
 | `COLOR_BORDER` | `#e2e8f0` | Standard borders |
 | `COLOR_BORDER_LIGHT` | `#e2e8f0` | Light borders (same as standard) |
 
+### Corner Radius
+
+| Surface | Radius | Source |
+|---------|--------|--------|
+| Form controls (`.form-control`, `.form-select`, `textarea`, `.Select-control`, `.Select-menu-outer`) | 6px | `var(--bs-border-radius)` theme token |
+| Surfaces / containers / cards | 2px | `var(--border-radius, 2px)` |
+
 ### Utility Colors
 
 | Token | Value | Usage |

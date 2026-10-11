@@ -69,10 +69,14 @@ def list_catalog_queries(
     return queries
 
 
-def get_catalog_query(namespace: str, slug: str) -> CatalogQuery | None:
+def get_catalog_query(
+    namespace: str, slug: str, *, include_user_overrides: bool = True
+) -> CatalogQuery | None:
     """Get one catalog query by namespace directory and slug."""
     catalog_id = f"{namespace}/{slug}"
-    for catalog_query in query.list_catalog_queries():
+    for catalog_query in query.list_catalog_queries(
+        include_user_overrides=include_user_overrides
+    ):
         if catalog_query.id == catalog_id:
             return catalog_query
     return None

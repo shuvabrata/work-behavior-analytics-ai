@@ -46,6 +46,15 @@ license: Complete terms in LICENSE.txt
   - Hover trigger keeps the popover active when the cursor moves onto the popover body, allowing comfortable reading and text selection.
   - Supports rich markdown formatting (`dcc.Markdown`) with clear typography and comfortable padding.
 
+**Large Table Rendering (Performance Technique)**:
+- **Problem**: Dash instantiates a component tree for every server callback output. For tables with many rows (e.g. 100+), this per-component instantiation dominates load time — a 140-row table can take ~10s to render even when the backend is fast.
+- **Technique**: Render the table body in JavaScript, not as a Dash component tree. Use a `clientside_callback` that reads the raw data from a `dcc.Store` and builds the `<tr>`/`<td>` HTML directly in the browser (string concatenation + `innerHTML`). This bypasses Dash's component-instantiation cost entirely.
+- **Skeleton-first**: Keep the table skeleton (header + empty `<tbody id="...">`) in the layout so the header renders instantly; the clientside callback fills the body.
+- **Client-side filtering**: Keep search/filter in the same JS pass — no server round-trip, instant filtering.
+- **Security**: Escape all user data in the JS (`&`, `<`, `>`, quotes) to avoid HTML injection.
+- **Reference Implementation**: The Library page (`src/app/dash_app/pages/library/`) — `layout.py` renders the static skeleton; `callbacks.py` has the clientside callback that builds rows from `library-store`.
+- **Trade-off**: Row-building logic moves to JS, so Python unit tests cover the data flow and skeleton rather than the rendered rows. Use this pattern for large, read-only, or frequently-filtered datasets; keep small tables as normal Dash components.
+
 ---
 
 This skill guides creation of distinctive, production-grade frontend interfaces that avoid generic "AI slop" aesthetics. Implement real working code with exceptional attention to aesthetic details and creative choices.

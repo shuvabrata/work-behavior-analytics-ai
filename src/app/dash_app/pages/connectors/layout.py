@@ -22,6 +22,7 @@ from app.dash_app.styles import (
     FONT_SIZE_SMALL,
     FONT_WEIGHT_MEDIUM,
     FONT_WEIGHT_SEMIBOLD,
+    SPACING_XXXSMALL,
     SPACING_XSMALL,
     SPACING_SMALL,
 )
@@ -369,11 +370,18 @@ def _render_recent_scans(_connector_type: str, connector_meta: dict[str, Any]) -
 
 
 def _section_container(children: html.Div) -> html.Div:
-    """Wrap a section in a subtle card with a left navy accent border."""
+    """Wrap a section in a subtle card with a left navy accent border.
+
+    Uses tighter vertical padding than the shared ``FEATURE_CARD_STYLE`` so a
+    collapsed section (title only) does not waste vertical space above and
+    below the header.
+    """
     return html.Div(
         children,
         style={
             "padding": SPACING_SMALL,
+            "paddingTop": SPACING_XXXSMALL,
+            "paddingBottom": SPACING_XXXSMALL,
             "backgroundColor": COLOR_BACKGROUND_LIGHT,
             "border": f"1px solid {COLOR_BORDER}",
             "borderLeft": f"3px solid {COLOR_NAVY}",

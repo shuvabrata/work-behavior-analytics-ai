@@ -2,21 +2,85 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import httpx
 import pytest
+import yaml
 
 from app.main import app
+from app.query_catalog import get_default_catalog_dir
 
 
 pytestmark = [pytest.mark.integration, pytest.mark.asyncio]
 
+_API_BASE = "http://test"
+
+
+def _client() -> httpx.AsyncClient:
+    """Return an in-process HTTP client bound to the ASGI app."""
+    return httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app),
+        base_url=_API_BASE,
+    )
+
 
 async def _get(path: str, *, params: dict[str, str] | None = None) -> httpx.Response:
-    async with httpx.AsyncClient(
-        transport=httpx.ASGITransport(app=app),
-        base_url="http://test",
-    ) as client:
+    async with _client() as client:
         return await client.get(path, params=params)
+
+
+async def _put(path: str, *, payload: dict[str, Any]) -> httpx.Response:
+    async with _client() as client:
+        return await client.put(path, json=payload)
+
+
+async def _delete(path: str) -> httpx.Response:
+    async with _client() as client:
+        return await client.delete(path)
+
+
+def _write_payload(name: str = "Integration Test Query") -> dict[str, Any]:
+    """Build a minimal valid PUT body."""
+    return {
+        "name": name,
+        "description": "Integration test description.",
+        "queries": {"tabular": "MATCH (n) RETURN n LIMIT 1"},
+        "tags": ["integration-test"],
+    }
+
+
+def _cleanup_user_namespace(namespace: str) -> None:
+    """Remove a user namespace's registry entry and its now-empty directory.
+
+    ``delete_query`` deliberately leaves the namespace entry in
+    ``user_defined/catalog.yaml`` (an empty namespace is harmless at load time),
+    so tests that create an override — especially in a brand-new custom
+    namespace — must clean up after themselves or they pollute the real catalog.
+    If the namespaces list empties, the whole ``catalog.yaml`` is removed,
+    because ``load_namespaces`` rejects an empty list.
+    """
+    root = get_default_catalog_dir()
+    user_catalog_file = root / "user_defined" / "catalog.yaml"
+    if user_catalog_file.exists():
+        with user_catalog_file.open("r", encoding="utf-8") as handle:
+            data = yaml.safe_load(handle) or {}
+        data["namespaces"] = [
+            entry
+            for entry in data.get("namespaces", [])
+            if entry.get("directory") != namespace
+        ]
+        if data["namespaces"]:
+            user_catalog_file.write_text(
+                yaml.dump(data, default_flow_style=False, sort_keys=False),
+                encoding="utf-8",
+            )
+        else:
+            user_catalog_file.unlink()
+
+    namespace_dir = root / "user_defined" / namespace
+    if namespace_dir.is_dir() and not any(namespace_dir.iterdir()):
+        namespace_dir.rmdir()
 
 
 async def test_catalog_list_endpoint_returns_normalized_catalog():
@@ -179,3 +243,185 @@ async def test_catalog_detail_endpoint_returns_404_for_missing_query():
 
     assert response.status_code == 404
     assert response.json() == {"detail": "Catalog query not found"}
+
+
+# ── User-defined overrides (PUT/DELETE) over HTTP ─────────────────────
+# These tests hit the real queries_catalog/ tree, so every test that writes must
+# clean up after itself to keep the exact-count assertions above (140 / 28 / 9)
+# valid. Cleanup runs in a `finally` so a mid-test failure cannot leave residue.
+
+
+async def test_c1_put_creates_user_query():
+    path = "/api/v1/queries/catalog/github/test_c1"
+    try:
+        response = await _put(path, payload=_write_payload())
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["id"] == "github/test_c1"
+        assert data["slug"] == "test_c1"
+        assert data["namespace"]["directory"] == "github"
+        assert data["origin"] == "custom"
+        assert "user_defined/" in data["source_path"]
+    finally:
+        await _delete(path)
+        _cleanup_user_namespace("github")
+
+
+async def test_c2_put_overwrites_existing_override():
+    path = "/api/v1/queries/catalog/github/test_c2"
+    try:
+        first = await _put(path, payload=_write_payload(name="First Name"))
+        assert first.status_code == 200
+        assert first.json()["name"] == "First Name"
+
+        second = await _put(path, payload=_write_payload(name="Second Name"))
+        assert second.status_code == 200
+        assert second.json()["name"] == "Second Name"
+        assert second.json()["origin"] == "custom"
+    finally:
+        await _delete(path)
+        _cleanup_user_namespace("github")
+
+
+async def test_c3_put_new_query_appears_in_catalog_and_detail():
+    path = "/api/v1/queries/catalog/github/test_c3"
+    try:
+        assert (await _put(path, payload=_write_payload())).status_code == 200
+
+        listing = await _get("/api/v1/queries/catalog", params={"namespace": "github"})
+        assert listing.status_code == 200
+        assert any(item["id"] == "github/test_c3" for item in listing.json()["items"])
+
+        detail = await _get(path)
+        assert detail.status_code == 200
+        assert detail.json()["id"] == "github/test_c3"
+    finally:
+        await _delete(path)
+        _cleanup_user_namespace("github")
+
+
+async def test_c4_put_with_write_cypher_returns_422():
+    path = "/api/v1/queries/catalog/github/test_c4"
+    payload = _write_payload()
+    payload["queries"] = {"tabular": "MATCH (n) DELETE n"}
+    try:
+        response = await _put(path, payload=payload)
+
+        assert response.status_code == 422
+        detail = response.json()["detail"]
+        assert isinstance(detail, str)
+        assert "write" in detail.lower()
+        # Validation runs before any write, so nothing was persisted.
+        assert (await _get(path)).status_code == 404
+    finally:
+        await _delete(path)
+        _cleanup_user_namespace("github")
+
+
+async def test_c5_put_missing_required_fields_returns_422():
+    response = await _put(
+        "/api/v1/queries/catalog/github/test_c5",
+        payload={"name": "", "description": "", "queries": {}},
+    )
+
+    assert response.status_code == 422
+    detail = response.json()["detail"]
+    assert isinstance(detail, list) and detail
+
+
+async def test_c6_delete_removes_user_query():
+    path = "/api/v1/queries/catalog/github/test_c6"
+    assert (await _put(path, payload=_write_payload())).status_code == 200
+    assert (await _get(path)).status_code == 200
+
+    response = await _delete(path)
+    assert response.status_code == 200
+    assert response.json() == {"message": "Query override deleted"}
+
+    assert (await _get(path)).status_code == 404
+    _cleanup_user_namespace("github")
+
+
+async def test_c7_delete_non_existent_returns_204():
+    response = await _delete("/api/v1/queries/catalog/github/test_c7_does_not_exist")
+
+    assert response.status_code == 204
+    assert response.content == b""
+
+
+async def test_c8_put_overrides_system_query_then_delete_restores_it():
+    path = "/api/v1/queries/catalog/hall_of_fame/top_n_committers"
+
+    original = await _get(path)
+    assert original.status_code == 200
+    original_name = original.json()["name"]
+    assert original.json()["origin"] == "builtin"
+
+    try:
+        override = await _put(path, payload=_write_payload(name="Overridden Top N"))
+        assert override.status_code == 200
+        body = override.json()
+        assert body["origin"] == "override"
+        assert body["name"] == "Overridden Top N"
+        assert "user_defined/" in body["source_path"]
+
+        merged = await _get(path)
+        assert merged.status_code == 200
+        assert merged.json()["name"] == "Overridden Top N"
+        assert merged.json()["origin"] == "override"
+    finally:
+        await _delete(path)
+        _cleanup_user_namespace("hall_of_fame")
+
+    restored = await _get(path)
+    assert restored.status_code == 200
+    assert restored.json()["name"] == original_name
+    assert restored.json()["origin"] == "builtin"
+
+
+async def test_c9_namespaces_include_custom_user_namespace():
+    baseline = await _get("/api/v1/queries/catalog/namespaces")
+    assert baseline.status_code == 200
+    base_count = baseline.json()["count"]
+
+    path = "/api/v1/queries/catalog/test_c9_ns/test_c9"
+    try:
+        assert (await _put(path, payload=_write_payload())).status_code == 200
+
+        response = await _get("/api/v1/queries/catalog/namespaces")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["count"] == base_count + 1
+
+        entry = next(
+            item for item in data["items"] if item["directory"] == "test_c9_ns"
+        )
+        assert entry["name"] == "Test C9 Ns"
+        assert entry["is_user_defined"] is True
+        assert entry["order"] == base_count
+    finally:
+        await _delete(path)
+        _cleanup_user_namespace("test_c9_ns")
+
+
+async def test_put_accepts_mixed_case_key():
+    """The id regex deliberately allows upper case in slug segments."""
+    path = "/api/v1/queries/catalog/github/Mixed_Case_Key"
+    try:
+        response = await _put(path, payload=_write_payload())
+
+        assert response.status_code == 200
+        assert response.json()["id"] == "github/Mixed_Case_Key"
+    finally:
+        await _delete(path)
+        _cleanup_user_namespace("github")
+
+
+async def test_put_rejects_path_unsafe_key():
+    path = "/api/v1/queries/catalog/github/bad.key"
+
+    response = await _put(path, payload=_write_payload())
+
+    assert response.status_code == 422
+    assert (await _get(path)).status_code == 404

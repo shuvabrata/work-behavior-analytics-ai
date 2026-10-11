@@ -328,6 +328,25 @@ The dialog message must state the scope of destruction and include the phrase "T
 
 ---
 
+### Neutral / Secondary Buttons
+
+**App Standard**: The app MUST NOT rely on Bootstrap's stock `secondary` variant (`.btn-outline-secondary`). The theme CSS does not restyle that variant, and its `#6c757d` text fails contrast against both theme backgrounds. Pair `color="secondary", outline=True` with `className="btn-subtle-action"`, which supplies theme-aware tokens instead.
+
+```python
+import dash_bootstrap_components as dbc
+
+compare_btn = dbc.Button(
+    "Compare to Factory",
+    id="editor-view-changes",
+    color="secondary",
+    outline=True,
+    className="btn-subtle-action",
+    size="sm",
+)
+```
+
+---
+
 ### Form Inputs & Dropdowns
 
 **App Standard**: Use `dbc.Select` (native `<select>`, styled via Bootstrap's `.form-select`) for all dropdowns, **not** `dcc.Dropdown` (react-select). `dcc.Dropdown` renders a custom DOM structure that bypasses the theme-aware `.form-select` / `.theme-executive-dark .form-select` CSS rules, causing white backgrounds and poor contrast in dark mode.

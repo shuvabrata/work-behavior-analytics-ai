@@ -29,6 +29,12 @@
 - **Effort**: M
 - **Risk**: MED
 - **Depends on**: none
+- **Status**: **DONE** — all 5 phases implemented, verified and committed
+  (`bff99d9` → `ce02408`, pushed to `origin/feature/editor-test-buttons`).
+  Operator manual regression of the graph page and catalog editor still pending.
+  Two operator-found defects were fixed as follow-ups during execution: the
+  Quick Test badge's close button overflowing its alert, and the View Test
+  modal ignoring the app theme / using a circle layout.
 - **Category**: dx
 - **Planned at**: commit `a7ce365`, 2026-10-11
 
@@ -1065,9 +1071,28 @@ route is `/app/catalog/edit/{namespace}/{slug}`; a single-segment path parses as
 
 ## Phase 5 — Cleanup, polish & regression
 
+### ✅ Executed 2026-10-12
+
+Two files: `docs/design/query-catalog-editor-design.md` (both passages rewritten)
+and `editor_test_callbacks.py` (the five unused click args renamed to
+`_tab_clicks`/`_graph_clicks`/`_close_clicks`, per the repo's `_raw_clicks`
+convention at `graph/callbacks/query.py:125`).
+
+Verified: the three dangling-reference greps are clean; `grep "Test
+Tabular\|Test Graph"` on the doc returns nothing; `W0613` for the new module is
+**0** (file score 10.00); coverage is **100%** for `components/result_pane.py`
+and **97%** for `editor_test_callbacks.py` (both ≥ 90%; the two uncovered lines
+are `_run_test`'s `except ValueError` branch for a non-JSON error body); 1839
+unit tests pass; mypy clean (277 files); pylint 9.68 repo-wide; bandit exit 0
+with severity High = 0. The `graph-*` id regression vs `a7ce365` is **identical**
+(24 ids, with the archived source proven loaded).
+
+**Remaining:** the two manual regression passes below are the operator's — there
+is no browser on the build machine.
+
 ### Tasks
 
-- [ ] Confirm no dangling references (note the trailing `"` on the first grep —
+- [x] Confirm no dangling references (note the trailing `"` on the first grep —
       it anchors to the retired id's closing quote, so it does not match the new
       `editor-test-results-container`):
 
@@ -1083,7 +1108,7 @@ route is `/app/catalog/edit/{namespace}/{slug}`; a single-segment path parses as
   # Expected: no output
   ```
 
-- [ ] Update `docs/design/query-catalog-editor-design.md` so it describes the new
+- [x] Update `docs/design/query-catalog-editor-design.md` so it describes the new
       affordances. Two passages name the removed buttons:
 
   - **lines 424-429** (the "Queries section" bullet) — replace
@@ -1112,7 +1137,7 @@ route is `/app/catalog/edit/{namespace}/{slug}`; a single-segment path parses as
 
   Do **not** renumber or restructure the surrounding doc.
 
-- [ ] Run the gate with coverage, plus the other CI gates:
+- [x] Run the gate with coverage, plus the other CI gates:
 
   ```bash
   pytest -m unit tests -q --cov=src --cov-report=term-missing
@@ -1201,4 +1226,4 @@ ALL must hold:
 | Phase 2 — Editor layout (buttons + modal shell) | `[x]` | DONE 2026-10-11; operator-verified; buttons inert pending Phase 3 |
 | Phase 3 — Quick Test callbacks | `[x]` | DONE 2026-10-11; uncommitted |
 | Phase 4 — View Test modal callback | `[x]` | DONE 2026-10-11; + cose default + theme stylesheet fixes; committed `31b9bb6` |
-| Phase 5 — Cleanup & regression | `[ ]` | |
+| Phase 5 — Cleanup & regression | `[x]` | Code+docs DONE 2026-10-12 (committed `ce02408`); operator manual regression pending |

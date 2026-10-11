@@ -73,8 +73,8 @@ _BADGE_CLASS = "alert-inline-badge"
     prevent_initial_call=True,
 )
 def quick_test(
-    tab_clicks: int | None,
-    graph_clicks: int | None,
+    _tab_clicks: int | None,
+    _graph_clicks: int | None,
     tab_query: str | None,
     graph_query: str | None,
 ) -> tuple[Any, Any]:
@@ -119,9 +119,9 @@ def quick_test(
     prevent_initial_call=True,
 )
 def view_test(
-    tab_clicks: int | None,
-    graph_clicks: int | None,
-    close_clicks: int | None,
+    _tab_clicks: int | None,
+    _graph_clicks: int | None,
+    _close_clicks: int | None,
     tab_query: str | None,
     graph_query: str | None,
 ) -> tuple[Any, ...]:

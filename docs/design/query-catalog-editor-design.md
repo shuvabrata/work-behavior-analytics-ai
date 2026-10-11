@@ -422,9 +422,11 @@ sticky action bar:
 - **Metadata section:** name, owner, status (dropdown), summary, tags
   (comma-separated), description.
 - **Queries section:** two monospace textareas, **Tabular Query** and
-  **Graph Query**, each with its **own** Test button (`Test Tabular`,
-  `Test Graph`) so there is never ambiguity about which variant is being
-  exercised. Below them: the parameter list (add/remove rows of
+  **Graph Query**, each with its **own** **Quick Test** button (renders a
+  compact inline `✔ N row(s) returned` / `✔ Graph: N nodes, M relationships` /
+  `✘ <message>` badge directly under that textarea) and **View Test** button
+  (opens a shared `xl` results modal), so there is never ambiguity about which
+  variant is being exercised. Below them: the parameter list (add/remove rows of
   name/label/type/required/placeholder/description/env_var) and the
   Default View radio, restricted to the views that actually have Cypher.
 - **Save As modal:** namespace dropdown (with a "+ New namespace…" option that
@@ -446,11 +448,16 @@ or makes the reset one-click.
 
 ### Testing a query
 
-`Test Tabular` / `Test Graph` POST the textarea's Cypher to
-`/api/v1/graph/execute` as `source="raw"`, `view="auto"` and render the result
-in an inline pane: a table for tabular results, a summary alert for graph
-results. This requires a live Neo4j; a down or unreachable graph surfaces as an
-error alert, not a crash.
+**Quick Test** POSTs the textarea's Cypher to `/api/v1/graph/execute` as
+`source="raw"`, `view="auto"` and renders a compact inline badge directly under
+that textarea: `✔ N row(s) returned` for a tabular result, `✔ Graph: N nodes, M
+relationships` for a graph result, `✘ <message>` for a failure.
+
+**View Test** POSTs the same way and renders the full result in a shared `xl`
+modal — a `cyto.Cytoscape` graph for a graph result (force-directed `cose`
+layout, wheel-zoom and drag-pan, a **Fit** button) or a data table for a tabular
+result. The modal's graph follows the active app theme. This requires a live
+Neo4j; a down or unreachable graph surfaces as an error alert, not a crash.
 
 UI conventions follow the repo's mandatory standards: `outline-danger` for
 destructive buttons, a dedicated dismissable feedback region near the top

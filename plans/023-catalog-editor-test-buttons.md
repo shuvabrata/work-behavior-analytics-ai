@@ -887,6 +887,24 @@ first render also matches its `Force-Directed (cose)` dropdown. New default:
 makes the graph page's first render run a force-directed layout, which is
 costlier than the previous instant circle on large result sets.
 
+**Follow-up fix 2 (operator-reported, 2026-10-11): the modal ignored the app
+theme.** The shared builder also bakes in the **static** `CYTOSCAPE_STYLESHEET`,
+which is `build_cytoscape_stylesheet()` with no argument — i.e. `ACTIVE_THEME` =
+`executive-light`. So in dark mode the modal drew the light palette (the
+operator saw relationship labels dark-on-white). The Graph and Collaboration
+pages each replace it from `theme-store`; the modal had no such callback. Added
+`update_test_stylesheet` (`Output("editor-test-cytoscape", "stylesheet")`,
+`Input("theme-store", "data")`, no `prevent_initial_call`) mirroring
+`collaboration_network/callbacks/display.py:14-26`, with two tests asserting the
+callback equals `build_cytoscape_stylesheet(theme)` for both themes.
+
+Together, follow-up fixes 1 and 2 are the same structural gap: Phase 1's pure
+move extracted the static component but not the dynamic `layout` / `stylesheet`
+props the graph page derives from live app state. The one remaining difference is
+`register_edge_hover_dimming_callback("graph-cytoscape")`
+(`graph/callbacks/display.py:14`) — the modal has no equivalent, so edge-hover
+dimming is absent there. Deliberately not added; recorded as a known gap.
+
 ### Tasks
 
 - [x] Add to `editor_test_callbacks.py`:
@@ -1182,5 +1200,5 @@ ALL must hold:
 | Phase 1 — Extract `result_pane.py` | `[x]` | DONE 2026-10-11 + approved stylesheet move; operator-verified; uncommitted on `feature/editor-test-buttons` |
 | Phase 2 — Editor layout (buttons + modal shell) | `[x]` | DONE 2026-10-11; operator-verified; buttons inert pending Phase 3 |
 | Phase 3 — Quick Test callbacks | `[x]` | DONE 2026-10-11; uncommitted |
-| Phase 4 — View Test modal callback | `[x]` | DONE 2026-10-11; + cose default fix; uncommitted |
+| Phase 4 — View Test modal callback | `[x]` | DONE 2026-10-11; + cose default + theme stylesheet fixes; committed `31b9bb6` |
 | Phase 5 — Cleanup & regression | `[ ]` | |

@@ -21,10 +21,6 @@ from dash.exceptions import PreventUpdate
 
 from app.runtime_settings import runtime_settings
 from app.dash_app.components.common import create_alert
-from app.dash_app.pages.graph.utils import (
-    create_error_alert,
-    create_table_display,
-)
 from app.dash_app.styles import COLOR_GRAY_MEDIUM
 from ._utils import get_api_base_url
 from .editor_layout import render_factory_diff_lines, render_parameter_row
@@ -727,80 +723,6 @@ def save_as_query(
             create_alert(f"Save failed: {exc}", color="danger", class_name="mb-3"),
             True,
         )
-
-
-def _run_test(query_text: str | None) -> Any:
-    """Execute a raw Cypher query and render the results pane.
-
-    Returns:
-        The results pane children (an alert on error, a table on success).
-    """
-    if not query_text or not query_text.strip():
-        return create_alert(
-            "Enter a query before testing.", color="warning", class_name="mb-3"
-        )
-
-    payload = {
-        "source": "raw",
-        "query": query_text.strip(),
-        "view": "auto",
-    }
-    api_base = get_api_base_url()
-    try:
-        resp = requests.post(
-            f"{api_base}/api/v1/graph/execute",
-            json=payload,
-            timeout=TIMEOUT_SECONDS,
-        )
-        if resp.status_code not in (200, 400, 422, 500):
-            resp.raise_for_status()
-        if resp.status_code != 200:
-            try:
-                error_data = resp.json()
-            except ValueError:
-                error_data = {}
-            return create_error_alert(
-                error_data.get("detail", {}).get("message", "Query execution failed."),
-                alert_type="danger",
-                heading="Query Execution Failed",
-            )
-        data = resp.json()
-        if data.get("isGraph"):
-            return create_alert(
-                f"Graph result: {data.get('resultCount', 0)} records.",
-                color="success",
-                class_name="mb-3",
-                duration=5000,
-            )
-        return create_table_display(data.get("rawResults") or [])
-    except requests.exceptions.RequestException as exc:
-        return create_alert(f"Test failed: {exc}", color="danger", class_name="mb-3")
-
-
-@callback(
-    Output("editor-test-results", "children"),
-    Input("editor-test-tabular", "n_clicks"),
-    State("editor-query-tabular", "value"),
-    prevent_initial_call=True,
-)
-def test_tabular(n_clicks: int | None, query_text: str | None) -> Any:
-    """Test the Tabular Query textarea."""
-    if not n_clicks:
-        raise PreventUpdate
-    return _run_test(query_text)
-
-
-@callback(
-    Output("editor-test-results", "children", allow_duplicate=True),
-    Input("editor-test-graph", "n_clicks"),
-    State("editor-query-graph", "value"),
-    prevent_initial_call=True,
-)
-def test_graph(n_clicks: int | None, query_text: str | None) -> Any:
-    """Test the Graph Query textarea."""
-    if not n_clicks:
-        raise PreventUpdate
-    return _run_test(query_text)
 
 
 @callback(

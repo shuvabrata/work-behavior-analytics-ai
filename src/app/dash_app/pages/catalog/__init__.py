@@ -9,3 +9,4 @@ from .editor_layout import get_editor_layout
 # pylint: disable=unused-import
 from . import callbacks  # noqa: F401
 from . import editor_callbacks  # noqa: F401
+from . import editor_test_callbacks  # noqa: F401

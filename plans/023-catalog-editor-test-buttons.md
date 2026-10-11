@@ -441,7 +441,10 @@ created (7 tests, all exact-id tree walks). Verified: 1827 unit tests pass
 tree walk, `editor-test-results` and both old buttons absent, and
 `import app.main` + `create_dash_app()` still succeed with the old callbacks
 dangling (safe because `suppress_callback_exceptions=True`). `editor_callbacks.py`
-is untouched, as the phase boundary requires.
+is untouched, as the phase boundary requires. **Operator-verified manually
+2026-10-11** — button pairs render as expected, the old bottom results pane is
+gone, all four buttons are inert with a clean console, and Save / Save As /
+Compare to Factory / Add Parameter still work.
 
 ### Tasks
 
@@ -610,9 +613,39 @@ old pane.)
 > Delete the old `_run_test`, `test_tabular`, and `test_graph` from
 > `editor_callbacks.py` and migrate the tests that call them.
 
+### ✅ Executed 2026-10-11
+
+Five files: `editor_test_callbacks.py` + `tests/test_catalog_editor_test_callbacks.py`
+created; `editor_callbacks.py` (−78 lines), `catalog/__init__.py`, and the
+E4–E7 block of `tests/test_catalog_editor_callbacks.py` modified. Verified: 1831
+unit tests pass (+4 net), mypy clean (277 files), pylint 9.68, no
+`editor-test-results` / `_run_test` / `test_tabular` / `test_graph` /
+`create_error_alert` / `create_table_display` left in `editor_callbacks.py`, and
+`import app.main` + `create_dash_app()` still succeed.
+
+The E5 migration asserts on **`result[1]`**, per the correction above — the
+graph trigger returns `(no_update, badge)`. The raised-exception test patches
+`editor_test_callbacks.requests.post` (the attribute), not the module, so the
+source's `except requests.exceptions.RequestException` resolves against the real
+`requests`; the four migrated E4–E7 tests keep the whole-module fake, which is
+safe only because none of them raises inside `_run_test`.
+
+**Follow-up fix (operator-reported, 2026-10-11):** the first cut's `_BADGE_STYLE`
+inline padding (`3px 8px` at 11px) shrank the alert to ~22px while Bootstrap's
+`.alert-dismissible .btn-close` keeps its box anchored at the alert's **top**
+with `padding: 1.25rem 1rem` (~51px tall) — so the × rendered *below* the badge.
+Fixed by dropping the inline style and adding a shared unscoped
+`.alert-inline-badge` class to `assets/executive-dashboard.css` that re-anchors
+the close button to the alert's vertical centre (`top: 50%` +
+`translateY(-50%)`) and reserves `22px` of right padding for it. **This amends
+this plan's earlier "add no new CSS" instruction** — the badge class follows the
+same pattern as `btn-subtle-action` / `collapse-toggle-subtle`. Note the defect
+was specific to this badge: no other `create_alert(...)` caller overrides
+padding.
+
 ### Tasks
 
-- [ ] Create `src/app/dash_app/pages/catalog/editor_test_callbacks.py` with a
+- [x] Create `src/app/dash_app/pages/catalog/editor_test_callbacks.py` with a
   complete import block:
 
   ```python
@@ -712,7 +745,7 @@ old pane.)
       return no_update, badge
   ```
 
-- [ ] Delete from `editor_callbacks.py`:
+- [x] Delete from `editor_callbacks.py`:
   - `_run_test` (lines 732-777), `test_tabular` (lines 780-790), `test_graph`
     (lines 793-803).
   - The now-unused imports at lines 24-27: **both** `create_error_alert` (used
@@ -721,7 +754,7 @@ old pane.)
   - Keep `create_alert`, `COLOR_GRAY_MEDIUM`, `get_api_base_url`,
     `TIMEOUT_SECONDS`, and everything else.
 
-- [ ] Migrate the four tests that call the deleted functions —
+- [x] Migrate the four tests that call the deleted functions —
   `tests/test_catalog_editor_callbacks.py`, section "E4/E5: Test Tabular / Test
   Graph" (lines 564-625). They are the only pin on the request payload, the
   write-Cypher 400 path, and the empty-query path, so **rewrite** rather than
@@ -756,16 +789,20 @@ old pane.)
     `{"isGraph": False, "rawResults": [{"n": 1}]}`, so the badge reads
     `✔ 0 row(s) returned`.)
   - `test_e5_test_graph_posts_execute` (line 585) → same, `triggered_id="editor-quick-test-graph"`,
-    assert `result[0]` contains `✔ Graph:`. (E5's fake is
-    `{"isGraph": True, "resultCount": 3}` — no `nodes`, so the badge reads
-    `✔ Graph: 0 nodes, 0 relationships`; the `"✔ Graph:"` prefix still holds.)
+    assert **`result[1]`** contains `✔ Graph:` (and `result[0] is no_update`).
+    **Correction:** an earlier revision of this plan said `result[0]` — that was
+    wrong. `quick_test` returns `(badge, no_update)` for a *tabular* trigger and
+    `(no_update, badge)` for a *graph* trigger, so the graph badge is output
+    index 1. (E5's fake is `{"isGraph": True, "resultCount": 3}` — no `nodes`,
+    so the badge reads `✔ Graph: 0 nodes, 0 relationships`; the `"✔ Graph:"`
+    prefix still holds.)
   - `test_e6_test_with_write_cypher_shows_error` (line 599) → assert the badge
     contains `✘` and `"write operations"`.
   - `test_e7_test_button_disabled_when_empty` (line 617) → assert no HTTP call
     and the badge contains `Enter a query`.
   - The rest of the file must keep passing unchanged.
 
-- [ ] Register the new module in `src/app/dash_app/pages/catalog/__init__.py`:
+- [x] Register the new module in `src/app/dash_app/pages/catalog/__init__.py`:
 
   ```python
   from . import editor_test_callbacks  # noqa: F401
@@ -1059,6 +1096,7 @@ route is `/app/catalog/edit/{namespace}/{slug}`; a single-segment path parses as
 | **Modified** | `src/app/dash_app/pages/catalog/editor_layout.py` — 4 buttons, 2 feedback divs, modal, delete `_render_test_results` |
 | **Modified** | `src/app/dash_app/pages/catalog/editor_callbacks.py` — delete `_run_test`, `test_tabular`, `test_graph`, and the 2 unused graph-utils imports |
 | **Modified** | `src/app/dash_app/pages/catalog/__init__.py` — register `editor_test_callbacks` |
+| **Modified** | `src/app/dash_app/assets/executive-dashboard.css` — shared `.alert-inline-badge` class (Phase 3 follow-up fix, see Phase 3) |
 | **Modified** | `tests/test_catalog_editor_callbacks.py` — migrate tests E4–E7 |
 | **Modified** | `docs/design/query-catalog-editor-design.md` — rewrite the two passages that name the old Test buttons |
 
@@ -1108,7 +1146,7 @@ ALL must hold:
 | Phase | Status | Notes |
 |---|---|---|
 | Phase 1 — Extract `result_pane.py` | `[x]` | DONE 2026-10-11 + approved stylesheet move; operator-verified; uncommitted on `feature/editor-test-buttons` |
-| Phase 2 — Editor layout (buttons + modal shell) | `[x]` | DONE 2026-10-11; buttons inert pending Phase 3 |
-| Phase 3 — Quick Test callbacks | `[ ]` | |
+| Phase 2 — Editor layout (buttons + modal shell) | `[x]` | DONE 2026-10-11; operator-verified; buttons inert pending Phase 3 |
+| Phase 3 — Quick Test callbacks | `[x]` | DONE 2026-10-11; uncommitted |
 | Phase 4 — View Test modal callback | `[ ]` | |
 | Phase 5 — Cleanup & regression | `[ ]` | |

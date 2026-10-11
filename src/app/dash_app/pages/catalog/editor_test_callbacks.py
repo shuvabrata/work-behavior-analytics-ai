@@ -16,9 +16,11 @@ from dash import (
     no_update,
 )
 
+from app.dash_app.graph_styles import build_cytoscape_stylesheet
 from app.dash_app.pages.graph.utils import (
     create_error_alert,
     create_table_display,
+    fetch_effective_theme,
     neo4j_to_cytoscape,
 )
 from app.runtime_settings import runtime_settings
@@ -166,3 +168,20 @@ clientside_callback(
     Input("editor-test-fit", "n_clicks"),
     prevent_initial_call=True,
 )
+
+
+@callback(
+    Output("editor-test-cytoscape", "stylesheet"),
+    Input("theme-store", "data"),
+)
+def update_test_stylesheet(theme_name: str | None) -> list[dict[str, Any]]:
+    """Rebuild the modal's Cytoscape palette when the app theme changes.
+
+    Mirrors the Graph and Collaboration pages: fetch the server-merged effective
+    theme (base tokens ⊕ default-theme overrides) and build the stylesheet from
+    it. `fetch_effective_theme` returns None on any error, which falls back to
+    the hardcoded base tokens.
+    """
+    active_theme = theme_name or "executive-light"
+    effective = fetch_effective_theme(active_theme)
+    return build_cytoscape_stylesheet(active_theme, effective=effective)

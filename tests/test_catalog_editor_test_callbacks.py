@@ -199,3 +199,19 @@ def test_view_test_error_shows_error_display(monkeypatch):
 
     assert result[0] is True
     assert "write operations" in str(result[6])
+
+
+def test_stylesheet_follows_theme(monkeypatch):
+    """Regression: the modal palette must track the app theme, not be fixed to light."""
+    monkeypatch.setattr(editor_test_callbacks, "fetch_effective_theme", lambda _theme: None)
+    light = editor_test_callbacks.update_test_stylesheet("executive-light")
+    dark = editor_test_callbacks.update_test_stylesheet("executive-dark")
+    assert isinstance(light, list) and isinstance(dark, list)
+    assert light != dark
+
+
+def test_stylesheet_none_theme_falls_back_to_light(monkeypatch):
+    """A missing theme-store value must behave as executive-light."""
+    monkeypatch.setattr(editor_test_callbacks, "fetch_effective_theme", lambda _theme: None)
+    assert editor_test_callbacks.update_test_stylesheet(None) == \
+        editor_test_callbacks.update_test_stylesheet("executive-light")

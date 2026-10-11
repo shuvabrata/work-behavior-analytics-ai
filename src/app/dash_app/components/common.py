@@ -537,7 +537,6 @@ _CONTROLS_BUTTON_STYLE = {
     "fontFamily": FONT_SANS,
     "fontSize": "11px",
     "padding": "4px 12px",
-    "borderRadius": "2px",
     "borderColor": COLOR_GRAY_LIGHTER,
     "color": COLOR_GRAY_DARK,
 }

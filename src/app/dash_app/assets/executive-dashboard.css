@@ -208,8 +208,8 @@
 }
 
 /* Library page search input — matches the top-nav global search pill */
-.library-search-input,
-.library-search-input.form-control {
+.catalog-search-input,
+.catalog-search-input.form-control {
     background-color: var(--color-background-light) !important;
     border: 1px solid var(--color-border) !important;
     color: var(--color-charcoal) !important;
@@ -221,13 +221,13 @@
     padding-right: 14px !important;
 }
 
-.library-search-input::placeholder {
+.catalog-search-input::placeholder {
     color: var(--color-gray-light) !important;
     opacity: 1 !important;
 }
 
-.library-search-input:focus,
-.library-search-input.form-control:focus {
+.catalog-search-input:focus,
+.catalog-search-input.form-control:focus {
     border-color: var(--color-navy) !important;
     box-shadow: 0 0 0 2px var(--color-focus-ring) !important;
     background-color: var(--color-background-light) !important;

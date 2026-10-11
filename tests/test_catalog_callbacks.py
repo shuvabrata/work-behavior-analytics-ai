@@ -1,8 +1,8 @@
 """Unit tests for the Library (query catalog) listing page callbacks.
 
 These tests exercise the Python-side callback functions in
-``app.dash_app.pages.library.callbacks`` and the static table skeleton in
-``app.dash_app.pages.library.layout``. The table body rows are built entirely
+``app.dash_app.pages.catalog.callbacks`` and the static table skeleton in
+``app.dash_app.pages.catalog.layout``. The table body rows are built entirely
 in JavaScript (a clientside callback), so row-level rendering is not unit
 tested here — the Python tests cover the data flow and the static skeleton.
 HTTP calls are mocked with a fake ``requests`` layer so no live server is
@@ -13,8 +13,8 @@ from dataclasses import dataclass
 
 import pytest
 
-from app.dash_app.pages.library import callbacks as library_callbacks
-from app.dash_app.pages.library.layout import render_library_table
+from app.dash_app.pages.catalog import callbacks as catalog_callbacks
+from app.dash_app.pages.catalog.layout import render_catalog_table
 
 
 pytestmark = pytest.mark.unit
@@ -96,7 +96,7 @@ def _query(
 
 def test_table_skeleton_has_headers_and_empty_body():
     """The static skeleton renders headers and an empty tbody for JS to fill."""
-    table = render_library_table()
+    table = render_catalog_table()
     rendered = str(table)
 
     for header in (
@@ -121,9 +121,9 @@ def test_table_skeleton_has_headers_and_empty_body():
 
 
 def test_d5_new_query_click_navigates_to_new(monkeypatch):
-    """New Query click sets the url pathname to /app/library/new."""
-    result = library_callbacks.handle_new_click(1)
-    assert result == "/app/library/new"
+    """New Query click sets the url pathname to /app/catalog/new."""
+    result = catalog_callbacks.handle_new_click(1)
+    assert result == "/app/catalog/new"
 
 
 def test_table_row_has_no_destructive_button():
@@ -135,7 +135,7 @@ def test_table_row_has_no_destructive_button():
     """
     import inspect
 
-    source = inspect.getsource(library_callbacks)
+    source = inspect.getsource(catalog_callbacks)
     assert "data-action=\"destructive\"" not in source
     assert "querySelector('[data-action=\"destructive\"]')" not in source
     assert "library-delete-confirm" not in source

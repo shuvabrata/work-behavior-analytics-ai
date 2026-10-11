@@ -21,7 +21,7 @@ def get_layout() -> html.Div:
             dcc.Store(id="library-namespaces-store", storage_type="memory"),
             html.Div(id="library-feedback"),
             create_page_header(
-                [("Library", None)],
+                [("Catalog", None)],
                 "Browse and manage the query catalog. User-defined queries "
                 "override factory defaults.",
             ),
@@ -45,10 +45,10 @@ def get_layout() -> html.Div:
                             ),
                             dbc.Col(
                                 dbc.Input(
-                                    id="library-search-input",
+                                    id="catalog-search-input",
                                     type="text",
                                     placeholder="Search all columns…",
-                                    className="library-search-input",
+                                    className="catalog-search-input",
                                 ),
                                 width=True,
                             ),
@@ -67,7 +67,7 @@ def get_layout() -> html.Div:
                         className="g-2 align-items-center",
                     ),
                     html.Div(
-                        render_library_table(),
+                        render_catalog_table(),
                         id="library-table-container",
                         style={
                             "marginTop": SPACING_XSMALL,
@@ -81,11 +81,11 @@ def get_layout() -> html.Div:
     )
 
 
-def render_library_table() -> html.Div:
+def render_catalog_table() -> html.Div:
     """Return the static table skeleton.
 
     Only the header row is rendered here. The body rows are built entirely in
-    JavaScript by the ``render_library_table`` clientside callback (see
+    JavaScript by the ``render_catalog_table`` clientside callback (see
     ``callbacks.py``), which reads the raw catalog data from ``library-store``
     and constructs the ``<tr>``/``<td>`` HTML directly in the browser. This
     avoids Dash's per-component instantiation cost for 140+ rows, which was

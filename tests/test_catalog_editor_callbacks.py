@@ -1,7 +1,7 @@
 """Unit tests for the Library query editor callbacks.
 
 These tests exercise the callback functions in
-``app.dash_app.pages.library.editor_callbacks``. HTTP calls are mocked with a
+``app.dash_app.pages.catalog.editor_callbacks``. HTTP calls are mocked with a
 fake ``requests`` layer so no live server or Neo4j is required.
 """
 
@@ -9,7 +9,7 @@ from dataclasses import dataclass
 
 import pytest
 
-from app.dash_app.pages.library import editor_callbacks as editor
+from app.dash_app.pages.catalog import editor_callbacks as editor
 
 
 pytestmark = pytest.mark.unit
@@ -401,7 +401,7 @@ def test_e1_editor_loads_query(monkeypatch):
     fake = _FakeRequests([_FakeResponse(_query_payload(), 200)])
     monkeypatch.setattr(editor, "requests", fake)
 
-    result = editor.load_query("edit", "/app/library/edit/github/top_committers")
+    result = editor.load_query("edit", "/app/catalog/edit/github/top_committers")
 
     assert fake.get_calls[0]["url"].endswith(
         "/api/v1/queries/catalog/github/top_committers"
@@ -424,7 +424,7 @@ def test_e1b_new_route_leaves_form_blank(monkeypatch):
     fake = _FakeRequests([])
     monkeypatch.setattr(editor, "requests", fake)
 
-    result = editor.load_query("new", "/app/library/new")
+    result = editor.load_query("new", "/app/catalog/new")
 
     assert fake.get_calls == []
     assert result[0] == {"mode": "new"}
@@ -443,7 +443,7 @@ def test_e2_save_puts_to_current_id(monkeypatch):
     feedback = editor.save_query(
         1,
         {"mode": "edit", "id": "github/top_committers"},
-        "/app/library/edit/github/top_committers",
+        "/app/catalog/edit/github/top_committers",
         state["name"],
         state["description"],
         state["summary"],
@@ -476,7 +476,7 @@ def test_e2b_save_on_new_route_warns(monkeypatch):
     feedback = editor.save_query(
         1,
         {"mode": "new"},
-        "/app/library/new",
+        "/app/catalog/new",
         state["name"],
         state["description"],
         state["summary"],
@@ -641,7 +641,7 @@ def test_e8_reset_deletes_and_reloads(monkeypatch):
     result = editor.destructive_action(
         1,
         {"mode": "edit", "id": "github/top_committers", "origin": "override"},
-        "/app/library/edit/github/top_committers",
+        "/app/catalog/edit/github/top_committers",
     )
 
     assert fake.delete_calls[0]["url"].endswith(
@@ -691,13 +691,13 @@ def test_e9b_delete_issues_delete_and_navigates_to_library(monkeypatch):
     result = editor.destructive_action(
         1,
         {"mode": "edit", "id": "github/top_committers", "origin": "custom"},
-        "/app/library/edit/github/top_committers",
+        "/app/catalog/edit/github/top_committers",
     )
 
     assert fake.delete_calls[0]["url"].endswith(
         "/api/v1/queries/catalog/github/top_committers"
     )
-    assert result[12] == "/app/library"
+    assert result[12] == "/app/catalog"
     assert result[13] is None or "Delete failed" not in str(result[13])
 
 
@@ -711,13 +711,13 @@ def test_e9c_delete_failure_shows_error(monkeypatch):
     result = editor.destructive_action(
         1,
         {"mode": "edit", "id": "github/top_committers", "origin": "custom"},
-        "/app/library/edit/github/top_committers",
+        "/app/catalog/edit/github/top_committers",
     )
 
     assert fake.delete_calls[0]["url"].endswith(
         "/api/v1/queries/catalog/github/top_committers"
     )
-    assert result[12] is None or result[12] != "/app/library"
+    assert result[12] is None or result[12] != "/app/catalog"
     assert "Delete failed" in str(result[13])
 
 
@@ -780,7 +780,7 @@ def test_e1c_load_query_404_shows_error(monkeypatch):
     fake = _FakeRequests([_FakeResponse({"detail": "Catalog query not found"}, 404)])
     monkeypatch.setattr(editor, "requests", fake)
 
-    result = editor.load_query("edit", "/app/library/edit/github/nonexistent")
+    result = editor.load_query("edit", "/app/catalog/edit/github/nonexistent")
 
     # The feedback output (index 12) should contain an error alert.
     feedback = result[12]
@@ -804,7 +804,7 @@ def test_e1d_load_query_request_exception_shows_error(monkeypatch):
 
     monkeypatch.setattr(editor.requests, "get", _failing_get)
 
-    result = editor.load_query("edit", "/app/library/edit/github/top_committers")
+    result = editor.load_query("edit", "/app/catalog/edit/github/top_committers")
 
     feedback = result[12]
     assert feedback is not None
@@ -825,7 +825,7 @@ def _factory_route(origin: str) -> dict:
     }
 
 
-_DIFF_PATH = "/app/library/edit/github/top_committers"
+_DIFF_PATH = "/app/catalog/edit/github/top_committers"
 
 
 def test_view_changes_button_visible_only_for_override():
@@ -970,7 +970,7 @@ def test_factory_diff_text_renders_every_diffed_field():
 
 def test_view_changes_button_uses_subtle_action_class():
     """The Compare to Factory button carries the theme-aware subtle-action class."""
-    from app.dash_app.pages.library.editor_layout import _render_action_bar
+    from app.dash_app.pages.catalog.editor_layout import _render_action_bar
 
     def _walk(component):
         children = getattr(component, "children", None)
@@ -986,3 +986,11 @@ def test_view_changes_button_uses_subtle_action_class():
         if getattr(c, "id", None) == "editor-view-changes"
     )
     assert button.className == "btn-subtle-action"
+
+
+def test_parse_route_still_accepts_the_legacy_library_prefix():
+    """The old /app/library deep links must keep resolving after the rename."""
+    assert editor._parse_route("/app/library/edit/github/top_committers") == (
+        "edit", "github", "top_committers",
+    )
+    assert editor._parse_route("/app/library/new") == ("new", None, None)

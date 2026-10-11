@@ -40,6 +40,9 @@ _NO_CHANGE_13: tuple[Any, ...] = (no_update,) * 13
 def _parse_route(pathname: str | None) -> tuple[str, str | None, str | None]:
     """Parse the editor route.
 
+    The canonical prefix is ``/app/catalog``; the legacy ``/app/library``
+    prefix is still accepted so existing deep links keep resolving.
+
     Returns:
         A tuple of ``(mode, namespace, slug)`` where ``mode`` is ``"new"``
         for the new-query route and ``"edit"`` otherwise. For ``"new"`` the
@@ -48,13 +51,13 @@ def _parse_route(pathname: str | None) -> tuple[str, str | None, str | None]:
     if not pathname:
         return "edit", None, None
     stripped = pathname.rstrip("/")
-    if stripped == "/app/library/new":
-        return "new", None, None
-    if stripped.startswith("/app/library/edit/"):
-        remainder = stripped.split("/app/library/edit/")[-1]
-        parts = remainder.split("/")
-        if len(parts) >= 2:
-            return "edit", parts[0], parts[1]
+    for prefix in ("/app/catalog", "/app/library"):
+        if stripped == f"{prefix}/new":
+            return "new", None, None
+        if stripped.startswith(f"{prefix}/edit/"):
+            parts = stripped.split(f"{prefix}/edit/")[-1].split("/")
+            if len(parts) >= 2:
+                return "edit", parts[0], parts[1]
     return "edit", None, None
 
 
@@ -980,7 +983,7 @@ def destructive_action(
     if origin != "override":
         return (
             *(no_update,) * 12,
-            "/app/library",
+            "/app/catalog",
             no_update,
         )
 

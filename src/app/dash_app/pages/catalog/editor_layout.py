@@ -85,7 +85,7 @@ def get_editor_layout() -> html.Div:
             ),
             html.Div(id="editor-feedback"),
             create_page_header(
-                [("Library", "/app/library"), ("Query Editor", None)],
+                [("Catalog", "/app/catalog"), ("Query Editor", None)],
                 "Create or edit a user-defined catalog query.",
             ),
             html.Div(

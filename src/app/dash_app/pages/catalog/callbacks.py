@@ -27,7 +27,7 @@ TIMEOUT_SECONDS = runtime_settings.get_int("HTTP_REQUEST_TIMEOUT")
 )
 def load_library(pathname: str | None) -> tuple[Any, Any]:
     """Load the catalog and namespaces when the page mounts."""
-    if pathname not in ("/app/library", "/app/library/"):
+    if pathname not in ("/app/catalog", "/app/catalog/", "/app/library", "/app/library/"):
         return no_update, no_update
 
     api_base = get_api_base_url()
@@ -146,7 +146,7 @@ clientside_callback(
             // because the table body is set via innerHTML and the children
             // output returns no_update. q.id is a path-safe "namespace/slug",
             // so embedding it in the URL is safe.
-            var editBtn = '<button class="btn btn-primary btn-sm me-1" data-action="edit" data-id="' + esc(q.id) + '" onclick="window.location.href=&quot;/app/library/edit/' + q.id + '&quot;">Edit</button>';
+            var editBtn = '<button class="btn btn-primary btn-sm me-1" data-action="edit" data-id="' + esc(q.id) + '" onclick="window.location.href=&quot;/app/catalog/edit/' + q.id + '&quot;">Edit</button>';
 
             rows.push(
                 '<tr data-namespace="' + esc(ns) + '" data-search="' + esc(searchable(q)) + '"' +
@@ -170,7 +170,7 @@ clientside_callback(
     """,
     Output("library-table-container", "children", allow_duplicate=True),
     Input("library-store", "data"),
-    Input("library-search-input", "value"),
+    Input("catalog-search-input", "value"),
     Input("library-namespace-filter", "value"),
     prevent_initial_call=True,
 )
@@ -185,4 +185,4 @@ def handle_new_click(n_clicks: int | None) -> Any:
     """Navigate to the new-query editor."""
     if not n_clicks:
         raise PreventUpdate
-    return "/app/library/new"
+    return "/app/catalog/new"

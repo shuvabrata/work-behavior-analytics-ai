@@ -91,7 +91,16 @@ This preserves current visuals while making it easier to add future themes (for 
 |---------|--------|--------|
 | Form controls (`.form-control`, `.form-select`, `textarea`, `.Select-control`, `.Select-menu-outer`) | 6px | `var(--bs-border-radius)` theme token |
 | Buttons (`.btn`, `.btn-sm`, `.btn-lg`) | 6px | `var(--bs-border-radius)` via `--bs-btn-border-radius` |
+| Chat message surfaces (user / assistant bubbles, inline cards) | 6px | inline `var(--bs-border-radius, 6px)` — `pages/chat.py` |
 | Surfaces / containers / cards | 2px | `var(--border-radius, 2px)` |
+
+**Enforcement.** The form-control radius is declared with `!important` so it can beat
+Bootswatch Materia's hardcoded `.form-control { border-radius: 0 }`. Consequence: an
+inline `borderRadius` on a `.form-control` / `.form-select` / `textarea` / react-select
+control is silently ignored — set it in `assets/executive-dashboard.css`, not in a
+component. Buttons work the opposite way: the button radius overrides Bootstrap's
+`--bs-btn-border-radius` variable, which an inline `border-radius` *does* beat, so a
+button carrying an inline radius keeps that value instead of 6px.
 
 ### Utility Colors
 

@@ -21,7 +21,7 @@ def get_layout() -> html.Div:
             dcc.Store(id="library-namespaces-store", storage_type="memory"),
             html.Div(id="library-feedback"),
             create_page_header(
-                [("Library", None)],
+                [("Catalog", None)],
                 "Browse and manage the query catalog. User-defined queries "
                 "override factory defaults.",
             ),

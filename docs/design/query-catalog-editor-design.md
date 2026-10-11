@@ -232,6 +232,20 @@ the body). A PUT to an existing override overwrites it; a PUT to a new id
 creates it. The response is the merged query as re-loaded by the loader, so the
 client sees exactly what a subsequent GET would return.
 
+### Reading the factory version of an overridden query
+
+`GET /api/v1/queries/catalog/{ns}/{slug}` accepts an `include_overrides` query
+parameter (default `true`). With `include_overrides=false` the shipped catalog
+is read **without** the `user_defined/` overlay, so the response is the
+*factory* entry for an id the user has overridden. This is what makes the
+editor's factory-vs-current diff possible: the merged view has already replaced
+the built-in text once an override exists, so there is otherwise no way to ask
+for it. The parameter is read-only, keeps `default(true)` so every existing
+caller stays on the merged view, and changes nothing about the response shape —
+it only selects which of the two entries the lookup sees. Because the factory
+view is the shipped tree, `include_overrides=false` for an id that exists only
+as a user-created query (`custom` origin) returns `404`.
+
 The write service owns all file I/O under `user_defined/`. It is synchronous
 and is invoked from the async router via a worker thread, matching the pattern
 used by the graph execute endpoint. Keeping file I/O in a dedicated module
@@ -313,6 +327,13 @@ file is stable and human-diffable. Writing only author fields keeps the file
 self-describing and prevents a saved file from asserting an identity that
 disagrees with its own path.
 
+Both the query file and the `user_defined/catalog.yaml` registry are written
+through `_atomic_write_text`: the content goes to a uniquely named sibling temp
+file and is `os.replace`d into place, so a crash mid-write leaves the previous
+file intact rather than a truncated one. A truncated YAML file would make the
+**entire** catalog unloadable, since the loader validates every file on every
+read.
+
 ---
 
 ## 11. Persistence and deployment model
@@ -387,6 +408,15 @@ sticky action bar:
   Both variants use `color="outline-danger"` and sit behind a two-stage
   `dcc.ConfirmDialog` (click → dialog → confirm), with a message that names the
   query and states "This cannot be undone."
+- **Compare to Factory (overrides only):** an additional button, rendered immediately
+  to the **left** of the destructive action and visible only when
+  `origin == "override"`. It opens a scrollable `dbc.Modal` holding the
+  factory-vs-current unified diff — **red lines are the factory version, green
+  lines are the current override**. The diff is fetched **lazily**, the moment
+  the modal opens, so a query whose diff is never viewed never pays for the two
+  reads. A `custom` query has no factory version to diff against and a
+  `builtin` has no destructive action at all, so neither renders the
+  affordance.
 - **Metadata section:** name, owner, status (dropdown), summary, tags
   (comma-separated), description.
 - **Queries section:** two monospace textareas, **Tabular Query** and
@@ -405,6 +435,12 @@ sticky action bar:
   the factory data, because the built-in version survives underneath.
 - **Custom → Delete:** delete the overlay file, then **navigate back to the
   listing**, because there is no factory version to fall back to.
+
+The factory diff is additive information beside the destructive action, not a
+replacement for it. For an override the flow is **read → close the modal →
+click the destructive button → confirm**, and the two-stage
+`dcc.ConfirmDialog` is unchanged — the diff never removes the confirmation step
+or makes the reset one-click.
 
 ### Testing a query
 
@@ -431,12 +467,17 @@ using the shared `collapse-toggle-subtle` class.
 | Missing/invalid body fields | `422` (Pydantic validation on `CatalogQueryWrite`) |
 | GET of an unknown query | `404` |
 | DELETE with no override present | `204` (idempotent — not an error) |
-| Written YAML fails to reload | `500` (`CatalogLoadError` propagates) |
-| Malformed/hand-edited overlay file at load | `CatalogLoadError` naming the file |
+| Written YAML fails to reload | `422`; the written file is rolled back to its prior contents (removed if it was new) |
+| Malformed/hand-edited overlay file at load | read endpoints return a controlled `500`; the offending file is named in the server log, not in the response body |
 
 A written file is **re-loaded before responding**, so a save that would produce
 an unloadable catalog fails loudly at save time rather than silently poisoning
-later reads.
+later reads. If that reload fails, the write is rolled back — a brand-new file
+is removed, an existing override is restored byte-for-byte — so the failure
+cannot leave the catalog in a broken state. The read endpoints map an
+unloadable catalog to a `500` whose body carries no filesystem paths (the cause
+goes to the log); the underlying fault is a server-side data problem, not a
+transient one, so the status stays `500`.
 
 ---
 
@@ -494,7 +535,10 @@ later reads.
 10. **`origin` drives the destructive label (Reset vs Delete).**
     *Why:* an override has a factory fallback and a custom query does not —
     the label and the follow-up behaviour (reload vs navigate) must match that
-    reality rather than offering one ambiguous verb.
+    reality rather than offering one ambiguous verb. The same discriminator
+    also gates whether a factory diff is offered — "Compare to Factory" renders only
+    for `override` — so the label, the affordance, and the information
+    available before confirming all come from one field.
 
 11. **Client-side table rendering.**
     *Why:* 140+ Dash rows made the listing slow to render; building the rows in
@@ -511,6 +555,16 @@ later reads.
     (`^[a-zA-Z0-9][a-zA-Z0-9_]*$`), widening an earlier lowercase-only draft.
     Traversal is still impossible because the pattern admits no separators or
     dots.
+
+14. **Crash-safe writes: directory first, atomic replace, rollback on reload
+    failure.**
+    *Why:* the catalog is loaded in full on every read and the loader raises on
+    the first unparseable file, so any half-written or inconsistent overlay file
+    is a catalog-wide outage whose only recovery is a human with a shell. The
+    write path therefore creates the namespace directory *before* registering it
+    (a declared namespace with no directory fails the load), writes through a
+    uniquely named temp file + `os.replace`, and restores the prior bytes when
+    the post-write reload fails.
 
 ---
 
@@ -534,6 +588,14 @@ later reads.
   Consolidating them would remove a drift risk.
 - **No edit-time conflict check.** Save As onto an existing id overwrites it
   without a distinct "already exists" confirmation.
+- **Parsed-catalog cache assumes mtime/size change on write.** `load_catalog()`
+  caches the parsed result keyed on the resolved directory, `validate_cypher`,
+  and a fingerprint of every catalog file's `(relative path, mtime_ns, size)`.
+  The app's own writer gives each write a fresh mtime, so its changes are seen
+  immediately, as are `git checkout` and ordinary editor saves. A writer that
+  deliberately preserves both the mtime and the size (`cp -p`, `rsync -a`, a
+  restored backup) can go undetected until the process restarts or
+  `clear_catalog_cache()` is called.
 
 ---
 

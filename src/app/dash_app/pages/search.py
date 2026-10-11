@@ -806,7 +806,6 @@ def get_layout() -> html.Div:
                                 n_submit=0,
                                 style={
                                     **INPUT_STYLE,
-                                    "borderRadius": "24px",
                                     "height": "44px",
                                     "fontSize": FONT_SIZE_MEDIUM,
                                     "paddingLeft": "20px",

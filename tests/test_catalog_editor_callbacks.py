@@ -628,7 +628,7 @@ def test_e7_test_button_disabled_when_empty(monkeypatch):
     result = editor_test_callbacks.quick_test_tabular(1, "")
 
     assert fake.post_calls == []
-    assert "Enter a query" in str(result)
+    assert "Enter a query" in str(result[0])
 
 
 # ── E8: Destructive action → DELETE → reset or navigate ───────────────

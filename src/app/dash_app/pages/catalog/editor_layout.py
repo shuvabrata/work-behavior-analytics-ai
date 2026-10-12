@@ -289,7 +289,10 @@ def _render_queries_section() -> html.Div:
                                                    color="secondary", outline=True, size="sm",
                                                    className="btn-subtle-action mt-2"),
                                     ], className="d-flex"),
-                                    html.Div(id="editor-quick-test-tabular-feedback", className="mt-1"),
+                                    dcc.Loading(
+                                        type="circle",
+                                        children=html.Div(id="editor-quick-test-tabular-feedback", className="mt-1"),
+                                    ),
                                 ],
                                 md=6,
                             ),
@@ -310,7 +313,10 @@ def _render_queries_section() -> html.Div:
                                                    color="secondary", outline=True, size="sm",
                                                    className="btn-subtle-action mt-2"),
                                     ], className="d-flex"),
-                                    html.Div(id="editor-quick-test-graph-feedback", className="mt-1"),
+                                    dcc.Loading(
+                                        type="circle",
+                                        children=html.Div(id="editor-quick-test-graph-feedback", className="mt-1"),
+                                    ),
                                 ],
                                 md=6,
                             ),

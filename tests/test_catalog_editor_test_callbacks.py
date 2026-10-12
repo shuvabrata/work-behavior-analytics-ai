@@ -8,7 +8,6 @@ the migrated E4–E7 tests in ``test_catalog_editor_callbacks.py``.
 
 import pytest
 import requests as requests_lib
-from dash import no_update
 
 from app.dash_app.pages.catalog import editor_test_callbacks
 
@@ -54,17 +53,13 @@ def test_quick_test_tabular_success(monkeypatch):
     monkeypatch.setattr(
         editor_test_callbacks.requests, "post", lambda *a, **k: _Resp(payload)
     )
-    monkeypatch.setattr(
-        editor_test_callbacks, "ctx", _FakeContext("editor-quick-test-tabular")
+
+    result = editor_test_callbacks.quick_test_tabular(
+        1, "MATCH (n) RETURN n"
     )
 
-    result = editor_test_callbacks.quick_test(
-        1, None, "MATCH (n) RETURN n", None
-    )
-
-    assert "✔" in str(result[0])
-    assert "1 row(s)" in str(result[0])
-    assert result[1] is no_update
+    assert "✔" in str(result)
+    assert "1 row(s)" in str(result)
 
 
 def test_quick_test_graph_success(monkeypatch):
@@ -78,17 +73,13 @@ def test_quick_test_graph_success(monkeypatch):
     monkeypatch.setattr(
         editor_test_callbacks.requests, "post", lambda *a, **k: _Resp(payload)
     )
-    monkeypatch.setattr(
-        editor_test_callbacks, "ctx", _FakeContext("editor-quick-test-graph")
+
+    result = editor_test_callbacks.quick_test_graph(
+        1, "MATCH (a)-[r]-(b) RETURN a, r, b"
     )
 
-    result = editor_test_callbacks.quick_test(
-        None, 1, None, "MATCH (a)-[r]-(b) RETURN a, r, b"
-    )
-
-    assert "✔ Graph:" in str(result[1])
-    assert "2 nodes" in str(result[1])
-    assert result[0] is no_update
+    assert "✔ Graph:" in str(result)
+    assert "2 nodes" in str(result)
 
 
 def test_quick_test_http_400_shows_error(monkeypatch):
@@ -99,16 +90,13 @@ def test_quick_test_http_400_shows_error(monkeypatch):
         "post",
         lambda *a, **k: _Resp(payload, status_code=400),
     )
-    monkeypatch.setattr(
-        editor_test_callbacks, "ctx", _FakeContext("editor-quick-test-tabular")
+
+    result = editor_test_callbacks.quick_test_tabular(
+        1, "MATCH (n) DELETE n"
     )
 
-    result = editor_test_callbacks.quick_test(
-        1, None, "MATCH (n) DELETE n", None
-    )
-
-    assert "✘" in str(result[0])
-    assert "write operations" in str(result[0])
+    assert "✘" in str(result)
+    assert "write operations" in str(result)
 
 
 def test_quick_test_request_exception_shows_error(monkeypatch):
@@ -117,20 +105,17 @@ def test_quick_test_request_exception_shows_error(monkeypatch):
         raise requests_lib.exceptions.ConnectionError("Connection refused")
 
     monkeypatch.setattr(editor_test_callbacks.requests, "post", _failing_post)
-    monkeypatch.setattr(
-        editor_test_callbacks, "ctx", _FakeContext("editor-quick-test-tabular")
+
+    result = editor_test_callbacks.quick_test_tabular(
+        1, "MATCH (n) RETURN n"
     )
 
-    result = editor_test_callbacks.quick_test(
-        1, None, "MATCH (n) RETURN n", None
-    )
-
-    assert "✘" in str(result[0])
-    assert "Connection refused" in str(result[0])
+    assert "✘" in str(result)
+    assert "Connection refused" in str(result)
 
 
 def test_view_test_tabular_success(monkeypatch):
-    """View Test (tabular) opens the modal with the table pane shown."""
+    """View Test (tabular) fills the table pane and hides the graph pane."""
     payload = {"isGraph": False, "rawResults": [{"name": "Alice"}], "resultCount": 1}
     monkeypatch.setattr(
         editor_test_callbacks.requests, "post", lambda *a, **k: _Resp(payload)
@@ -140,18 +125,17 @@ def test_view_test_tabular_success(monkeypatch):
     )
 
     result = editor_test_callbacks.view_test(
-        1, None, None, "MATCH (p:Person) RETURN p.name AS name", None
+        1, None, "MATCH (p:Person) RETURN p.name AS name", None
     )
 
-    assert result[0] is True
-    assert "Tabular" in result[1]
-    assert result[2] == []
-    assert result[3] == {"display": "none"}
-    assert result[5] == {"display": "block"}
+    assert result[0] == []
+    assert result[1] == {"display": "none"}
+    assert result[2] is not None
+    assert result[3] == {"display": "block"}
 
 
 def test_view_test_graph_success(monkeypatch):
-    """View Test (graph) opens the modal with Cytoscape shown and elements set."""
+    """View Test (graph) fills the Cytoscape elements and shows the graph pane."""
     monkeypatch.setattr(
         editor_test_callbacks.requests, "post", lambda *a, **k: _Resp(_GRAPH_PAYLOAD)
     )
@@ -160,29 +144,49 @@ def test_view_test_graph_success(monkeypatch):
     )
 
     result = editor_test_callbacks.view_test(
-        None, 1, None, None, "MATCH (p:Person)-[r]-(c:Commit) RETURN p, r, c"
+        None, 1, None, "MATCH (p:Person)-[r]-(c:Commit) RETURN p, r, c"
     )
 
-    assert result[0] is True
-    assert "Graph" in result[1]
-    assert result[3] == {"display": "block"}
-    assert result[2]
-    assert result[5] == {"display": "none"}
+    assert result[0]
+    assert result[1] == {"display": "block"}
+    assert result[3] == {"display": "none"}
 
 
-def test_view_test_close_returns_closed(monkeypatch):
+def test_toggle_test_modal_close(monkeypatch):
     """Clicking Close (no HTTP call) closes the modal."""
     monkeypatch.setattr(
         editor_test_callbacks, "ctx", _FakeContext("editor-test-modal-close")
     )
 
-    result = editor_test_callbacks.view_test(None, None, 1, None, None)
+    result = editor_test_callbacks.toggle_test_modal(None, None, 1)
 
     assert result[0] is False
 
 
+def test_toggle_test_modal_opens_with_title(monkeypatch):
+    """Both View Test buttons open the modal with their own title, without HTTP."""
+    def _fail_post(*_args, **_kwargs):
+        raise AssertionError("toggle_test_modal must not perform HTTP")
+
+    monkeypatch.setattr(editor_test_callbacks.requests, "post", _fail_post)
+
+    monkeypatch.setattr(
+        editor_test_callbacks, "ctx", _FakeContext("editor-view-test-tabular")
+    )
+    tabular = editor_test_callbacks.toggle_test_modal(1, None, None)
+    assert tabular[0] is True
+    assert "Tabular" in tabular[1]
+
+    monkeypatch.setattr(
+        editor_test_callbacks, "ctx", _FakeContext("editor-view-test-graph")
+    )
+    graph = editor_test_callbacks.toggle_test_modal(None, 1, None)
+    assert graph[0] is True
+    assert "Graph" in graph[1]
+
+
 def test_view_test_error_shows_error_display(monkeypatch):
-    """A non-200 from the execute endpoint opens the modal with an error display."""
+    """A non-200 from the execute endpoint renders an error display pane."""
     payload = {"detail": {"message": "Query contains write operations"}}
     monkeypatch.setattr(
         editor_test_callbacks.requests,
@@ -194,11 +198,11 @@ def test_view_test_error_shows_error_display(monkeypatch):
     )
 
     result = editor_test_callbacks.view_test(
-        1, None, None, "MATCH (n) DELETE n", None
+        1, None, "MATCH (n) DELETE n", None
     )
 
-    assert result[0] is True
-    assert "write operations" in str(result[6])
+    assert result[1] == {"display": "none"}
+    assert "write operations" in str(result[4])
 
 
 def test_stylesheet_follows_theme(monkeypatch):
@@ -215,3 +219,36 @@ def test_stylesheet_none_theme_falls_back_to_light(monkeypatch):
     monkeypatch.setattr(editor_test_callbacks, "fetch_effective_theme", lambda _theme: None)
     assert editor_test_callbacks.update_test_stylesheet(None) == \
         editor_test_callbacks.update_test_stylesheet("executive-light")
+
+
+def test_no_callback_owns_both_quick_test_panes():
+    """Regression guard: one callback writing both feedback props makes BOTH
+    dcc.Loading spinners light up on a single click (Dash marks every output of
+    a pending request as loading). Each pane must have its own callback.
+
+    Uses dash's private callback registry, which is stable for the pinned
+    dash==4.4.1 (requirements.app.txt).
+    """
+    from dash import _callback
+
+    panes = {
+        ("editor-quick-test-tabular-feedback", "children"),
+        ("editor-quick-test-graph-feedback", "children"),
+    }
+
+    def parse(sig: str) -> list[tuple[str, str]]:
+        """Decode dash's '..a.b...c.d..' multi-output signature."""
+        body = sig[2:] if sig.startswith("..") else sig
+        body = body[:-2] if body.endswith("..") else body
+        out = []
+        for chunk in body.split("..."):
+            if chunk:
+                comp, _, prop = chunk.rpartition(".")
+                out.append((comp, prop))
+        return out
+
+    for spec in _callback.GLOBAL_CALLBACK_LIST:
+        owned = panes & set(parse(spec["output"]))
+        assert len(owned) <= 1, (
+            f"one callback declares both Quick Test panes as outputs: {sorted(owned)}"
+        )

@@ -451,13 +451,16 @@ or makes the reset one-click.
 **Quick Test** POSTs the textarea's Cypher to `/api/v1/graph/execute` as
 `source="raw"`, `view="auto"` and renders a compact inline badge directly under
 that textarea: `✔ N row(s) returned` for a tabular result, `✔ Graph: N nodes, M
-relationships` for a graph result, `✘ <message>` for a failure.
+relationships` for a graph result, `✘ <message>` for a failure. While the
+request is in flight the badge slot shows a spinner in place of the badge.
 
 **View Test** POSTs the same way and renders the full result in a shared `xl`
 modal — a `cyto.Cytoscape` graph for a graph result (force-directed `cose`
 layout, wheel-zoom and drag-pan, a **Fit** button) or a data table for a tabular
-result. The modal's graph follows the active app theme. This requires a live
-Neo4j; a down or unreachable graph surfaces as an error alert, not a crash.
+result. The modal opens immediately on click and shows a spinner while the query
+runs (the request is bounded by `HTTP_REQUEST_TIMEOUT`). The modal's graph
+follows the active app theme. This requires a live Neo4j; a down or unreachable
+graph surfaces as an error alert, not a crash.
 
 UI conventions follow the repo's mandatory standards: `outline-danger` for
 destructive buttons, a dedicated dismissable feedback region near the top

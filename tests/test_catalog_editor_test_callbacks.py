@@ -322,3 +322,93 @@ def test_no_callback_owns_both_quick_test_panes():
         assert len(owned) <= 1, (
             f"one callback declares both Quick Test panes as outputs: {sorted(owned)}"
         )
+
+
+def test_tabular_result_hides_fit_row(monkeypatch):
+    """A tabular result hides the Cytoscape-only Fit row (output index 6)."""
+    payload = {"isGraph": False, "rawResults": [{"name": "Alice"}], "resultCount": 1}
+    monkeypatch.setattr(
+        editor_test_callbacks.requests, "post", lambda *a, **k: _Resp(payload)
+    )
+    monkeypatch.setattr(
+        editor_test_callbacks, "ctx", _FakeContext("editor-view-test-tabular")
+    )
+
+    result = editor_test_callbacks.view_test(
+        1, None, "MATCH (p:Person) RETURN p.name", None
+    )
+
+    assert result[6] == {"display": "none"}
+
+
+def test_graph_result_shows_fit_row(monkeypatch):
+    """A graph result shows the right-aligned Fit row (output index 6)."""
+    monkeypatch.setattr(
+        editor_test_callbacks.requests, "post", lambda *a, **k: _Resp(_GRAPH_PAYLOAD)
+    )
+    monkeypatch.setattr(
+        editor_test_callbacks, "ctx", _FakeContext("editor-view-test-graph")
+    )
+
+    result = editor_test_callbacks.view_test(
+        None, 1, None, "MATCH (p:Person)-[r]-(c:Commit) RETURN p, r, c"
+    )
+
+    assert result[6] == {"display": "flex", "justifyContent": "flex-end"}
+
+
+def test_view_test_empty_query_shows_warning(monkeypatch):
+    """An empty textarea is a recoverable input problem, not a query failure."""
+    monkeypatch.setattr(
+        editor_test_callbacks, "ctx", _FakeContext("editor-view-test-tabular")
+    )
+
+    result = editor_test_callbacks.view_test(1, None, "", None)
+
+    assert "Enter a query" in str(result[4])
+    assert "Query Failed" not in str(result[4])
+    assert "danger" not in str(result[4])
+    assert result[6] == {"display": "none"}
+
+
+def test_editing_query_clears_that_panes_badge():
+    """Editing a query clears its own pane's badge (and reads no context)."""
+    assert editor_test_callbacks.clear_quick_test_tabular_badge(
+        "MATCH (n) RETURN n"
+    ) is None
+    assert editor_test_callbacks.clear_quick_test_graph_badge(
+        "MATCH (n) RETURN n"
+    ) is None
+
+
+def test_fit_row_style_is_explicit_on_every_branch(monkeypatch):
+    """Every style dict view_test writes to the Fit row must set `display`
+    explicitly — Dash replaces the prop, so an omitted display would un-hide it."""
+    def run(pane: str, payload: dict):
+        monkeypatch.setattr(
+            editor_test_callbacks.requests, "post", lambda *a, **k: _Resp(payload)
+        )
+        monkeypatch.setattr(
+            editor_test_callbacks, "ctx", _FakeContext(f"editor-view-test-{pane}")
+        )
+        if pane == "tabular":
+            return editor_test_callbacks.view_test(
+                1, None, "MATCH (p:Person) RETURN p.name", None
+            )
+        return editor_test_callbacks.view_test(
+            None, 1, None, "MATCH (p:Person)-[r]-(c:Commit) RETURN p, r, c"
+        )
+
+    for pane, payload in (
+        ("tabular", {"isGraph": False, "rawResults": [{"n": 1}], "resultCount": 1}),
+        ("graph", _GRAPH_PAYLOAD),
+    ):
+        style = run(pane, payload)[6]
+        assert "display" in style, f"{pane} branch returns a display-less style: {style}"
+
+    # the empty-query path short-circuits before any HTTP call
+    monkeypatch.setattr(
+        editor_test_callbacks, "ctx", _FakeContext("editor-view-test-tabular")
+    )
+    empty_style = editor_test_callbacks.view_test(1, None, "", None)[6]
+    assert "display" in empty_style, f"empty-query branch returns a display-less style: {empty_style}"

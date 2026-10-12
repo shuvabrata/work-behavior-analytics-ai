@@ -16,6 +16,7 @@ from dash import (
     no_update,
 )
 
+from app.dash_app.components.common import create_alert
 from app.dash_app.graph_styles import build_cytoscape_stylesheet
 from app.dash_app.pages.graph.utils import (
     create_error_alert,
@@ -137,6 +138,26 @@ def quick_test_graph(_clicks: int | None, query: str | None) -> dbc.Alert:
 
 
 @callback(
+    Output("editor-quick-test-tabular-feedback", "children", allow_duplicate=True),
+    Input("editor-query-tabular", "value"),
+    prevent_initial_call=True,
+)
+def clear_quick_test_tabular_badge(_value: str | None) -> None:
+    """Drop the Tabular pane's stale Quick Test badge when its query changes."""
+    return None
+
+
+@callback(
+    Output("editor-quick-test-graph-feedback", "children", allow_duplicate=True),
+    Input("editor-query-graph", "value"),
+    prevent_initial_call=True,
+)
+def clear_quick_test_graph_badge(_value: str | None) -> None:
+    """Drop the Graph pane's stale Quick Test badge when its query changes."""
+    return None
+
+
+@callback(
     Output("editor-test-modal",       "is_open"),
     Output("editor-test-modal-title", "children"),
     Input("editor-view-test-tabular", "n_clicks"),
@@ -168,6 +189,7 @@ def toggle_test_modal(
     Output("editor-test-table-container",     "style"),
     Output("editor-test-results-container",   "children"),
     Output("editor-test-results-container",   "style"),
+    Output("editor-test-fit-row",             "style"),
     Input("editor-view-test-tabular", "n_clicks"),
     Input("editor-view-test-graph",   "n_clicks"),
     State("editor-query-tabular", "value"),
@@ -188,6 +210,7 @@ def view_test(
     hide = {"display": "none"}
     show = {"display": "block"}
     empty_show = {"minHeight": "300px", "padding": "16px"}
+    fit_show = {"display": "flex", "justifyContent": "flex-end"}
 
     if ctx.triggered_id == "editor-view-test-tabular":
         query = tab_query
@@ -195,9 +218,14 @@ def view_test(
         query = graph_query
 
     result = _run_test(query)
+    is_empty = not (query or "").strip()
 
     if not result["ok"]:
-        if result.get("heading"):
+        if is_empty:
+            error: Any = create_alert(
+                "Enter a query before testing.", color="warning", class_name="mb-3"
+            )
+        elif result.get("heading"):
             error = create_error_alert(
                 "",  # the message is carried by the heading, as on the Graph page
                 alert_type=result["alert_type"],
@@ -207,14 +235,14 @@ def view_test(
             )
         else:
             error = create_error_alert(result["error"], heading="Query Failed")
-        return [], hide, None, hide, error, empty_show
+        return [], hide, None, hide, error, empty_show, hide
 
     data = result["data"]
     if data.get("isGraph"):
         elements = neo4j_to_cytoscape(data)
-        return elements, show, None, hide, None, hide
+        return elements, show, None, hide, None, hide, fit_show
     table = create_table_display(data.get("rawResults") or [])
-    return [], hide, table, show, None, hide
+    return [], hide, table, show, None, hide, hide
 
 
 clientside_callback(

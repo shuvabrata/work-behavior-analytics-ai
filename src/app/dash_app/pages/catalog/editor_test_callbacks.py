@@ -22,6 +22,7 @@ from app.dash_app.pages.graph.utils import (
     create_table_display,
     fetch_effective_theme,
     neo4j_to_cytoscape,
+    parse_error_response,
 )
 from app.runtime_settings import runtime_settings
 from ._utils import get_api_base_url
@@ -33,13 +34,24 @@ def _run_test(query_text: str | None) -> dict[str, Any]:
     """Execute a raw Cypher query and return the raw API response.
 
     Returns a dict with keys:
-      - "ok":    bool
-      - "data":  dict | None  (full API JSON on success)
-      - "error": str  | None  (user-facing message on failure)
+      - "ok":         bool
+      - "data":       dict | None  (full API JSON on success)
+      - "error":      str  | None  (short single-line message on failure)
+      - "heading":    str  | None  (classified heading for the modal)
+      - "hint":       str  | None  (actionable hint for the modal)
+      - "doc_link":   str  | None  (Cypher docs URL for the modal)
+      - "alert_type": str  | None  (Bootstrap alert type for the modal)
+
+    ``"error"`` is always a short single-line message (rendered by the Quick
+    Test badge). ``"heading"``/``"hint"``/``"doc_link"``/``"alert_type"`` are
+    the classified fields produced by ``parse_error_response`` for the View Test
+    modal and may be ``None``.
     """
     if not query_text or not query_text.strip():
         return {"ok": False, "data": None,
-                "error": "Enter a query before testing."}
+                "error": "Enter a query before testing.",
+                "heading": None, "hint": None, "doc_link": None,
+                "alert_type": "danger"}
     payload = {"source": "raw", "query": query_text.strip(), "view": "auto"}
     api_base = get_api_base_url()
     try:
@@ -49,15 +61,38 @@ def _run_test(query_text: str | None) -> dict[str, Any]:
         )
         if resp.status_code != 200:
             try:
-                detail = resp.json().get("detail", {})
-                msg = (detail.get("message", "Query execution failed.")
-                       if isinstance(detail, dict) else str(detail))
+                body = resp.json()
             except ValueError:
-                msg = "Query execution failed."
-            return {"ok": False, "data": None, "error": msg}
+                body = {}
+            if not isinstance(body, dict):
+                body = {}
+            detail = body.get("detail")
+            if isinstance(detail, dict):
+                heading, hint, doc_link, alert_type = parse_error_response(
+                    body, resp.status_code
+                )
+                message = (
+                    detail.get("message") or detail.get("error")
+                    or "Query execution failed."
+                )
+                return {
+                    "ok": False, "data": None, "error": message,
+                    "heading": heading, "hint": hint,
+                    "doc_link": doc_link, "alert_type": alert_type,
+                }
+            # Non-dict `detail` (FastAPI 422 returns a list): keep the raw text.
+            # parse_error_response would raise AttributeError on this shape.
+            return {
+                "ok": False, "data": None,
+                "error": str(detail) if detail else "Query execution failed.",
+                "heading": None, "hint": None, "doc_link": None,
+                "alert_type": "danger",
+            }
         return {"ok": True, "data": resp.json(), "error": None}
     except requests.exceptions.RequestException as exc:
-        return {"ok": False, "data": None, "error": str(exc)}
+        return {"ok": False, "data": None, "error": str(exc),
+                "heading": None, "hint": None, "doc_link": None,
+                "alert_type": "danger"}
 
 
 _BADGE_CLASS = "alert-inline-badge"
@@ -162,7 +197,16 @@ def view_test(
     result = _run_test(query)
 
     if not result["ok"]:
-        error = create_error_alert(result["error"], heading="Query Failed")
+        if result.get("heading"):
+            error = create_error_alert(
+                "",  # the message is carried by the heading, as on the Graph page
+                alert_type=result["alert_type"],
+                hint=result["hint"],
+                heading=result["heading"],
+                doc_link=result["doc_link"],
+            )
+        else:
+            error = create_error_alert(result["error"], heading="Query Failed")
         return [], hide, None, hide, error, empty_show
 
     data = result["data"]

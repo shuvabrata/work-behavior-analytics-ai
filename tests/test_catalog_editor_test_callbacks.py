@@ -202,7 +202,77 @@ def test_view_test_error_shows_error_display(monkeypatch):
     )
 
     assert result[1] == {"display": "none"}
-    assert "write operations" in str(result[4])
+    assert "Write operations" in str(result[4])
+
+
+def test_view_test_error_includes_hint_and_doc_link(monkeypatch):
+    """The modal renders the curated hint and Cypher doc link, like the Graph page."""
+    payload = {"detail": {"message": "Query contains write operations"}}
+    monkeypatch.setattr(
+        editor_test_callbacks.requests,
+        "post",
+        lambda *a, **k: _Resp(payload, status_code=400),
+    )
+    monkeypatch.setattr(
+        editor_test_callbacks, "ctx", _FakeContext("editor-view-test-tabular")
+    )
+
+    result = editor_test_callbacks.view_test(
+        1, None, "MATCH (n) DELETE n", None
+    )
+
+    assert "neo4j.com/docs" in str(result[4])
+
+
+def test_run_test_non_dict_detail_does_not_raise(monkeypatch):
+    """A FastAPI 422 (list ``detail``) must not escape as AttributeError."""
+    payload = {"detail": [{"loc": ["body"], "msg": "bad"}]}
+    monkeypatch.setattr(
+        editor_test_callbacks.requests,
+        "post",
+        lambda *a, **k: _Resp(payload, status_code=422),
+    )
+
+    result = editor_test_callbacks._run_test("MATCH (n) RETURN n")
+
+    assert result["ok"] is False
+    assert result["heading"] is None
+    assert isinstance(result["error"], str) and result["error"]
+
+
+def test_run_test_non_json_error_body(monkeypatch):
+    """A non-JSON error body falls back to the generic message, without raising."""
+
+    class _BadJsonResp(_Resp):
+        def json(self):
+            raise ValueError("not json")
+
+    monkeypatch.setattr(
+        editor_test_callbacks.requests,
+        "post",
+        lambda *a, **k: _BadJsonResp({}, status_code=500),
+    )
+
+    result = editor_test_callbacks._run_test("MATCH (n) RETURN n")
+
+    assert result["error"] == "Query execution failed."
+    assert result["heading"] is None
+
+
+def test_quick_test_badge_keeps_short_message(monkeypatch):
+    """The badge shows the short raw message and must not leak the modal hint."""
+    payload = {"detail": {"error": "Validation failed",
+                          "message": "Query contains write operations"}}
+    monkeypatch.setattr(
+        editor_test_callbacks.requests,
+        "post",
+        lambda *a, **k: _Resp(payload, status_code=400),
+    )
+
+    badge = editor_test_callbacks.quick_test_tabular(1, "MATCH (n) DELETE n")
+
+    assert "Query contains write operations" in str(badge)
+    assert "read-only" not in str(badge)
 
 
 def test_stylesheet_follows_theme(monkeypatch):

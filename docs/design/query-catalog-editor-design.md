@@ -452,7 +452,8 @@ or makes the reset one-click.
 `source="raw"`, `view="auto"` and renders a compact inline badge directly under
 that textarea: `✔ N row(s) returned` for a tabular result, `✔ Graph: N nodes, M
 relationships` for a graph result, `✘ <message>` for a failure. While the
-request is in flight the badge slot shows a spinner in place of the badge.
+request is in flight the **tested pane's** badge slot shows a spinner in place
+of the badge; the other pane is unaffected.
 
 **View Test** POSTs the same way and renders the full result in a shared `xl`
 modal — a `cyto.Cytoscape` graph for a graph result (force-directed `cose`

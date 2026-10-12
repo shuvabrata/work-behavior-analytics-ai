@@ -624,6 +624,31 @@ input::placeholder {
 }
 
 /* ============================================================
+   Inline Result Badge (compact dismissible alert)
+   ============================================================ */
+
+/* Bootstrap anchors `.alert-dismissible .btn-close` to the alert's top with
+   `padding: 1.25rem 1rem`, so its button box is ~2.5rem taller than a compact
+   alert and the × spills below the alert's bottom edge. Re-anchor the button to
+   the vertical centre instead, and reserve room on the right for it. */
+.alert-inline-badge.alert {
+    font-family: var(--font-sans);
+    font-size: var(--font-size-xsmall);
+    padding: 3px 22px 3px 8px;
+    margin-bottom: 0;
+}
+
+.alert-inline-badge.alert-dismissible .btn-close {
+    padding: 0;
+    top: 50%;
+    right: 6px;
+    transform: translateY(-50%);
+    width: 10px;
+    height: 10px;
+    background-size: 10px auto;
+}
+
+/* ============================================================
    Right Panel Workbench Tab Bar
    ============================================================ */
 

@@ -35,7 +35,7 @@ from app.dash_app.styles import (
     FONT_SIZE_XSMALL,
     FONT_WEIGHT_SEMIBOLD
 )
-from ..styles import get_node_type_styles
+from app.dash_app.graph_styles import get_node_type_styles
 
 
 def create_error_alert(
@@ -327,7 +327,7 @@ def get_shape_css(shape: str) -> dict[str, Any]:
     
     # Define clip-path for different shapes.
     # Keep this map aligned with Cytoscape node shapes used in
-    # app.dash_app.pages.graph.styles so legend glyphs match graph nodes.
+    # app.dash_app.graph_styles so legend glyphs match graph nodes.
     #
     # Covers the full ALLOWED_SHAPES set (24 shapes) from app.common.graph_theme.
     shape_styles = {

@@ -6,6 +6,11 @@ from dash import dcc, html
 import dash_bootstrap_components as dbc
 
 from app.dash_app.components.common import create_page_header
+from app.dash_app.components.result_pane import (
+    create_graph_result_container,
+    create_results_empty_state,
+    create_table_result_container,
+)
 from app.dash_app.styles import (
     CARD_CONTAINER_STYLE,
     COLOR_BACKGROUND_LIGHT,
@@ -95,7 +100,7 @@ def get_editor_layout() -> html.Div:
                     _render_queries_section(),
                     _render_save_as_modal(),
                     _render_factory_diff_modal(),
-                    _render_test_results(),
+                    _render_test_results_modal(),
                 ],
                 className="editor-form",
                 style={**CARD_CONTAINER_STYLE, "paddingTop": SPACING_XSMALL},
@@ -276,14 +281,15 @@ def _render_queries_section() -> html.Div:
                                         rows=8,
                                         style={"fontFamily": FONT_MONO, "fontSize": FONT_SIZE_XSMALL},
                                     ),
-                                    dbc.Button(
-                                        "Test Tabular",
-                                        id="editor-test-tabular",
-                                        color="secondary",
-                                        outline=True,
-                                        size="sm",
-                                        className="btn-subtle-action mt-2",
-                                    ),
+                                    html.Div([
+                                        dbc.Button("Quick Test", id="editor-quick-test-tabular",
+                                                   color="secondary", outline=True, size="sm",
+                                                   className="btn-subtle-action me-1 mt-2"),
+                                        dbc.Button("View Test", id="editor-view-test-tabular",
+                                                   color="secondary", outline=True, size="sm",
+                                                   className="btn-subtle-action mt-2"),
+                                    ], className="d-flex"),
+                                    html.Div(id="editor-quick-test-tabular-feedback", className="mt-1"),
                                 ],
                                 md=6,
                             ),
@@ -296,14 +302,15 @@ def _render_queries_section() -> html.Div:
                                         rows=8,
                                         style={"fontFamily": FONT_MONO, "fontSize": FONT_SIZE_XSMALL},
                                     ),
-                                    dbc.Button(
-                                        "Test Graph",
-                                        id="editor-test-graph",
-                                        color="secondary",
-                                        outline=True,
-                                        size="sm",
-                                        className="btn-subtle-action mt-2",
-                                    ),
+                                    html.Div([
+                                        dbc.Button("Quick Test", id="editor-quick-test-graph",
+                                                   color="secondary", outline=True, size="sm",
+                                                   className="btn-subtle-action me-1 mt-2"),
+                                        dbc.Button("View Test", id="editor-view-test-graph",
+                                                   color="secondary", outline=True, size="sm",
+                                                   className="btn-subtle-action mt-2"),
+                                    ], className="d-flex"),
+                                    html.Div(id="editor-quick-test-graph-feedback", className="mt-1"),
                                 ],
                                 md=6,
                             ),
@@ -505,14 +512,36 @@ def _render_factory_diff_modal() -> dbc.Modal:
     )
 
 
-def _render_test_results() -> html.Div:
-    """Inline pane for Test Tabular / Test Graph results."""
-    return html.Div(
+def _render_test_results_modal() -> dbc.Modal:
+    """Shared xl modal for View Test results (tabular and graph)."""
+    return dbc.Modal(
         [
-            html.H6("Test Results", className="mt-3"),
-            html.Div(id="editor-test-results"),
+            dbc.ModalHeader(dbc.ModalTitle("", id="editor-test-modal-title")),
+            dbc.ModalBody(
+                dcc.Loading(
+                    type="circle",
+                    children=[
+                        html.Div(
+                            dbc.Button("Fit", id="editor-test-fit",
+                                       color="secondary", outline=True, size="sm",
+                                       className="btn-subtle-action mb-2"),
+                            className="d-flex justify-content-end",
+                        ),
+                        create_graph_result_container(id_prefix="editor-test"),
+                        create_table_result_container(id_prefix="editor-test"),
+                        create_results_empty_state(id_prefix="editor-test"),
+                    ],
+                )
+            ),
+            dbc.ModalFooter(
+                dbc.Button("Close", id="editor-test-modal-close",
+                           color="secondary", size="sm")
+            ),
         ],
-        style={"fontFamily": FONT_SANS, "fontSize": FONT_SIZE_SMALL},
+        id="editor-test-modal",
+        size="xl",
+        scrollable=True,
+        is_open=False,
     )
 
 

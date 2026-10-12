@@ -10,7 +10,7 @@ helpers, but the analytics layer must not import from the Dash layer.
 # Used as the base for _node_size multiplier calculations so dynamic sizing
 # preserves each type's width:height ratio.
 # Keep in sync with fixed width/height values in
-# app/dash_app/pages/graph/styles.py :: build_cytoscape_stylesheet.
+# app/dash_app/graph_styles.py :: build_cytoscape_stylesheet.
 BASE_NODE_DIMENSIONS: dict[str, tuple[float, float]] = {
     "Project": (70.0, 35.0),
     "Person": (66.0, 56.0),

@@ -32,7 +32,7 @@ HEX_COLOR = r"^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$"
 
 # The override-aware nodeType keys mirror the existing nodeType values used by
 # the graph page (see ``build_cytoscape_stylesheet`` in
-# ``app.dash_app.pages.graph.styles``), plus ``default`` for untyped nodes.
+# ``app.dash_app.graph_styles``), plus ``default`` for untyped nodes.
 NODE_TYPES: tuple[str, ...] = (
     "Person",
     "Project",

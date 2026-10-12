@@ -6,13 +6,16 @@ broken down into logical sections for maintainability.
 
 from dash import html, dcc
 import dash_bootstrap_components as dbc
-import dash_cytoscape as cyto
 
-from .styles import CYTOSCAPE_STYLESHEET
 from .components import create_expansion_modal, create_context_menu, create_time_slider_pair
 from .utils.ui_components import create_performance_metrics
 
 from app.dash_app.components.common import create_controls_bar, create_page_header
+from app.dash_app.components.result_pane import (
+    create_graph_result_container,
+    create_results_empty_state,
+    create_table_result_container,
+)
 
 from app.dash_app.styles import (
     FONT_SANS,
@@ -25,9 +28,6 @@ from app.dash_app.styles import (
     COLOR_TEXT_SECONDARY,
     GRAPH_QUERY_TEXTAREA_STYLE,
     GRAPH_HELPER_TEXT_STYLE,
-    GRAPH_CYTOSCAPE_STYLE,
-    GRAPH_EMPTY_STATE_ICON_STYLE,
-    GRAPH_EMPTY_STATE_TEXT_STYLE,
     GRAPH_DETAILS_PANEL_STYLE,
     GRAPH_LOADING_COLOR,
     GRAPH_NODE_HOVER_TOOLTIP_STYLE,
@@ -41,77 +41,6 @@ def create_graph_controls() -> dbc.Row:
         dbc.Row containing layout selector and control buttons
     """
     return create_controls_bar("graph")
-
-
-def create_graph_container() -> html.Div:
-    """Create main graph visualization container with Cytoscape
-    
-    Returns:
-        html.Div containing Cytoscape graph component
-    """
-    return html.Div(
-        id="graph-cytoscape-container",
-        style={"display": "none"},  # Hidden initially, then maintains consistent size after first query
-        children=[
-            # Do not enable autoRefreshLayout=True. If the user has manually dragged nodes 
-            # into positions they like, add/remove nodes via filters can disturb that arrangement.
-            cyto.Cytoscape(
-                id="graph-cytoscape",
-                elements=[],
-                layout={'name': 'circle', 'animate': True},
-                style=GRAPH_CYTOSCAPE_STYLE,
-                stylesheet=CYTOSCAPE_STYLESHEET,
-                userZoomingEnabled=True,
-                userPanningEnabled=True,
-                wheelSensitivity=0.3,
-                minZoom=0.05,
-                maxZoom=3
-            )
-        ]
-    )
-
-
-def create_table_container() -> html.Div:
-    """Create container for tabular query results
-    
-    Returns:
-        html.Div for displaying tables
-    """
-    return html.Div(
-        id="graph-table-container",
-        style={"display": "none"}  # Hidden by default
-    )
-
-
-def create_empty_state() -> html.Div:
-    """Create empty state display (shown before any query execution)
-    
-    Returns:
-        html.Div with empty state message
-    """
-    return html.Div(
-        id="graph-results-container",
-        style={
-            "minHeight": "calc(75vh)",
-            "padding": "16px"
-        },
-        children=[
-            html.Div(
-                [
-                    html.Div(
-                        "◆",
-                        style=GRAPH_EMPTY_STATE_ICON_STYLE
-                    ),
-                    html.P(
-                        "No results to display. Execute a query to visualize network relationships.",
-                        style=GRAPH_EMPTY_STATE_TEXT_STYLE
-                    )
-                ],
-                className="text-center",
-                style={"marginTop": "80px"}
-            )
-        ]
-    )
 
 
 def _filter_card() -> dbc.Card:
@@ -522,9 +451,9 @@ def create_results_section() -> html.Div:
                     type="circle",
                     color=GRAPH_LOADING_COLOR,
                     children=[
-                        create_graph_container(),
-                        create_table_container(),
-                        create_empty_state()
+                        create_graph_result_container(id_prefix="graph"),
+                        create_table_result_container(id_prefix="graph"),
+                        create_results_empty_state(id_prefix="graph")
                     ]
                 )
             ], id="graph-viz-col", width=8, style={"paddingRight": "24px"}),

@@ -87,12 +87,33 @@ queries:
     WHERE mvp_score > 0
     ORDER BY mvp_score DESC
     LIMIT 10
-    OPTIONAL MATCH p1=(p)<-[:CREATED_BY]-(c2:Commit)
-    OPTIONAL MATCH p2=(p)<-[:CREATED_BY]-(pr3:PullRequest)
-    OPTIONAL MATCH p3=(pr4:PullRequest)-[:REVIEWED_BY]->(p)
-    OPTIONAL MATCH p4=(i2:Issue)-[:ASSIGNED_TO]-(p)
-    OPTIONAL MATCH p5=(page2:Page)-[:CREATED_BY]->(p)
-    RETURN p1, p2, p3, p4, p5
+    CALL {
+      WITH p
+      OPTIONAL MATCH p1=(p)<-[:CREATED_BY]-(c2:Commit)
+      RETURN collect(p1) AS commit_paths
+    }
+    CALL {
+      WITH p
+      OPTIONAL MATCH p2=(p)<-[:CREATED_BY]-(pr3:PullRequest)
+      RETURN collect(p2) AS pr_paths
+    }
+    CALL {
+      WITH p
+      OPTIONAL MATCH p3=(pr4:PullRequest)-[:REVIEWED_BY]->(p)
+      RETURN collect(p3) AS review_paths
+    }
+    CALL {
+      WITH p
+      OPTIONAL MATCH p4=(i2:Issue)-[:ASSIGNED_TO]-(p)
+      RETURN collect(p4) AS issue_paths
+    }
+    CALL {
+      WITH p
+      OPTIONAL MATCH p5=(page2:Page)-[:CREATED_BY]->(p)
+      RETURN collect(p5) AS page_paths
+    }
+    RETURN p,
+           commit_paths + pr_paths + review_paths + issue_paths + page_paths AS paths
 tags:
 - table
 - graph

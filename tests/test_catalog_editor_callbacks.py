@@ -10,6 +10,7 @@ from dataclasses import dataclass
 import pytest
 
 from app.dash_app.pages.catalog import editor_callbacks as editor
+from app.dash_app.pages.catalog import editor_test_callbacks
 
 
 pytestmark = pytest.mark.unit
@@ -561,17 +562,29 @@ def test_e3b_save_as_custom_namespace(monkeypatch):
     assert "Saved as" in str(feedback)
 
 
-# ── E4/E5: Test Tabular / Test Graph → POST execute ────────────────────
+# ── E4/E5: Quick Test Tabular / Graph → POST execute ───────────────────
+
+
+class _FakeContext:
+    """Stands in for dash.ctx so quick_test can dispatch on triggered_id."""
+
+    triggered = True
+
+    def __init__(self, triggered_id: str = "editor-quick-test-tabular"):
+        self.triggered_id = triggered_id
 
 
 def test_e4_test_tabular_posts_execute(monkeypatch):
-    """Test Tabular posts the tabular query to the execute endpoint."""
+    """Quick Test (tabular) posts the tabular query to the execute endpoint."""
     fake = _FakeRequests(
         [_FakeResponse({"isGraph": False, "rawResults": [{"n": 1}]}, 200)]
     )
-    monkeypatch.setattr(editor, "requests", fake)
+    monkeypatch.setattr(editor_test_callbacks, "requests", fake)
+    monkeypatch.setattr(editor_test_callbacks, "ctx", _FakeContext())
 
-    result = editor.test_tabular(1, "MATCH (n) RETURN n LIMIT 10")
+    result = editor_test_callbacks.quick_test(
+        1, None, "MATCH (n) RETURN n LIMIT 10", None
+    )
 
     assert fake.post_calls[0]["url"].endswith("/api/v1/graph/execute")
     assert fake.post_calls[0]["json"] == {
@@ -579,25 +592,30 @@ def test_e4_test_tabular_posts_execute(monkeypatch):
         "query": "MATCH (n) RETURN n LIMIT 10",
         "view": "auto",
     }
-    assert result is not None
+    assert "✔" in str(result[0])
 
 
 def test_e5_test_graph_posts_execute(monkeypatch):
-    """Test Graph posts the graph query to the execute endpoint."""
+    """Quick Test (graph) posts the graph query to the execute endpoint."""
     fake = _FakeRequests(
         [_FakeResponse({"isGraph": True, "resultCount": 3}, 200)]
     )
-    monkeypatch.setattr(editor, "requests", fake)
+    monkeypatch.setattr(editor_test_callbacks, "requests", fake)
+    monkeypatch.setattr(
+        editor_test_callbacks, "ctx", _FakeContext("editor-quick-test-graph")
+    )
 
-    result = editor.test_graph(1, "MATCH (a)-[r]-(b) RETURN a, r, b")
+    result = editor_test_callbacks.quick_test(
+        None, 1, None, "MATCH (a)-[r]-(b) RETURN a, r, b"
+    )
 
     assert fake.post_calls[0]["url"].endswith("/api/v1/graph/execute")
     assert fake.post_calls[0]["json"]["query"] == "MATCH (a)-[r]-(b) RETURN a, r, b"
-    assert "3" in str(result)
+    assert "✔ Graph:" in str(result[1])
 
 
 def test_e6_test_with_write_cypher_shows_error(monkeypatch):
-    """A 400 from the execute endpoint surfaces an error alert."""
+    """A 400 from the execute endpoint surfaces an error badge."""
     fake = _FakeRequests(
         [
             _FakeResponse(
@@ -606,23 +624,26 @@ def test_e6_test_with_write_cypher_shows_error(monkeypatch):
             )
         ]
     )
-    monkeypatch.setattr(editor, "requests", fake)
+    monkeypatch.setattr(editor_test_callbacks, "requests", fake)
+    monkeypatch.setattr(editor_test_callbacks, "ctx", _FakeContext())
 
-    result = editor.test_tabular(1, "MATCH (n) DELETE n")
+    result = editor_test_callbacks.quick_test(1, None, "MATCH (n) DELETE n", None)
 
     assert fake.post_calls[0]["json"]["query"] == "MATCH (n) DELETE n"
-    assert "write operations" in str(result)
+    assert "✘" in str(result[0])
+    assert "write operations" in str(result[0])
 
 
 def test_e7_test_button_disabled_when_empty(monkeypatch):
     """Testing with an empty textarea warns without an HTTP call."""
     fake = _FakeRequests([])
-    monkeypatch.setattr(editor, "requests", fake)
+    monkeypatch.setattr(editor_test_callbacks, "requests", fake)
+    monkeypatch.setattr(editor_test_callbacks, "ctx", _FakeContext())
 
-    result = editor.test_tabular(1, "")
+    result = editor_test_callbacks.quick_test(1, None, "", None)
 
     assert fake.post_calls == []
-    assert "Enter a query" in str(result)
+    assert "Enter a query" in str(result[0])
 
 
 # ── E8: Destructive action → DELETE → reset or navigate ───────────────

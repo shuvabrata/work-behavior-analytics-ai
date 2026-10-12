@@ -1,7 +1,13 @@
-"""Cytoscape style definitions for graph visualization
+"""Cytoscape style definitions for graph visualization.
 
 This module contains all visual styling for the graph visualization,
 including node colors, sizes, edge styles, and selection states.
+
+Shared by the graph page, the collaboration network page, and the shared
+result-pane builders (``app.dash_app.components.result_pane``). It deliberately
+lives outside ``pages/graph/``: importing any submodule of that package runs its
+``__init__`` (which imports ``.layout``), so a module here could not be imported
+by shared code without a circular import.
 """
 
 import re

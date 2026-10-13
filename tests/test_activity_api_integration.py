@@ -23,7 +23,9 @@ from typing import Any
 
 import httpx
 import pytest
+from sqlalchemy.sql import visitors
 
+from app.api.activity.v1 import service
 from app.api.activity.v1.service import _decode_cursor
 from app.db.models.activity_action import ActivityAction
 from app.db.models.activity_event import ActivityEvent
@@ -98,17 +100,19 @@ class FakeSession:
     def _label_row(self, stmt: Any) -> tuple[str | None, str | None]:
         """Return the canned label row for the entity in *stmt*.
 
-        The fake derives the entity key from the statement's WHERE criteria
-        by scanning for the ``entity_id`` equality value.  Falls back to
-        matching the compiled SQL text (contains the literal entity id).
+        The fake derives the entity key from the statement's WHERE criteria by
+        walking the (possibly nested) criteria for the ``entity_id`` equality
+        value.  The identity predicate is an ``or_`` of ``and_`` groups, so the
+        comparison is not a top-level criterion.
         """
         entity_id: str | None = None
         for crit in getattr(stmt, "_where_criteria", []):
-            text = str(crit)
-            if "entity_id" in text:
-                right = getattr(crit, "right", None)
-                if right is not None:
-                    entity_id = getattr(right, "value", None)
+            for element in visitors.iterate(crit):
+                left = getattr(element, "left", None)
+                if getattr(left, "name", None) == "entity_id":
+                    right = getattr(element, "right", None)
+                    if right is not None:
+                        entity_id = getattr(right, "value", None)
         if entity_id is None:
             return None, None
         for key, value in self.labels.items():
@@ -252,6 +256,21 @@ def client(fake_db: FakeSession) -> httpx.AsyncClient:
         transport=httpx.ASGITransport(app=app),
         base_url=BASE_URL,
     )
+
+
+@pytest.fixture(autouse=True)
+def _stub_person_identity_resolution(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep the unit gate offline — Person lanes must not reach Neo4j here.
+
+    The repo's local ``.env`` ships ``NEO4J_ENABLED=true``; without this stub the
+    Person-lane tests would attempt a real ``verify_connectivity()`` from inside
+    ``-m unit``. Stub once per module rather than in each test.
+    """
+
+    async def _no_identities(_person_wba_id: str) -> list[tuple[str, str]]:
+        return []
+
+    monkeypatch.setattr(service, "resolve_person_identities", _no_identities)
 
 
 # ---------------------------------------------------------------------------

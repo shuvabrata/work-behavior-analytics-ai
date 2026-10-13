@@ -113,7 +113,7 @@ class TestQueryExecution:
     def test_connection_error_handling(self, monkeypatch):
         """Test that connection errors are handled gracefully."""
         # Reset the driver singleton so a new driver is created with the bogus URI
-        import app.api.graph.v1.query as query_module
+        import app.common.neo4j_driver as query_module
         monkeypatch.setattr(query_module, "_driver_instance", None)
         monkeypatch.setattr(settings, "NEO4J_URI", "bolt://invalid-host:7687")
 

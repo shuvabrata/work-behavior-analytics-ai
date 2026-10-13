@@ -16,7 +16,7 @@ python3 reset_db.py
 echo "Clearing PostgreSQL tables..."
 docker compose -f "$PROJECT_ROOT/docker-compose.yml" exec -T postgres \
   psql -U "${POSTGRES_USER:-postgres}" -d "${POSTGRES_DB:-postgres}" \
-  -c "DELETE FROM activity_actions; DELETE FROM activity_events; DELETE FROM producer_sync_state;"
+  -c "TRUNCATE activity_actions, activity_events, producer_sync_state;"
 echo "PostgreSQL tables cleared."
 
 # Flush RabbitMQ queues

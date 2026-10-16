@@ -1,77 +1,23 @@
 """Query layer for Neo4j graph database operations."""
 
 import re
-import threading
 from typing import Any, Dict, List
 import neo4j
-from neo4j import GraphDatabase
 from neo4j.exceptions import Neo4jError, ServiceUnavailable
 
+from app.common.neo4j_driver import close_driver, get_driver as _get_driver
 from app.settings import settings
 from common.logger import logger
 
-
-# ---------------------------------------------------------------------------
-# Module-level Neo4j driver singleton
-# ---------------------------------------------------------------------------
-# The Neo4j Python driver is designed to be a long-lived singleton that
-# manages its own connection pool internally. Creating a new driver per
-# request wastes ~100-300ms on TCP/TLS handshake and bypasses pooling.
-# This singleton is created lazily on first use, then reused for all
-# subsequent calls. It is thread-safe.
-_driver_lock = threading.Lock()
-_driver_instance = None
-
-
-def _get_driver() -> Any:
-    """Return the long-lived Neo4j driver instance, creating it on first call.
-
-    The driver manages its own connection pool and is safe to share across
-    threads and async tasks. Do NOT close this driver per-request.
-
-    Returns:
-        The shared neo4j.GraphDatabase.driver instance.
-
-    Raises:
-        RuntimeError: If Neo4j is not enabled (NEO4J_ENABLED is false) or
-            if the initial connection/verification fails.
-    """
-    global _driver_instance
-    if not settings.NEO4J_ENABLED:
-        raise RuntimeError("Neo4j is not enabled. Set NEO4J_ENABLED=true in .env")
-    if _driver_instance is not None:
-        return _driver_instance  # type: ignore[unreachable]
-    with _driver_lock:
-        if _driver_instance is not None:
-            return _driver_instance  # type: ignore[unreachable]
-        try:
-            _driver_instance = GraphDatabase.driver(
-                settings.NEO4J_URI,
-                auth=(settings.NEO4J_USERNAME, settings.NEO4J_PASSWORD),
-            )
-            _driver_instance.verify_connectivity()
-            logger.info(f"Neo4j driver singleton created: uri={settings.NEO4J_URI}")
-            return _driver_instance
-        except (ServiceUnavailable, Exception) as e:
-            _driver_instance = None
-            logger.error(f"Neo4j driver creation failed: {e}")
-            raise RuntimeError(
-                f"Unable to connect to Neo4j database: {str(e)}"
-            ) from e
-
-
-def close_driver() -> None:
-    """Close the shared Neo4j driver singleton if initialized.
-
-    Safe to call multiple times — subsequent calls are no-ops.
-    Intended for application shutdown (FastAPI lifespan teardown).
-    """
-    global _driver_instance
-    with _driver_lock:
-        if _driver_instance is not None:
-            _driver_instance.close()
-            _driver_instance = None
-            logger.info("Neo4j driver singleton closed")
+# ``close_driver`` is re-exported from the shared driver module so callers that
+# previously imported it from this query layer keep working.
+__all__ = [
+    "close_driver",
+    "execute_cypher_query",
+    "expand_node_query",
+    "fetch_relationships_between_nodes",
+    "validate_read_only_query",
+]
 
 
 # Read-only Cypher keywords (case-insensitive)

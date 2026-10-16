@@ -163,6 +163,17 @@ the migration in `src/app/alembic/versions/`.
 | Everything involving Alice | `activity_actions` (`actor_*` OR `target_*`) | both action indexes |
 | Who interacted with Issue Y | `activity_actions` (`target_*`) | `idx_activity_actions_target` |
 
+**Person lanes are expanded across providers.** The timeline store holds **raw**
+provider-scoped entity ids (§4.2), while search returns the **canonical** Person
+`wba_id`. Before the Postgres query runs, a `Person` lane is expanded to every
+`IdentityMapping` identity that maps to the canonical person — resolved at
+request time from Neo4j, the single source of truth for
+Person ↔ IdentityMapping. Each resolved `(source, entity_id)` pair becomes its
+own index-friendly disjunct on **both** the actor and target sides, so
+cross-provider activity lands in one lane. Non-Person lanes (Issues / Pages /
+PRs, which are not cross-provider deduped) keep a single identity and issue
+exactly today's predicate.
+
 ---
 
 ## 4. Ingestion pipeline
@@ -294,6 +305,15 @@ These are deliberate properties of v1, not bugs:
 7. **`from` is optional.** Omitted means "all time" — the query is still
    keyset-bounded to `limit` rows per lane, so paging backward needs no backend
    change.
+8. **Person lanes read Neo4j at request time.** A `Person` lane is expanded to
+   all `IdentityMapping` identities resolved from Neo4j before the Postgres
+   query (§3.3). This is **best-effort**: when the graph is disabled or
+   unreachable, the lane degrades to its single canonical identity (today's
+   behaviour) and the request still succeeds. Accepted limitation: **mention-only
+   people** — those who only ever appear as a relationship target and therefore
+   have no `IdentityMapping` node — are not expanded and stay invisible under a
+   different provider's raw id. The timeline store still holds **raw** provider
+   ids (unchanged); the read-time expansion exists precisely because of that.
 
 ---
 

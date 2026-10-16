@@ -4,7 +4,7 @@ import threading
 from unittest.mock import MagicMock
 
 import pytest
-from app.api.graph.v1.query import _get_driver, close_driver
+from app.common.neo4j_driver import _get_driver, close_driver
 from app.settings import settings
 
 
@@ -20,7 +20,7 @@ class TestNeo4jDriverSingleton:
         # Replace GraphDatabase in the query module with a mock class so that
         # _get_driver() hits the mock instead of the real C extension class.
         mock_graph_db = MagicMock()
-        monkeypatch.setattr("app.api.graph.v1.query.GraphDatabase", mock_graph_db)
+        monkeypatch.setattr("app.common.neo4j_driver.GraphDatabase", mock_graph_db)
         yield
         # Teardown: close driver and reset singleton state
         close_driver()
@@ -29,7 +29,7 @@ class TestNeo4jDriverSingleton:
         """Calling _get_driver() twice returns the exact same object."""
         mock_driver = MagicMock()
         mock_driver.verify_connectivity.return_value = None
-        import app.api.graph.v1.query as query_mod
+        import app.common.neo4j_driver as query_mod
         query_mod.GraphDatabase.driver.return_value = mock_driver
 
         first = _get_driver()
@@ -45,7 +45,7 @@ class TestNeo4jDriverSingleton:
         first_mock.verify_connectivity.return_value = None
         second_mock = MagicMock()
         second_mock.verify_connectivity.return_value = None
-        import app.api.graph.v1.query as query_mod
+        import app.common.neo4j_driver as query_mod
         query_mod.GraphDatabase.driver.side_effect = [first_mock, second_mock]
 
         first = _get_driver()
@@ -62,7 +62,7 @@ class TestNeo4jDriverSingleton:
         """Multiple threads calling _get_driver() concurrently all get the same instance."""
         mock_driver = MagicMock()
         mock_driver.verify_connectivity.return_value = None
-        import app.api.graph.v1.query as query_mod
+        import app.common.neo4j_driver as query_mod
         query_mod.GraphDatabase.driver.return_value = mock_driver
 
         results = []
@@ -87,7 +87,7 @@ class TestNeo4jDriverSingleton:
         """Calling close_driver() multiple times does not raise."""
         mock_driver = MagicMock()
         mock_driver.verify_connectivity.return_value = None
-        import app.api.graph.v1.query as query_mod
+        import app.common.neo4j_driver as query_mod
         query_mod.GraphDatabase.driver.return_value = mock_driver
 
         # Create the driver first

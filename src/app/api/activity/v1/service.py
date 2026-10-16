@@ -20,6 +20,7 @@ from app.db.models.activity_action import ActivityAction
 from app.db.models.activity_event import ActivityEvent
 from common.logger import logger
 from . import mock_data, query
+from .identity import resolve_person_identities
 from .model import (
     Suggestion,
     TimelineEvent,
@@ -159,16 +160,19 @@ def _action_to_event(
     action: ActivityAction,
     *,
     lane_entity_type: str,
-    lane_entity_id: str,
+    lane_identity_ids: frozenset[str],
 ) -> TimelineEvent:
     """Convert an ``ActivityAction`` ORM row into a ``TimelineEvent``.
 
     ``entity_type`` is the *other* side of the action: the target when the
     lane entity is the actor, the actor when the lane entity is the target.
+    ``lane_identity_ids`` is the full set of entity ids belonging to the lane, so
+    a row whose actor is a *different* provider identity of the same person is
+    still recognised as "the lane acting".
     """
     if (
         action.actor_entity_type == lane_entity_type
-        and action.actor_entity_id == lane_entity_id
+        and action.actor_entity_id in lane_identity_ids
     ):
         other_type = action.target_entity_type
     else:
@@ -220,9 +224,19 @@ async def _fetch_lane(
     """Fetch one lane's events and assemble the ``TimelineLane``."""
     wba_id = f"{source}::{entity_type}::{entity_id}"
 
+    # Non-Person lanes have exactly one identity (today's behaviour). A Person
+    # lane is expanded to every provider identity that maps to the canonical
+    # person, so cross-provider activity lands in one lane. Neo4j is the source
+    # of truth; when it is unavailable we fall back to the lane identity alone.
+    identities: list[tuple[str, str]] = [(source, entity_id)]
+    if entity_type == "Person":
+        resolved = await resolve_person_identities(wba_id)
+        if resolved:
+            identities = list(dict.fromkeys([(source, entity_id), *resolved]))
+
     # Resolve the display label + avatar from the pre-computed columns.
     display_name, avatar_url = await query.fetch_display_label(
-        db, source=source, entity_type=entity_type, entity_id=entity_id
+        db, entity_type=entity_type, identities=identities
     )
     label = display_name or entity_id
 
@@ -249,9 +263,8 @@ async def _fetch_lane(
     if request.scope == "history":
         event_rows = await query.fetch_event_history(
             db,
-            source=source,
             entity_type=entity_type,
-            entity_id=entity_id,
+            identities=identities,
             from_time=request.from_,
             to_time=request.to,
             cursor_time=cursor_time,
@@ -265,9 +278,8 @@ async def _fetch_lane(
     else:
         action_rows = await query.fetch_actions_for_entity(
             db,
-            source=source,
             entity_type=entity_type,
-            entity_id=entity_id,
+            identities=identities,
             from_time=request.from_,
             to_time=request.to,
             cursor_time=cursor_time,
@@ -278,7 +290,7 @@ async def _fetch_lane(
             _action_to_event(
                 row,
                 lane_entity_type=entity_type,
-                lane_entity_id=entity_id,
+                lane_identity_ids=frozenset(eid for _, eid in identities),
             )
             for row in action_rows
         ]

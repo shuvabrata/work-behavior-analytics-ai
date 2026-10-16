@@ -15,6 +15,7 @@ Only the plans below remain.
 | 005  | [MCP thread join timeout](005-mcp-thread-join-timeout.md) | P2 | S | — | TODO |
 | 022  | [Retire AUTHORED_BY → CREATED_BY](022-retire-authored-by-unify-created-by.md) | P1 | M | — | DONE ✓ — merged to `main` at `b28598b` |
 | 023  | [Catalog Editor — Quick Test & View Test Buttons](023-catalog-editor-test-buttons.md) | P1 | M | — | DONE ✓ — all 5 phases, committed `bff99d9`→`ce02408` on `feature/editor-test-buttons` (pushed); operator manual regression pending |
+| 043  | [Activity Timeline — make event cards read as a sentence](043-activity-timeline-card-reading-order.md) | P1 | M | — | TODO |
 
 ## Notes
 
@@ -24,6 +25,14 @@ Only the plans below remain.
   All source code (`src/`, `queries_catalog/`, `simulation/layer7/`, `tests/`) verified
   clean — zero `AUTHORED_BY` occurrences outside `__pycache__` and test result artifacts.
   Plan file retained as historical record.
+- **043**: Activity cards do not read as a sentence — the object title holds the
+  prominent line and the action is buried, and `activity_actions.summary` is the
+  *actor's* title so lane-as-actor cards (Case B) cannot name their object at all.
+  Chosen design: relationship-first line order, verbatim neutral relation label (no
+  per-relation specialization), and the object's name resolved at read time from
+  `activity_events.display_name` via one additive nullable column. Hover/tooltip is
+  explicitly out of scope. Planned against `90c9674` — the commit that merged the
+  Person-identity lane expansion (#338), which touched the same API files.
 
 ## Other documents
 

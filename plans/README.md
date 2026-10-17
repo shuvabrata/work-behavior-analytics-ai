@@ -15,7 +15,8 @@ Only the plans below remain.
 | 005  | [MCP thread join timeout](005-mcp-thread-join-timeout.md) | P2 | S | — | TODO |
 | 022  | [Retire AUTHORED_BY → CREATED_BY](022-retire-authored-by-unify-created-by.md) | P1 | M | — | DONE ✓ — merged to `main` at `b28598b` |
 | 023  | [Catalog Editor — Quick Test & View Test Buttons](023-catalog-editor-test-buttons.md) | P1 | M | — | DONE ✓ — all 5 phases, committed `bff99d9`→`ce02408` on `feature/editor-test-buttons` (pushed); operator manual regression pending |
-| 043  | [Activity Timeline — make event cards read as a sentence](043-activity-timeline-card-reading-order.md) | P1 | M | — | IMPLEMENTED — uncommitted on `feature/timeline-card-readability`; all gates green, migration not yet applied (see note) |
+| 043  | [Activity Timeline — make event cards read as a sentence](043-activity-timeline-card-reading-order.md) | P1 | M | — | DONE ✓ — committed `202e763` on `feature/timeline-card-readability`; all gates green, migration applied at `51d673fb286f` |
+| 044  | [Activity Timeline — event detail modal](044-activity-timeline-detail-modal.md) | P1 | L | 043 | TODO |
 
 ## Notes
 
@@ -36,11 +37,37 @@ Only the plans below remain.
   **Executed 2026-10-17 on `feature/timeline-card-readability` (uncommitted).**
   Reviewer re-ran every gate: 1877 unit tests pass, `mypy src/` clean, pylint
   9.68/10, bandit 0 High, spec regenerates with no diff; the resolve subquery
-  was compiled independently and does not cartesian-join. One gate unverified —
-  `alembic upgrade head` was denied by the permission classifier, so
-  `activity_actions.target_source` does not exist yet; the offline SQL is the
-  single correct additive `ADD COLUMN`. Run it before testing the new line-2
-  name on fresh data.
+  was compiled independently and does not cartesian-join. The migration was
+  applied on 2026-10-17 — `alembic current` reports `51d673fb286f (head)` and
+  `activity_actions.target_source` (`varchar(32)`) exists. All gates green.
+- **044**: Clicking a timeline card currently navigates to `/app/graph` with no
+  query context, so there is no way to see what an event actually is. Chosen
+  design: the card becomes a click target that opens an `xl` scrollable
+  `dbc.Modal` (mirroring the Catalog Editor's "View Test") whose header is the
+  full sentence the card fragments, and whose body renders **both** entities'
+  Neo4j properties side by side using the *same* table renderer as the Graph
+  page's right panel. One additive API field (`related_wba_id`) closes the gap
+  that the sibling's `source` is not on `TimelineEvent`; the fetch reuses
+  `POST /api/v1/graph/execute` unchanged with one parameterised `IN $ids` query.
+  Planned against `202e763`, on top of Plan 043. The hover peek survives and its
+  headline is aligned with the modal's sentence (Plan 043 had deferred that
+  popup work to exactly this plan).
+
+  Three claims were verified against the live local services when this plan was
+  written, so the executor inherits them as measured facts rather than
+  assumptions: (a) the properties Cypher runs green on all five cases —
+  including the **merged-Person** case, where a
+  `confluence::IdentityMapping::…` id must resolve to the `jira::Person::…` node
+  that `person_cache` email/account dedup created; (b) `SHOW INDEXES` confirms a
+  `RANGE` index on `id` for all 16 entity labels, so `WHERE n.id IN $ids` is a
+  seek; (c) the `related_wba_id` `case()`/`concat()` SQL compiles to valid
+  Postgres. See the plan's Phase 3 for the measured table.
+
+  **Depends on 043** for `lane_role` / `related_id` / `related_name`,
+  `helpers.card_primary` / `card_secondary`, and the `activity_actions.target_source`
+  column — all committed at `202e763`, with the migration applied: `alembic
+  current` reports `51d673fb286f (head)` and the column is live.
+
 
 ## Other documents
 

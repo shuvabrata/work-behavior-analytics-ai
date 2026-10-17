@@ -269,19 +269,21 @@ and `service.py:246-249` special-cases Person lanes with exactly this hop.
 |---|----------|-----------|
 | 1 | **Click opens the modal; the hover peek stays.** | Progressive disclosure. The peek is instant and needs no network; the modal is deliberate and fetches. |
 | 2 | **The card stops being a link.** It becomes an `html.Div` — the whole card is the modal trigger. | One click target, one behaviour. The Graph navigation moves into the modal header (Decision 8). |
-| 3 | **Fetch both nodes with ONE `POST /api/v1/graph/execute`** carrying constant parameterized Cypher and `parameters: {a, b}`. | No new endpoint, no new models, no new router wiring. Reuses `neo4j_to_cytoscape` and the shared table renderer. |
+| 3 | **Fetch both nodes with ONE `POST /api/v1/graph/execute`** carrying constant parameterized Cypher and `parameters: {ids: [left, right]}`. | No new endpoint, no new models, no new router wiring. Reuses `neo4j_to_cytoscape` and the shared table renderer. One call is possible because both ids are the nodes' own canonical ids (Decision 9), so the result can be keyed by the requested id with no hop and no re-keying. |
 | 4 | **Add one additive field `related_wba_id` to `TimelineEvent`.** | The other side's `source` is not on the event, so the sibling's WBA id cannot be built in the UI. `related_source` is already computed in `query.py`; this exposes it pre-concatenated. |
 | 5 | **Share the TABLE renderer, not the panel builder.** New `render_properties_table()` is called by both `build_element_properties_content` (graph + collaboration network) and the new modal body builder. | "A change in one affects both" without dragging the graph panel's per-panel header and dead "Expand Node" button into the modal. |
 | 6 | **The modal header is the full sentence**: lane name · relationship · target name (as the Graph deep-link) · time. | The card elides the subject; the modal restores it. Neither panel needs a title, so the panels sit close together. |
 | 7 | **Lane entity is the LEFT panel, always; the connector is non-directional.** | The lane is the card's subject. Plan 043 Decision 3 established the relation label is verbatim and neutral because `direction` is unusable — an arrow would re-assert a direction the data cannot support. |
 | 8 | **The Graph deep-link opens in a NEW TAB** and runs the 2-node subgraph. | Matches today's card behaviour (`target="_blank"`). The subgraph shows what the modal shows, including the edge. |
-| 9 | **Person lanes hop via `IdentityMapping`; every other type matches the id directly.** | Mirrors `service.py:246-249`. The naive id match misses merged Person nodes (`person_cache.py:125-151`). |
-| 10 | **The modal always opens**; a missing node degrades to a per-panel "Not found in graph" note. Both missing → one empty state. `NEO4J_ENABLED=false` → one explanatory state. | The header needs no network, so the click is never dead. |
+| 9 | **Every lane is looked up by its own canonical WBA id — no `IdentityMapping` hop, no label.** | A lane can only come from the ES-backed typeahead, and every Person document in ES is keyed by the canonical Neo4j id (the ES sink refuses to create a shadow document), so a lane id IS the node id. This is the property `service.py:246-249` already relies on. A hop would also break result keying: the returned id would differ from the requested one, so every Person lane would render "Not found in graph". |
+| 10 | **The modal always opens**; a missing node degrades to a per-panel "Not found in graph" note. Both missing → one empty state. `NEO4J_ENABLED=false` → one explanatory state reading *"Neo4j is not available — graph properties are disabled."* (see step 5e.3). | The header needs no network, so the click is never dead. The graph API answers **HTTP 500** when Neo4j is disabled, so the disabled case is a normal configuration and must not read as a generic failure. |
 | 11 | **History scope shows a ONE-panel modal** (no connector, no second fetch), header `<lane name> · Updated · <time>`. | `lane_role` is `None` and `related_id` is `None` in history — there is no other side. |
 | 12 | **Both panels show CURRENT Neo4j state**, with a muted "current state" caption. | Neo4j holds current state; `details` is empty for activity events, so an as-of-event panel is not available for the other side. One rule for both panels. |
 | 13 | **50/50 panel split, ONE shared body scroll.** | Nested scroll regions in a modal are awkward; keeping the panels aligned reads as one table pair. |
 | 14 | **The peek's headline becomes the same sentence**, gains a muted "Click for details" hint, and the native `title=` tooltip is REMOVED. | The peek currently shows `event["summary"]` — the field Plan 043 proved wrong — so hovering and clicking would describe one event two ways. The native tooltip duplicates the headline ~1s later and overlaps the portal. |
-| 15 | **Mock data gains a `wba::other::<Type>::<id>` lane id convention** and `related_id` / `related_name` / `lane_role`. | Without it the feature is undemonstrable in mock mode. The ids deliberately match no real node, so clicking a mock card exercises the "Not found" paths deterministically with zero Neo4j calls. |
+| 15 | **Mock data gains a `mockdemo::<Type>::<id>` lane id convention** and `related_id` / `related_name` / `lane_role`. | Without it the feature is undemonstrable in mock mode. The ids deliberately match no real node, so clicking a mock card exercises the "Not found" paths deterministically with zero Neo4j calls. The **three-part** shape is load-bearing: `_lane_identity` and the card helpers read `parts[1]` as the entity *type*, so a 4-part `wba::other::<Type>::<id>` would make every mock lane type "other" — no avatars, a cube icon and a neutral card colour (see step 6a). |
+| 16 | **The modal body's tables are emitted through a `_detail_panel` helper** carrying `.timeline-detail-panel` and the "Current state" caption. | Decision 13's 50/50 split and Decision 12's caption are both CSS/render requirements — the class must actually be emitted or `flex: 1 1 0` + `min-width: 0` never applies and long ids push the tables apart. One helper makes both impossible to forget. |
+| 17 | **`timeline-detail-store` changes value on every click** (a clientside nonce), and it is the only trigger for the panels. | Two clicks on equal payloads would otherwise leave the previous event's panels on screen while the header shows the new event. `is_open` is owned by the clientside branch; the store must be too. |
 
 ## Commands you will need
 
@@ -323,14 +325,15 @@ running.
 | `src/app/api/activity/v1/service.py` | thread `related_wba_id` + `lane_entity_type`; `_action_to_event` returns both | 1 |
 | `src/app/dash_app/components/common.py` | extract `render_properties_table`; add `render_visible_properties` | 2 |
 | `src/app/dash_app/pages/timeline/api.py` | `fetch_node_properties(wba_ids)` HTTP client | 3 |
-| `src/app/dash_app/pages/timeline/helpers.py` | `detail_sentence` / `detail_payload` / `graph_deep_link` / `graph_lookup_id`; `popup_fields` headline change; drop `_popup_headline` | 3, 4 |
+| `src/app/dash_app/pages/timeline/helpers.py` | `detail_sentence` / `detail_payload` / `graph_deep_link`; `popup_fields` headline + hint + scope; drop `_popup_headline` | 3, 4 |
 | `src/app/dash_app/pages/timeline/layout.py` | card → `Div` + `role`/`tabIndex`; modal skeleton; Graph link; drop the `_popup_headline` import | 5 |
 | `src/app/dash_app/pages/timeline/callbacks.py` | click branch in the clientside listener; detail callback | 5 |
-| `src/app/dash_app/assets/executive-dashboard.css` | modal layout + `In` column rules | 5 |
+| `src/app/dash_app/assets/executive-dashboard.css` | modal layout, panel/caption/connector/missing/graph-link rules | 5 |
 | `src/app/api/activity/v1/mock_data.py` | mock lane ids + event fields | 6 |
 | `tests/test_activity_api_integration.py` | fake session returns 3-tuples; `related_wba_id` / `lane_entity_type` assertions; `mock::` ids re-pointed | 6, 7 |
 | `tests/test_activity_timeline_ui_helpers.py` | updated `popup_fields` test + new `detail_*` tests; `mock::` ids re-pointed | 6, 7 |
-| `tests/test_activity_timeline_mock.py`, `tests/test_activity_timeline_callbacks.py` | `mock::` ids re-pointed to `wba::other::` | 6 |
+| `tests/test_activity_timeline_mock.py`, `tests/test_activity_timeline_callbacks.py` | `mock::` ids re-pointed to `mockdemo::` | 6 |
+| `tests/test_activity_person_identity.py` | 3rd positional at the 3 `_action_to_event` call sites; re-measured SQL disjunct counts | 7 |
 | `tests/test_activity_timeline_detail_modal.py` | **create** — SQL shape + `render_properties_table` + payload builders | 7 |
 | `docs/design/activity-timeline-design.md` | §5.1, §5.3, §7.4, §11 | 7 |
 
@@ -412,10 +415,9 @@ The signature becomes:
         default=None,
         description=(
             "The lane entity's OWN entity type. Needed because ``entity_type`` "
-            "is the *other* side's type, so the UI cannot otherwise tell which "
-            "side of the event the lane was — and the Person→IdentityMapping "
-            "lookup hop depends on it. None for scope=history, where "
-            "``entity_type`` is already the lane's own."
+            "is the *other* side's type, so the UI cannot otherwise label the "
+            "lane's node in the modal's Graph deep-link. None for scope=history, "
+            "where ``entity_type`` is already the lane's own."
         ),
     )
 ```
@@ -476,8 +478,10 @@ pytest -m unit tests -q
 mypy src/
 ```
 Expect the tuple-shape change to break tests that call `_action_to_event` or
-assert on the compiled SQL — **that is expected**; they are repaired in Phase 7.
-Do **not** restore `.scalars()` or reshape the query to get back to green.
+assert on the compiled SQL — **that is expected**; they are repaired in Phase 7
+(`tests/test_activity_person_identity.py` is the file that goes red — it is in
+the In-scope table for exactly this reason). Do **not** restore `.scalars()` or
+reshape the query to get back to green.
 
 ### Phase 2 — Components: share the table renderer
 
@@ -505,6 +509,24 @@ timeline detail modal.
 **2b.** Give it the same `None`/private-key filtering the panel builder applies,
 by adding a thin wrapper **beside** it (do not change `render_properties_table`'s
 pure signature):
+
+Widen the callee's annotation first, in `_panel_build_visible_properties`
+(`common.py:664`) — a ``frozenset`` is **not** assignable to a ``set[Any]``
+parameter under `mypy` strict, and the body only does ``k not in exclude_keys``,
+so the read-only abstraction is the honest type:
+
+```python
+# ``set`` is invariant in mypy, so a ``frozenset`` constant cannot be passed to a
+# ``set`` parameter.  This is a read-only use, so take the abstract type.
+def _panel_build_visible_properties(
+    data: dict[str, Any], exclude_keys: AbstractSet[Any]
+) -> dict[str, Any]:
+```
+
+Add ``from collections.abc import Set as AbstractSet`` to `common.py`'s imports
+(the repo prefers `collections.abc` for exactly this — CLAUDE.md, "Code style").
+
+Then the constant and the wrapper:
 
 ```python
 #: The same synthetic keys the graph right panel hides, so the modal shows the
@@ -562,6 +584,10 @@ pytest -m unit tests -q
 mypy src/ && pylint src --score=y
 grep -rn "_panel_properties_table" src/     # → no matches
 ```
+`mypy src/` must be clean. The usual cause of a failure here is the
+`frozenset`/`set` invariance above (`arg-type`) — that is an **`arg-type`**
+error, which the `app.dash_app.*` override does **not** suppress, so widening the
+annotation is required, not optional.
 Then confirm `build_element_properties_content` output is unchanged — the
 existing Graph/CN tests are the gate. If none pin it, render a node dict through
 it before and after this phase and diff the two `str(...)` outputs; they must be
@@ -578,11 +604,12 @@ class NodePropertiesError(RuntimeError):
     """Raised when the graph property fetch fails (non-200 or transport error)."""
 
 
-#: One indexed scan for every requested id, then a Person hop.  A node that does
-#: not exist is simply absent from the result, which is what lets the UI render a
-#: per-panel "not found" state instead of an empty property table.  The
-#: ``MAPS_TO`` hop and the ``coalesce`` are explained in step 3b — **write the
-#: final form from 3b here**; the placeholder below is what 3b replaces.
+#: One indexed lookup for every requested id — one round trip, no UNION, no hop.
+#: A node that does not exist is simply absent from the result, which is what lets
+#: the UI render a per-panel "not found" state instead of an empty property table.
+#: The ids passed in ARE the nodes' own canonical ``id`` values (Decision 9), so
+#: the returned node's ``wba_id`` always equals the id requested and the result
+#: needs no re-keying.
 _NODE_PROPERTIES_CYPHER = (
     "MATCH (n) WHERE n.id IN $ids RETURN n LIMIT 2"
 )
@@ -641,82 +668,63 @@ This is a **page-level import of another page's `utils` subpackage** — permitt
 already done by `pages/timeline/callbacks.py:29` and
 `pages/catalog/editor_test_callbacks.py:21`. Do not move it.
 
-**Note on the query**: `WHERE n.id IN $ids` uses the `id`-uniqueness
-constraint/index on every label. Do **not** write `MATCH (n {id: $a})` twice and
-do not `UNION`; a single indexed `IN` scan is one round trip and one plan. The
-`OPTIONAL MATCH` in 3b's final form is for the **Person hop only** — it is not a
-second entity lookup, and it cannot drop rows because a `MATCH` with `WHERE n.id
-IN $ids` establishes `n` first.
+**Note on the query**: `WHERE n.id IN $ids` uses the `id` label index on every
+entity label. Do **not** write `MATCH (n {id: $a})` twice and do not `UNION`; a
+single indexed `IN` lookup is one round trip and one plan.
 
-**3b. Person lanes need the hop (Decision 9).** The modal must translate a
-Person WBA id into the IdentityMapping id **before** calling
-`fetch_node_properties`. Add a pure helper in
-`src/app/dash_app/pages/timeline/helpers.py` (it is a string transform; it
-belongs beside the other pure helpers):
+> **Why there is no label in the MATCH.** The `id` index is **per-label** — 16
+> separate `RANGE` indexes, not one global one — so an *unlabelled* `MATCH (n
+> {id: …})` cannot use any of them: `EXPLAIN` shows `AllNodesScan > Filter`.
+> Do **not** "simplify" the query back to `MATCH (n {id: $id})` — that is
+> precisely the scan this note forbids. (The same reasoning is why the
+> deep-link queries in 5c *are* label-scoped: there the id is a literal, so the
+> label can be written into the pattern.)
 
-```python
-_PERSON_MARKER = "::Person::"
-_IDENTITY_MARKER = "::IdentityMapping::"
+**3b. There is no Person hop (Decision 9).** A Person lane's WBA id **is** the
+Person node's `id`, so it is passed to `fetch_node_properties` unchanged — no
+`IdentityMapping` translation, and no helper to write.
+
+> **Why the hop was dropped.** An earlier draft translated a Person lane via a
+> `graph_lookup_id` helper and a `MAPS_TO` hop, on the premise that a lane id
+> might name a *shadow* Person node (the case `person_cache.py:125-151` handles
+> by resolving a provider person onto an existing canonical Person). That case
+> cannot reach the modal: a lane is only ever created from the typeahead, which
+> reads Elasticsearch, and every Person document in ES is keyed by the
+> **canonical** Neo4j id — the ES sink deliberately refuses to create a shadow
+> document (`consumers/sinks/elasticsearch_sink.py:98-138`; the local
+> `confluence_person_index` is empty for exactly this reason). The shipped
+> identity expansion in `api/activity/v1/service.py:246-249` relies on the same
+> property, matching the lane id directly as `(p:Person {id: $person_id})`.
+>
+> Dropping the hop also removes a result-keying hazard: with the hop present,
+> the node *returned* differs from the id *requested*, so keying the result by
+> `wba_id` (as `fetch_node_properties` does) would miss for **every** Person
+> lane and render "Not found in graph". Without the hop, requested id ==
+> returned id == lane id, and the existing keying is correct.
+>
+> **Do not reintroduce a label or a hop.** In particular, do not add
+> `(p:Person {id: …})` or an `IdentityMapping` lookup "for safety": the first
+> would break every non-Person lane, and the second would reintroduce the keying
+> hazard above.
 
 
-def graph_lookup_id(wba_id: str, entity_type: str) -> str:
-    """Return the id to look this entity up by in Neo4j.
 
-    A Person's canonical node id is NOT necessarily its lane WBA id: the person
-    cache resolves a provider person to an existing canonical Person (by email
-    or Atlassian account id), so ``github::Person::alice`` may live in the graph
-    as ``jira::Person::557058:abc``.  The graph therefore has to be entered via
-    the person's IdentityMapping node, exactly as
-    ``api/activity/v1/identity.py`` does.  Every other entity type is stored
-    under its own canonical id and is matched directly.
-    """
-    if entity_type != "Person" or _PERSON_MARKER not in wba_id:
-        return wba_id
-    return wba_id.replace(_PERSON_MARKER, _IDENTITY_MARKER, 1)
-```
 
-**Then update `_NODE_PROPERTIES_CYPHER` to handle both cases in one query**, so
-the single round trip still covers both panels:
-
-```python
-_NODE_PROPERTIES_CYPHER = (
-    "MATCH (n) WHERE n.id IN $ids "
-    "OPTIONAL MATCH (n)-[:MAPS_TO]-(p:Person) "
-    "WITH coalesce(p, n) AS resolved "
-    "RETURN DISTINCT resolved AS n LIMIT 2"
-)
-```
-
-- For a non-Person id, `[:MAPS_TO]` matches nothing and `coalesce` yields the
-  node itself.
-- For an IdentityMapping id, it yields the canonical Person.
-- `DISTINCT` collapses the case where both ids resolve to the same node (a
-  self-referencing event), which would otherwise emit two identical panels.
-
-> **This Cypher has already been executed against the live local graph and all
-> five cases pass** — measured on 2026-10-17 against
-> `neo4j:5.26-community`. You do **not** need to re-derive it; implement it as
-> written. The measured evidence, so you can recognise a regression:
+> **This Cypher has already been executed against the live local graph** —
+> measured on 2026-10-17 against `neo4j:5.26-community`. You do **not** need to
+> re-derive it; implement it as written. The measured evidence, so you can
+> recognise a regression:
 >
 > | Input | Rows | Result |
 > |---|---|---|
-> | `confluence::IdentityMapping::557058:62105664-…` | 1 | **Person** `jira::Person::557058:62105664-…` (a *merged* person) |
-> | `jira::Person::557058:62105664-…` (already canonical) | 1 | itself, `Person` |
-> | `github::Repository::shuvabrata/work-behavior-analytics-ai` | 1 | itself, `Repository` (no `MAPS_TO`, correctly not hopped) |
-> | `wba::other::Person::nope` (missing) | 0 | absent → the "Not found" panel |
-> | merged id **+** a missing id, one call | 1 | only the resolvable node |
+> | `jira::Person::557058:62105664-…` (a real lane id) | 1 | itself, `Person` |
+> | `github::Repository::shuvabrata/work-behavior-analytics-ai` | 1 | itself, `Repository` |
+> | `mockdemo::Person::nope` (missing) | 0 | absent → the "Not found" panel |
+> | a real id **+** a missing id, one call | 1 | only the resolvable node |
 >
-> The merged case is real, not hypothetical: both
-> `confluence::IdentityMapping::557058:62105664-…` and
-> `jira::IdentityMapping::557058:62105664-…` reach the **same**
-> `jira::Person::557058:62105664-…`. A naive `MATCH (p:Person {id: $lane_id})`
-> would have returned nothing for a Confluence-identity lane — which is why the
-> hop is required.
->
-> The `id`-equality is index-backed: `SHOW INDEXES` confirms a `RANGE` index on
-> `id` for every one of the 16 entity labels (`Person`, `Issue`, `PullRequest`,
-> `Repository`, …), so `WHERE n.id IN $ids` is a seek, not a scan. Do not
-> replace it with a property-map match, which would be a scan.
+> The `id`-equality is index-backed by 16 **per-label** `RANGE` indexes
+> (`Person`, `Issue`, `PullRequest`, `Repository`, …). Keep the `IN` form — see
+> the note above for why a per-id property-map match would be a scan.
 >
 > The deep-link Cypher is also verified: the lane-only form returns 37 rows for
 > a real Repository id, and the related-node form returns **0** when no such edge
@@ -728,11 +736,10 @@ _NODE_PROPERTIES_CYPHER = (
 ```
 mypy src/ && pylint src --score=y
 ```
-Re-run the five-case check above **once**, after wiring `fetch_node_properties`,
-to confirm the code path (not just the Cypher) behaves — substituting a real
-IdentityMapping id from
-`MATCH (im:IdentityMapping)-[:MAPS_TO]-(p:Person) RETURN im.id LIMIT 1`. If Neo4j
-is unavailable, report this step as not performed — the unit tests in Phase 7 are
+Re-run the four-case check above **once**, after wiring
+`fetch_node_properties`, to confirm the code path (not just the Cypher) behaves —
+taking a real lane id from `MATCH (p:Person) RETURN p.id LIMIT 1`. If Neo4j is
+unavailable, report this step as not performed — the unit tests in Phase 7 are
 the gate.
 
 ### Phase 4 — Helpers: the modal payload and the peek's new sentence
@@ -743,26 +750,36 @@ payload builders. The lane's display name is **not** on the event, so it is
 passed in:
 
 ```python
-def detail_sentence(event: dict[str, Any], lane_label: str) -> str:
+def detail_sentence(
+    event: dict[str, Any], lane_label: str, *, scope: str = "activity"
+) -> str:
     """Return the card's full sentence: ``<subject> <relationship> <object>``.
 
     The card elides the subject into the sticky lane header, so ``lane_label``
-    supplies it here.  The object's name prefers the resolved ``related_name``
-    and falls back to ``related_id`` — the same chain ``card_secondary`` uses.
-    Returns a fragment (never empty) so both the modal header and the hover peek
-    can render it unconditionally.
+    supplies it here.  Returns a fragment (never empty) so both the modal header
+    and the hover peek can render it unconditionally.
+
+    The object is appended **only in activity scope**.  ``card_secondary`` falls
+    back to ``event["summary"]`` after ``related_name``/``related_id``, and in
+    history scope that summary is the lane's OWN display name
+    (``_event_to_event`` sets ``summary=event.display_name``, with no
+    ``related_*``), so appending it would render
+    "Alice Johnson Updated Alice Johnson".
     """
     subject = (lane_label or "").strip()
     relationship = humanize_relationship(str(event.get("relationship_type") or ""))
-    obj = card_secondary(event)
     if not relationship:
         relationship = entity_type_label(str(event.get("entity_type") or ""))
-    parts = [part for part in (subject, relationship, obj) if part]
-    return " ".join(parts) or "Event"
+    parts = [part for part in (subject, relationship) if part]
+    if scope != "history":
+        parts.append(card_secondary(event))
+    return " ".join(part for part in parts if part) or "Event"
 ```
 
 **Careful**: `card_secondary` returns the *other side's name alone*. Read it
-before assuming it includes a type label.
+before assuming it includes a type label — and note the scope gate above is
+**not** the same chain as `card_secondary`; it deliberately drops that
+function's third (``summary``) fallback in history scope.
 
 **4b.** `popup_fields` (line 512) — Decision 14. Change the headline source and
 add the click hint. The payload key stays `summary` so the existing clientside
@@ -771,7 +788,11 @@ sentence:
 
 ```python
 def popup_fields(
-    event: dict[str, Any], datetime_text: str, lane_label: str = ""
+    event: dict[str, Any],
+    datetime_text: str,
+    lane_label: str = "",
+    *,
+    scope: str = "activity",
 ) -> dict[str, Any]:
     """Build the JSON payload carried on each card for the hover popup.
 
@@ -780,9 +801,11 @@ def popup_fields(
     identically — the old ``_popup_headline`` preferred ``event["summary"]``,
     which is the *actor's* title and is frequently absent for Person-actor
     events.  ``hint`` drives the peek's muted "Click for details" affordance.
+    ``scope`` is forwarded to ``detail_sentence`` so history cards do not repeat
+    the lane's own name (see 4a).
     """
     fields: dict[str, Any] = {
-        "summary": detail_sentence(event, lane_label),
+        "summary": detail_sentence(event, lane_label, scope=scope),
         "relationship": humanize_relationship(
             str(event.get("relationship_type") or "")
         ),
@@ -797,7 +820,7 @@ def popup_fields(
     return fields
 ```
 
-Keep the `lane_label` parameter **defaulted** so existing call sites and tests
+Keep `lane_label` and `scope` **defaulted** so existing call sites and tests
 that pass only two arguments keep working.
 
 **4c.** Add the modal payload builder, also in `helpers.py`:
@@ -813,6 +836,7 @@ def detail_payload(event: dict[str, Any], lane_label: str, lane_wba_id: str,
     renders a single panel.
     """
     related = event.get("related_wba_id")
+    related_wba_id = related if isinstance(related, str) and related else None
     # ``entity_type`` is the OTHER side's type, so the lane's own type comes
     # from the API's ``lane_entity_type`` in activity scope, and from
     # ``entity_type`` in history scope (where the lane entity IS the event).
@@ -822,23 +846,31 @@ def detail_payload(event: dict[str, Any], lane_label: str, lane_wba_id: str,
         else str(event.get("lane_entity_type") or "")
     )
     return {
+        # ``nonce`` makes the payload differ on EVERY click — see Decision 17.
+        # Two cards with equal payloads would otherwise write an equal value to
+        # ``timeline-detail-store`` and the panels would not re-render.
+        # Always 0 here; the clientside branch (5d) overwrites it before storing.
+        "nonce": 0,
         "lane_wba_id": lane_wba_id,
         "lane_label": lane_label,
         "lane_entity_type": lane_type,
-        "related_wba_id": related if isinstance(related, str) and related else None,
+        "related_wba_id": related_wba_id,
         "relationship": humanize_relationship(
             str(event.get("relationship_type") or "")
         ),
         "datetime": datetime_text,
         "scope": scope,
+        # Needs ``related_wba_id`` normalised first, hence the local above.
+        "graph_url": graph_deep_link(lane_wba_id, lane_type, related_wba_id),
     }
 ```
 
 `lane_entity_type` comes from the field added in Phase 1b — do **not** infer it
 in the UI. In particular do not try to derive it from `lane_role`: `lane_role`
-tells you *which side* the lane was on, not what type that side is. Getting this
-wrong silently skips the Person hop in Phase 3b, so merged Person lanes render
-"Not found" while every test stays green.
+tells you *which side* the lane was on, not what type that side is. It is needed
+for two things only: the deep link's `MATCH` label (Decision 9 keeps the
+*properties* lookup label-free) and the Graph link's node label. In history
+scope it is read from ``entity_type``, which **is** the lane's own type there.
 
 **Why `lane_entity_type` is a server field and not a UI inference**: in
 `_action_to_event` (`src/app/api/activity/v1/service.py:184-190`) the line
@@ -890,6 +922,7 @@ and at the end:
                 event,
                 _format_full_datetime(event.get("event_time")),
                 lane_label,
+                scope=scope,
             )
         ),
         "data-timeline-detail": json.dumps(
@@ -1055,28 +1088,40 @@ Cypher, so the query string is constructed **server-side** and shipped as an
 opaque `graph_url` in the card payload. The browser never builds Cypher.
 
 ```python
-def graph_deep_link(lane_wba_id: str, related_wba_id: str | None) -> str:
+def graph_deep_link(
+    lane_wba_id: str, lane_entity_type: str, related_wba_id: str | None
+) -> str:
     """Return the ``/app/graph?cypher=`` URL for this event's entities.
 
     With a ``related_wba_id`` the query loads the two nodes and the
     relationship between them (what the modal shows); without one — history
     scope, where there is no other side — it loads the lane node and its
-    immediate neighbours.  Mirrors the ``?cypher=`` shape
-    ``pages/search.py:273`` uses; the Graph page reads it in
-    ``handle_url_deep_link_tab`` to open the Console tab, pre-fill the query and
-    auto-execute it (``graph/callbacks/right_panel.py:100-105``).
+    immediate neighbours.  The ``?cypher=`` shape is the one
+    ``pages/search.py:349`` and ``:458`` construct; the Graph page reads it in
+    ``handle_url_deep_link_tab`` (``graph/callbacks/right_panel.py:100-105``) to
+    open the Console tab, pre-fill the query and auto-execute it.
 
-    Both endpoints are matched on the nodes' canonical ``id`` property, which is
-    index-backed (``scripts/create_neo4j_indexes.py``), so neither is a scan.
+    **Both MATCHes are label-scoped on purpose.**  The ``id`` index is
+    **per-label** (16 separate ``RANGE`` indexes, created by
+    ``src/app/scripts/create_neo4j_indexes.py``), so an *unlabelled*
+    ``MATCH (a {id: …})`` cannot use any of them — it plans as
+    ``AllNodesScan > Filter``.  The labels are safe to interpolate: both come
+    from parsed WBA ids and both are validated by
+    ``validate_read_only_query``'s callers on the way in.
+
+    The related node's label is read from its own WBA id, so callers pass only
+    the lane's type.
     """
     if related_wba_id:
+        related_type = related_wba_id.split("::", 2)[1]
         cypher = (
-            f"MATCH (a {{id: '{lane_wba_id}'}})-[r]-(b {{id: '{related_wba_id}'}}) "
+            f"MATCH (a:{lane_entity_type} {{id: '{lane_wba_id}'}})"
+            f"-[r]-(b:{related_type} {{id: '{related_wba_id}'}}) "
             "RETURN a, r, b LIMIT 50"
         )
     else:
         cypher = (
-            f"MATCH (a {{id: '{lane_wba_id}'}}) "
+            f"MATCH (a:{lane_entity_type} {{id: '{lane_wba_id}'}}) "
             "OPTIONAL MATCH (a)-[r]-(b) RETURN a, r, b LIMIT 50"
         )
     return f"/app/graph?cypher={quote(cypher)}"
@@ -1085,15 +1130,21 @@ def graph_deep_link(lane_wba_id: str, related_wba_id: str | None) -> str:
 Import `quote` from `urllib.parse` at the top of `helpers.py` (check the
 existing import block first — do not duplicate an existing import).
 
-Call it from `detail_payload` (Phase 4c) as an **always-present** key, so the
-clientside branch needs no conditional:
+Call it from `detail_payload` (Phase 4c), which already does this — see the
+``"graph_url"`` key there. It takes the already-normalised ``lane_type`` and
+``related_wba_id`` locals, so the clientside branch needs no conditional.
+
+**Caution on the label**: ``lane_entity_type`` is empty when the API sent no
+``lane_entity_type`` *and* the scope is activity (an older cached payload). A
+bare ``MATCH (a: {id: …})`` is a Cypher **syntax error**, so guard it — if
+``lane_entity_type`` is falsy, fall back to the unlabelled (scanning) form
+rather than emitting invalid Cypher:
 
 ```python
-    result["graph_url"] = graph_deep_link(lane_wba_id, related_wba_id)
+    lane_label = f":{lane_entity_type}" if lane_entity_type else ""
 ```
 
-where `related_wba_id` is the already-normalised `related` local variable from
-4c (a `str` or `None`).
+and interpolate ``lane_label`` in both branches.
 
 **5d.** `callbacks.py` — extend the **existing** install-once clientside
 callback (line ~972). Two additions inside the `if (!window.__timelinePopupWired)`
@@ -1121,6 +1172,13 @@ block, and one new delegated listener:
                     if (data.graph_url) {
                         window.dash_clientside.set_props('timeline-detail-graph-link', {href: data.graph_url});
                     }
+                    // Decision 17: stamp a fresh nonce so the store's value
+                    // differs on EVERY click. Without it, two clicks on cards
+                    // with equal payloads write an equal value and Dash does not
+                    // re-fire the panels callback — leaving the PREVIOUS event's
+                    // panels under the new event's header.
+                    window.__timelineDetailNonce = (window.__timelineDetailNonce || 0) + 1;
+                    data.nonce = window.__timelineDetailNonce;
                     window.dash_clientside.set_props('timeline-detail-store', {data: data});
                     window.dash_clientside.set_props('timeline-detail-modal', {is_open: true});
                 }
@@ -1153,22 +1211,23 @@ def render_detail_panels(payload: dict[str, Any] | None) -> Any:
 Its body:
 
 1. `if not payload: return no_update`
-2. Build the lookup id for the left panel with
-   `graph_lookup_id(payload["lane_wba_id"], payload["lane_entity_type"])` and
-   use `payload["related_wba_id"]` for the right.
-3. `fetch_node_properties([left, right])`, wrapped in
-   `try/except NodePropertiesError` → return a single empty state
-   (`create_alert("Could not load properties for this event.", color="danger")`
-   is acceptable — but prefer the inline panel empty state below, so the modal
-   body stays uniform).
-4. Render:
-   - **history** (`related_wba_id is None`): one panel, full width, using
-     `render_visible_properties` on the left node; if the node is missing, the
-     "Not found in graph" state.
+2. Take the two lookup ids **straight from the payload** — both ARE the nodes'
+   canonical ids (Decision 9), so there is no translation step:
+   `left = payload["lane_wba_id"]`, `right = payload.get("related_wba_id")`.
+   Build the list of ids actually to fetch: `ids = [left] if not right else [left, right]`.
+3. `nodes = fetch_node_properties(ids)`, wrapped in
+   `try/except NodePropertiesError` → return `_detail_error(...)` (see below).
+   **Do not use `create_alert`** for this: an alert belongs in the page's
+   feedback slot, and the modal body is its own section — the inline state keeps
+   the body uniform.
+4. Render, **through `_detail_panel`** (see below, and Decisions 12 and 16):
+   - **history** (`right` is `None`): one panel using
+     `_detail_panel(render_visible_properties(nodes[left]))` when
+     `left in nodes`, else `_detail_panel(_not_found(left))`.
    - **activity**: a `html.Div(className="timeline-detail-grid")` containing
-     `left_panel`, `connector`, `right_panel`, where each panel is
-     `render_visible_properties(node_data)` or `_not_found(wba_id)`, and the
-     connector is
+     `_detail_panel(render_visible_properties(nodes[left]))` (or
+     `_detail_panel(_not_found(left))`), then the connector, then the same for
+     `right`. The connector is
      `html.Div([html.I(className="fas fa-link", title=relationship)], className="timeline-detail-connector")`.
      **The connector is non-directional** (Decision 7) and its `title` carries
      the relationship for hover parity.
@@ -1177,10 +1236,52 @@ Its body:
      not render, `fas fa-share-nodes` (used at `analytics/registry.py:32`) is a
      proven-in-repo fallback. Confirm the icon is visible in the Phase 5 manual
      pass — a silently blank glyph is easy to miss.
-
 5. **Only the panel body is replaced** — never `is_open`. The clientside branch
    owns `is_open`, so it must never be a server `Output` (two owners would fight
-   on every remount).
+   on every remount). `timeline-detail-store` is the **only** `Input`.
+
+Two small helpers sit beside the callback. `_detail_panel` is the one that makes
+Decisions 12 and 16 real — every panel goes through it, so the class and the
+caption cannot be forgotten:
+
+```python
+def _detail_panel(body: Any) -> html.Div:
+    """One side of the modal.
+
+    ``.timeline-detail-panel`` is the flex child: ``flex: 1 1 0`` +
+    ``min-width: 0`` (5g) is what makes the two tables share the width and wrap
+    long WBA ids instead of pushing each other apart.  The caption is Decision
+    12 — these are the entities' CURRENT properties, not an as-of-event snapshot.
+    """
+    return html.Div(
+        [
+            html.Div("Current state", className="timeline-detail-caption"),
+            body,
+        ],
+        className="timeline-detail-panel",
+    )
+
+
+def _detail_error(message: str) -> html.Div:
+    """Modal-body error state.  NOT ``create_alert`` — see step 3 above."""
+    return html.Div(
+        [html.Div(message, className="timeline-detail-missing-title")],
+        className="timeline-detail-missing",
+    )
+```
+
+The `except` branch distinguishes the two causes the API can actually report:
+
+```python
+    except NodePropertiesError as exc:
+        # With Neo4j disabled the graph API answers 500, so a plain "failed"
+        # would be a dead end for a normal, supported configuration.
+        if "500" in str(exc):
+            return _detail_error(
+                "Neo4j is not available — graph properties are disabled."
+            )
+        return _detail_error("Could not load properties for this event.")
+```
 
 `_not_found(wba_id)` returns the muted block:
 
@@ -1239,6 +1340,13 @@ def _not_found(wba_id: str) -> html.Div:
     font-size: 12px;
 }
 
+.timeline-detail-missing-title {
+    /* Used by both _not_found and _detail_error.  The parent's italic already
+       carries the tone; this is a no-op unless the title needs its own weight. */
+    font-style: normal;
+    font-weight: var(--font-weight-medium);
+}
+
 .timeline-detail-missing-id {
     margin-top: 4px;
     font-family: 'Inter', sans-serif;
@@ -1282,10 +1390,15 @@ mypy src/ && pylint src --score=y
 `docker compose up -d --force-recreate app`, open `/app/timeline`:
 - Click a card → the xl modal opens **immediately** with the sentence in the
   header, then the panels fill.
+- **Click a second, different card** (and the *same* card twice) — the header
+  **and** the panels must match that card both times. A stale panel under a new
+  header means the store's nonce is not being stamped (Decision 17).
 - The header's Graph link opens `/app/graph` **in a new tab** with the subgraph.
 - Both panels show properties in the shared `.details-prop-row` style; long WBA
   ids wrap rather than overflow; the copy icons and the connector glyph render
   (a missing icon is an empty box, not an error).
+- Each panel shows the **"Current state"** caption above its table, and the two
+  tables sit side by side at equal width (`.timeline-detail-panel`).
 - Because mock lane ids match no real node (Decision 15), both panels show
   "Not found in graph" — and the console shows **zero** Neo4j calls beyond the
   one `/graph/execute`.
@@ -1313,16 +1426,29 @@ not mark the phase failed, and do not improvise a substitute.
    holding the lane's own type. Pass it through; do not re-derive it.
 
 **6a.** Change the six `_SUGGESTION_CATALOGUE` ids (line 455-464) from
-`mock::<Type>::<id>` to `wba::other::<Type>::<id>` — e.g.
-`("wba::other::Person::alice", "Alice Johnson", "Person", "github", ...)`.
+`mock::<Type>::<id>` to **`mockdemo::<Type>::<id>`** — e.g.
+`("mockdemo::Person::alice", "Alice Johnson", "Person", "github", ...)`.
 
 - `api/activity/v1/service.py`'s `parse_wba_id` accepts any `a::b::c` triple, so
   no validation change is needed.
-- `wba::other::` is a **reserved namespace that matches no real node id**, so
+- `mockdemo::` is a source no real signal uses, and no node id starts with it, so
   mock cards deterministically exercise the per-panel "Not found in graph" state
   with **zero** Neo4j traffic. That is the point: mock mode stays fully offline.
-- The label/avatar logic in `_lane_identity` keys off the **parsed** entity type,
-  not the source, so `Person` lanes keep their avatars.
+- **The three-part shape is load-bearing — do not use
+  `wba::other::<Type>::<id>`.**  `_lane_identity` (`mock_data.py:172`) reads
+  `entity_type = parts[1]`, and so do `helpers.entity_type_label` /
+  `entity_type_token` / `entity_type_icon`; the segment is the *type*, and the
+  leading segment is the *source*.  With a 4-part `wba::other::Person::alice`
+  the parsed type is `"other"`, so **every** mock lane renders a generic cube
+  icon, the type tag reads "other", all avatars disappear (the
+  `entity_type == "Person"` branch at `mock_data.py:175` never fires), labels
+  read `"Person::Alice"`, and the card's per-entity colour collapses to
+  `graph.node.default`.  Verified by running it:
+
+  ```
+  mockdemo::Person::alice    -> ('Person', 'Alice', 'https://avatars…/u/735?v=4')
+  wba::other::Person::alice  -> ('other', 'Person::Alice', None)
+  ```
 
 **6b.** Update the tests that hardcode the old ids. **Four** test files contain
 the literal `mock::` (verified):
@@ -1355,7 +1481,7 @@ fields:
             details = {}
             related_id = f"mock-other-{lane_index}-{index}"
             related_name = f"Mock {spec.other_type} {index}"
-            related_wba_id = f"wba::other::{spec.other_type}::{related_id}"
+            related_wba_id = f"mockdemo::{spec.other_type}::{related_id}"
             lane_role = "actor"
 ```
 
@@ -1371,7 +1497,7 @@ sets `lane_entity_type=lane_entity_type`.
 **Verify**
 ```
 pytest -m unit tests -q
-grep -rn "mock::" tests/ src/     # → only the new "wba::other::" ids, no bare "mock::"
+grep -rn "mock::" tests/ src/     # → no matches (ids are now "mockdemo::")
 ```
 Then confirm mock output carries the fields and the id is the reserved form:
 ```
@@ -1379,14 +1505,14 @@ TIMELINE_MOCK_SCENARIO=even PYTHONPATH=src python -c "
 from app.api.activity.v1 import mock_data
 from app.api.activity.v1.model import TimelineRequest
 r = mock_data.build_timeline(
-    TimelineRequest(wba_ids=['wba::other::Person::alice']), 'even'
+    TimelineRequest(wba_ids=['mockdemo::Person::alice']), 'even'
 )
 e = r.lanes[0].events[0]
 print(r.lanes[0].wba_id, e.related_wba_id, e.related_name, e.lane_role,
       e.lane_entity_type)
 "
 ```
-Expect a lane id starting `wba::other::`, and a non-None
+Expect a lane id starting `mockdemo::`, and a non-None
 `related_wba_id` / `related_name` / `lane_role` / `lane_entity_type`.
 
 ### Phase 7 — Tests and documentation
@@ -1397,22 +1523,45 @@ the fake to return `(action, related_name, related_wba_id)` and add assertions:
 `related_wba_id` is the **other** side's canonical id in **both** directions,
 and is `None` for history.
 
-**7b.** `tests/test_activity_person_identity.py` — the three `_action_to_event`
-call sites (keyword style) need the third positional argument (`None` is fine;
-those tests assert only on `event.entity_type`). The two compiled-SQL counts
-(`TestActionsPredicate`) may shift by the new `concat` column — re-measure with
-the file's own `where = sql.split("FROMactivity_actionsWHERE", 1)[-1]` pattern
-and update the numbers. **Do not delete or `xfail` them** — the
-disjunct-per-identity property is the fix from `90c9674`.
+**7b.** `tests/test_activity_person_identity.py` (**this file is in Scope — see
+the In-scope table**) — the three `_action_to_event` call sites (keyword style)
+need the third positional argument (`None` is fine; those tests assert only on
+`event.entity_type`). The two compiled-SQL counts (`TestActionsPredicate`) may
+shift by the new `concat` column — re-measure with the file's own
+`where = sql.split("FROMactivity_actionsWHERE", 1)[-1]` pattern and update the
+numbers. **Do not delete or `xfail` them** — the disjunct-per-identity property
+is the fix from `90c9674`.
 
 **7c.** `tests/test_activity_timeline_detail_modal.py` (**create**) —
 `pytestmark = pytest.mark.unit`. Cover, with no network and no Neo4j:
 
 - **The Cypher is a single statement and indexed**: assert
   `_NODE_PROPERTIES_CYPHER` contains `IN $ids` and does not contain `UNION`.
-- **`graph_lookup_id`**: a Person id hops to `::IdentityMapping::`; a
-  non-Person id is returned unchanged; a Person id already containing
-  `::IdentityMapping::` is not double-rewritten.
+- **No hop, no label, no re-keying**: `_NODE_PROPERTIES_CYPHER` contains
+  `IN $ids`, does **not** contain `UNION`, and does **not** contain `MAPS_TO` or
+  `IdentityMapping` (the hop is deliberately gone — Decision 9).
+- **`fetch_node_properties` keys by the id requested** (the Finding-1 regression
+  pin): stub the HTTP layer so the response's node carries a `wba_id` equal to
+  the id asked for, and assert the result is keyed by that id; then assert that
+  asking for **two** ids returns both rows. A service that hopped would fail the
+  first assertion, because the returned `wba_id` would differ.
+- **`_detail_panel`** (Decision 16): the returned `html.Div` has
+  `className == "timeline-detail-panel"` and its first child carries
+  `className == "timeline-detail-caption"` with the "Current state" text.
+- **`_detail_error` copy**: a `NodePropertiesError("HTTP 500")` path
+  yields the "Neo4j is not available" sentence and a different error yields the
+  generic one.
+- **`detail_payload` nonce** (Decision 17): two payloads built from *identical*
+  events compare **unequal** once the nonce is bumped, so the store cannot be
+  written an equal value twice.
+- **`graph_deep_link` is label-scoped** (the `id` index is per-label): for a related pair the
+  Cypher contains `MATCH (a:PullRequest {id: '…'})` and `(b:Issue {id: '…'})`;
+  for history it contains only the lane id; `unquote`ing the query round-trips;
+  and a falsy `lane_entity_type` produces **no** bare `(a: {id:` (which would be
+  a syntax error).
+- **Mock lane identity keeps its type**: `mock_data._lane_identity("mockdemo::Person::alice", "even", 0)`
+  returns `entity_type == "Person"` and a non-`None` avatar — i.e. the type is
+  read from the middle segment, not a synthetic source.
 - **`render_properties_table` parity**: the same `(key, value)` list rendered
   through `render_properties_table` and through `build_element_properties_content`
   produces the same `details-prop-row` rows (parse both `str(...)` outputs and
@@ -1424,7 +1573,10 @@ disjunct-per-identity property is the fix from `90c9674`.
 - **`detail_payload`**: activity carries a non-None `related_wba_id`; history
   carries `None`; the payload is JSON-serializable (`json.dumps` must not raise).
 - **`detail_sentence`**: subject + humanized relationship + object; falls back to
-  the entity type when there is no relationship; never returns `""`.
+  the entity type when there is no relationship; never returns `""`; and in
+  **history** scope (`scope="history"`, `summary == lane_label`, no
+  `related_*`) returns `<lane> Updated` with the lane's name appearing exactly
+  **once** (the lane's name must not be repeated).
 
 **7d.** `tests/test_activity_timeline_ui_helpers.py` — update
 `test_popup_fields_from_event` (line 366): the headline is now the sentence, and
@@ -1432,9 +1584,15 @@ disjunct-per-identity property is the fix from `90c9674`.
 preference to the raw `summary` — the whole point of Decision 14.
 
 **7e.** `docs/design/activity-timeline-design.md`:
-- §5.1 `TimelineEvent` shape — add `related_wba_id` **and** `lane_entity_type`,
-  stating why the latter exists (`entity_type` is the other side's type, and the
-  Person→IdentityMapping hop needs the lane's own).
+- §5.1 `TimelineEvent` shape — add `related_wba_id` **and** `lane_entity_type`.
+  State why the latter exists: `entity_type` is the *other* side's type, and the
+  lane's own type is needed for the modal's Graph deep-link label. (It is **not**
+  for an `IdentityMapping` hop — Decision 9 dropped that, see below.)
+- §5.1/§7.4 — record that the modal looks a lane up by its **own canonical id**,
+  with no `IdentityMapping` translation and no label: a lane only ever comes from
+  the ES-backed typeahead, whose Person documents are keyed by the canonical
+  Neo4j id. This is why the properties fetch can be one call keyed by the id
+  requested.
 - §5.3 — note that the sibling's canonical id is now carried on the event.
 - §7.4 Cards & interaction — replace the two-line card bullet's **interaction**
   half: the card is no longer a link; clicking opens the event detail modal. Add
@@ -1442,7 +1600,8 @@ preference to the raw `summary` — the whole point of Decision 14.
   a new tab, the two shared-renderer panels, the neutral connector, current-state
   semantics, the history single-panel case, and the per-panel not-found state).
   State explicitly that the modal's tables are rendered by the **same** function
-  as the Graph right panel.
+  as the Graph right panel, that each panel carries a "Current state" caption,
+  and that a re-click re-renders the panels (the click stamps a nonce).
 - §11 Source map — add `tests/test_activity_timeline_detail_modal.py`.
 
 **Verify**
@@ -1461,7 +1620,7 @@ slipped in that this plan did not intend.
 
 | File | New/updated | Cases |
 |---|---|---|
-| `tests/test_activity_timeline_detail_modal.py` | **create** | Cypher shape; `graph_lookup_id`; table-renderer parity; visible-property filtering; `detail_payload` for activity + history; `detail_sentence` |
+| `tests/test_activity_timeline_detail_modal.py` | **create** | Cypher shape (no hop/label); fetch keying; `_detail_panel`; error copy; nonce; label-scoped deep link; table-renderer parity; visible-property filtering; `detail_payload` for activity + history; `detail_sentence` incl. the history single-name case |
 | `tests/test_activity_timeline_ui_helpers.py` | update | `popup_fields` headline is the sentence + `hint`; `related_name` beats `summary` |
 | `tests/test_activity_api_integration.py` | update | fake returns 3-tuples; `related_wba_id` correct in both directions; `None` for history |
 | `tests/test_activity_person_identity.py` | update | 3 call sites take the new positional; re-measured SQL counts |
@@ -1506,6 +1665,19 @@ Machine-checkable. ALL must hold:
       `_popup_headline` is no longer imported or called by `layout.py`.
 - [ ] `grep -rn "build_detail_placeholder" src/` returns **no matches** (no
       such helper was invented).
+- [ ] `grep -rn "graph_lookup_id\|wba::other::" src/ tests/ plans/044-*` returns
+      **no matches** outside this plan's own explanation of why the hop was
+      dropped — the helper is not written and the reserved-source convention is
+      `mockdemo::`.
+- [ ] The modal's panels carry their class: every panel rendered by
+      `render_detail_panels` goes through `_detail_panel`, so
+      `grep -c 'className="timeline-detail-panel"\|className=_PANEL_CLASS'`
+      in `callbacks.py` and the `_detail_panel` body both show it — and
+      `.timeline-detail-caption` is emitted (Decision 16). Pinned by a 7c test.
+- [ ] `timeline-detail-store`'s value differs on every click (Decision 17): the
+      clientside branch stamps a nonce, pinned by a 7c test.
+- [ ] `graph_deep_link` emits a **label-scoped** `MATCH` for both forms, and
+      never a bare `(a: {id:` when the type is empty.
 - [ ] The card is keyboard-reachable: `build_event_card` returns an `html.Div`
       with `role == "button"` and `tabIndex == 0`, and carries both
       `data-timeline-event` and `data-timeline-detail`. Pin this in
@@ -1533,6 +1705,11 @@ Stop and report back — do not improvise — if:
   `related_id` / `related_name`, or `helpers.card_primary` does not exist, or
   `activity_actions` has no `target_source` column. This plan cannot be executed
   without it.
+- **A Person lane's WBA id turns out not to be its Neo4j node id.** Decision 9
+  rests on this, and the whole fetch/keying design follows from it. Test it
+  early: `MATCH (p:Person {id: $lane_id})` for a real lane must return one row.
+  If it does not, STOP and report — the hop (and its keying complication) has to
+  come back, and this plan needs re-planning rather than a local patch.
 - **`_action_to_event`'s `lane_entity_type` parameter turns out to mean
   something other than the lane's own entity type.** Phase 1c passes it straight
   through as the new `lane_entity_type` field. Before doing so, read
@@ -1544,6 +1721,9 @@ Stop and report back — do not improvise — if:
   it; if it still fails, stop. **Never** fall back to `.scalars()` — it silently
   drops `related_name` and `related_wba_id`, and because both are optional
   nothing raises.
+- **`_detail_panel`'s class is not what 5g defines**, or a panel is emitted
+  without it. The two are a matched pair (Decision 16) — if the class name
+  changes, change it in **both** the helper and the CSS in the same edit.
 - **`render_properties_table`'s body has to change** to make the modal work, or
   `build_element_properties_content`'s rendered output changes in Phase 2. That
   phase is a pure rename + wrapper for the Graph page; **any** visual change
@@ -1551,9 +1731,11 @@ Stop and report back — do not improvise — if:
   modal's columns need different value formatting, that is its own problem to
   solve in `render_visible_properties` (which may post-process the `(key, value)`
   list before delegating) — not by editing the shared table.
-- **The properties query returns more rows than nodes requested**, or a Person
-  lookup returns an IdentityMapping node instead of the Person. The
-  `coalesce`/`DISTINCT` shape is load-bearing.
+- **The properties query returns a node whose `wba_id` differs from the id you
+  requested.** Decision 9 says they are the same id; if they are not, the
+  request was hopped or label-scoped and the panel keying will miss. Do not
+  "fix" this by re-keying — report it, because it means a lane id is not a node
+  id and Decision 9's premise is wrong.
 - **`is_open` ends up with two owners** (a server callback and the clientside
   branch both writing it). The clientside branch owns it; the server owns only
   `timeline-detail-panels.children`.
@@ -1590,16 +1772,25 @@ Stop and report back — do not improvise — if:
   (per-panel header, Expand Node button). The modal deliberately does not use it.
   If a future surface wants the graph panel's chrome **and** the modal's chromeless
   body, that is the moment to reconsider, not before.
-- `_NODE_PROPERTIES_CYPHER` mirrors `api/activity/v1/identity.py`'s Person hop in
-  a second place. If the Person↔IdentityMapping model changes (e.g. MAPS_TO stops
-  being undirected), both must change together — see
-  `docs/design/RELATIONSHIPS_DESIGN.md`.
+- `_NODE_PROPERTIES_CYPHER` is **hop-free by design** (Decision 9) and shares no
+  logic with `api/activity/v1/identity.py`'s `MAPS_TO` lookup. If a future change
+  makes a lane id differ from its node id (e.g. lanes start coming from somewhere
+  other than the ES-backed typeahead), the hop has to come back — and with it the
+  result-keying problem the hop creates. Re-read Decision 9 before changing how
+  lanes are minted.
 - Adding a new entity type whose canonical id is not
-  `{source}::{entity_type}::{id}` breaks both `related_wba_id` and
-  `graph_lookup_id`.
+  `{source}::{entity_type}::{id}` breaks `related_wba_id`, `graph_deep_link`'s
+  label derivation (`related_wba_id.split("::", 2)[1]`) and the mock
+  `mockdemo::<Type>::<id>` convention, all at once.
 - The `is_open` / `timeline-detail-store` split is the modal's contract: the
-  clientside branch never fetches, and the server never opens. Preserve it or
-  the modal either blocks on the round trip or fights itself on remount.
+  clientside branch never fetches, and the server never opens. `is_open` has one
+  owner (clientside) and `panels.children` has one owner (server); the store is
+  the only thing crossing between them, and it must change value every click
+  (Decision 17). Preserve all three or the modal either blocks on the round trip,
+  fights itself on remount, or shows a stale event's panels.
+- `.timeline-detail-panel` and `_detail_panel` are a matched pair. The class is
+  what applies `flex: 1 1 0` + `min-width: 0`; without it long WBA ids push the
+  two tables apart instead of wrapping. Rename one, rename both.
 
 **What a reviewer should scrutinize**
 
@@ -1612,8 +1803,14 @@ Stop and report back — do not improvise — if:
 - That the connector has **no** direction arrow.
 - That no file under `src/connectors/` and no `src/common/activity_signal/` file
   was touched.
-- That the properties fetch is exactly **one** HTTP call per click (check the
-  browser network tab in the manual pass).
+- That the properties fetch is exactly **one** HTTP call per click — one
+  `POST /api/v1/graph/execute` carrying both ids (Decision 3; check the browser
+  network tab in the manual pass).
+- That no `IdentityMapping` hop crept back in: the ids sent to Neo4j are the
+  lane id and the sibling's WBA id, unchanged (Decision 9).
+- That both panels carry `.timeline-detail-panel` and the "Current state"
+  caption, and that a second click on a *different* card re-renders the panels
+  (Decisions 12, 16, 17).
 
 **Deliberately deferred (out of scope)**
 

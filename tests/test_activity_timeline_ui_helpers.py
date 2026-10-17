@@ -25,7 +25,8 @@ from app.dash_app.pages.timeline.helpers import (
     build_grid,
     bucket_by_period,
     cap_cell,
-    card_summary,
+    card_primary,
+    card_secondary,
     cell_expansion_key,
     entity_type_color,
     entity_type_label,
@@ -313,21 +314,29 @@ def test_humanize_relationship() -> None:
     assert humanize_relationship("") == ""
 
 
-def test_card_summary_fallback() -> None:
-    """A null summary falls back to relationship + entity type."""
-    assert card_summary({"summary": "Did a thing"}) == "Did a thing"
+def test_card_primary() -> None:
+    """Line 1 is the humanized relationship, else the entity-type label."""
+    assert card_primary({"relationship_type": "CREATED"}) == "Created"
+    # Guards history's line 2 without a STATE_CHANGE special case.
+    assert card_primary({"relationship_type": "STATE_CHANGE"}) == "Updated"
+    assert card_primary({}) == ""
+    assert card_primary({"entity_type": "PullRequest"}) == "PR"
+
+
+def test_card_secondary() -> None:
+    """Line 2's name follows related_name → related_id → summary → ""."""
+    assert card_secondary({"related_name": "Title of an Epic"}) == "Title of an Epic"
+    assert card_secondary({"related_id": "UI-2"}) == "UI-2"
+    assert card_secondary({"summary": "Did a thing"}) == "Did a thing"
+    # Priority ordering: the resolved name beats id and summary.
     assert (
-        card_summary(
-            {"summary": None, "relationship_type": "CREATED", "entity_type": "PullRequest"}
+        card_secondary(
+            {"related_name": "Resolved", "related_id": "raw-id", "summary": "Did a thing"}
         )
-        == "Created · PR"
+        == "Resolved"
     )
-    assert (
-        card_summary(
-            {"summary": "  ", "relationship_type": "STATE_CHANGE", "entity_type": "Page"}
-        )
-        == "Updated · Page"
-    )
+    assert card_secondary({}) == ""
+    assert card_secondary({"related_name": "  "}) == ""
 
 
 def test_entity_type_token_mapping() -> None:
@@ -370,6 +379,8 @@ def test_popup_fields_from_event() -> None:
     assert with_url["relationship"] == "Reviewed"
     assert with_url["entity_type"] == "PR"
     assert with_url["datetime"] == "Mar 15, 2026 2:30 PM"
+    # Headline is unchanged by the card restructure (hover is out of scope).
+    assert with_url["summary"] == "Reviewed PR"
 
     without_url = popup_fields(
         {"summary": None, "relationship_type": "CREATED", "entity_type": "File"},

@@ -140,6 +140,7 @@ One row per relationship observed in a signal. Backs `scope=activity`.
 | `actor_entity_type` / `actor_entity_id` | `VARCHAR` | Who initiated the relationship. |
 | `relationship_type` | `VARCHAR(32)` | `CREATED`, `REVIEWED`, `COMMENTED_ON`, … |
 | `target_entity_type` / `target_entity_id` | `VARCHAR` | What the action targeted. |
+| `target_source` | `VARCHAR(32)` | The target's own origin system (`RelationshipTarget.source`), which can differ from the signal's `source` (e.g. a github Issue `REFERENCES` a jira Issue). Nullable; `NULL` on rows written before the column existed. |
 | `summary` | `VARCHAR(512)` | Denormalized context (e.g. PR title) for fast reads. |
 | `url` | `VARCHAR(1024)` | Link to the target in the source system. |
 
@@ -200,9 +201,16 @@ For each signal:
 
 1. Compute `content_hash = SHA-256(json(attributes) + json(relationships))` with
    `sort_keys=True` — stable regardless of dict insertion order.
-2. Compute `display_name`: first non-empty of `attributes.name` / `title` /
-   `summary` / `key`, else the raw entity `id`. Mirrors
-   `GraphNode.display_name()`.
+2. Compute `display_name` from the first non-empty of the entity's `name` /
+   `title` / `summary` / `key` / `full_name` / `message` attributes, else the
+   raw entity `id`. The last two exist because `CommitAttributes` stores its
+   name in `message` and `PersonAttributes` in `full_name`, and neither defines
+   any of the first four — without them a commit's name is its 40-character SHA
+   and a person's is their provider account id. The result is clamped to 512
+   characters (the column width) because a producer may emit a commit message up
+   to 2000 characters; an over-long value would make the INSERT fail and drop
+   the whole signal. This deliberately diverges from `GraphNode.display_name()`,
+   which still uses only the first four fields (see §10).
 3. Compute `avatar_url`: `attributes.avatar_url` when `entity_type == "Person"`,
    else `NULL`.
 4. `INSERT … ON CONFLICT (source, entity_type, entity_id, event_time,
@@ -254,6 +262,9 @@ class TimelineEvent:
     source: str               # github | jira | confluence
     url: str | None           # source-system link
     details: dict             # {} for scope=activity; attribute snapshot for history
+    lane_role: str | None     # "actor" | "target"; None for scope=history
+    related_id: str | None    # the *other* side's entity id, when known
+    related_name: str | None  # resolved display name of the *other* side (see §5.3)
 
 class TimelineLane:
     wba_id: str
@@ -283,9 +294,14 @@ Response: `{"results": [{wba_id, label, entity_type, source, avatar_url}]}`.
 
 These are deliberate properties of v1, not bugs:
 
-1. **Activity events carry no related-entity id.** `TimelineEvent` exposes the
-   *other* side's `entity_type` but not its id; `details` is `{}` for
-   `scope=activity`. Cards therefore show `summary`, not "PR #142".
+1. **Activity events name the related entity.** `TimelineEvent` carries the
+   *other* side's `entity_type`, its `related_id`, and a resolved `related_name`
+   read from `activity_events.display_name` (plus `lane_role`, saying whether the
+   lane entity was the actor or the target). `details` stays `{}` for
+   `scope=activity`. The resolved name is only as good as the stored
+   `display_name`: rows written before the six-field rule was extended (see §4.2)
+   still hold a raw id for commits and people, so a card may fall back to
+   `related_id` and then to `summary`.
 2. **No per-lane event count.** `TimelineLane` has no `total_count`.
 3. **The cursor is per-lane, not global.** A request accepts one `cursor`
    applied to *all* lanes, while each lane returns its own `next_cursor`. Because
@@ -462,9 +478,19 @@ Analytics sub-page.
 
 ### 7.4 Cards & interaction
 
-- **Two lines:** line 1 = `summary` (ellipsised; fallback = humanized relationship
-  + entity type); line 2 = `<EntityType (colored)> · <relationship> · <time>`,
-  with a left accent border in the lane color.
+- **Two lines, relationship-first.** The card is a fragment — the **sticky lane
+  header** is the sentence's subject, so the subject is elided and the card
+  reads as *has a <relation> relationship to <object>*:
+  - `scope=activity`: line 1 = the humanized relationship (the scan axis when
+    many cards stack; `humanize_relationship` output, verbatim and neutral — no
+    inverse map, no `_BY` special-casing); line 2 =
+    `<EntityType (colored)> · <other side's name>` + right-aligned time.
+  - `scope=history`: inverted — line 1 = `<EntityType (colored)> · <lane name>`
+    (the lane entity *is* the subject here); line 2 = `Updated` + time.
+  - Line 2's name resolves `related_name → related_id → summary` (see §5.3), so
+    it degrades to a readable key when the other side has no timeline row yet.
+    A left accent border in the lane color and the per-entity type color are
+    both retained.
 - **Cell overflow:** at most **3** cards per cell, then a "+N more ▾" link that
   reveals *already-loaded* events only (never fetches).
 - **Hover/focus popup:** a single portal rendered **outside** the scrolling grid
@@ -610,10 +636,20 @@ curl "http://localhost:8000/api/v1/activity/suggest?q=none&mock=suggest_variants
 - Outbound "View Timeline" buttons from Search, Graph, and Collaboration Network.
 - Entity-specific Graph deep-link from a card click (currently plain `/app/graph`).
 - Per-lane event totals in lane headers (needs a backend COUNT query).
-- The related-entity id on activity cards (needs an additive API field).
+- The hover popup's headline/field design — the card format moved on (see §7.4)
+  while the popup's payload stayed byte-identical; consolidating the popup's
+  headline helper with the card helpers is its own follow-up.
 - A single multi-lane request with real per-lane cursors (backend change).
 - Touch/mobile-optimised interactions.
-- Timeline backfill / replay.
+- Timeline backfill / replay (including backfilling `display_name` and
+  `target_source` for rows written before §4.2 / §3.2 changed).
+
+**Known defect — `GraphNode.display_name()` (`src/connectors/neo4j_db/node_base.py`).**
+It still uses only the four-field rule (`name` / `title` / `summary` / `key`), so
+it shares the commit gap this design fixed in §4.2: on the **Graph** page a
+`Commit` (whose name lives in `message`) renders as its 40-character SHA. Same
+defect, different feature surface (its own callers, tests and Cypher
+properties) — worth its own plan, not folded in here.
 
 ---
 
@@ -630,4 +666,4 @@ curl "http://localhost:8000/api/v1/activity/suggest?q=none&mock=suggest_variants
 | Page CSS | `src/app/dash_app/assets/executive-dashboard.css` (`.timeline-*`) |
 | Lane tokens | `src/app/dash_app/styles.py` (`timeline.lane.1`–`.5`) |
 | Route + sidebar | `src/app/dash_app/layout.py` |
-| Tests | `tests/test_activity_api_unit.py`, `tests/test_activity_api_integration.py`, `tests/test_activity_timeline_ui_helpers.py`, `tests/test_activity_timeline_mock.py`, `tests/test_activity_timeline_edge_cases.py` |
+| Tests | `tests/test_activity_api_unit.py`, `tests/test_activity_api_integration.py`, `tests/test_activity_person_identity.py`, `tests/test_activity_timeline_ui_helpers.py`, `tests/test_activity_timeline_mock.py`, `tests/test_activity_timeline_edge_cases.py`, `tests/test_activity_writer_display_name.py` |

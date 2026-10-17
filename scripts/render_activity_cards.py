@@ -17,11 +17,11 @@ where the *object* is the other side of the relationship — the target when the
 lane entity is the actor, the actor when the lane entity is the target.
 
 Line 1/line 2 text is produced by the application's own helpers
-(``humanize_relationship``, ``entity_type_label``) with the app timezone, so the
-ASCII cannot drift from the real card.  The object's name is resolved the same
-way plan 043 resolves it — from ``activity_events.display_name``, newest row for
-the other side's ``(source, entity_type, entity_id)`` — then falls back to
-``related_id``, then to ``activity_actions.summary``.
+(``card_primary``, ``card_secondary``, ``entity_type_label``) with the app
+timezone, so the ASCII cannot drift from the real card.  The object's name is
+resolved the same way the app resolves it — from ``activity_events.display_name``,
+newest row for the other side's ``(source, entity_type, entity_id)`` — then falls
+back to ``related_id``, then to ``activity_actions.summary``.
 
 The script is strictly **read-only**: it issues SELECTs and writes nothing but
 its own stdout.  ``--json PATH`` is the only file it can write, and only on
@@ -63,13 +63,16 @@ from psycopg2.extras import RealDictCursor  # noqa: E402
 from app.common.timezone import get_app_timezone  # noqa: E402
 from app.dash_app.pages.timeline import layout as _timeline_layout  # noqa: E402
 from app.dash_app.pages.timeline.helpers import (  # noqa: E402
+    card_primary as _card_primary,
+)
+from app.dash_app.pages.timeline.helpers import (  # noqa: E402
+    card_secondary as _card_secondary,
+)
+from app.dash_app.pages.timeline.helpers import (  # noqa: E402
     entity_type_label,
-    humanize_relationship,
 )
 
 # Borrowed from the real renderer so the preview cannot drift from the card.
-# NOTE: plan 043 (Phase 4) owns the card helpers; when it lands,
-# repoint this at the helper that owns the format.
 _EVENT_TIME_FORMAT = _timeline_layout._EVENT_TIME_FORMAT
 
 # ---------------------------------------------------------------------------
@@ -305,24 +308,39 @@ def _format_event_time(raw: datetime | None) -> str:
     return raw.astimezone(get_app_timezone()).strftime(_EVENT_TIME_FORMAT)
 
 
-def card_primary(relationship_type: str, other_type: str) -> str:
-    """Line 1 (plan 043 ``card_primary``): the relationship, else the type."""
-    relationship = humanize_relationship(relationship_type or "")
-    if relationship:
-        return relationship
-    return entity_type_label(other_type or "")
+def _as_card_event(row: dict[str, Any]) -> dict[str, Any]:
+    """Normalise a query row into the event dict the card helpers expect.
+
+    The row names the other side ``other_id``; the helpers (plan 043) call it
+    ``related_id``.  ``entity_type`` is the *other* side's type, as it is on the
+    real ``TimelineEvent``.
+    """
+    return {
+        "relationship_type": row.get("relationship_type"),
+        "entity_type": row.get("other_type"),
+        "related_name": row.get("related_name"),
+        "related_id": row.get("other_id"),
+        "summary": row.get("summary"),
+    }
+
+
+def card_primary(row: dict[str, Any]) -> str:
+    """Line 1 — the app helper that owns the format (no private reimplementation)."""
+    return _card_primary(_as_card_event(row))
 
 
 def card_secondary_object(row: dict[str, Any]) -> tuple[str, bool]:
     """Line 2's name, and whether it came from a resolved display_name.
 
-    Priority mirrors plan 043: ``related_name`` → ``related_id`` → ``summary``.
+    The name comes from the app helper that owns the format; the ``resolved``
+    flag is derived here for the preview's raw-id reporting only.
     """
-    for key in ("related_name", "other_id", "summary"):
-        value = row.get(key)
-        if isinstance(value, str) and value.strip():
-            return value.strip(), key == "related_name"
-    return "", False
+    event = _as_card_event(row)
+    name = _card_secondary(event)
+    resolved = bool(
+        isinstance(event.get("related_name"), str) and event["related_name"].strip()
+    )
+    return name, resolved
 
 
 # Two id shapes that are technically a display_name but unreadable on a card:
@@ -354,7 +372,7 @@ def render_card(row: dict[str, Any]) -> dict[str, Any]:
     other_type = str(row.get("other_type") or "")
     type_label = entity_type_label(other_type)
 
-    primary = card_primary(str(row.get("relationship_type") or ""), other_type)
+    primary = card_primary(row)
     name, resolved = card_secondary_object(row)
     secondary = f"{type_label} · {name}" if name else type_label
     time_text = _format_event_time(row.get("event_time"))

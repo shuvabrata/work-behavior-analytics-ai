@@ -68,17 +68,31 @@ def _compute_content_hash(signal: ActivitySignal) -> str:
     ).hexdigest()
 
 
-def _compute_display_name(signal: ActivitySignal) -> str:
-    """Mirrors GraphNode.display_name() from node_base.py.
+# ``activity_events.display_name`` is VARCHAR(512). A blank is not an option:
+# the writer's INSERT would fail and the whole signal would be dropped.
+_DISPLAY_NAME_MAX = 512
 
-    Tries ``name``, ``title``, ``summary``, ``key`` in order and falls back
-    to the raw entity ``id``.
+
+def _compute_display_name(signal: ActivitySignal) -> str:
+    """Return the human-readable name for a signal's entity.
+
+    Covers the two entity types whose name field the graph-side rule misses:
+    ``CommitAttributes.message`` and ``PersonAttributes.full_name``.  Without
+    those, a commit's name is its 40-character SHA and a person's is their
+    provider account id.
+
+    Tries ``name``, ``title``, ``summary``, ``key``, then ``full_name`` and
+    ``message``, and falls back to the raw entity ``id``.  The result is clamped
+    to ``_DISPLAY_NAME_MAX`` because ``activity_events.display_name`` is
+    ``VARCHAR(512)`` while producers allow a commit message up to 2000
+    characters — an over-long value makes the INSERT raise, and the writer
+    catches that and skips the entire signal (event row *and* action rows).
     """
     attrs = signal.attributes.model_dump()
-    for field in ("name", "title", "summary", "key"):
+    for field in ("name", "title", "summary", "key", "full_name", "message"):
         value = attrs.get(field)
         if value and isinstance(value, str):
-            return value
+            return value[:_DISPLAY_NAME_MAX]
     return signal.id
 
 
@@ -117,6 +131,7 @@ def _decompose_relationships(signal: ActivitySignal) -> list[dict[str, object]]:
                 "relationship_type": rel.type,
                 "target_entity_type": rel.target.entity_type or "",
                 "target_entity_id": rel.target.id or "",
+                "target_source": rel.target.source or signal.source,
                 "summary": summary,
                 "url": rel.target.url,
             }
@@ -317,9 +332,10 @@ class ActivityWriter:
                 """
                 INSERT INTO activity_actions
                     (signal_id, source, event_time, actor_entity_type, actor_entity_id,
-                     relationship_type, target_entity_type, target_entity_id, summary, url)
+                     relationship_type, target_entity_type, target_entity_id,
+                     target_source, summary, url)
                 VALUES
-                    ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                    ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
                 """,
                 [
                     (
@@ -331,6 +347,7 @@ class ActivityWriter:
                         a["relationship_type"],
                         a["target_entity_type"],
                         a["target_entity_id"],
+                        a["target_source"],
                         a["summary"],
                         a["url"],
                     )

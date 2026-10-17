@@ -48,7 +48,9 @@ class ActivityEvent(Base):
         nullable=False,
         server_default=func.now(),  # pylint: disable=not-callable
     )
-    # Computed at write time — mirrors GraphNode.display_name(); see activity_writer.py.
+    # Computed at write time by activity_writer._compute_display_name, which covers
+    # commits (message) and people (full_name) that GraphNode.display_name() misses.
+    # Clamped to this column's width there — keep the 512 in sync with that clamp.
     display_name: Mapped[str | None] = mapped_column(String(512), nullable=True)
     # Person avatars only; NULL for all non-Person entity types.
     avatar_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)

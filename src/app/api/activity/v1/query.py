@@ -11,7 +11,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from datetime import datetime
 
-from sqlalchemy import and_, or_, select, tuple_
+from sqlalchemy import and_, case, func, or_, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.activity_action import ActivityAction
@@ -28,10 +28,15 @@ async def fetch_actions_for_entity(
     cursor_time: datetime | None,
     cursor_id: int | None,
     limit: int,
-) -> list[ActivityAction]:
+) -> list[tuple[ActivityAction, str | None]]:
     """Return ``activity_actions`` rows where the entity is actor OR target.
 
     Backs ``scope=activity`` — "everything involving this entity".
+
+    Each row is returned as a ``(action, related_name)`` pair, where
+    ``related_name`` is the resolved display name of the *other* side of the
+    relationship (read from ``activity_events.display_name``), or ``None`` when
+    that side has no timeline row yet.
 
     ``identities`` is one or more ``(source, entity_id)`` pairs for the lane —
     a single pair for every non-Person lane, or every provider identity of a
@@ -65,7 +70,43 @@ async def fetch_actions_for_entity(
             for source, entity_id in identities
         )
     )
-    stmt = select(ActivityAction).where(or_(actor_match, target_match))
+
+    # The "other side" of the relationship: the target when the lane entity is
+    # the actor, else the actor.  A scalar subquery (ORDER BY … LIMIT 1) keeps
+    # this to exactly one value per action row — ``activity_events`` holds many
+    # rows per entity, so a plain join would multiply the lane and corrupt
+    # pagination.  The lane's own ``source`` is the signal's source, so the
+    # other side's source is the target's when the lane is the actor, and the
+    # action's own ``source`` when the lane is the target.
+    related_source = case(
+        (actor_match, func.coalesce(ActivityAction.target_source, ActivityAction.source)),
+        else_=ActivityAction.source,
+    )
+    related_type = case(
+        (actor_match, ActivityAction.target_entity_type),
+        else_=ActivityAction.actor_entity_type,
+    )
+    related_id = case(
+        (actor_match, ActivityAction.target_entity_id),
+        else_=ActivityAction.actor_entity_id,
+    )
+
+    related_name_subq = (
+        select(ActivityEvent.display_name)
+        .where(
+            ActivityEvent.source == related_source,
+            ActivityEvent.entity_type == related_type,
+            ActivityEvent.entity_id == related_id,
+            ActivityEvent.display_name.is_not(None),
+        )
+        .order_by(ActivityEvent.event_time.desc())
+        .limit(1)
+        .scalar_subquery()
+    )
+
+    stmt = select(ActivityAction, related_name_subq.label("related_name")).where(
+        or_(actor_match, target_match)
+    )
     if from_time is not None:
         stmt = stmt.where(ActivityAction.event_time >= from_time)
     if to_time is not None:
@@ -80,7 +121,10 @@ async def fetch_actions_for_entity(
     ).limit(limit)
 
     result = await db.execute(stmt)
-    return list(result.scalars().all())
+    # NOT .scalars() — it returns only the FIRST column of each row, which
+    # silently drops related_name and degrades every card to a raw id with
+    # green tests.
+    return [(action, name) for action, name in result.all()]
 
 
 async def fetch_event_history(

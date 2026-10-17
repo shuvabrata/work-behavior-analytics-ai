@@ -15,7 +15,7 @@ Only the plans below remain.
 | 005  | [MCP thread join timeout](005-mcp-thread-join-timeout.md) | P2 | S | — | TODO |
 | 022  | [Retire AUTHORED_BY → CREATED_BY](022-retire-authored-by-unify-created-by.md) | P1 | M | — | DONE ✓ — merged to `main` at `b28598b` |
 | 023  | [Catalog Editor — Quick Test & View Test Buttons](023-catalog-editor-test-buttons.md) | P1 | M | — | DONE ✓ — all 5 phases, committed `bff99d9`→`ce02408` on `feature/editor-test-buttons` (pushed); operator manual regression pending |
-| 043  | [Activity Timeline — make event cards read as a sentence](043-activity-timeline-card-reading-order.md) | P1 | M | — | TODO |
+| 043  | [Activity Timeline — make event cards read as a sentence](043-activity-timeline-card-reading-order.md) | P1 | M | — | IMPLEMENTED — uncommitted on `feature/timeline-card-readability`; all gates green, migration not yet applied (see note) |
 
 ## Notes
 
@@ -33,6 +33,14 @@ Only the plans below remain.
   `activity_events.display_name` via one additive nullable column. Hover/tooltip is
   explicitly out of scope. Planned against `90c9674` — the commit that merged the
   Person-identity lane expansion (#338), which touched the same API files.
+  **Executed 2026-10-17 on `feature/timeline-card-readability` (uncommitted).**
+  Reviewer re-ran every gate: 1877 unit tests pass, `mypy src/` clean, pylint
+  9.68/10, bandit 0 High, spec regenerates with no diff; the resolve subquery
+  was compiled independently and does not cartesian-join. One gate unverified —
+  `alembic upgrade head` was denied by the permission classifier, so
+  `activity_actions.target_source` does not exist yet; the offline SQL is the
+  single correct additive `ADD COLUMN`. Run it before testing the new line-2
+  name on fresh data.
 
 ## Other documents
 

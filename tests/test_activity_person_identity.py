@@ -187,6 +187,7 @@ class TestActionToEvent:
         )
         event = _action_to_event(
             action,
+            None,
             lane_entity_type="Person",
             lane_identity_ids=frozenset({"alice", "557058:abc"}),
         )
@@ -201,6 +202,7 @@ class TestActionToEvent:
         )
         event = _action_to_event(
             action,
+            None,
             lane_entity_type="Person",
             lane_identity_ids=frozenset({"alice", "557058:abc"}),
         )
@@ -217,6 +219,7 @@ class TestActionToEvent:
         )
         event = _action_to_event(
             action,
+            None,
             lane_entity_type="Person",
             lane_identity_ids=frozenset({"alice", "557058:abc"}),
         )
@@ -274,9 +277,12 @@ class TestActionsPredicate:
             limit=10,
         )
         sql = _compiled_sql(session.statements[-1])
-        # Two actor-side + two target-side disjuncts. The "=" excludes the
-        # SELECT column list, which also names activity_actions.source.
-        assert sql.count("source=") == 4
+        where = sql.split("FROMactivity_actionsWHERE", 1)[-1]
+        # One disjunct per identity, per side — the added target_source column and
+        # the resolve subquery's CASE both contain "source=", so scope to WHERE.
+        assert where.count("source=") == 4            # 2 identities
+        assert where.count("actor_entity_id=") == 2   # one per identity, actor side
+        assert where.count("target_entity_id=") == 2  # one per identity, target side
 
     @pytest.mark.asyncio
     async def test_single_identity_matches_todays_behaviour(self) -> None:
@@ -292,4 +298,8 @@ class TestActionsPredicate:
             limit=10,
         )
         sql = _compiled_sql(session.statements[-1])
-        assert sql.count("source=") == 2
+        where = sql.split("FROMactivity_actionsWHERE", 1)[-1]
+        # Scoped to WHERE for the same reason as the two-identity case above.
+        assert where.count("source=") == 2            # 1 identity
+        assert where.count("actor_entity_id=") == 1   # one per identity, actor side
+        assert where.count("target_entity_id=") == 1  # one per identity, target side

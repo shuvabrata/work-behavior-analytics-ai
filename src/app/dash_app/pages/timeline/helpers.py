@@ -437,11 +437,35 @@ def humanize_relationship(relationship_type: str) -> str:
     return relationship_type.replace("_", " ").title()
 
 
-def card_summary(event: dict[str, Any]) -> str:
-    """Return the card's first line: the summary, or a relationship+type fallback.
+def card_primary(event: dict[str, Any]) -> str:
+    """Return line 1: the humanized relationship, else the entity type."""
+    relationship = humanize_relationship(str(event.get("relationship_type") or ""))
+    if relationship:
+        return relationship
+    return entity_type_label(str(event.get("entity_type") or ""))
 
-    ``activity``-scope events may carry ``summary=None`` (e.g. File events), so
-    fall back to ``<Relationship> · <EntityType>`` rather than an empty card.
+
+def card_secondary(event: dict[str, Any]) -> str:
+    """Return the *other* side's display name, or ``""`` when unknown.
+
+    Prefers the resolved ``related_name``, then the raw ``related_id``, then
+    ``summary``.  Deliberately excludes the entity-type label: the layout
+    renders that itself as a colour-coded span (see ``build_event_card``), so
+    returning ``"<Type> · <name>"`` here would duplicate it.
+    """
+    for key in ("related_name", "related_id", "summary"):
+        value = event.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return ""
+
+
+def _popup_headline(event: dict[str, Any]) -> str:
+    """Return the hover popup's headline (``summary`` → ``<Rel> · <Type>`` → "Event").
+
+    NOTE: this intentionally duplicates a variant of the retired ``card_summary``
+    so the popup's output stays byte-identical while the card format moved on.
+    Consolidate it with the card helpers in the later hover/popup plan.
     """
     summary = event.get("summary")
     if isinstance(summary, str) and summary.strip():
@@ -492,7 +516,7 @@ def popup_fields(event: dict[str, Any], datetime_text: str) -> dict[str, Any]:
     popup renders the "Open source" link only when there is somewhere to go.
     """
     fields: dict[str, Any] = {
-        "summary": card_summary(event),
+        "summary": _popup_headline(event),
         "relationship": humanize_relationship(
             str(event.get("relationship_type") or "")
         ),

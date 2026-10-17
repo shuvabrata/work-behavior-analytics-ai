@@ -21,6 +21,8 @@
 >   src/app/dash_app/pages/timeline/ \
 >   src/app/dash_app/assets/executive-dashboard.css \
 >   tests/test_activity_api_integration.py \
+>   tests/test_activity_api_unit.py \
+>   tests/test_activity_person_identity.py \
 >   tests/test_activity_timeline_ui_helpers.py \
 >   tests/test_activity_timeline_edge_cases.py \
 >   docs/design/activity-timeline-design.md
@@ -93,7 +95,7 @@ from `summary` at all.
 
 ### Cause 3 — the name-picker misses two entity types
 
-Measured against the live store with `scripts/render_activity_cards.py`:
+Measured against the live store:
 
 ```
 84 distinct cards; 45 show a human object name, 33 resolve to a raw id,
@@ -219,7 +221,6 @@ that imports app code (`pytest.ini` sets it for tests).
 | Migration round-trip | `cd src/app && alembic downgrade -1 && alembic upgrade head` | exit 0 both ways |
 | Security scan | `bandit -c .bandit.yml -r src/ -lll` | no High severity |
 | Spec freshness | `PYTHONPATH=src python scripts/generate_signal_activity_spec.py && git diff --stat docs/design/spec-activity-signal.md` | **no diff** |
-| Card preview (read-only) | `PYTHONPATH=src python scripts/render_activity_cards.py --source github --lane-type PullRequest` | renders; commit cards show a message, not a SHA, once fresh signals land |
 
 ## Scope
 
@@ -241,11 +242,11 @@ that imports app code (`pytest.ini` sets it for tests).
 | `src/app/dash_app/assets/executive-dashboard.css` | card class rename + flex ellipsis | 5 |
 | `tests/test_activity_timeline_ui_helpers.py` | rewrite the `card_summary` test | 6 |
 | `tests/test_activity_api_integration.py` | fake session + new assertions | 6 |
+| `tests/test_activity_api_unit.py` | **check only** — do NOT add the clamp test here; its home is the new writer file below | — |
+| `tests/test_activity_writer_display_name.py` | **create** — the `_compute_display_name` clamp + `full_name`/`message` tests | 6 |
+| `tests/test_activity_person_identity.py` | 3 `_action_to_event` call sites + 2 SQL-count assertions | 6 |
+| `tests/test_activity_timeline_edge_cases.py` | one assertion made substring-tolerant | 6 |
 | `docs/design/activity-timeline-design.md` | §4.2, §3.2, §5.1, §5.3, §7.4, §10, §11 | 1, 6 |
-
-`scripts/render_activity_cards.py` already exists in the working tree (uncommitted)
-and is **read-only** — use it for verification, do not change it to satisfy a
-failing check.
 
 **Out of scope** — see `## Out of scope (explicit)` below; do NOT touch the
 Neo4j graph node layer, the producers, `src/common/activity_signal/`, or any file
@@ -258,10 +259,11 @@ not listed above.
   creation either — work on the current branch.
 - If the operator explicitly dispatches you in an isolated worktree, follow that
   instruction instead; it overrides this section.
-- Do not run `git stash`, `git checkout`, `git reset`, or `git clean`. The
-  operator may have uncommitted work of their own in this tree (the untracked
-  `plans/043-*.md`, `scripts/render_activity_cards.py`, and `simu.txt` are
-  exactly that), and a destructive git command would discard it.
+- Do not run `git stash`, `git checkout`, `git reset`, or `git clean`. The tree
+  is clean at `89a0ec5`, but the operator works directly on this branch (the
+  plan and the README index all landed in that commit), so
+  leave their commits — and any uncommitted work they add later — alone. A
+  destructive git command would discard it.
 
 ## Implementation
 
@@ -320,9 +322,16 @@ original four, so no existing name can be shadowed. There is **no second
 implementation** to update (verified: `_compute_display_name` is defined once and
 called once).
 
-Add a **unit test for the clamp** (mirroring the existing writer tests' style):
-a signal whose commit message exceeds 512 characters must yield a `display_name`
-of exactly 512, never longer, and never raise.
+Add a **unit test for the clamp** in a **new file**,
+`tests/test_activity_writer_display_name.py` (start it with
+`pytestmark = pytest.mark.unit`, and import
+`from connectors.consumers.activity_writer import _compute_display_name`). There
+is **no existing writer test to mirror** — nothing under `tests/` imports
+`activity_writer` today — and the file belongs beside the consumer code, not in
+`tests/test_activity_api_unit.py` (whose docstring scopes it to the pure
+functions in `app/api/activity/v1/service.py`, and which imports no connector
+module). A signal whose commit message exceeds 512 characters must yield a
+`display_name` of exactly 512 characters, never longer, and never raise.
 
 **1b.** `docs/design/activity-timeline-design.md` §4.2 step 2 — the doc currently
 says "first non-empty of `attributes.name` / `title` / `summary` / `key`". Rewrite
@@ -361,13 +370,9 @@ mypy src/
 pytest -m unit tests -q
 ```
 Then confirm the behaviour directly — with the consumer running, re-scan a repo so
-fresh signals land, and check the stored value:
-```
-PYTHONPATH=src python scripts/render_activity_cards.py --source github --lane-type PullRequest
-```
-`INCLUDES -> Commit` should now read a commit message instead of `528be7629e…`.
-(Until fresh signals arrive this still shows the SHA — that is the accepted
-no-backfill behaviour, not a failure.)
+fresh signals land, and check the stored value: `INCLUDES -> Commit` should now
+read a commit message instead of `528be7629e…`. (Rows written before this change
+still show the SHA — that is the accepted no-backfill behaviour, not a failure.)
 
 ### Phase 2 — Storage: carry the target's own source
 
@@ -538,6 +543,14 @@ Three things this step must get right, all of which are easy to get wrong:
 
 `ActivityEvent` is already imported here (`fetch_display_label` uses it).
 
+> **This step breaks two tests you have not been told about yet — do not stop.**
+> `tests/test_activity_person_identity.py` asserts on this function's compiled
+> SQL (`TestActionsPredicate`) and calls `_action_to_event` directly
+> (`TestActionToEvent`). Both are repaired in **Phase 6e**, which is where the
+> file enters Scope. Finish Phase 3 as written, then go to 6e — the intermediate
+> red state between here and there is expected. Do **not** restore `.scalars()`,
+> weaken the subquery, or reach for `xfail` to get back to green.
+
 > **Only one of the two identical lines changes.** `return list(result.scalars().all())`
 > appears **twice** in this file: line 83 inside `fetch_actions_for_entity`
 > (change it) and line 127 inside `fetch_event_history` (**leave it** — that
@@ -624,8 +637,7 @@ Do **not** add `related_id` / `related_name` / `lane_role` to `_Spec`. It has no
 fields for them, and the mock's real value is the *geometric* edge cases it
 invents (30-day gaps, 100-event spikes, cell overflow, empty lanes, pagination
 traps, XSS strings) — none of which this change touches, because it alters card
-*text*, not layout. For previewing the new card text on real data, use
-`scripts/render_activity_cards.py`, which renders every distinct real combination.
+*text*, not layout.
 
 **Verify**
 ```
@@ -663,23 +675,25 @@ def card_primary(event: dict[str, Any]) -> str:
     return entity_type_label(str(event.get("entity_type") or ""))
 ```
 
-- **Add** `card_secondary(event) -> str` — line 2's `Type · name` half (time is
-  added by the layout as a separate span). Object name priority:
-  `related_name` → `related_id` → `summary` → (type alone):
+- **Add** `card_secondary(event) -> str` — **the object's name alone**, no type
+  label and no separator (the layout renders `<colored Type> · <this>` and
+  appends the time). Object name priority: `related_name` → `related_id` →
+  `summary` → `""`:
 
 ```python
 def card_secondary(event: dict[str, Any]) -> str:
-    """Return line 2 without the time: ``<Type> · <object name>``.
+    """Return the *other* side's display name, or ``""`` when unknown.
 
-    The object name prefers the resolved ``related_name``, then the raw
-    ``related_id``, then ``summary``. Falls back to the bare type label.
+    Prefers the resolved ``related_name``, then the raw ``related_id``, then
+    ``summary``.  Deliberately excludes the entity-type label: the layout
+    renders that itself as a colour-coded span (see ``build_event_card``), so
+    returning ``"<Type> · <name>"`` here would duplicate it.
     """
-    type_label = entity_type_label(str(event.get("entity_type") or ""))
     for key in ("related_name", "related_id", "summary"):
         value = event.get(key)
         if isinstance(value, str) and value.strip():
-            return f"{type_label} · {value.strip()}"
-    return type_label
+            return value.strip()
+    return ""
 ```
 
 - **`popup_fields` must keep its output byte-identical** (hover is out of scope).
@@ -709,11 +723,32 @@ mypy src/ && pylint src --score=y
 
 | scope | line 1 | line 2 |
 |---|---|---|
-| `activity` | `card_primary(event)` (the relationship) | `card_secondary(event)` + time |
-| `history` | `card_secondary(event)` (the lane's identity) | `"Updated"` + time |
+| `activity` | `card_primary(event)` (the relationship) | `<Type> · card_secondary(event)` + time |
+| `history` | `<Type> · card_secondary(event)` (the lane's identity) | `card_primary(event)` + time |
 
   Use `card_primary(event)` for history's line 2 — it already yields `"Updated"`
   for `STATE_CHANGE` with no special-casing.
+
+  **The line-2 DOM is load-bearing — build it exactly like this, do not collapse
+  the two spans into one.** `card_secondary` returns the *name alone* (no type,
+  no separator); the layout owns the type label because it also owns
+  `type_color`:
+
+```python
+    body: list[Any] = [
+        html.Span(type_label, className="timeline-card-type", style={"color": type_color}),
+        html.Span("·", className="timeline-card-sep"),
+        html.Span(card_secondary(event), className="timeline-card-name"),
+    ]
+    if time_text:
+        body.append(html.Span(time_text, className="timeline-card-time"))
+```
+
+  `type_label` is already computed in this function today (it is the current
+  `meta`'s first span) — reuse it; do not recompute it.
+  **A single fused `Type · name` span is wrong here**: it leaves `type_color`
+  unused (pylint `W0613`, `unused-argument`, which is *not* in `.pylintrc`'s
+  disable list) and drops the per-entity colour from every card.
 
   Class names become `.timeline-card-primary` and `.timeline-card-secondary`.
   **Keep `title=`, `href`, `target`, `rel` and the `data-timeline-event` payload
@@ -759,9 +794,20 @@ mypy src/ && pylint src --score=y
 ```
 
 The `.timeline-card-type` / `.timeline-card-sep` / `.timeline-card-time` rules
-stay. The `Type · name` half needs `flex: 1 1 auto; min-width: 0` (and
-`overflow: hidden; text-overflow: ellipsis`) so it truncates while
-`.timeline-card-time` keeps its existing `margin-left: auto` pin. Nothing else in
+stay. The truncating element is the **name** span, not a `Type · name` half:
+
+```css
+.timeline-card-name {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+```
+
+so the name ellipsises while `.timeline-card-time` keeps its existing
+`margin-left: auto` pin. (`flex: 1 1 auto` on the type/sep spans would let the
+type label itself be squeezed; only the name grows and shrinks.) Nothing else in
 the `.timeline-card` block changes — `min-height: 40px`, `padding: 3px 7px`, the
 3px lane-accent left border and the 2px radius all stay, so the per-cell height
 budget (`MAX_CELL_CARDS = 3`) is unaffected.
@@ -769,18 +815,7 @@ budget (`MAX_CELL_CARDS = 3`) is unaffected.
 **Verify — machine-checkable (this is the gate)**
 ```
 pytest -m unit tests -q                                        # → all pass
-PYTHONPATH=src python scripts/render_activity_cards.py         # → see expected output below
 ```
-The preview script needs no browser, no app and no mock mode — it reads the cards
-straight from Postgres via the same helpers the page uses. Expected, for every
-rendered card:
-- line 1 is the relationship (`Mentions`, `Assigned To`, `Updated`, …) and is
-  **never blank**;
-- line 2 is `<Type> · <name-or-id>` followed by a right-aligned `HH:MM AM/PM` time;
-- history-scope cards (if any render) invert: line 1 is `<Type> · <lane name>`,
-  line 2 is `Updated`.
-Narrow it to one lane group with `--source github --lane-type PullRequest` while
-iterating.
 
 **Verify — manual, operator-run (NOT a gate; do not block on it).** To see the
 real page, mock mode makes the scenarios reproducible: set `TIMELINE_MOCK_SCENARIO=even`
@@ -867,9 +902,9 @@ Then add the assertions:
 - §10 Deferred — remove "The related-entity id on activity cards"; add a note that
   the hover popup's headline/field design is the follow-up plan, and add the
   `GraphNode.display_name()` commit gap (Graph page shows SHAs) as a known defect.
-- §11 Source map — add `scripts/render_activity_cards.py`, the read-only
-  card-preview tool used to verify §7.4 (already present in the working tree; it
-  is uncommitted, so include it with this change).
+- §11 Source map — add `tests/test_activity_writer_display_name.py` to the Tests
+  row. The Tests row currently omits `tests/test_activity_person_identity.py`,
+  which is a real timeline test file — add it while you are there.
 
 **Verify**
 ```
@@ -883,15 +918,43 @@ The last command must produce **no diff** — nothing in `src/common/activity_si
 changed, so the spec-freshness CI gate is unaffected. If it does differ, stop: a
 model change slipped in that this plan did not intend.
 
-**6d.** `tests/test_activity_timeline_edge_cases.py` — **no change required, but
-read this before concluding the tests missed something.** It is the only test file
-that renders cards through the layout (`build_grid` → `build_grid_body` →
-`build_cell` → `build_event_card`); every other test stops at the helpers. Its
-`_render()` helper calls `build_grid_body(...)` without a `scope`, so it always
-renders the `"activity"` default, and its assertions are membership-based
-(`"Alice Johnson" in texts`, `"Updated" in texts`) — so they stay green after the
-line swap and need no edit. (Its name, `test_history_scope_person_state_change`,
-is misleading: it has never exercised the history branch.)
+**6d.** `tests/test_activity_timeline_edge_cases.py` — **one assertion needs a
+one-word edit; the rest of the file does not.** Read this before concluding the
+tests missed something. It is the only test file that renders cards through the
+layout (`build_grid` → `build_grid_body` → `build_cell` → `build_event_card`);
+every other test stops at the helpers. Its `_render()` helper calls
+`build_grid_body(...)` without a `scope`, so it always renders the `"activity"`
+default — that part is unchanged. (Its name,
+`test_history_scope_person_state_change`, is misleading: it has never exercised
+the history branch.)
+
+What *does* change is its text collector:
+
+```python
+def _texts(node: Any) -> list[str]:        # edge_cases.py:55
+    if isinstance(node, str): return [node]
+```
+
+It returns **whole leaf strings**, and the pinned line-2 DOM (Phase 5a) puts the
+name inside a compound span — `"Person · Alice Johnson"`, not `"Alice Johnson"`.
+So in `test_history_scope_person_state_change`, change
+
+```python
+    assert "Alice Johnson" in texts          # ← fails: compound span
+```
+
+to a substring test:
+
+```python
+    assert any("Alice Johnson" in text for text in texts)
+```
+
+`assert "Updated" in texts` stays as-is (line 1 is its own `Div`, a bare string).
+Verified against the pinned card: the collected texts are
+`['Mar 15', 'Updated', 'Person · Alice Johnson', '03:30 PM']`, so the exact-member
+form fails and the substring form passes. Do **not** "fix" this by loosening the
+card back to a fused `Type · name` span — Phase 5a pins the split form
+deliberately, so the type label keeps its per-entity colour.
 
 Consequence, accepted deliberately: **no automated test pins the end-to-end
 `scope` pass-through** (`render_grid` → `build_grid_body` → `build_cell` →
@@ -901,6 +964,63 @@ by the **manual** history check in Phase 5 instead ("`scope=history` — cards r
 `<Type> · <lane name>` / `Updated`"), which is why no test is added here. If the
 scope branch is ever found rendering wrongly, this is the file to add a real
 `scope="history"` layout test to.
+
+**6e.** `tests/test_activity_person_identity.py` — **five of its 15 tests break on
+this plan** and this step is what repairs them. It is easy to miss: the file is
+not named in Phases 1–5, but it imports `_action_to_event` directly and asserts on
+the compiled SQL of `fetch_actions_for_entity`. Nothing else in the file changes.
+
+**(a) The three `_action_to_event` call sites** (lines ~188, ~202, ~218, inside
+`TestActionToEvent`) use the keyword-only style and will raise
+`TypeError: _action_to_event() missing 1 required positional argument:
+'related_name'`. Pass `None` as the second positional argument — all three tests
+assert only on `event.entity_type`, so the resolved name is irrelevant to them,
+and `None` exercises the documented fallback:
+
+```python
+        event = _action_to_event(
+            action,
+            None,
+            lane_entity_type="Person",
+            lane_identity_ids=frozenset({"alice", "557058:abc"}),
+        )
+```
+
+**(b) The two compiled-SQL counts** in `TestActionsPredicate` (lines ~279, ~295)
+are scoped to the whole statement:
+
+```python
+assert sql.count("source=") == 4         # 2 identities
+assert sql.count("source=") == 2         # 1 identity
+```
+
+The new correlated subquery repeats the identity disjuncts inside each `CASE`, and
+the SELECT column list gains `activity_actions.target_source`, so the whole-statement
+count rises to **11** and **6** (measured). The assertions' *intent* — "one disjunct
+per identity, per side" — is about the `WHERE` clause, so keep that intent and scope
+to it:
+
+```python
+        where = sql.split("FROMactivity_actionsWHERE", 1)[-1]
+        # One disjunct per identity, per side — the added target_source column and
+        # the resolve subquery's CASE both contain "source=", so scope to WHERE.
+        assert where.count("source=") == 4            # 2 identities
+        assert where.count("actor_entity_id=") == 2   # one per identity, actor side
+        assert where.count("target_entity_id=") == 2  # one per identity, target side
+```
+
+for the two-identity case, and `2` / `1` / `1` for the single-identity one.
+**Do not delete or `xfail` these tests** — the disjunct-per-identity property is
+the fix from `90c9674` and must stay pinned.
+
+**Verify**
+```
+pytest -m unit tests/test_activity_person_identity.py -q    # → 15 passed
+```
+
+> **This file is in Scope for exactly these edits.** It is the one place the
+> "editing a file not in Scope" STOP condition must not fire; if you believe any
+> *other* unlisted file needs changing, that is still a STOP.
 
 **Spec-freshness check (docs must move with the code).** Beyond the generated
 spec, confirm nothing still contradicts the shipped behaviour.
@@ -973,9 +1093,18 @@ the fake first (Phase 6b), then add:
 - One action with a `related_name` and one with `None`, asserting both the
   resolved and fallback strings.
 
-**`tests/test_activity_api_unit.py`** (existing, 14 tests) — add a case that
+**`tests/test_activity_writer_display_name.py`** (**create**) — two cases:
 `_compute_display_name` returns exactly 512 characters for an over-long commit
-message (Phase 1 clamp), and that it resolves `full_name` for a `Person`.
+message (the Phase 1 clamp), and it resolves `full_name` for a `Person` (whose
+attributes carry no `name`/`title`/`summary`/`key`). Keep `tests/test_activity_api_unit.py`
+untouched — it is listed in Scope as *check only* precisely so the clamp test
+does not land in the wrong module.
+
+**`tests/test_activity_person_identity.py`** (existing, 15 tests) — five of its
+tests break on this plan and are updated in Phase 6e, not here: three
+`_action_to_event` call sites (the new `related_name` positional) and the two
+compiled-SQL counts in `TestActionsPredicate` (the added subquery repeats the
+identity disjuncts inside its `CASE`).
 
 **Verify**: `pytest -m unit tests -q` → all pass, including the new cases.
 
@@ -1008,7 +1137,11 @@ Stop and report back — do not improvise — if:
 - **`_compute_display_name` cannot be made to respect the 512 limit** without
   changing the column width — the plan assumes a clamp, not a schema change.
 - **A step requires editing a file not in the `## Scope` table.** That is a plan
-  defect, not a judgement call.
+  defect, not a judgement call. The four test files added to Scope by Phases 6b
+  and 6e — `test_activity_api_integration.py`, `test_activity_api_unit.py` (check
+  only), `test_activity_writer_display_name.py`, `test_activity_person_identity.py`
+  and `test_activity_timeline_edge_cases.py` — are *in* Scope; this condition is
+  about files beyond that list.
 - **The code at a cited location does not match the excerpt** in `## Current
   state` — the repo has drifted. (This is *not* stale excerpts: the tree was clean
   at `90c9674` when this plan was written, so real drift means someone committed or
@@ -1032,7 +1165,7 @@ Stop and report back — do not improvise — if:
   `(ActivityAction, related_name)` tuple shape, or reintroduce the `.scalars()`
   drop.
 - If a new entity type is added whose name field is not one of the six, its cards
-  will silently render a raw id. `scripts/render_activity_cards.py` is the check.
+  will silently render a raw id.
 
 **What a reviewer should scrutinize**
 - That `fetch_actions_for_entity` ends in `result.all()`, **not** `.scalars()` —
@@ -1059,6 +1192,15 @@ mention-only person resolution.
 - [ ] Lane pagination and per-cell counts are unchanged (no row multiplication).
 - [ ] `pytest -m unit tests -q`, `mypy src/`, `pylint src --score=y` (≥ 9.0) and
       `bandit` all pass; the activity-signal spec regenerates with no diff.
+      (`pylint src` exits non-zero on this repo even at a clean 9.68/10 — the CI
+      job reads the **score** via `--exit-zero`, so check the number, not the
+      exit code.)
+- [ ] `tests/test_activity_person_identity.py` passes all 15 tests, with its
+      disjunct-per-identity intent intact and the three `_action_to_event` call
+      sites updated — not deleted, not `xfail`ed.
+- [ ] The activity card's line 2 renders the entity type in its **own**
+      colour-coded span (`type_color` is used, not dead); `card_secondary`
+      returns the object name alone.
 - [ ] `_compute_display_name` resolves `full_name` (Person) and `message`
       (Commit); the existing four fields are untouched and **not reordered**.
 - [ ] `_compute_display_name` never returns a string longer than 512 characters
@@ -1094,7 +1236,7 @@ mention-only person resolution.
 | **`direction` looks like the answer but is not.** It is `None` on most producers (37 occurrences vs 2 `OUT`), means Neo4j *edge orientation* rather than grammatical voice, and is not persisted in `activity_actions` at all. | Documented in Decisions #3; the label stays verbatim and neutral. |
 | **A new name field shadows an existing one.** | Cannot happen: only `PersonAttributes`/`CommitAttributes` define `full_name`/`message`, and **neither** defines `name`, `title`, `summary` or `key` (verified against the live models). The fields are appended, never reordered, so the change is a strict superset. |
 | **`display_name` divergence goes unnoticed.** The comment in `_compute_display_name` and the doc both said "mirrors `GraphNode.display_name()`"; after Phase 1 that is false, and the graph side still shows commit SHAs. | Phase 1a updates the docstring and Phase 1b the design doc; §10 Out-of-scope records the Neo4j twin as a separate plan so the divergence is deliberate and written down, not accidental. |
-| **Existing rows keep raw ids after Phase 1** (write-time change, no backfill), so a reviewer may read the unchanged SHA as a failed fix. | Accepted and documented; Phase 1's verify step says so explicitly and `scripts/render_activity_cards.py` only reflects the fix after fresh signals land. |
+| **Existing rows keep raw ids after Phase 1** (write-time change, no backfill), so a reviewer may read the unchanged SHA as a failed fix. | Accepted and documented; Phase 1's verify step says so explicitly — the stored value only changes once fresh signals land. |
 | **Raw ids leak into the UI** where the other side has no `activity_events` row yet (and no backfill can repair it). | Accepted: `related_name → related_id → summary → type` degrades in that order, and `mock=card_variety` exercises the fallback visibly. The 6 remaining raw ids are readable keys (`UI-2`, `BTS-7`, `work-behavior-analytics-ai::main`), not opaque handles. |
 | **A class rename breaks styling** that referenced `.timeline-card-summary`. | No test or code references the old class names (verified). The CSS block is replaced in the same step (5b, Phase 5). |
 | **Drift after this plan was written** — the resolve touches `query.py` and `service.py`, which the merged Person-identity change (`90c9674`) also modified. | The dual drift check at the top (commit range **and** `git status`) covers both committed and uncommitted drift; locate every symbol by content, never by line number. |

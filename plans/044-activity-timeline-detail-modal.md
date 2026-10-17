@@ -6,7 +6,7 @@
 >
 > **Drift check (run first)** — check **both** committed and uncommitted drift:
 > ```
-> git diff --stat 202e763..HEAD -- src/app/dash_app/pages/timeline/ \
+> git diff --stat d77db38..HEAD -- src/app/dash_app/pages/timeline/ \
 >   src/app/dash_app/components/common.py \
 >   src/app/api/activity/v1/ src/app/api/graph/v1/ \
 >   src/app/dash_app/assets/executive-dashboard.css \
@@ -21,32 +21,64 @@
 > below are approximate — **locate every symbol by content**, and confirm each
 > "Current state" excerpt against the live code before editing.
 >
-> **Note on the base commit**: `202e763` is "Activity Timeline Design card
-> ordering". Plan 043 (`plans/043-activity-timeline-card-reading-order.md`) was
-> executed against `90c9674` and is **committed at `202e763`** — verified: that
-> commit contains `helpers.card_secondary` and the
+> **Note on the base commit**: `d77db38` is "Make timeline cards line ordering
+> correct (#339)" — the card-reading-order change, **squash-merged to `main`**.
+> Its predecessor `90c9674` (#338, the Person-identity lane expansion) was the
+> base it was written against.
+>
+> The baseline was originally stamped as `202e763` (the same change on the
+> now-merged `feature/timeline-card-readability` branch). That commit is **not**
+> an ancestor of `main` — it exists only on that branch — so the stamp was moved
+> to `d77db38`, which **is** on `main` and is content-identical for every
+> in-scope path (verified: `git diff --stat 202e763 d77db38 -- <in-scope paths>`
+> is empty, and `git diff --stat d77db38..HEAD -- <in-scope paths>` gives the
+> same answer the old stamp did). Use `d77db38` for drift detection.
+>
+> Verified at `d77db38`: the tree contains `helpers.card_secondary` and the
 > `add_activity_actions_target_source` migration. Its migration is **applied**:
 > `alembic current` reports `51d673fb286f (head)` and
 > `activity_actions.target_source` (`varchar(32)`) exists.
 >
-> This plan builds directly on it: it assumes `TimelineEvent` already carries
-> `lane_role`, `related_id` and `related_name`, that `helpers.card_primary` /
-> `card_secondary` exist, and that `activity_actions` has the `target_source`
-> column. If any of those are absent, **that is a STOP condition** — Plan 043
-> has been reverted or the branch moved, and this plan cannot be executed.
+> This plan builds directly on that change: it assumes `TimelineEvent` already
+> carries `lane_role`, `related_id` and `related_name`, that
+> `helpers.card_primary` / `card_secondary` exist, and that
+> `activity_actions` has the `target_source` column. If any of those are absent,
+> **that is a STOP condition** — the change has been reverted or the branch
+> moved, and this plan cannot be executed.
 
 ## Status
 
 - **Priority**: P1
 - **Effort**: L
-- **Risk**: MEDIUM (a new Dash modal + one clientside click branch; one additive API field)
-- **Depends on**: `plans/043-activity-timeline-card-reading-order.md` (committed at `202e763`)
+- **Risk**: MEDIUM (a new Dash modal + one clientside click branch; one additive
+  API field; the sibling lookup carries a `MAPS_TO` branch and a re-keying step,
+  which is where a silent "Not found" regression can hide — see Decision 9b)
+- **Depends on**: the card-reading-order change, squash-merged to `main` as
+  `d77db38` (#339)
+- **Related**: `plans/045-graph-query-validator-rejects-entity-ids.md` — a
+  pre-existing defect in the Graph deep-link path this plan newly routes through.
+  **Not a dependency**: 045 is a problem statement only, and 044 must not wait on
+  it nor fix it.
 - **Category**: direction (UX — the card is a fragment; the modal is the full sentence)
-- **Planned at**: commit `202e763`, 2026-10-17
+- **Planned at**: commit `d77db38` (originally stamped `202e763`; see the base-commit
+  note above), 2026-10-17. Drift check verified clean at review time.
+- **Revised**: 2026-10-17 — the API change is now a single field built in the
+  service (not a query-layer column), mock data is untouched, and the click nonce
+  is dropped. See Decisions 4, 7b, 15, 17.
+- **Revised again**: 2026-10-17 (review) — **Decision 9 was wrong for the
+  sibling** and is now split into 9a (lane: no hop) and 9b (sibling: one
+  `MAPS_TO` hop). Measured on the live graph: 3 of 9 real Person sibling ids are
+  not node ids, covering 58 of 382 Person-involving rows, and 11 of the 14 cards
+  on the local `confluence::Page::26705923` lane. Phase 3a now fetches both
+  sides in one two-branch query and **keys the result by the id requested**;
+  Phase 5c's `graph_deep_link` routes Person ids through `_node_pattern`. The
+  pre-existing deep-link validator defect found in the same review is recorded
+  separately in `plans/045-graph-query-validator-rejects-entity-ids.md` and is
+  **not** fixed here.
 
 ## Why this matters
 
-Plan 043 made the timeline card read as a fragment — `Mentions` /
+The card-reading-order change (`d77db38`, #339) made the timeline card read as a fragment — `Mentions` /
 `PullRequest · Title of an Epic` — with the subject elided into the sticky lane
 header. The card is deliberately terse: two lines, ~40px, no room for detail.
 
@@ -56,11 +88,28 @@ clicking the card navigates to `/app/graph` with no query context at all
 (`href="/app/graph"`, `layout.py:629`). To see either entity's real properties a
 user must leave the timeline, reach the Graph page, and search manually.
 
+Note on scope: this plan adds **one** API field and reuses the existing graph
+endpoint, the existing cytoscape transform and the existing properties table. It
+does not add a shared abstraction, a mock-id convention, or client-side
+freshness machinery — the *Why* for each of those omissions is in the Decisions
+table (4, 7b, 15, 17).
+
 This plan adds an **event detail modal**: click a card, get a large
 (`size="xl"`) modal that reads as the complete sentence the card fragments —
 subject, relationship, target — with **both entities' Neo4j properties rendered
 side by side**, using the *same* table renderer the Graph page's right panel
 uses, so a change to that renderer changes both surfaces.
+
+**The two sides are looked up differently, and that asymmetry is the crux of
+this design** (Decision 9a/9b). The lane's id comes from the ES-backed typeahead
+and *is* its Neo4j node id. The other side's id comes from the raw
+`activity_actions` row and is **provider-scoped** — when Neo4j deduped that
+person onto another provider's canonical node, the provider-scoped id was never
+created, so a naive lookup silently renders "Not found in graph" for a person who
+is in the graph. On the local data that is **11 of the 14 cards** on the
+`confluence::Page::26705923` lane. The modal therefore resolves both sides in one
+query, with a `MAPS_TO` branch for Person ids, and keys the result by the id it
+asked for rather than the id that came back.
 
 ## Current state
 
@@ -100,7 +149,7 @@ id, **not** its display name.
 `helpers.py`, `popup_fields(event, datetime_text)` (line 512) → a dict with
 `summary` (from `_popup_headline`, line 463), `relationship`, `entity_type`,
 `source`, `datetime`, and `url` only when present. `_popup_headline` prefers
-`event["summary"]` — the *actor's* title, which Plan 043 proved wrong for
+`event["summary"]` — the *actor's* title, which `d77db38` (#339) proved wrong for
 lane-as-actor cards.
 
 `callbacks.py` line ~972 is an install-once `clientside_callback` binding
@@ -216,7 +265,8 @@ close (`editor_test_callbacks.py:160-182`).
 ### `TimelineEvent` today
 
 `src/app/api/activity/v1/model.py` — `signal_id, event_time,
-relationship_type, summary, entity_type, source, url, details`, plus Plan 043's
+relationship_type, summary, entity_type, source, url, details`, plus the
+card-reading-order change's
 `lane_role: Literal["actor","target"] | None`, `related_id: str | None`,
 `related_name: str | None`.
 
@@ -269,21 +319,22 @@ and `service.py:246-249` special-cases Person lanes with exactly this hop.
 |---|----------|-----------|
 | 1 | **Click opens the modal; the hover peek stays.** | Progressive disclosure. The peek is instant and needs no network; the modal is deliberate and fetches. |
 | 2 | **The card stops being a link.** It becomes an `html.Div` — the whole card is the modal trigger. | One click target, one behaviour. The Graph navigation moves into the modal header (Decision 8). |
-| 3 | **Fetch both nodes with ONE `POST /api/v1/graph/execute`** carrying constant parameterized Cypher and `parameters: {ids: [left, right]}`. | No new endpoint, no new models, no new router wiring. Reuses `neo4j_to_cytoscape` and the shared table renderer. One call is possible because both ids are the nodes' own canonical ids (Decision 9), so the result can be keyed by the requested id with no hop and no re-keying. |
-| 4 | **Add one additive field `related_wba_id` to `TimelineEvent`.** | The other side's `source` is not on the event, so the sibling's WBA id cannot be built in the UI. `related_source` is already computed in `query.py`; this exposes it pre-concatenated. |
+| 3 | **Fetch both nodes with ONE `POST /api/v1/graph/execute`** carrying constant parameterized Cypher and `parameters: {ids: [...], mids: [...]}`. | No new endpoint, no new models, no new router wiring. Reuses `neo4j_to_cytoscape` and the shared table renderer. One call is possible because the Person hop is a **second branch of the same query** (Decision 9b), not a second request — the ids and their mapping ids travel together in one payload, and the result is keyed by the id **requested** (not by the `wba_id` that comes back, which legitimately differs for a deduped Person). |
+| 4 | **Add one additive field `related_wba_id` to `TimelineEvent`.** | The other side's `source` is not on the event, so the sibling's WBA id cannot be built in the UI. It is assembled in `_action_to_event` from the row's own `target_source` — no query-layer change, no tuple reshaping, no SQL-count churn. |
 | 5 | **Share the TABLE renderer, not the panel builder.** New `render_properties_table()` is called by both `build_element_properties_content` (graph + collaboration network) and the new modal body builder. | "A change in one affects both" without dragging the graph panel's per-panel header and dead "Expand Node" button into the modal. |
 | 6 | **The modal header is the full sentence**: lane name · relationship · target name (as the Graph deep-link) · time. | The card elides the subject; the modal restores it. Neither panel needs a title, so the panels sit close together. |
-| 7 | **Lane entity is the LEFT panel, always; the connector is non-directional.** | The lane is the card's subject. Plan 043 Decision 3 established the relation label is verbatim and neutral because `direction` is unusable — an arrow would re-assert a direction the data cannot support. |
+| 7 | **Lane entity is the LEFT panel, always; the connector is non-directional.** | The lane is the card's subject. `d77db38` (#339) established the relation label is verbatim and neutral because `direction` is unusable — an arrow would re-assert a direction the data cannot support. |
+| 7b | **The lane's entity type is derived from the lane's WBA id, not sent as a field.** | A lane id *is* `{source}::{entity_type}::{id}` (`service.py::_fetch_lane`), and `build_grid_body` already threads that id into every card as `lane_wba_id`. The other side's type is derived the same way (5c), so both sides use one idiom and the API gains one field instead of two. |
 | 8 | **The Graph deep-link opens in a NEW TAB** and runs the 2-node subgraph. | Matches today's card behaviour (`target="_blank"`). The subgraph shows what the modal shows, including the edge. |
-| 9 | **Every lane is looked up by its own canonical WBA id — no `IdentityMapping` hop, no label.** | A lane can only come from the ES-backed typeahead, and every Person document in ES is keyed by the canonical Neo4j id (the ES sink refuses to create a shadow document), so a lane id IS the node id. This is the property `service.py:246-249` already relies on. A hop would also break result keying: the returned id would differ from the requested one, so every Person lane would render "Not found in graph". |
+| 9 | **The LANE is looked up by its own canonical WBA id — no `IdentityMapping` hop, no label. The SIBLING is looked up through the `MAPS_TO` hop when it is a Person.** | These are two different questions and the earlier draft of this row conflated them. **(a) The lane**: a lane can only come from the ES-backed typeahead, and every Person document in ES is keyed by the canonical Neo4j id (the ES sink refuses to create a shadow document), so a lane id IS the node id — this is the property `service.py:246-249` already relies on. **(b) The sibling**: it does *not* come from the typeahead — it is built from the raw `activity_actions` row (`target_entity_id` / `actor_entity_id`), which carries the **provider-scoped** id. When a Person arrived from a second provider, Neo4j reused the canonical node and the provider-scoped id was **never created** (`person_cache.py:125-151`; `elasticsearch_sink.index_signal_with_canonical_id`, `:154-192`). So `confluence::Person::557058:…` is **not** a node id when the node is `jira::Person::557058:…`. Measured on the live graph: **3 of 9** distinct real Person sibling ids miss, covering 58 of 382 Person-involving rows (~15%) — and on the lane `confluence::Page::26705923`, **11 of its 14 events** carry a `confluence::Person::…` sibling. Without the hop the right panel reads "Not found in graph" for a person who is in the graph, and the deep link returns `nodes=0 rels=0`. The hop is therefore a **second branch of the same single query**, and the result is keyed by the id **requested** — not by the `wba_id` that comes back, which legitimately differs in exactly this case. See 3a. |
 | 10 | **The modal always opens**; a missing node degrades to a per-panel "Not found in graph" note. Both missing → one empty state. `NEO4J_ENABLED=false` → one explanatory state reading *"Neo4j is not available — graph properties are disabled."* (see step 5e.3). | The header needs no network, so the click is never dead. The graph API answers **HTTP 500** when Neo4j is disabled, so the disabled case is a normal configuration and must not read as a generic failure. |
 | 11 | **History scope shows a ONE-panel modal** (no connector, no second fetch), header `<lane name> · Updated · <time>`. | `lane_role` is `None` and `related_id` is `None` in history — there is no other side. |
 | 12 | **Both panels show CURRENT Neo4j state**, with a muted "current state" caption. | Neo4j holds current state; `details` is empty for activity events, so an as-of-event panel is not available for the other side. One rule for both panels. |
 | 13 | **50/50 panel split, ONE shared body scroll.** | Nested scroll regions in a modal are awkward; keeping the panels aligned reads as one table pair. |
-| 14 | **The peek's headline becomes the same sentence**, gains a muted "Click for details" hint, and the native `title=` tooltip is REMOVED. | The peek currently shows `event["summary"]` — the field Plan 043 proved wrong — so hovering and clicking would describe one event two ways. The native tooltip duplicates the headline ~1s later and overlaps the portal. |
-| 15 | **Mock data gains a `mockdemo::<Type>::<id>` lane id convention** and `related_id` / `related_name` / `lane_role`. | Without it the feature is undemonstrable in mock mode. The ids deliberately match no real node, so clicking a mock card exercises the "Not found" paths deterministically with zero Neo4j calls. The **three-part** shape is load-bearing: `_lane_identity` and the card helpers read `parts[1]` as the entity *type*, so a 4-part `wba::other::<Type>::<id>` would make every mock lane type "other" — no avatars, a cube icon and a neutral card colour (see step 6a). |
+| 14 | **The peek's headline becomes the same sentence**, gains a muted "Click for details" hint, and the native `title=` tooltip is REMOVED. | The peek currently shows `event["summary"]` — the field `d77db38` (#339) proved wrong — so hovering and clicking would describe one event two ways. The native tooltip duplicates the headline ~1s later and overlaps the portal. |
+| 15 | **Mock data (`mock_data.py`) is left exactly as it is — no lane-id rename, no `related_*` on `_materialize`, no `lane_role`.** The only mock-specific code in this plan is the gated branch in `detail_payload`. | Mock lane ids already resolve to no node: measured live, `MATCH (n) WHERE n.id STARTS WITH 'mock::' RETURN count(n)` is **0**, and a two-id fetch returns an empty node list. So clicking a mock card already exercises the per-panel "Not found" state with zero Neo4j traffic. The one thing mock mode lacks is a sibling id (mock events carry a sibling *type* but never a `related_id`), so `detail_payload` synthesises a three-segment placeholder under three guards — activity scope only, `mock::` lane only, no existing `related_wba_id` (see 4c). |
 | 16 | **The modal body's tables are emitted through a `_detail_panel` helper** carrying `.timeline-detail-panel` and the "Current state" caption. | Decision 13's 50/50 split and Decision 12's caption are both CSS/render requirements — the class must actually be emitted or `flex: 1 1 0` + `min-width: 0` never applies and long ids push the tables apart. One helper makes both impossible to forget. |
-| 17 | **`timeline-detail-store` changes value on every click** (a clientside nonce), and it is the only trigger for the panels. | Two clicks on equal payloads would otherwise leave the previous event's panels on screen while the header shows the new event. `is_open` is owned by the clientside branch; the store must be too. |
+| 17 | **`timeline-detail-store` carries the card's payload and is the only trigger for the panels.** No nonce. | The panels are a pure function of the two node ids in the payload, and the header is built from the same payload, so a byte-equal payload means an identical header *and* identical panels — nothing to correct. Dash's renderer already skips unchanged props by deep equality, so an equal payload simply does not re-fetch. `is_open` is owned by the clientside branch; the store too. |
 
 ## Commands you will need
 
@@ -298,7 +349,7 @@ anything that imports app code (`pytest.ini` sets it for tests).
 | Tests (the gate) | `pytest -m unit tests -q` | all pass |
 | One module | `pytest -m unit tests/test_activity_api_unit.py -q` | all pass (unchanged in this plan) |
 | API integration | `pytest -m unit tests/test_activity_api_integration.py -q` | all pass (mocked DB — needs no app, Postgres or mock mode) |
-| Migration (already applied) | `cd src/app && alembic current` | `51d673fb286f (head)` — Plan 043's `target_source` column is live |
+| Migration (already applied) | `cd src/app && alembic current` | `51d673fb286f (head)` — the `target_source` column from `d77db38` (#339) is live |
 | Components | `pytest -m unit tests/test_activity_timeline_ui_helpers.py -q` | all pass |
 | Security scan | `bandit -c .bandit.yml -r src/ -lll` | no High severity |
 | Spec freshness | `PYTHONPATH=src python scripts/generate_signal_activity_spec.py && git diff --stat docs/design/spec-activity-signal.md` | **no diff** |
@@ -320,21 +371,17 @@ running.
 
 | File | What changes | Phase |
 |---|---|---|
-| `src/app/api/activity/v1/model.py` | two additive fields: `related_wba_id`, `lane_entity_type` | 1 |
-| `src/app/api/activity/v1/query.py` | select `related_wba_id` as a 3rd column; return-shape followed through | 1 |
-| `src/app/api/activity/v1/service.py` | thread `related_wba_id` + `lane_entity_type`; `_action_to_event` returns both | 1 |
+| `src/app/api/activity/v1/model.py` | one additive field: `related_wba_id` | 1 |
+| `src/app/api/activity/v1/service.py` | build `related_wba_id` in `_action_to_event`; pass it through `_build_event` | 1 |
 | `src/app/dash_app/components/common.py` | extract `render_properties_table`; add `render_visible_properties` | 2 |
-| `src/app/dash_app/pages/timeline/api.py` | `fetch_node_properties(wba_ids)` HTTP client | 3 |
-| `src/app/dash_app/pages/timeline/helpers.py` | `detail_sentence` / `detail_payload` / `graph_deep_link`; `popup_fields` headline + hint + scope; drop `_popup_headline` | 3, 4 |
+| `src/app/dash_app/pages/timeline/api.py` | `fetch_node_properties(wba_ids)` HTTP client + `_mapping_id_for`; the two-branch `_NODE_PROPERTIES_CYPHER` | 3 |
+| `src/app/dash_app/pages/timeline/helpers.py` | `detail_sentence` / `detail_payload` / `graph_deep_link` / `_node_pattern`; `popup_fields` headline + hint + scope; drop `_popup_headline` | 3, 4 |
 | `src/app/dash_app/pages/timeline/layout.py` | card → `Div` + `role`/`tabIndex`; modal skeleton; Graph link; drop the `_popup_headline` import | 5 |
-| `src/app/dash_app/pages/timeline/callbacks.py` | click branch in the clientside listener; detail callback | 5 |
+| `src/app/dash_app/pages/timeline/callbacks.py` | click/keydown branch in the clientside listener; detail callback | 5 |
 | `src/app/dash_app/assets/executive-dashboard.css` | modal layout, panel/caption/connector/missing/graph-link rules | 5 |
-| `src/app/api/activity/v1/mock_data.py` | mock lane ids + event fields | 6 |
-| `tests/test_activity_api_integration.py` | fake session returns 3-tuples; `related_wba_id` / `lane_entity_type` assertions; `mock::` ids re-pointed | 6, 7 |
-| `tests/test_activity_timeline_ui_helpers.py` | updated `popup_fields` test + new `detail_*` tests; `mock::` ids re-pointed | 6, 7 |
-| `tests/test_activity_timeline_mock.py`, `tests/test_activity_timeline_callbacks.py` | `mock::` ids re-pointed to `mockdemo::` | 6 |
-| `tests/test_activity_person_identity.py` | 3rd positional at the 3 `_action_to_event` call sites; re-measured SQL disjunct counts | 7 |
-| `tests/test_activity_timeline_detail_modal.py` | **create** — SQL shape + `render_properties_table` + payload builders | 7 |
+| `tests/test_activity_api_integration.py` | `related_wba_id` assertions (both directions, None for history) | 7 |
+| `tests/test_activity_timeline_ui_helpers.py` | updated `popup_fields` test + new `detail_*` tests | 7 |
+| `tests/test_activity_timeline_detail_modal.py` | **create** — cypher shape, fetch keying, panel helpers, payload builders | 7 |
 | `docs/design/activity-timeline-design.md` | §5.1, §5.3, §7.4, §11 | 7 |
 
 **Out of scope** — do NOT touch:
@@ -345,7 +392,11 @@ running.
 - The producers (`src/connectors/producers/`), the consumer, the Neo4j sink, and
   `src/connectors/neo4j_db/node_base.py` (the `GraphNode.display_name()` commit
   gap is a **separate, known defect** — out of scope, see Maintenance notes).
-- `src/app/api/graph/v1/` — `POST /graph/execute` is reused **unchanged**.
+- `src/app/api/graph/v1/` — `POST /graph/execute` is reused **unchanged**. In
+  particular, do **not** "fix" `validate_read_only_query` here so that ids
+  containing a write keyword are accepted; that defect is tracked separately in
+  `plans/045-graph-query-validator-rejects-entity-ids.md` and must be decided on
+  its own.
 - The Graph page and the Collaboration Network page: they must keep rendering
   exactly as they do today. Phase 2 is a **pure refactor** for them.
 - `_fetch_lane`'s pagination, the timeline grid, cell overflow, idle separators.
@@ -363,42 +414,17 @@ running.
 
 ### Phase 1 — API: expose the other side's canonical WBA id
 
-`related_source` is already computed in `fetch_actions_for_entity`; it is simply
-not selected. Build the full id server-side so the UI never concatenates WBA ids.
+The UI cannot build the sibling's WBA id (the other side's `source` is not on the
+event), so the server builds it. **Build it in Python, in `_action_to_event`** —
+every ingredient is already on the ORM row the service holds, so the query layer
+is not touched at all (no third column, no tuple reshaping, no test churn).
 
-**1a.** `src/app/api/activity/v1/query.py`, inside `fetch_actions_for_entity`.
-`related_source` and `related_id` are already `CASE` expressions (lines 81-92).
-Add a third column by string-concatenating with `func.concat` — **not** the `||`
-operator, which is overridden in some databases:
+**1a.** *(removed — there is no query-layer change in this plan. Do **not** add a
+`func.concat` column to `fetch_actions_for_entity`, and do **not** change its
+return shape: `tests/test_activity_person_identity.py` asserts on its compiled
+SQL, and `_fetch_lane` unpacks its 2-tuples.)*
 
-```python
-    related_wba_id = func.concat(
-        related_source, "::", related_type, "::", related_id
-    )
-
-    stmt = select(
-        ActivityAction,
-        related_name_subq.label("related_name"),
-        related_wba_id.label("related_wba_id"),
-    ).where(or_(actor_match, target_match))
-```
-
-**Change the return line** to carry the third column:
-
-```python
-    result = await db.execute(stmt)
-    # NOT .scalars() — it returns only the FIRST column of each row, which
-    # silently drops related_name and related_wba_id.
-    return [(action, name, wba) for action, name, wba in result.all()]
-```
-
-The signature becomes:
-
-```python
-) -> list[tuple[ActivityAction, str | None, str | None]]:
-```
-
-**1b.** `src/app/api/activity/v1/model.py` — add **two** additive fields to
+**1b.** `src/app/api/activity/v1/model.py` — add **one** additive field to
 `TimelineEvent`, after `related_name`:
 
 ```python
@@ -411,77 +437,62 @@ The signature becomes:
             "the sibling node up in Neo4j."
         ),
     )
-    lane_entity_type: str | None = Field(
-        default=None,
-        description=(
-            "The lane entity's OWN entity type. Needed because ``entity_type`` "
-            "is the *other* side's type, so the UI cannot otherwise label the "
-            "lane's node in the modal's Graph deep-link. None for scope=history, "
-            "where ``entity_type`` is already the lane's own."
-        ),
-    )
 ```
 
-`lane_entity_type` is **derivable and must be derived on the server** — do not
-leave it for the UI to guess. `_action_to_event` already computes the branch
-that decides it (see 1c).
+That is the **only** new field. The lane entity's own type is **not** a field:
+a lane's WBA id already *is* `{source}::{entity_type}::{id}`
+(`service.py::_fetch_lane` builds it that way), `build_grid_body` already threads
+that same id into every card as `lane_wba_id`, and `graph_deep_link` (5c) derives
+the label from it with the same `split("::", 2)[1]` idiom it already uses for the
+other side. In history scope `entity_type` is already the lane's own type
+(`_event_to_event`), so no scope branch is needed either.
 
 **1c.** `src/app/api/activity/v1/service.py`:
 
-- `_build_event` — accept `related_wba_id: str | None = None` and
-  `lane_entity_type: str | None = None` and pass both into `TimelineEvent`.
-- `_action_to_event` — the third positional parameter, and set it. Its existing
-  keyword-only `lane_entity_type: str` parameter already holds **the lane's own
-  type** (it is what `is_actor` compares against) — so `lane_entity_type` is
-  passed straight through to the event and the UI never has to infer the side:
+- `_build_event` — accept `related_wba_id: str | None = None` and pass it into
+  `TimelineEvent`.
+- `_action_to_event` — build the id locally and pass it through. Every ingredient
+  is already computed here: `is_actor` decides the same branch the SQL `CASE` at
+  `query.py:81` encodes, and `other_type` / `related_id` are already locals.
+  `target_source` is the row's own column (`activity_action.py:59`), so no query
+  change is needed:
 
 ```python
-def _action_to_event(
-    action: ActivityAction,
-    related_name: str | None,
-    related_wba_id: str | None,
-    *,
-    lane_entity_type: str,
-    lane_identity_ids: frozenset[str],
-) -> TimelineEvent:
+    is_actor = (
+        action.actor_entity_type == lane_entity_type
+        and action.actor_entity_id in lane_identity_ids
+    )
+    lane_role: Literal["actor", "target"] = "actor" if is_actor else "target"
+    other_type = action.target_entity_type if is_actor else action.actor_entity_type
+    related_id = action.target_entity_id if is_actor else action.actor_entity_id
+    # The other side's own source: the target's when the lane is the actor, else
+    # the row's own source.  Mirrors ``related_source`` in the query layer, and
+    # ``target_source`` is never empty when written (activity_writer.py:134).
+    other_source = (
+        (action.target_source or action.source) if is_actor else action.source
+    )
+    return _build_event(
+        ...
+        related_id=related_id,
+        related_name=related_name,
+        related_wba_id=f"{other_source}::{other_type}::{related_id}",
+    )
 ```
 
-  and inside, after `related_id`:
-
-```python
-    related_wba_id=related_wba_id,
-    lane_entity_type=lane_entity_type,
-```
-
-- `_fetch_lane` — unpack three values from the new tuple shape:
-
-```python
-        events = [
-            _action_to_event(
-                action,
-                related_name,
-                related_wba_id,
-                lane_entity_type=entity_type,
-                lane_identity_ids=frozenset(eid for _, eid in identities),
-            )
-            for action, related_name, related_wba_id in action_rows
-        ]
-```
-
-  `last_row = action_rows[-1][0] if action_rows else None` is **unchanged** —
-  `[0]` is still the ORM row. `_event_to_event` is **unchanged**: history events
-  keep `related_wba_id=None` via the `_build_event` default.
+  `_action_to_event`'s signature, `_fetch_lane`'s loop and its
+  `last_row = action_rows[-1][0] if action_rows else None` are all **unchanged**.
+  `_event_to_event` is **unchanged**: history events keep `related_wba_id=None`
+  via the `_build_event` default.
 
 **Verify**
 ```
 pytest -m unit tests -q
 mypy src/
+git diff --stat src/app/api/activity/v1/query.py     # → no output (untouched)
 ```
-Expect the tuple-shape change to break tests that call `_action_to_event` or
-assert on the compiled SQL — **that is expected**; they are repaired in Phase 7
-(`tests/test_activity_person_identity.py` is the file that goes red — it is in
-the In-scope table for exactly this reason). Do **not** restore `.scalars()` or
-reshape the query to get back to green.
+Both must be green on the first run. If `pytest` or `mypy` goes red here, the
+build has been done in the wrong layer — re-read 1c rather than adjusting the
+query or the tests.
 
 ### Phase 2 — Components: share the table renderer
 
@@ -604,22 +615,56 @@ class NodePropertiesError(RuntimeError):
     """Raised when the graph property fetch fails (non-200 or transport error)."""
 
 
-#: One indexed lookup for every requested id — one round trip, no UNION, no hop.
-#: A node that does not exist is simply absent from the result, which is what lets
-#: the UI render a per-panel "not found" state instead of an empty property table.
-#: The ids passed in ARE the nodes' own canonical ``id`` values (Decision 9), so
-#: the returned node's ``wba_id`` always equals the id requested and the result
-#: needs no re-keying.
+#: One round trip for both sides.  Two branches, one call:
+#:
+#: * branch 1 — the id **is** a node id (every non-Person entity, and every
+#:   Person whose provider identity is its canonical node).  A node that does
+#:   not exist is simply absent, which is what lets the UI render a per-panel
+#:   "not found" state.
+#: * branch 2 — the id is a Person whose provider identity was deduped onto a
+#:   *different* provider's canonical Person node, so the id is **not** a node
+#:   id (Decision 9b).  ``MAPS_TO`` recovers it.  The mapping node and the
+#:   ``MAPS_TO`` edge are returned alongside the Person so the caller can pair
+#:   them unambiguously (a Person may have several mappings, so position is not
+#:   a safe pairing key).
+#:
+#: Both branches must alias their columns identically — Cypher rejects a UNION
+#: whose branches return different column names ("All sub queries in an UNION
+#: must have the same return column names").  The ``null`` placeholders exist
+#: only to satisfy that rule.
+#:
+#: The ``id`` property is indexed per label, so branch 1 is a scan when
+#: unlabelled — see the note below.  This is deliberate.
 _NODE_PROPERTIES_CYPHER = (
-    "MATCH (n) WHERE n.id IN $ids RETURN n LIMIT 2"
+    "MATCH (n) WHERE n.id IN $ids RETURN n AS node, null AS mapping, null AS rel "
+    "UNION "
+    "MATCH (i:IdentityMapping) WHERE i.id IN $mids "
+    "MATCH (i)-[r:MAPS_TO]-(p:Person) RETURN p AS node, i AS mapping, r AS rel"
 )
 
 
-def fetch_node_properties(wba_ids: list[str]) -> dict[str, dict[str, Any]]:
-    """Fetch node properties for each WBA id, keyed by WBA id.
+def _mapping_id_for(wba_id: str) -> str | None:
+    """Return the ``IdentityMapping`` id matching a Person WBA id, else ``None``.
 
-    Returns ``{}`` for an empty input.  A node that does not exist in Neo4j is
-    simply absent from the result — callers render a per-node "not found" state.
+    ``confluence::Person::557058:abc`` → ``confluence::IdentityMapping::557058:abc``.
+    Only Person ids have a mapping branch; every other type returns ``None``.
+    """
+    if "::Person::" not in wba_id:
+        return None
+    return wba_id.replace("::Person::", "::IdentityMapping::", 1)
+
+
+def fetch_node_properties(wba_ids: list[str]) -> dict[str, dict[str, Any]]:
+    """Fetch node properties for each WBA id, keyed by the id **requested**.
+
+    Returns ``{}`` for an empty input.  An id that resolves to no node is simply
+    absent from the result — callers render a per-node "not found" state.
+
+    The result is keyed by the id the caller asked for, **not** by the node that
+    came back: a Person sibling is requested by its provider-scoped id but
+    resolves to a canonical Person node whose ``wba_id`` differs (Decision 9b),
+    so the ``data`` dict's own ``wba_id`` must not be used as the key.
+
     Raises :class:`NodePropertiesError` on a transport error or a non-200
     response, which includes the HTTP 500 the backend returns when
     ``NEO4J_ENABLED`` is false.
@@ -627,6 +672,7 @@ def fetch_node_properties(wba_ids: list[str]) -> dict[str, dict[str, Any]]:
     ids = [str(w) for w in wba_ids if w]
     if not ids:
         return {}
+    mids = [mid for mid in (_mapping_id_for(w) for w in ids) if mid]
     try:
         # Bandit's B113 only recognises literal timeouts; ours is runtime-configured.
         response = requests.post(  # nosec B113
@@ -635,7 +681,7 @@ def fetch_node_properties(wba_ids: list[str]) -> dict[str, dict[str, Any]]:
                 "query": _NODE_PROPERTIES_CYPHER,
                 "source": "raw",
                 "view": "graph",
-                "parameters": {"ids": ids},
+                "parameters": {"ids": ids, "mids": mids},
             },
             timeout=runtime_settings.get_int("HTTP_REQUEST_TIMEOUT"),
         )
@@ -655,11 +701,42 @@ def fetch_node_properties(wba_ids: list[str]) -> dict[str, dict[str, Any]]:
         raise NodePropertiesError(f"invalid JSON: {exc}") from exc
 
     elements = neo4j_to_cytoscape(payload if isinstance(payload, dict) else {})
-    result: dict[str, dict[str, Any]] = {}
+    nodes: dict[str, dict[str, Any]] = {}
+    element_to_wba: dict[str, str] = {}
     for element in elements:
+        if element.get("group") != "nodes":
+            continue
         data = element.get("data")
-        if isinstance(data, dict) and data.get("wba_id"):
-            result[str(data["wba_id"])] = data
+        if not isinstance(data, dict) or not data.get("wba_id"):
+            continue
+        nodes[str(data["wba_id"])] = data
+        if data.get("id"):
+            element_to_wba[str(data["id"])] = str(data["wba_id"])
+
+    # Pair each mapping node with the Person it MAPS_TO, via the returned edge.
+    # ``mapping_to_person`` is keyed by the *requested* Person id, so branch-2
+    # hits land under the key the caller used.
+    mapping_to_person: dict[str, dict[str, Any]] = {}
+    for element in elements:
+        if element.get("group") != "edges":
+            continue
+        data = element.get("data")
+        if not isinstance(data, dict) or data.get("relType") != "MAPS_TO":
+            continue
+        source = element_to_wba.get(str(data.get("source")))
+        target = element_to_wba.get(str(data.get("target")))
+        if not source or not target:
+            continue
+        for a, b in ((source, target), (target, source)):
+            if "::IdentityMapping::" in a and "::Person::" in b:
+                requested = a.replace("::IdentityMapping::", "::Person::", 1)
+                mapping_to_person[requested] = nodes[b]
+
+    result: dict[str, dict[str, Any]] = {}
+    for requested in ids:
+        data = nodes.get(requested) or mapping_to_person.get(requested)
+        if data is not None:
+            result[requested] = data
     return result
 ```
 
@@ -668,47 +745,71 @@ This is a **page-level import of another page's `utils` subpackage** — permitt
 already done by `pages/timeline/callbacks.py:29` and
 `pages/catalog/editor_test_callbacks.py:21`. Do not move it.
 
-**Note on the query**: `WHERE n.id IN $ids` uses the `id` label index on every
-entity label. Do **not** write `MATCH (n {id: $a})` twice and do not `UNION`; a
-single indexed `IN` lookup is one round trip and one plan.
+**Note on the query**: `WHERE n.id IN $ids` does **not** use the per-label `id`
+indexes when the `MATCH` is unlabelled. `EXPLAIN` on the live graph:
 
-> **Why there is no label in the MATCH.** The `id` index is **per-label** — 16
-> separate `RANGE` indexes, not one global one — so an *unlabelled* `MATCH (n
-> {id: …})` cannot use any of them: `EXPLAIN` shows `AllNodesScan > Filter`.
-> Do **not** "simplify" the query back to `MATCH (n {id: $id})` — that is
-> precisely the scan this note forbids. (The same reasoning is why the
-> deep-link queries in 5c *are* label-scoped: there the id is a literal, so the
-> label can be written into the pattern.)
+```
+MATCH (n)        WHERE n.id IN $ids RETURN n   → ProduceResults > Limit > Filter > AllNodesScan
+MATCH (n:Person) WHERE n.id IN $ids RETURN n   → ProduceResults > Limit > NodeUniqueIndexSeek
+```
 
-**3b. There is no Person hop (Decision 9).** A Person lane's WBA id **is** the
-Person node's `id`, so it is passed to `fetch_node_properties` unchanged — no
-`IdentityMapping` translation, and no helper to write.
+So branch 1 is a full node scan. This is a **deliberate** trade, not an
+oversight: the ids are of unknown label, and splitting them by label would mean
+one `MATCH` per label (or a `UNION` per label), which costs more plans and more
+query text than the scan costs at this graph's size. Do **not** "optimise" this
+by dropping the `UNION` and the mapping branch — branch 2 is what makes a
+deduped Person sibling resolve at all (Decision 9b). Do not add a label to
+branch 1 either: the requested id's label is not known to the caller.
 
-> **Why the hop was dropped.** An earlier draft translated a Person lane via a
-> `graph_lookup_id` helper and a `MAPS_TO` hop, on the premise that a lane id
-> might name a *shadow* Person node (the case `person_cache.py:125-151` handles
-> by resolving a provider person onto an existing canonical Person). That case
-> cannot reach the modal: a lane is only ever created from the typeahead, which
-> reads Elasticsearch, and every Person document in ES is keyed by the
-> **canonical** Neo4j id — the ES sink deliberately refuses to create a shadow
-> document (`consumers/sinks/elasticsearch_sink.py:98-138`; the local
-> `confluence_person_index` is empty for exactly this reason). The shipped
-> identity expansion in `api/activity/v1/service.py:246-249` relies on the same
-> property, matching the lane id directly as `(p:Person {id: $person_id})`.
+**3b. The Person hop is required for the sibling (Decision 9b).** A Person
+**lane** id is its node id and needs no translation, but a Person **sibling**
+may be a provider-scoped id whose node was never created because Neo4j deduped
+the person onto another provider's canonical node. `fetch_node_properties`
+handles both in one call: branch 1 covers the id-is-a-node-id case, branch 2
+recovers the deduped case through `MAPS_TO`.
+
+> **Why the earlier draft's argument was wrong.** It reasoned that "a lane is
+> only ever created from the typeahead, which reads Elasticsearch, and every
+> Person document in ES is keyed by the canonical Neo4j id" — so no hop. That
+> premise is **true for the lane and false for the sibling**. The sibling is not
+> drawn from the typeahead; it is built from the raw `activity_actions` row,
+> whose `target_entity_id` / `actor_entity_id` is the **provider-scoped** id
+> (`activity_writer._decompose_relationships`). When a person is seen from a
+> second provider, `person_cache.get_or_create_person` reuses the existing
+> canonical node by email and the second provider's Person id is never created —
+> but its `IdentityMapping` node **is** created (`person_cache.queue_identity_mapping`),
+> and that is what branch 2 walks.
 >
-> Dropping the hop also removes a result-keying hazard: with the hop present,
-> the node *returned* differs from the id *requested*, so keying the result by
-> `wba_id` (as `fetch_node_properties` does) would miss for **every** Person
-> lane and render "Not found in graph". Without the hop, requested id ==
-> returned id == lane id, and the existing keying is correct.
+> **Measured on the live graph (456 nodes), 2026-10-17** — the ids are the ones
+> the plan's own Phase 1c rule produces from real rows:
 >
-> **Do not reintroduce a label or a hop.** In particular, do not add
-> `(p:Person {id: …})` or an `IdentityMapping` lookup "for safety": the first
-> would break every non-Person lane, and the second would reintroduce the keying
-> hazard above.
-
-
-
+> | Requested id (built by 1c) | Branch 1 | Branch 2 (via `MAPS_TO`) |
+> |---|---|---|
+> | `github::Person::shuvabrata` | ✅ itself | n/a |
+> | `jira::Person::557058:62105664-…` | ✅ itself | n/a |
+> | `jira::Person::712020:cc7f7515-…` | ✅ itself | n/a |
+> | `confluence::Person::557058:62105664-…` | ❌ absent | ✅ → `jira::Person::557058:62105664-…` |
+> | `confluence::Person::712020:cc7f7515-…` | ❌ absent | ✅ → `jira::Person::712020:cc7f7515-…` |
+> | `confluence::Person::712020:23da340e-…` | ❌ absent | ✅ → `jira::Person::712020:23da340e-…` |
+> | `confluence::Page::26705923` | ✅ itself | n/a |
+> | `github::PullRequest::work-behavior-analytics-ai::339` | ✅ itself | n/a |
+> | `mock::Person::alice`, `mock::PullRequest::mock-other` | ❌ absent | ❌ absent → "Not found" (correct, Decision 15) |
+>
+> Whole-dataset sweep: **3 of 9** distinct real Person sibling ids miss branch 1
+> and are recovered by branch 2; **58 of 382** Person-involving action rows are
+> affected (~15%). The worst single lane is `confluence::Page::26705923`, where
+> **11 of its 14 events** carry a `confluence::Person::…` sibling.
+>
+> **The keying must be by the requested id, not by the returned `wba_id`.** In
+> the deduped case the two differ by construction. That is why
+> `fetch_node_properties` builds `mapping_to_person` from the returned `MAPS_TO`
+> edge and keys the final result by the id the caller passed. Keying by the
+> node's own `wba_id` is the bug this branch exists to avoid.
+>
+> **Do not** try to pair the mapping to its Person by position or by list order:
+> a Person can have several `IdentityMapping` nodes (the live graph has a
+> `jira` and a `confluence` mapping for the same person), so only the returned
+> `MAPS_TO` edge identifies the pairing.
 
 > **This Cypher has already been executed against the live local graph** —
 > measured on 2026-10-17 against `neo4j:5.26-community`. You do **not** need to
@@ -719,28 +820,41 @@ Person node's `id`, so it is passed to `fetch_node_properties` unchanged — no
 > |---|---|---|
 > | `jira::Person::557058:62105664-…` (a real lane id) | 1 | itself, `Person` |
 > | `github::Repository::shuvabrata/work-behavior-analytics-ai` | 1 | itself, `Repository` |
-> | `mockdemo::Person::nope` (missing) | 0 | absent → the "Not found" panel |
+> | `mock::Person::nope` (missing) | 0 | absent → the "Not found" panel |
 > | a real id **+** a missing id, one call | 1 | only the resolvable node |
+> | `confluence::Person::557058:62105664-…` **+** its mapping | 2 | the mapping node, the `MAPS_TO` edge, and the canonical `jira::Person::…` |
 >
-> The `id`-equality is index-backed by 16 **per-label** `RANGE` indexes
-> (`Person`, `Issue`, `PullRequest`, `Repository`, …). Keep the `IN` form — see
-> the note above for why a per-id property-map match would be a scan.
+> Keep the `IN` form — see the note above for why a per-id property-map match
+> would also be a scan.
 >
 > The deep-link Cypher is also verified: the lane-only form returns 37 rows for
 > a real Repository id, and the related-node form returns **0** when no such edge
 > exists (the expected case for a mock or historical event) — the Graph page
 > shows the nodes and the user sees the edge is absent, which is correct rather
-> than an error.
+> than an error. For a **deduped Person sibling** the related-node form returns
+> **0** unless it is written through the hop — see 5c.
 
 **Verify**
 ```
 mypy src/ && pylint src --score=y
 ```
-Re-run the four-case check above **once**, after wiring
-`fetch_node_properties`, to confirm the code path (not just the Cypher) behaves —
-taking a real lane id from `MATCH (p:Person) RETURN p.id LIMIT 1`. If Neo4j is
-unavailable, report this step as not performed — the unit tests in Phase 7 are
-the gate.
+Re-run the case table above **once**, after wiring `fetch_node_properties`, to
+confirm the code path (not just the Cypher) behaves — including the **deduped
+Person** rows, which are the ones branch 2 exists for. Take real ids from:
+
+```
+MATCH (p:Person) RETURN p.id LIMIT 5          # canonical ids → branch 1
+MATCH (i:IdentityMapping) RETURN i.id LIMIT 5 # mapping ids  → branch 2
+```
+
+For each mapping id, `fetch_node_properties([<the matching ::Person:: id>])`
+must return a non-empty dict whose single value's `wba_id` is the **canonical
+`Person`** id (e.g. requesting `confluence::Person::557058:…` yields a node whose
+`wba_id` is `jira::Person::557058:…`). If a mapping id's Person id comes back
+absent, branch 2 is mis-wired — re-read 3a rather than adding a fallback.
+
+If Neo4j is unavailable, report this step as not performed — the unit tests in
+Phase 7 are the gate.
 
 ### Phase 4 — Helpers: the modal payload and the peek's new sentence
 
@@ -833,27 +947,29 @@ def detail_payload(event: dict[str, Any], lane_label: str, lane_wba_id: str,
     Everything the modal needs to render its header and issue its one Neo4j
     fetch, with no second round trip.  In ``history`` scope there is no other
     side (``lane_role`` is None), so ``related_wba_id`` is None and the modal
-    renders a single panel.
+    renders a single panel.  The lane's OWN type is not carried here: it is the
+    middle segment of ``lane_wba_id`` (Decision 7b), which the clientside branch
+    passes straight through.
     """
     related = event.get("related_wba_id")
     related_wba_id = related if isinstance(related, str) and related else None
-    # ``entity_type`` is the OTHER side's type, so the lane's own type comes
-    # from the API's ``lane_entity_type`` in activity scope, and from
-    # ``entity_type`` in history scope (where the lane entity IS the event).
-    lane_type = (
-        str(event.get("entity_type") or "")
-        if scope == "history"
-        else str(event.get("lane_entity_type") or "")
-    )
+    if (
+        related_wba_id is None
+        and scope != "history"          # Decision 11: history is one panel, always
+        and lane_wba_id.startswith("mock::")   # mock lanes only — never real data
+    ):
+        # Mock events carry a sibling TYPE but no sibling id.  Build a
+        # placeholder in the SAME {source}::{type}::{id} grammar as the lane id,
+        # so graph_deep_link's middle-segment label is the sibling's real type.
+        # A 4-segment id (e.g. "mock::Person::other::Issue") would parse the
+        # label as "Person" — the exact conflation the card-reading-order change's mock guidance
+        # warns about.
+        related_entity_type = str(event.get("entity_type") or "")
+        if related_entity_type:
+            related_wba_id = f"mock::{related_entity_type}::mock-other"
     return {
-        # ``nonce`` makes the payload differ on EVERY click — see Decision 17.
-        # Two cards with equal payloads would otherwise write an equal value to
-        # ``timeline-detail-store`` and the panels would not re-render.
-        # Always 0 here; the clientside branch (5d) overwrites it before storing.
-        "nonce": 0,
         "lane_wba_id": lane_wba_id,
         "lane_label": lane_label,
-        "lane_entity_type": lane_type,
         "related_wba_id": related_wba_id,
         "relationship": humanize_relationship(
             str(event.get("relationship_type") or "")
@@ -861,25 +977,40 @@ def detail_payload(event: dict[str, Any], lane_label: str, lane_wba_id: str,
         "datetime": datetime_text,
         "scope": scope,
         # Needs ``related_wba_id`` normalised first, hence the local above.
-        "graph_url": graph_deep_link(lane_wba_id, lane_type, related_wba_id),
+        "graph_url": graph_deep_link(lane_wba_id, related_wba_id),
     }
 ```
 
-`lane_entity_type` comes from the field added in Phase 1b — do **not** infer it
-in the UI. In particular do not try to derive it from `lane_role`: `lane_role`
-tells you *which side* the lane was on, not what type that side is. It is needed
-for two things only: the deep link's `MATCH` label (Decision 9 keeps the
-*properties* lookup label-free) and the Graph link's node label. In history
-scope it is read from ``entity_type``, which **is** the lane's own type there.
+> **The mock branch above is the whole of this plan's mock support**
+> (Decision 15), and each of its three conditions is load-bearing:
+>
+> - `related_wba_id is None` — real activity events already carry the true
+>   sibling id from Phase 1, so the branch can only ever add to mock data.
+> - `scope != "history"` — **this one is easy to lose.** `_event_to_event` sets
+>   `entity_type` to the lane's *own* type and leaves `related_wba_id` None, so
+>   without this guard the fallback would invent a sibling for history and the
+>   modal would render two panels plus a connector, breaking Decision 11's
+>   single-panel history modal and step 5e's `right is None` branch.
+> - `lane_wba_id.startswith("mock::")` — mock lanes only, never real data. Use
+>   `startswith` on the literal inline; do **not** introduce a module constant
+>   for the prefix (a tuple constant compared with `==` silently never matches).
+>
+> The placeholder id is **three segments** (`mock::<Type>::mock-other`) so it is
+> in the same `{source}::{type}::{id}` grammar as the lane id — which is what
+> makes `graph_deep_link`'s `split("::", 2)[1]` yield the sibling's *real* type.
+> A four-segment id would parse the label as `mock`, and the deep link would run
+> a nonsense subgraph. It matches no node, so the right panel still shows
+> "Not found in graph" and the whole click still issues **exactly one**
+> `POST /api/v1/graph/execute`. Everything else about mock data is unchanged: no
+> lane-id rename, no `related_*` on `_materialize`, no `lane_role`. Do **not**
+> generalise this into a fallback for real data — the sibling's id for real
+> events comes from the API field added in Phase 1.
 
-**Why `lane_entity_type` is a server field and not a UI inference**: in
-`_action_to_event` (`src/app/api/activity/v1/service.py:184-190`) the line
-`other_type = action.target_entity_type if is_actor else action.actor_entity_type`
-proves the actor and target types are both known server-side and that
-`entity_type` is deliberately the *other* one. The lane's own type is the
-complementary branch, which is exactly the keyword-only `lane_entity_type`
-parameter already passed into `_action_to_event` from `_fetch_lane`. Passing it
-through (Phase 1c) is one line and removes all inference from the UI.
+The lane's own type is deliberately **not** in the payload: `lane_wba_id` is
+`{source}::{entity_type}::{id}`, and `graph_deep_link` reads the middle segment
+(Decision 7b) — the same idiom it already uses for the other side, and the same
+one `helpers.selection_from_wba_ids` uses. Do **not** derive it from `lane_role`:
+that says *which side* the lane was on, not what type that side is.
 
 **Verify**
 ```
@@ -896,7 +1027,7 @@ it is Phase 7's job. That failure is expected; do not revert the change.
 from `html.A` to `html.Div`, drop `href`/`target`/`rel`/`title`, and carry the
 richer detail payload. `build_event_card` needs the lane's label and wba id, so
 extend its signature and thread them through `build_cell` → `build_grid_body`
-(the same pattern Plan 043 used for `scope`).
+(the same pattern the card-reading-order change used for `scope`).
 
 ```python
 def build_event_card(
@@ -1006,19 +1137,88 @@ a focused card, and now that the card is focusable it will fire — which is the
 desired behaviour (focus shows the peek). Do **not** remove the `focusin` /
 `focusout` listeners.
 
-**5a-iv. Thread the lane label.** `build_cell` already receives `lane_key` — pass
-`lane_label=<the lane's display label>` and `lane_wba_id=lane_key` down to every
-`build_event_card`. `build_grid_body` has the lane dicts in `lanes`; build a
-`{wba_id: label}` map beside the existing `lane_ids`
-(`lane_ids = [str(lane.get("wba_id") or "") for lane in lanes]`, line 751) and
-pass the label for each `wba_id`.
+**5a-iv. Thread the lane label.** `build_event_card` takes these two as
+**keyword-only** (`lane_label`, `lane_wba_id` — see 5a) and has **no** `lane_key`
+parameter. `build_cell` already has `lane_key` (the lane's wba id) as a
+parameter; the lane's *display label* does not exist there and must be looked up
+by `wba_id`. So this is three edits, not one:
 
+1. **`build_cell`** — add a `lane_label` parameter beside the existing
+   `lane_key` (both keyword-only, both defaulted):
+
+```python
+def build_cell(  # pylint: disable=too-many-arguments
+    events: list[dict[str, Any]],
+    lane_color: str,
+    effective_nodes: dict[str, Any] | None,
+    base_tokens: dict[str, Any],
+    *,
+    show_empty_note: bool = False,
+    expanded: bool = False,
+    row_key: str = "",
+    lane_key: str = "",
+    lane_label: str = "",
+    scope: str = "activity",
+) -> html.Div:
+```
+
+2. **Inside `build_cell`** — forward both into the card call (this is the only
+   place `lane_key` becomes `lane_wba_id`):
+
+```python
+    cards: list[Any] = [
+        build_event_card(
+            event,
+            lane_color,
+            entity_type_color(
+                str(event.get("entity_type") or ""), effective_nodes, base_tokens
+            ),
+            scope=scope,
+            lane_label=lane_label,
+            lane_wba_id=lane_key,
+        )
+        for event in shown
+    ]
+```
+
+3. **`build_grid_body`** — the lane dicts are in `lanes`, which is already a
+   parameter. Build the label map beside the existing `lane_ids`
+   (`lane_ids = [str(lane.get("wba_id") or "") for lane in lanes]`, line 751):
+
+```python
+    lane_labels = {
+        str(lane.get("wba_id") or ""): str(lane.get("label") or "")
+        for lane in lanes
+    }
+```
+
+   and pass it in the **main** cell loop, which is the only `build_cell` call
+   that already passes `lane_key=wba_id`:
+
+```python
+                build_cell(
+                    list(cells.get(wba_id) or []),
+                    lane_colors.get(wba_id, ""),
+                    effective_nodes,
+                    base_tokens,
+                    show_empty_note=first_row and lane_empty.get(wba_id, False),
+                    expanded=cell_expansion_key(row_key, wba_id) in expanded_cell_set,
+                    row_key=row_key,
+                    lane_key=wba_id,
+                    lane_label=lane_labels.get(wba_id, ""),
+                    scope=scope,
+                )
+```
+
+- The other `build_cell` calls (the empty-grid early return and the expanded
+  idle row) pass neither `lane_key` nor `lane_label` — leave them alone; no
+  cards are rendered without events.
 - **pylint**: `build_cell` and `build_grid_body` already carry
-  `# pylint: disable=too-many-arguments`; if the count trips again, extend that
-  disable rather than restructuring.
-- The label map must include a fallback for a lane missing from the dict —
-  `.get(wba_id, "")` is fine, since `detail_sentence` treats an empty subject as
-  "no subject" rather than rendering a stray space.
+  `# pylint: disable=too-many-arguments`; if the added parameter trips the count,
+  extend that disable rather than restructuring.
+- `lane_labels.get(wba_id, "")` is the required fallback for a lane missing from
+  the dict: `detail_sentence` treats an empty subject as "no subject" rather than
+  rendering a stray space.
 
 **5b.** `layout.py` — add the modal skeleton to the page root, beside the
 existing popup portal (Step 5a's Decision 1 keeps the portal). Mirror
@@ -1088,9 +1288,7 @@ Cypher, so the query string is constructed **server-side** and shipped as an
 opaque `graph_url` in the card payload. The browser never builds Cypher.
 
 ```python
-def graph_deep_link(
-    lane_wba_id: str, lane_entity_type: str, related_wba_id: str | None
-) -> str:
+def graph_deep_link(lane_wba_id: str, related_wba_id: str | None) -> str:
     """Return the ``/app/graph?cypher=`` URL for this event's entities.
 
     With a ``related_wba_id`` the query loads the two nodes and the
@@ -1101,50 +1299,108 @@ def graph_deep_link(
     ``handle_url_deep_link_tab`` (``graph/callbacks/right_panel.py:100-105``) to
     open the Console tab, pre-fill the query and auto-execute it.
 
+    Both labels are read from their own WBA id (``{source}::{type}::{id}``), so
+    callers pass ids only — the same ``split("::", 2)[1]`` idiom
+    ``selection_from_wba_ids`` uses.
+
     **Both MATCHes are label-scoped on purpose.**  The ``id`` index is
-    **per-label** (16 separate ``RANGE`` indexes, created by
+    **per-label** (every entity label, created by
     ``src/app/scripts/create_neo4j_indexes.py``), so an *unlabelled*
     ``MATCH (a {id: …})`` cannot use any of them — it plans as
-    ``AllNodesScan > Filter``.  The labels are safe to interpolate: both come
-    from parsed WBA ids and both are validated by
-    ``validate_read_only_query``'s callers on the way in.
+    ``AllNodesScan > Filter``.  Both labels come from parsed WBA ids, and
+    ``detail_payload`` only ever passes ids that came from a validated lane key
+    (``parse_wba_id`` in ``service.py``) or from the API's ``related_wba_id``.
 
-    The related node's label is read from its own WBA id, so callers pass only
-    the lane's type.
+    **A Person id is matched through its ``IdentityMapping``.**  A Person id on
+    either side may be a provider-scoped id whose Person node was never created,
+    because Neo4j deduped the person onto another provider's canonical node
+    (Decision 9b).  The label alone would then match nothing and the Graph page
+    would open empty.  Anchoring on the ``IdentityMapping`` (which *is* created
+    for every provider identity) and hopping one ``MAPS_TO`` to the Person
+    resolves the deduped case as well as the ordinary one, since a non-deduped
+    Person has its own mapping too.
     """
+    lane_pattern = _node_pattern("a", lane_wba_id)
     if related_wba_id:
-        related_type = related_wba_id.split("::", 2)[1]
         cypher = (
-            f"MATCH (a:{lane_entity_type} {{id: '{lane_wba_id}'}})"
-            f"-[r]-(b:{related_type} {{id: '{related_wba_id}'}}) "
-            "RETURN a, r, b LIMIT 50"
+            f"MATCH {lane_pattern} "
+            f"MATCH {_node_pattern('b', related_wba_id)} "
+            "MATCH (a)-[r]-(b) RETURN a, r, b LIMIT 50"
         )
     else:
         cypher = (
-            f"MATCH (a:{lane_entity_type} {{id: '{lane_wba_id}'}}) "
+            f"MATCH {lane_pattern} "
             "OPTIONAL MATCH (a)-[r]-(b) RETURN a, r, b LIMIT 50"
         )
     return f"/app/graph?cypher={quote(cypher)}"
 ```
 
+Write `_node_pattern` as a **module-level private helper beside
+`graph_deep_link`** (not a closure inside it) — mypy strict and pylint both
+prefer it that way, and Phase 7 tests it directly:
+
+```python
+def _node_pattern(var: str, wba_id: str) -> str:
+    """Return a label-scoped Cypher pattern that resolves ``wba_id`` to a node.
+
+    A Person is resolved through its ``IdentityMapping`` plus one ``MAPS_TO``
+    hop, because a Person's provider-scoped id may not be its node id at all
+    (Decision 9b).  Every other entity type is matched directly on its own id,
+    which the per-label ``id`` index serves as a seek.
+    """
+    source, entity_type, entity_id = wba_id.split("::", 2)
+    if entity_type == "Person":
+        mapping_id = f"{source}::IdentityMapping::{entity_id}"
+        return (
+            f"(i_{var}:IdentityMapping {{id: '{mapping_id}'}})"
+            f"-[:MAPS_TO]-({var}:Person)"
+        )
+    return f"({var}:{entity_type} {{id: '{wba_id}'}})"
+```
+
+> **Verified on the live graph**, 2026-10-17 — all six forms below were executed
+> through `POST /api/v1/graph/execute` and returned a non-error `GraphResponse`:
+>
+> | Case | Result |
+> |---|---|
+> | Page lane + **deduped** Person sibling | ✅ 2 nodes, 9 rels (`confluence::Page::…` + `jira::Person::…`) |
+> | Person lane + PR sibling | ✅ 2 nodes, 2 rels |
+> | Person lane + Commit sibling | ✅ 2 nodes, 2 rels |
+> | history, Person lane only | ✅ lane + neighbours |
+> | history, Page lane only | ✅ lane + neighbours |
+>
+> Without the hop, the first row returns `nodes=0 rels=0` — an empty Graph page.
+> Note that the `i_a` / `i_b` mapping nodes are **not** projected by
+> `RETURN a, r, b`, so the Graph page shows the same two entity nodes it did
+> before.
+
 Import `quote` from `urllib.parse` at the top of `helpers.py` (check the
 existing import block first — do not duplicate an existing import).
 
 Call it from `detail_payload` (Phase 4c), which already does this — see the
-``"graph_url"`` key there. It takes the already-normalised ``lane_type`` and
-``related_wba_id`` locals, so the clientside branch needs no conditional.
+``"graph_url"`` key there. It takes the already-normalised ``related_wba_id``
+local, so the clientside branch needs no conditional.
 
-**Caution on the label**: ``lane_entity_type`` is empty when the API sent no
-``lane_entity_type`` *and* the scope is activity (an older cached payload). A
-bare ``MATCH (a: {id: …})`` is a Cypher **syntax error**, so guard it — if
-``lane_entity_type`` is falsy, fall back to the unlabelled (scanning) form
-rather than emitting invalid Cypher:
+**The label is always present**, because `lane_wba_id` always has three
+`::`-separated segments: it is the lane key the API minted, and the modal is only
+reachable from a card built from a validated lane (`parse_wba_id` rejects any key
+without three non-empty parts, and `router.py` validates every requested
+`wba_ids` entry up front). So there is no empty-label branch to guard — and
+**do not add one**: a bare `MATCH (a: {id: …})` is a Cypher syntax error, so a
+defensive fallback would need to change the query shape, not just drop a label.
+If `lane_wba_id` ever turns out to lack a type segment, that is a STOP condition
+(see the STOP section), not something to paper over here.
 
-```python
-    lane_label = f":{lane_entity_type}" if lane_entity_type else ""
-```
-
-and interpolate ``lane_label`` in both branches.
+> **Known limitation, tracked separately — do not fix here.** The Graph page's
+> `validate_read_only_query` scans the *whole* query string for write keywords,
+> including inside string literals, so an id containing a hyphen-delimited
+> keyword (e.g. `github::Repository::acme/merge-queue`) is rejected with HTTP 400
+> and the deep link shows an error instead of a graph. This is **pre-existing**
+> (the Search page's `_build_node_cypher` has the same exposure) and the fix
+> belongs in the validator, not here. See
+> `plans/045-graph-query-validator-rejects-entity-ids.md`. Do **not** add
+> keyword-escaping or a URL-shape fallback in `graph_deep_link` — that is a
+> decision for 045.
 
 **5d.** `callbacks.py` — extend the **existing** install-once clientside
 callback (line ~972). Two additions inside the `if (!window.__timelinePopupWired)`
@@ -1172,13 +1428,11 @@ block, and one new delegated listener:
                     if (data.graph_url) {
                         window.dash_clientside.set_props('timeline-detail-graph-link', {href: data.graph_url});
                     }
-                    // Decision 17: stamp a fresh nonce so the store's value
-                    // differs on EVERY click. Without it, two clicks on cards
-                    // with equal payloads write an equal value and Dash does not
-                    // re-fire the panels callback — leaving the PREVIOUS event's
-                    // panels under the new event's header.
-                    window.__timelineDetailNonce = (window.__timelineDetailNonce || 0) + 1;
-                    data.nonce = window.__timelineDetailNonce;
+                    // The payload IS the store value, unchanged (Decision 17).
+                    // A byte-equal payload means an identical header and
+                    // identical panels (both derive from the same two node
+                    // ids), so Dash's own change detection skipping the repeat
+                    // is the correct behaviour.
                     window.dash_clientside.set_props('timeline-detail-store', {data: data});
                     window.dash_clientside.set_props('timeline-detail-modal', {is_open: true});
                 }
@@ -1211,10 +1465,13 @@ def render_detail_panels(payload: dict[str, Any] | None) -> Any:
 Its body:
 
 1. `if not payload: return no_update`
-2. Take the two lookup ids **straight from the payload** — both ARE the nodes'
-   canonical ids (Decision 9), so there is no translation step:
+2. Take the two lookup ids **straight from the payload**:
    `left = payload["lane_wba_id"]`, `right = payload.get("related_wba_id")`.
    Build the list of ids actually to fetch: `ids = [left] if not right else [left, right]`.
+   **No translation step here** — `fetch_node_properties` owns the Person hop
+   (Decision 9b / 3a). The ids stay in their requested form, and the dict it
+   returns is keyed by exactly those ids, so `nodes[left]` and `nodes[right]`
+   are correct even when the resolved node's own `wba_id` differs.
 3. `nodes = fetch_node_properties(ids)`, wrapped in
    `try/except NodePropertiesError` → return `_detail_error(...)` (see below).
    **Do not use `create_alert`** for this: an alert belongs in the page's
@@ -1390,9 +1647,10 @@ mypy src/ && pylint src --score=y
 `docker compose up -d --force-recreate app`, open `/app/timeline`:
 - Click a card → the xl modal opens **immediately** with the sentence in the
   header, then the panels fill.
-- **Click a second, different card** (and the *same* card twice) — the header
-  **and** the panels must match that card both times. A stale panel under a new
-  header means the store's nonce is not being stamped (Decision 17).
+- **Click a second, different card**, then the first again — the header **and**
+  the panels must match the card each time. Re-clicking the *same* card twice in
+  a row re-opens from the already-rendered panels (Decision 17: an equal payload
+  does not re-fetch) — that is expected, not a bug.
 - The header's Graph link opens `/app/graph` **in a new tab** with the subgraph.
 - Both panels show properties in the shared `.details-prop-row` style; long WBA
   ids wrap rather than overflow; the copy icons and the connector glyph render
@@ -1400,134 +1658,89 @@ mypy src/ && pylint src --score=y
 - Each panel shows the **"Current state"** caption above its table, and the two
   tables sit side by side at equal width (`.timeline-detail-panel`).
 - Because mock lane ids match no real node (Decision 15), both panels show
-  "Not found in graph" — and the console shows **zero** Neo4j calls beyond the
-  one `/graph/execute`.
+  "Not found in graph" — the right panel via the mock sibling id from 4c — and
+  the network tab shows exactly **one** `/graph/execute` per click.
 - Hovering the same card still shows the peek, now with the sentence and the
   "Click for details" hint, and **no** native tooltip.
+
+**Verify — the deduped-Person case (NOT a gate, but do it if Neo4j is up).**
+Mock mode cannot exercise this, because mock ids match no node by design. Turn
+mock mode **off** (`TIMELINE_MOCK_SCENARIO=` empty in `.env`, then
+`docker compose up -d --force-recreate app`) and select the lane
+**`confluence::Page::26705923`** (type `26705923`, or pick the Confluence Page
+named "First Engineering Page" from the typeahead):
+- Click any of the cards whose second line reads `Person · shuvabratadeb` —
+  **11 of that lane's 14 cards** are this shape on the current local data.
+- The **right** panel must show real properties (a `Person` table with `id`,
+  `name`, `email`, …), **not** "Not found in graph". Before this plan's fix it
+  showed "Not found in graph" for all 11.
+- The header's Graph link must open a graph with **two** nodes and edges between
+  them, **not** an empty canvas.
+- Still exactly **one** `/graph/execute` per click (the hop is inside the same
+  single query — 3a).
+
+If Neo4j is down or the lane is not present in the local data, report this step
+as not performed — the Phase 7 tests are the gate.
 
 If a browser or the app is unavailable, report this step as not performed — do
 not mark the phase failed, and do not improvise a substitute.
 
-### Phase 6 — Mock data: make the feature demonstrable
+### Phase 6 — Mock data: NO CHANGE
 
-`src/app/api/activity/v1/mock_data.py`. Today `_materialize` (line 323) builds
-`TimelineEvent` with no `related_id`, `related_name`, `related_wba_id` or
-`lane_role`.
+**There is nothing to do in this phase. `src/app/api/activity/v1/mock_data.py`
+must not be modified.**
 
-**Two facts to know before you start** (both verified against the live file):
+This phase previously specified a reshaped mock lane-id convention plus
+`related_*` / `lane_role` on `_materialize`. All of it is unnecessary, and the
+measurements below are why:
 
-1. **There is no lane-id builder.** Mock lane ids come from the *caller* —
-   `build_timeline` iterates `request.wba_ids` (line 419-421) and
-   `_lane_identity` (line 168-181) merely **parses** the id it is given. The only
-   literal `mock::` ids in the module are the `_SUGGESTION_CATALOGUE` entries
-   (line 455-464). So "change the lane-id builder" is not a thing; the ids to
-   change are the catalogue entries.
-2. **`_materialize` already has a `lane_entity_type` parameter** (line 328),
-   holding the lane's own type. Pass it through; do not re-derive it.
+- **Mock lane ids already resolve to no node.** Measured against the live local
+  graph: `MATCH (n) WHERE n.id STARTS WITH 'mock::' RETURN count(n)` → **0**, and
+  a properties fetch for two mock ids returns an empty node list
+  (`isGraph: false, resultCount: 0`). So the per-panel "Not found in graph" state
+  is already exercised deterministically with zero Neo4j traffic — which was the
+  entire argument for the rename.
+- **The source on those catalogue entries is real, not `mock`.** The entries read
+  `("mock::Person::alice", "Alice Johnson", "Person", "github", …)` — the source
+  is `github`/`jira`/`confluence`. `parse_wba_id` accepts any `a::b::c`, and no
+  node id is ever constructed from a lane's WBA id (node identity comes from the
+  connector pipeline), so the prefix changes nothing anywhere.
+- **The rename's cost was real**: ~40 line edits across `mock_data.py` and four
+  test files, plus a new reserved-source convention to document and a
+  "the three-part shape is load-bearing" rule to keep. Net behaviour change:
+  none.
 
-**6a.** Change the six `_SUGGESTION_CATALOGUE` ids (line 455-464) from
-`mock::<Type>::<id>` to **`mockdemo::<Type>::<id>`** — e.g.
-`("mockdemo::Person::alice", "Alice Johnson", "Person", "github", ...)`.
-
-- `api/activity/v1/service.py`'s `parse_wba_id` accepts any `a::b::c` triple, so
-  no validation change is needed.
-- `mockdemo::` is a source no real signal uses, and no node id starts with it, so
-  mock cards deterministically exercise the per-panel "Not found in graph" state
-  with **zero** Neo4j traffic. That is the point: mock mode stays fully offline.
-- **The three-part shape is load-bearing — do not use
-  `wba::other::<Type>::<id>`.**  `_lane_identity` (`mock_data.py:172`) reads
-  `entity_type = parts[1]`, and so do `helpers.entity_type_label` /
-  `entity_type_token` / `entity_type_icon`; the segment is the *type*, and the
-  leading segment is the *source*.  With a 4-part `wba::other::Person::alice`
-  the parsed type is `"other"`, so **every** mock lane renders a generic cube
-  icon, the type tag reads "other", all avatars disappear (the
-  `entity_type == "Person"` branch at `mock_data.py:175` never fires), labels
-  read `"Person::Alice"`, and the card's per-entity colour collapses to
-  `graph.node.default`.  Verified by running it:
-
-  ```
-  mockdemo::Person::alice    -> ('Person', 'Alice', 'https://avatars…/u/735?v=4')
-  wba::other::Person::alice  -> ('other', 'Person::Alice', None)
-  ```
-
-**6b.** Update the tests that hardcode the old ids. **Four** test files contain
-the literal `mock::` (verified):
-
-```
-tests/test_activity_api_integration.py
-tests/test_activity_timeline_callbacks.py
-tests/test_activity_timeline_mock.py
-tests/test_activity_timeline_ui_helpers.py
-```
-
-Run `grep -rn '"mock::' tests/*.py` and fix **every** hit — a missed one is a
-failing test, not a silent pass. Note that in
-`test_activity_timeline_callbacks.py` many of these are *selection fixtures*
-(`_ALICE = _selection_item("mock::Person::alice", "Alice")`) that never reach
-`parse_wba_id`; they still must be updated for consistency, but only the ones
-that flow into `build_timeline` affect behaviour. If updating a fixture-only id
-would churn an unrelated assertion, leave that one and note it — the gate is the
-`pytest -m unit tests -q` run below. **These four files are added to this plan's
-Scope for exactly this edit.**
-
-**6c.** In `_materialize`'s **activity** branch (line 353), populate the new
-fields:
-
-```python
-        else:
-            relationship = spec.relationship
-            summary = spec.summary
-            entity_type = spec.other_type
-            details = {}
-            related_id = f"mock-other-{lane_index}-{index}"
-            related_name = f"Mock {spec.other_type} {index}"
-            related_wba_id = f"mockdemo::{spec.other_type}::{related_id}"
-            lane_role = "actor"
-```
-
-and pass `related_id=related_id, related_name=related_name,
-related_wba_id=related_wba_id, lane_role=lane_role,
-lane_entity_type=lane_entity_type` into the `TimelineEvent`. The **history**
-branch keeps `related_*` at their `None` defaults (there is no other side) but
-sets `lane_entity_type=lane_entity_type`.
-
-**Do not** add `related_*` fields to `_Spec`: the mock's value is its
-*geometric* scenarios. Deriving them in `_materialize` keeps `_Spec` untouched.
+The one thing mock mode does need — that the sibling's **type** is visible in the
+right panel — is two lines inside `detail_payload` (step 4c), which is where the
+knowledge belongs. Leave `_SUGGESTION_CATALOGUE`, `_lane_identity` and
+`_materialize` exactly as they are.
 
 **Verify**
 ```
-pytest -m unit tests -q
-grep -rn "mock::" tests/ src/     # → no matches (ids are now "mockdemo::")
+git diff --stat src/app/api/activity/v1/mock_data.py   # → no output
 ```
-Then confirm mock output carries the fields and the id is the reserved form:
-```
-TIMELINE_MOCK_SCENARIO=even PYTHONPATH=src python -c "
-from app.api.activity.v1 import mock_data
-from app.api.activity.v1.model import TimelineRequest
-r = mock_data.build_timeline(
-    TimelineRequest(wba_ids=['mockdemo::Person::alice']), 'even'
-)
-e = r.lanes[0].events[0]
-print(r.lanes[0].wba_id, e.related_wba_id, e.related_name, e.lane_role,
-      e.lane_entity_type)
-"
-```
-Expect a lane id starting `mockdemo::`, and a non-None
-`related_wba_id` / `related_name` / `lane_role` / `lane_entity_type`.
+
+### Phase 6 (formerly 6a-6c) — removed
+
+The former steps 6a-6c are deleted for the same reason: the modal derives both
+node ids without them (the lane id from the card, the sibling from
+`related_wba_id` or the mock fallback in 4c), and `lane_role` is read nowhere in
+this design.
 
 ### Phase 7 — Tests and documentation
 
-**7a.** `tests/test_activity_api_integration.py` — the fake session returns
-`(action, related_name)` pairs today; it will break on the three-tuple. Update
-the fake to return `(action, related_name, related_wba_id)` and add assertions:
-`related_wba_id` is the **other** side's canonical id in **both** directions,
-and is `None` for history.
+**7a.** `tests/test_activity_api_integration.py` — add assertions only. The fake
+session's return shape is **unchanged** (still `(action, related_name)` pairs;
+the service builds the WBA id itself in Phase 1c). Assert that:
+`related_wba_id` is the **other** side's canonical id in **both** directions
+(actor-side and target-side rows), that it uses the row's own `target_source` for
+the actor direction, and that it is `None` for history.
 
-**7b.** `tests/test_activity_person_identity.py` (**this file is in Scope — see
-the In-scope table**) — the three `_action_to_event` call sites (keyword style)
-need the third positional argument (`None` is fine; those tests assert only on
-`event.entity_type`). The two compiled-SQL counts (`TestActionsPredicate`) may
-shift by the new `concat` column — re-measure with the file's own
+**7b.** `tests/test_activity_person_identity.py` — **no change, and it is not in
+Scope.** Its three `_action_to_event` call sites keep their current signature, and
+its compiled-SQL assertions are unaffected because this plan does not touch
+`fetch_actions_for_entity`. If this file goes red, the build was done in the
+wrong layer — fix Phase 1c rather than the test.
 `where = sql.split("FROMactivity_actionsWHERE", 1)[-1]` pattern and update the
 numbers. **Do not delete or `xfail` them** — the disjunct-per-identity property
 is the fix from `90c9674`.
@@ -1535,33 +1748,61 @@ is the fix from `90c9674`.
 **7c.** `tests/test_activity_timeline_detail_modal.py` (**create**) —
 `pytestmark = pytest.mark.unit`. Cover, with no network and no Neo4j:
 
-- **The Cypher is a single statement and indexed**: assert
-  `_NODE_PROPERTIES_CYPHER` contains `IN $ids` and does not contain `UNION`.
-- **No hop, no label, no re-keying**: `_NODE_PROPERTIES_CYPHER` contains
-  `IN $ids`, does **not** contain `UNION`, and does **not** contain `MAPS_TO` or
-  `IdentityMapping` (the hop is deliberately gone — Decision 9).
-- **`fetch_node_properties` keys by the id requested** (the Finding-1 regression
-  pin): stub the HTTP layer so the response's node carries a `wba_id` equal to
-  the id asked for, and assert the result is keyed by that id; then assert that
-  asking for **two** ids returns both rows. A service that hopped would fail the
-  first assertion, because the returned `wba_id` would differ.
+- **The Cypher has both branches and is a single statement**: assert
+  `_NODE_PROPERTIES_CYPHER` contains `IN $ids`, contains `IN $mids`, contains
+  `MAPS_TO`, and contains `UNION` **exactly once** (one union, two branches).
+  A regression that drops the mapping branch must fail this.
+- **`_mapping_id_for` translates only Person ids**: a `…::Person::x` id yields
+  `…::IdentityMapping::x`; a `…::Repository::x` id yields `None`; a Person id
+  keeps its own source segment (the mapping id is same-source, not canonicalised).
+- **`fetch_node_properties` keys by the id requested, not by the returned
+  `wba_id`** (the Decision 9b regression pin — this is the whole point of the
+  change). Stub the HTTP layer with a payload whose node carries a **different**
+  `wba_id` from the one asked for, plus a `MAPS_TO` edge pairing it back to the
+  requested id, and assert the result is keyed by the **requested** id. Then
+  assert that asking for **two** ids returns both rows, and that an id with no
+  branch-1 node and no `MAPS_TO` edge is simply **absent** (so the caller renders
+  the per-panel "Not found" state rather than a KeyError).
+  Build the stub payload by passing a `GraphResponse`-shaped dict through the
+  real `neo4j_to_cytoscape` (import it in the test) rather than hand-rolling
+  cytoscape elements — that keeps the fixture honest about the transform's
+  element shape.
+- **The pairing is by `MAPS_TO` edge, not by order**: give the stub **two**
+  mapping nodes with edges to the **same** Person, in the reverse of the
+  requested order, and assert the result still maps each requested id to the
+  right node. A positional pairing implementation must fail this.
 - **`_detail_panel`** (Decision 16): the returned `html.Div` has
   `className == "timeline-detail-panel"` and its first child carries
   `className == "timeline-detail-caption"` with the "Current state" text.
 - **`_detail_error` copy**: a `NodePropertiesError("HTTP 500")` path
   yields the "Neo4j is not available" sentence and a different error yields the
   generic one.
-- **`detail_payload` nonce** (Decision 17): two payloads built from *identical*
-  events compare **unequal** once the nonce is bumped, so the store cannot be
-  written an equal value twice.
-- **`graph_deep_link` is label-scoped** (the `id` index is per-label): for a related pair the
-  Cypher contains `MATCH (a:PullRequest {id: '…'})` and `(b:Issue {id: '…'})`;
-  for history it contains only the lane id; `unquote`ing the query round-trips;
-  and a falsy `lane_entity_type` produces **no** bare `(a: {id:` (which would be
-  a syntax error).
-- **Mock lane identity keeps its type**: `mock_data._lane_identity("mockdemo::Person::alice", "even", 0)`
-  returns `entity_type == "Person"` and a non-`None` avatar — i.e. the type is
-  read from the middle segment, not a synthetic source.
+- **`detail_payload` carries no nonce** (Decision 17): two payloads built from
+  *identical* events compare **equal**, so a re-click on the same card does not
+  re-fetch. Assert equality directly — that is the property the design now relies
+  on.
+- **`graph_deep_link` is label-scoped and derives both labels from the ids**
+  (the `id` index is per-label): for a related pair of **non-Person** entities
+  the Cypher contains `MATCH (a:PullRequest {id: '…'})` and
+  `(b:Issue {id: '…'})`; for history it contains only the lane id;
+  `unquote`ing the query round-trips.
+- **`_node_pattern` routes Person through the mapping hop** (Decision 9b):
+  `_node_pattern("b", "confluence::Person::abc")` contains
+  `(i_b:IdentityMapping {id: 'confluence::IdentityMapping::abc'})` and
+  `-[:MAPS_TO]-(b:Person)`; `_node_pattern("b", "github::Repository::a/b")`
+  contains `(b:Repository {id: 'github::Repository::a/b'})` and **no** `MAPS_TO`.
+  Then assert the whole deep link for a deduped Person sibling contains both the
+  mapping id and `MAPS_TO` — this is the pin that keeps the Graph link from
+  opening an empty canvas.
+- **The mock sibling id is narrow and well-formed** (three cases, all required):
+  1. `detail_payload` for a `mock::Person::alice` lane in **activity** scope with
+     `entity_type == "PullRequest"` returns `related_wba_id ==
+     "mock::PullRequest::mock-other"` — assert the **exact** value, so a
+     four-segment regression cannot slip through a `startswith` check;
+  2. the same call with `scope="history"` returns **`None`** (Decision 11 — the
+     fallback must not fire in history, or the modal renders two panels);
+  3. a **real** lane id (e.g. `github::Person::alice`) with no `related_wba_id`
+     on the event returns **`None`** (the fallback must not fire for real data).
 - **`render_properties_table` parity**: the same `(key, value)` list rendered
   through `render_properties_table` and through `build_element_properties_content`
   produces the same `details-prop-row` rows (parse both `str(...)` outputs and
@@ -1571,7 +1812,8 @@ is the fix from `90c9674`.
   an `id` row is injected first; a node with nothing visible renders the "No
   properties" state.
 - **`detail_payload`**: activity carries a non-None `related_wba_id`; history
-  carries `None`; the payload is JSON-serializable (`json.dumps` must not raise).
+  carries `None`; the lane's type is **not** a payload key (Decision 7b); the
+  payload is JSON-serializable (`json.dumps` must not raise).
 - **`detail_sentence`**: subject + humanized relationship + object; falls back to
   the entity type when there is no relationship; never returns `""`; and in
   **history** scope (`scope="history"`, `summary == lane_label`, no
@@ -1584,15 +1826,19 @@ is the fix from `90c9674`.
 preference to the raw `summary` — the whole point of Decision 14.
 
 **7e.** `docs/design/activity-timeline-design.md`:
-- §5.1 `TimelineEvent` shape — add `related_wba_id` **and** `lane_entity_type`.
-  State why the latter exists: `entity_type` is the *other* side's type, and the
-  lane's own type is needed for the modal's Graph deep-link label. (It is **not**
-  for an `IdentityMapping` hop — Decision 9 dropped that, see below.)
-- §5.1/§7.4 — record that the modal looks a lane up by its **own canonical id**,
-  with no `IdentityMapping` translation and no label: a lane only ever comes from
-  the ES-backed typeahead, whose Person documents are keyed by the canonical
-  Neo4j id. This is why the properties fetch can be one call keyed by the id
-  requested.
+- §5.1 `TimelineEvent` shape — add `related_wba_id`. Note that the lane's own
+  type is deliberately **not** a field: it is the middle segment of the lane's
+  WBA id (and `entity_type` is already the lane's own type in history scope), so
+  both the UI and the deep link derive it.
+- §5.1/§7.4 — record the **two different lookup rules**, since conflating them is
+  the bug this plan's review found. **(a) The lane** is looked up by its own
+  canonical id with no hop: a lane only ever comes from the ES-backed typeahead,
+  whose Person documents are keyed by the canonical Neo4j id. **(b) The sibling**
+  may need one `MAPS_TO` hop: its id comes from the raw `activity_actions` row
+  and is provider-scoped, so when Neo4j deduped that person onto another
+  provider's canonical node the provider-scoped id is not a node id at all. State
+  that both are resolved in **one** `/graph/execute` call, and that the result is
+  keyed by the id **requested**, not by the `wba_id` that came back.
 - §5.3 — note that the sibling's canonical id is now carried on the event.
 - §7.4 Cards & interaction — replace the two-line card bullet's **interaction**
   half: the card is no longer a link; clicking opens the event detail modal. Add
@@ -1600,8 +1846,10 @@ preference to the raw `summary` — the whole point of Decision 14.
   a new tab, the two shared-renderer panels, the neutral connector, current-state
   semantics, the history single-panel case, and the per-panel not-found state).
   State explicitly that the modal's tables are rendered by the **same** function
-  as the Graph right panel, that each panel carries a "Current state" caption,
-  and that a re-click re-renders the panels (the click stamps a nonce).
+  as the Graph right panel, and that each panel carries a "Current state"
+  caption. Do **not** document a click nonce — there is none; note instead that
+  the panels render from the payload's two node ids, so a repeat click on the
+  same card re-opens from the already-rendered panels.
 - §11 Source map — add `tests/test_activity_timeline_detail_modal.py`.
 
 **Verify**
@@ -1620,10 +1868,9 @@ slipped in that this plan did not intend.
 
 | File | New/updated | Cases |
 |---|---|---|
-| `tests/test_activity_timeline_detail_modal.py` | **create** | Cypher shape (no hop/label); fetch keying; `_detail_panel`; error copy; nonce; label-scoped deep link; table-renderer parity; visible-property filtering; `detail_payload` for activity + history; `detail_sentence` incl. the history single-name case |
+| `tests/test_activity_timeline_detail_modal.py` | **create** | Cypher shape (both branches, one `UNION`); `_mapping_id_for`; fetch keying **by requested id** (incl. the differing-`wba_id` and order-independence pins); `_detail_panel`; error copy; payload equality (no nonce); mock-sibling narrowness; label-scoped deep link + `_node_pattern` Person hop; table-renderer parity; visible-property filtering; `detail_payload` for activity + history; `detail_sentence` incl. the history single-name case |
 | `tests/test_activity_timeline_ui_helpers.py` | update | `popup_fields` headline is the sentence + `hint`; `related_name` beats `summary` |
-| `tests/test_activity_api_integration.py` | update | fake returns 3-tuples; `related_wba_id` correct in both directions; `None` for history |
-| `tests/test_activity_person_identity.py` | update | 3 call sites take the new positional; re-measured SQL counts |
+| `tests/test_activity_api_integration.py` | update | `related_wba_id` correct in both directions (fake session shape unchanged) and using `target_source`; `None` for history |
 
 Model the new test module structurally on
 `tests/test_activity_timeline_ui_helpers.py` (module docstring, `pytestmark`,
@@ -1637,11 +1884,17 @@ small pure-function tests, no fixtures).
   same category: pin what you can in Python (`build_event_card` returns a `Div`
   whose `role` is `"button"` and whose `tabIndex` is `0`, and whose props carry
   `data-timeline-detail`) and leave the JS to the manual pass.
-- Nothing automated pins the Graph deep-link URL. `graph_deep_link` **is** a pure
-  function, so test it: assert the returned string starts with
-  `/app/graph?cypher=`, that `unquote`-ing the remainder round-trips to the
-  expected Cypher, and that the related-id form contains both ids while the
-  history form contains only the lane id.
+- The `MAPS_TO` hop's *graph* behaviour is pinned only by the stub in 7c, not by
+  a live Neo4j test — the repo has no unit-level Neo4j fixture for the timeline.
+  The live check is the Phase 5 deduped-Person manual step.
+- Nothing automated pins the Graph deep-link URL's *end-to-end* behaviour (the
+  Graph page pre-filling and auto-executing it). `graph_deep_link` **is** a pure
+  function, so its shape **is** tested (7c): assert the returned string starts
+  with `/app/graph?cypher=`, that `unquote`-ing the remainder round-trips to the
+  expected Cypher, that the related-id form contains both ids while the history
+  form contains only the lane id, and that a Person id routes through
+  `_node_pattern`'s `MAPS_TO` hop. What is **not** tested is that the Graph page
+  actually runs it — that is the Phase 5 manual step.
 - Nothing automated pins the clientside `set_props` header. Same reason.
 - If the client-facing half is ever found broken, the place to start is the
   slice of the clientside function in `callbacks.py`.
@@ -1665,19 +1918,31 @@ Machine-checkable. ALL must hold:
       `_popup_headline` is no longer imported or called by `layout.py`.
 - [ ] `grep -rn "build_detail_placeholder" src/` returns **no matches** (no
       such helper was invented).
-- [ ] `grep -rn "graph_lookup_id\|wba::other::" src/ tests/ plans/044-*` returns
-      **no matches** outside this plan's own explanation of why the hop was
-      dropped — the helper is not written and the reserved-source convention is
-      `mockdemo::`.
+- [ ] `grep -rn "graph_lookup_id" src/ tests/` returns **no matches** — mock lane
+      ids are unchanged (`mock::`, not a new reserved source), and the hop is
+      spelled `_mapping_id_for` / `_node_pattern` rather than that retired name.
+- [ ] `git diff --stat src/app/api/activity/v1/query.py src/app/api/activity/v1/mock_data.py tests/test_activity_person_identity.py`
+      shows **no output** — the query layer, mock data and the identity tests are
+      all untouched (Decisions 4, 15).
 - [ ] The modal's panels carry their class: every panel rendered by
       `render_detail_panels` goes through `_detail_panel`, so
       `grep -c 'className="timeline-detail-panel"\|className=_PANEL_CLASS'`
       in `callbacks.py` and the `_detail_panel` body both show it — and
       `.timeline-detail-caption` is emitted (Decision 16). Pinned by a 7c test.
-- [ ] `timeline-detail-store`'s value differs on every click (Decision 17): the
-      clientside branch stamps a nonce, pinned by a 7c test.
-- [ ] `graph_deep_link` emits a **label-scoped** `MATCH` for both forms, and
-      never a bare `(a: {id:` when the type is empty.
+- [ ] `timeline-detail-store` carries the raw card payload with **no** `nonce`
+      key (Decision 17): `grep -rn "nonce" src/app/dash_app/pages/timeline/`
+      returns **no matches**, and the 7c payload-equality test passes.
+- [ ] `graph_deep_link` emits a **label-scoped** `MATCH` for both forms, with
+      both labels derived from the ids it is passed, and routes a **Person** id
+      through the `IdentityMapping` + `MAPS_TO` hop (`_node_pattern`) so a
+      deduped Person sibling does not open an empty graph.
+- [ ] `fetch_node_properties` keys its result by the id **requested**, not by the
+      returned node's `wba_id` — pinned by the 7c re-keying test, which must fail
+      if the keying is switched back to `data["wba_id"]`.
+- [ ] `_NODE_PROPERTIES_CYPHER` contains `MAPS_TO` and exactly **one** `UNION`
+      (both branches present); `_mapping_id_for` translates only `::Person::` ids.
+- [ ] The properties fetch is still exactly **one** `/graph/execute` call per
+      click — the hop is a second branch of the same query, not a second request.
 - [ ] The card is keyboard-reachable: `build_event_card` returns an `html.Div`
       with `role == "button"` and `tabIndex == 0`, and carries both
       `data-timeline-event` and `data-timeline-detail`. Pin this in
@@ -1688,12 +1953,12 @@ Machine-checkable. ALL must hold:
 - [ ] `build_element_properties_content` renders identically to before Phase 2
       (the existing Graph/Collaboration-Network tests pass, or the
       before/after string diff is empty).
-- [ ] `TimelineEvent` carries `related_wba_id` and `lane_entity_type`; both are
-      non-None for an activity event and `None` for history.
-- [ ] `lane_entity_type` is populated from the server (`_action_to_event`'s
-      parameter), **not** inferred in `helpers.py` —
-      `grep -rn "lane_entity_type" src/app/dash_app/pages/timeline/` shows only
-      reads of the event dict, never a derivation.
+- [ ] `TimelineEvent` carries `related_wba_id`; it is non-None for an activity
+      event and `None` for history. The field `lane_entity_type` is **not** added
+      to `TimelineEvent` — `grep -n "lane_entity_type" src/app/api/activity/v1/model.py`
+      returns **no matches** (Decision 7b). *(Do not widen this to `src/`: the
+      pre-existing private `lane_entity_type` parameter in `service.py` and
+      `mock_data.py` is untouched and must stay.)*
 - [ ] No file outside the `## Scope` table is modified (`git status --short`).
 - [ ] `plans/README.md` status row updated.
 
@@ -1701,26 +1966,51 @@ Machine-checkable. ALL must hold:
 
 Stop and report back — do not improvise — if:
 
-- **Plan 043 has not landed**: `TimelineEvent` has no `lane_role` /
+- **The card-reading-order change (`d77db38`, #339) has not landed**:
+  `TimelineEvent` has no `lane_role` /
   `related_id` / `related_name`, or `helpers.card_primary` does not exist, or
   `activity_actions` has no `target_source` column. This plan cannot be executed
   without it.
-- **A Person lane's WBA id turns out not to be its Neo4j node id.** Decision 9
-  rests on this, and the whole fetch/keying design follows from it. Test it
-  early: `MATCH (p:Person {id: $lane_id})` for a real lane must return one row.
-  If it does not, STOP and report — the hop (and its keying complication) has to
-  come back, and this plan needs re-planning rather than a local patch.
-- **`_action_to_event`'s `lane_entity_type` parameter turns out to mean
-  something other than the lane's own entity type.** Phase 1c passes it straight
-  through as the new `lane_entity_type` field. Before doing so, read
-  `service.py:184-190` and confirm `is_actor` compares `action.actor_entity_type`
-  against it — i.e. it *is* the lane's type. If the code says otherwise, stop
-  rather than guessing a derivation.
-- **`mypy src/` rejects the three-tuple return type** after a genuine attempt at
-  the unpacking form in Phase 1. Use an explicit `cast(...)` if that resolves
-  it; if it still fails, stop. **Never** fall back to `.scalars()` — it silently
-  drops `related_name` and `related_wba_id`, and because both are optional
-  nothing raises.
+- **A Person LANE's WBA id turns out not to be its Neo4j node id.** Decision 9a
+  rests on this. Test it early: `MATCH (p:Person {id: $lane_id})` for a real
+  lane must return one row. If it does not, STOP and report — the lane's own
+  lookup rule has to change too, and this plan needs re-planning rather than a
+  local patch. *(A **sibling** Person id failing that lookup is **expected**,
+  not a STOP: it is exactly what branch 2 of `_NODE_PROPERTIES_CYPHER` exists
+  for. Measured on the local graph, 3 of 9 real Person sibling ids miss branch 1
+  and are recovered by the hop.)*
+- **A Person id's `IdentityMapping` id cannot be derived by string substitution.**
+  `_mapping_id_for` assumes `{source}::Person::{id}` ↔
+  `{source}::IdentityMapping::{id}` (the same-source rule `identity.py:32-49`
+  documents). If a real Person's mapping lives under a *different* source
+  segment than the Person id, STOP and report — the substitution is wrong and the
+  sibling would still miss.
+- **`MAPS_TO` is not returned as an edge by `/graph/execute`.** The pairing in
+  `fetch_node_properties` reads `relType == "MAPS_TO"` off the transformed
+  elements. If the API does not surface relationship edges for this query shape,
+  STOP rather than switching to a positional pairing — a Person may have several
+  mappings, so position is not a safe key.
+- **`_action_to_event`'s `is_actor` is not the lane-is-actor predicate.** Phase
+  1c's `other_source` and the `related_wba_id` it builds rest on `is_actor` being
+  the same condition the query's `actor_match` encodes. If reading
+  `service.py:184-190` shows it comparing something other than
+  `action.actor_entity_type` / `action.actor_entity_id`, stop rather than
+  guessing which branch is right.
+- **`target_source` is not what the query layer's `related_source` uses.** Phase
+  1c builds `other_source` from `action.target_source or action.source` and
+  must match `query.py`'s `related_source` `CASE` exactly. If the live code
+  computes that source differently (a new column, an extra fallback), stop — a
+  divergent id would make the sibling panel silently miss.
+- **`lane_wba_id` turns out not to have three `::`-separated segments.** Phase 5c
+  derives the lane's `MATCH` label from `lane_wba_id.split("::", 2)[1]` and does
+  **not** guard for an empty label (a bare `MATCH (a: {id: …})` is a syntax
+  error, so a fallback would change the query shape). If a lane id can arrive
+  without a type segment, stop and report rather than adding a fallback.
+- **`pytest -m unit tests -q` goes red in Phase 1.** The whole point of building
+  `related_wba_id` in `_action_to_event` is that **no** existing test needs to
+  change. A red run means the change was made in the wrong layer (most likely a
+  third `select` column or a changed return shape) — revert to 1c rather than
+  repairing the tests.
 - **`_detail_panel`'s class is not what 5g defines**, or a panel is emitted
   without it. The two are a matched pair (Decision 16) — if the class name
   changes, change it in **both** the helper and the CSS in the same edit.
@@ -1732,10 +2022,13 @@ Stop and report back — do not improvise — if:
   solve in `render_visible_properties` (which may post-process the `(key, value)`
   list before delegating) — not by editing the shared table.
 - **The properties query returns a node whose `wba_id` differs from the id you
-  requested.** Decision 9 says they are the same id; if they are not, the
-  request was hopped or label-scoped and the panel keying will miss. Do not
-  "fix" this by re-keying — report it, because it means a lane id is not a node
-  id and Decision 9's premise is wrong.
+  requested — and `fetch_node_properties` keys the result by that node's
+  `wba_id` instead of by the id requested.** That is the **one** way this design
+  fails silently: the right panel would render "Not found in graph" for a
+  deduped Person sibling. Keying by the requested id is **required**, not
+  optional (Decision 9b, 3a). *(A differing `wba_id` is itself **expected** for a
+  deduped Person — that is the hop working. Do not "fix" it by removing the
+  hop.)*
 - **`is_open` ends up with two owners** (a server callback and the clientside
   branch both writing it). The clientside branch owns it; the server owns only
   `timeline-detail-panels.children`.
@@ -1744,7 +2037,7 @@ Stop and report back — do not improvise — if:
   defect, not a judgement call.
 - **The code at a cited location does not match the excerpt** in `## Current
   state` — the repo has drifted. (This is genuine drift, not staleness: the
-  excerpts were taken from the live tree at `202e763`.)
+  excerpts were taken from the live tree at `d77db38`.)
 
 ## Maintenance notes
 
@@ -1772,30 +2065,46 @@ Stop and report back — do not improvise — if:
   (per-panel header, Expand Node button). The modal deliberately does not use it.
   If a future surface wants the graph panel's chrome **and** the modal's chromeless
   body, that is the moment to reconsider, not before.
-- `_NODE_PROPERTIES_CYPHER` is **hop-free by design** (Decision 9) and shares no
-  logic with `api/activity/v1/identity.py`'s `MAPS_TO` lookup. If a future change
-  makes a lane id differ from its node id (e.g. lanes start coming from somewhere
-  other than the ES-backed typeahead), the hop has to come back — and with it the
-  result-keying problem the hop creates. Re-read Decision 9 before changing how
-  lanes are minted.
+- `_NODE_PROPERTIES_CYPHER` has **two branches** (Decision 9b): a direct
+  `n.id IN $ids` lookup, and a `MAPS_TO` branch for a Person whose provider
+  identity was deduped onto another provider's canonical Person. It is the same
+  `MAPS_TO` relationship `api/activity/v1/identity.py` walks for lane expansion,
+  but the two are independent call sites — changing the relationship's shape or
+  direction affects both. **Do not remove the mapping branch**: without it a
+  deduped Person sibling renders "Not found in graph" (measured: 11 of 14 cards
+  on the local `confluence::Page::26705923` lane). Do not remove the
+  requested-id keying either — the returned node's `wba_id` legitimately differs
+  from the id requested in exactly that case.
+- **A new entity type is fine as long as its canonical id stays
+  `{source}::{entity_type}::{id}`.** What breaks things is a type whose **node
+  id** is not the id its signals carry (the Person-with-dedup case). Such a type
+  needs its own branch in `_NODE_PROPERTIES_CYPHER` *and* its own hop in
+  `_node_pattern` for the deep link — a Person-only special case today.
 - Adding a new entity type whose canonical id is not
-  `{source}::{entity_type}::{id}` breaks `related_wba_id`, `graph_deep_link`'s
-  label derivation (`related_wba_id.split("::", 2)[1]`) and the mock
-  `mockdemo::<Type>::<id>` convention, all at once.
+  `{source}::{entity_type}::{id}` breaks `related_wba_id` and **both** of
+  `graph_deep_link`'s label derivations (`split("::", 2)[1]` on the lane id and on
+  the sibling id) at once.
 - The `is_open` / `timeline-detail-store` split is the modal's contract: the
   clientside branch never fetches, and the server never opens. `is_open` has one
   owner (clientside) and `panels.children` has one owner (server); the store is
-  the only thing crossing between them, and it must change value every click
-  (Decision 17). Preserve all three or the modal either blocks on the round trip,
-  fights itself on remount, or shows a stale event's panels.
+  the only thing crossing between them. Preserve the three-way split or the modal
+  either blocks on the round trip or fights itself on remount.
+- **The panels are a pure function of the payload's two node ids**, which is why
+  a repeat click on an identical card does not re-fetch (Decision 17). If a
+  future change makes a panel depend on anything else — a per-click timestamp, a
+  graph mutation counter — then the payload must change per click too, and
+  Decision 17 has to be revisited rather than a nonce quietly reintroduced.
 - `.timeline-detail-panel` and `_detail_panel` are a matched pair. The class is
   what applies `flex: 1 1 0` + `min-width: 0`; without it long WBA ids push the
   two tables apart instead of wrapping. Rename one, rename both.
 
 **What a reviewer should scrutinize**
 
-- That `fetch_actions_for_entity` ends in `result.all()` with **three** columns,
-  and that `fetch_event_history` still uses `.scalars()`.
+- That `src/app/api/activity/v1/query.py` is **unchanged**, and that
+  `related_wba_id` is built in `_action_to_event` from the row's own
+  `target_source` with the same branch the query's `related_source` `CASE` uses
+  (`git diff` on `query.py`, `mock_data.py` and
+  `tests/test_activity_person_identity.py` is empty).
 - That `build_element_properties_content`'s rendered output is unchanged — diff
   its `str(...)` before and after.
 - That the modal's table is genuinely `render_properties_table` and not a
@@ -1805,17 +2114,28 @@ Stop and report back — do not improvise — if:
   was touched.
 - That the properties fetch is exactly **one** HTTP call per click — one
   `POST /api/v1/graph/execute` carrying both ids (Decision 3; check the browser
-  network tab in the manual pass).
-- That no `IdentityMapping` hop crept back in: the ids sent to Neo4j are the
-  lane id and the sibling's WBA id, unchanged (Decision 9).
+  network tab in the manual pass). The `MAPS_TO` hop is a branch of that same
+  query, **not** a second request.
+- That the **right** panel renders properties for a deduped Person sibling, not
+  "Not found in graph" — the Decision 9b regression. The quickest check is the
+  local `confluence::Page::26705923` lane, where 11 of 14 cards are this shape.
+- That `fetch_node_properties` keys its result by the id **requested**: the
+  returned node's `wba_id` legitimately differs for a deduped Person, and keying
+  on the node's own `wba_id` would silently produce the "Not found" panel.
+- That `graph_deep_link` routes Person ids through `_node_pattern`'s mapping hop,
+  so the "Open in Graph" link is not empty for those same cards.
 - That both panels carry `.timeline-detail-panel` and the "Current state"
-  caption, and that a second click on a *different* card re-renders the panels
-  (Decisions 12, 16, 17).
+  caption, and that a click on a *different* card re-renders the panels
+  (Decisions 12, 16).
+- That the mock fallback in `detail_payload` is gated on `mock::` and cannot fire
+  for a real lane: for a real lane with no `related_wba_id`, the right panel must
+  render "Not found in graph" (there is genuinely no sibling), **not** a
+  fabricated id.
 
 **Deliberately deferred (out of scope)**
 
 - **`GraphNode.display_name()`'s commit gap** (`src/connectors/neo4j_db/node_base.py:58`):
-  the same four-word lookup Plan 043 fixed in the writer, still present on the
+  the same four-word lookup `d77db38` (#339) fixed in the writer, still present on the
   graph side, so the **Graph page** shows SHAs for commits. Same defect,
   different surface (its own callers, tests and Cypher properties). Worth its own
   plan. This plan **reuses** the graph-side renderer, so the modal will show a
@@ -1823,9 +2143,20 @@ Stop and report back — do not improvise — if:
   with the Graph page, which is the point, but it means the modal does **not**
   launder the graph's naming defect.
 - Backfilling `activity_events.display_name` or `activity_actions.target_source`
-  — unchanged from Plan 043's stance.
+  — unchanged from `d77db38`'s (#339) stance.
 - Resolving a *mention-only* person (no `IdentityMapping`) — unchanged from the
-  accepted limitation in the timeline design doc §5.3.8.
+  accepted limitation in the timeline design doc §5.3.8. Note that the
+  `MAPS_TO` branch in `_NODE_PROPERTIES_CYPHER` **depends** on the
+  `IdentityMapping` existing: a person who was never given one still misses.
+  That is the pre-existing limitation, not a new one.
+- **`validate_read_only_query` rejecting ids that contain a write keyword**
+  (`api/graph/v1/query.py:38-83` — it scans string literals, so e.g.
+  `github::Repository::acme/merge-queue` is rejected as a `MERGE`). This is
+  **pre-existing** — the Search page's `_build_node_cypher` has the same
+  exposure — and it is tracked separately in
+  `plans/045-graph-query-validator-rejects-entity-ids.md`. Do **not** add
+  keyword escaping or a URL-shape fallback in `graph_deep_link`; that is a
+  decision for 045.
 - The `details` attribute snapshot: `TimelineEvent.details` is `{}` for activity
   events, so no event-time property panel is possible for the other side, which
   is why Decision 12 chose current-state semantics for both.

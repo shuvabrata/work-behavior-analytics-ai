@@ -6,7 +6,7 @@
 >
 > **Drift check (run first)** — check **both** committed and uncommitted drift:
 > ```
-> git diff --stat 202e763..HEAD -- src/app/dash_app/pages/timeline/ \
+> git diff --stat d77db38..HEAD -- src/app/dash_app/pages/timeline/ \
 >   src/app/dash_app/components/common.py \
 >   src/app/api/activity/v1/ src/app/api/graph/v1/ \
 >   src/app/dash_app/assets/executive-dashboard.css \
@@ -21,19 +21,30 @@
 > below are approximate — **locate every symbol by content**, and confirm each
 > "Current state" excerpt against the live code before editing.
 >
-> **Note on the base commit**: `202e763` is "Activity Timeline Design card
-> ordering". Plan 043 (`plans/043-activity-timeline-card-reading-order.md`) was
-> executed against `90c9674` and is **committed at `202e763`** — verified: that
-> commit contains `helpers.card_secondary` and the
+> **Note on the base commit**: `d77db38` is "Make timeline cards line ordering
+> correct (#339)" — the card-reading-order change, **squash-merged to `main`**.
+> Its predecessor `90c9674` (#338, the Person-identity lane expansion) was the
+> base it was written against.
+>
+> The baseline was originally stamped as `202e763` (the same change on the
+> now-merged `feature/timeline-card-readability` branch). That commit is **not**
+> an ancestor of `main` — it exists only on that branch — so the stamp was moved
+> to `d77db38`, which **is** on `main` and is content-identical for every
+> in-scope path (verified: `git diff --stat 202e763 d77db38 -- <in-scope paths>`
+> is empty, and `git diff --stat d77db38..HEAD -- <in-scope paths>` gives the
+> same answer the old stamp did). Use `d77db38` for drift detection.
+>
+> Verified at `d77db38`: the tree contains `helpers.card_secondary` and the
 > `add_activity_actions_target_source` migration. Its migration is **applied**:
 > `alembic current` reports `51d673fb286f (head)` and
 > `activity_actions.target_source` (`varchar(32)`) exists.
 >
-> This plan builds directly on it: it assumes `TimelineEvent` already carries
-> `lane_role`, `related_id` and `related_name`, that `helpers.card_primary` /
-> `card_secondary` exist, and that `activity_actions` has the `target_source`
-> column. If any of those are absent, **that is a STOP condition** — Plan 043
-> has been reverted or the branch moved, and this plan cannot be executed.
+> This plan builds directly on that change: it assumes `TimelineEvent` already
+> carries `lane_role`, `related_id` and `related_name`, that
+> `helpers.card_primary` / `card_secondary` exist, and that
+> `activity_actions` has the `target_source` column. If any of those are absent,
+> **that is a STOP condition** — the change has been reverted or the branch
+> moved, and this plan cannot be executed.
 
 ## Status
 
@@ -42,15 +53,15 @@
 - **Risk**: MEDIUM (a new Dash modal + one clientside click branch; one additive
   API field; the sibling lookup carries a `MAPS_TO` branch and a re-keying step,
   which is where a silent "Not found" regression can hide — see Decision 9b)
-- **Depends on**: `plans/043-activity-timeline-card-reading-order.md` (committed at `202e763`)
+- **Depends on**: the card-reading-order change, squash-merged to `main` as
+  `d77db38` (#339)
 - **Related**: `plans/045-graph-query-validator-rejects-entity-ids.md` — a
   pre-existing defect in the Graph deep-link path this plan newly routes through.
   **Not a dependency**: 045 is a problem statement only, and 044 must not wait on
   it nor fix it.
 - **Category**: direction (UX — the card is a fragment; the modal is the full sentence)
-- **Planned at**: commit `202e763`, 2026-10-17 (source baseline; drift check
-  verified clean at review time, `202e763..1fa7800` touches no in-scope source
-  file)
+- **Planned at**: commit `d77db38` (originally stamped `202e763`; see the base-commit
+  note above), 2026-10-17. Drift check verified clean at review time.
 - **Revised**: 2026-10-17 — the API change is now a single field built in the
   service (not a query-layer column), mock data is untouched, and the click nonce
   is dropped. See Decisions 4, 7b, 15, 17.
@@ -67,7 +78,7 @@
 
 ## Why this matters
 
-Plan 043 made the timeline card read as a fragment — `Mentions` /
+The card-reading-order change (`d77db38`, #339) made the timeline card read as a fragment — `Mentions` /
 `PullRequest · Title of an Epic` — with the subject elided into the sticky lane
 header. The card is deliberately terse: two lines, ~40px, no room for detail.
 
@@ -138,7 +149,7 @@ id, **not** its display name.
 `helpers.py`, `popup_fields(event, datetime_text)` (line 512) → a dict with
 `summary` (from `_popup_headline`, line 463), `relationship`, `entity_type`,
 `source`, `datetime`, and `url` only when present. `_popup_headline` prefers
-`event["summary"]` — the *actor's* title, which Plan 043 proved wrong for
+`event["summary"]` — the *actor's* title, which `d77db38` (#339) proved wrong for
 lane-as-actor cards.
 
 `callbacks.py` line ~972 is an install-once `clientside_callback` binding
@@ -254,7 +265,8 @@ close (`editor_test_callbacks.py:160-182`).
 ### `TimelineEvent` today
 
 `src/app/api/activity/v1/model.py` — `signal_id, event_time,
-relationship_type, summary, entity_type, source, url, details`, plus Plan 043's
+relationship_type, summary, entity_type, source, url, details`, plus the
+card-reading-order change's
 `lane_role: Literal["actor","target"] | None`, `related_id: str | None`,
 `related_name: str | None`.
 
@@ -311,7 +323,7 @@ and `service.py:246-249` special-cases Person lanes with exactly this hop.
 | 4 | **Add one additive field `related_wba_id` to `TimelineEvent`.** | The other side's `source` is not on the event, so the sibling's WBA id cannot be built in the UI. It is assembled in `_action_to_event` from the row's own `target_source` — no query-layer change, no tuple reshaping, no SQL-count churn. |
 | 5 | **Share the TABLE renderer, not the panel builder.** New `render_properties_table()` is called by both `build_element_properties_content` (graph + collaboration network) and the new modal body builder. | "A change in one affects both" without dragging the graph panel's per-panel header and dead "Expand Node" button into the modal. |
 | 6 | **The modal header is the full sentence**: lane name · relationship · target name (as the Graph deep-link) · time. | The card elides the subject; the modal restores it. Neither panel needs a title, so the panels sit close together. |
-| 7 | **Lane entity is the LEFT panel, always; the connector is non-directional.** | The lane is the card's subject. Plan 043 Decision 3 established the relation label is verbatim and neutral because `direction` is unusable — an arrow would re-assert a direction the data cannot support. |
+| 7 | **Lane entity is the LEFT panel, always; the connector is non-directional.** | The lane is the card's subject. `d77db38` (#339) established the relation label is verbatim and neutral because `direction` is unusable — an arrow would re-assert a direction the data cannot support. |
 | 7b | **The lane's entity type is derived from the lane's WBA id, not sent as a field.** | A lane id *is* `{source}::{entity_type}::{id}` (`service.py::_fetch_lane`), and `build_grid_body` already threads that id into every card as `lane_wba_id`. The other side's type is derived the same way (5c), so both sides use one idiom and the API gains one field instead of two. |
 | 8 | **The Graph deep-link opens in a NEW TAB** and runs the 2-node subgraph. | Matches today's card behaviour (`target="_blank"`). The subgraph shows what the modal shows, including the edge. |
 | 9 | **The LANE is looked up by its own canonical WBA id — no `IdentityMapping` hop, no label. The SIBLING is looked up through the `MAPS_TO` hop when it is a Person.** | These are two different questions and the earlier draft of this row conflated them. **(a) The lane**: a lane can only come from the ES-backed typeahead, and every Person document in ES is keyed by the canonical Neo4j id (the ES sink refuses to create a shadow document), so a lane id IS the node id — this is the property `service.py:246-249` already relies on. **(b) The sibling**: it does *not* come from the typeahead — it is built from the raw `activity_actions` row (`target_entity_id` / `actor_entity_id`), which carries the **provider-scoped** id. When a Person arrived from a second provider, Neo4j reused the canonical node and the provider-scoped id was **never created** (`person_cache.py:125-151`; `elasticsearch_sink.index_signal_with_canonical_id`, `:154-192`). So `confluence::Person::557058:…` is **not** a node id when the node is `jira::Person::557058:…`. Measured on the live graph: **3 of 9** distinct real Person sibling ids miss, covering 58 of 382 Person-involving rows (~15%) — and on the lane `confluence::Page::26705923`, **11 of its 14 events** carry a `confluence::Person::…` sibling. Without the hop the right panel reads "Not found in graph" for a person who is in the graph, and the deep link returns `nodes=0 rels=0`. The hop is therefore a **second branch of the same single query**, and the result is keyed by the id **requested** — not by the `wba_id` that comes back, which legitimately differs in exactly this case. See 3a. |
@@ -319,7 +331,7 @@ and `service.py:246-249` special-cases Person lanes with exactly this hop.
 | 11 | **History scope shows a ONE-panel modal** (no connector, no second fetch), header `<lane name> · Updated · <time>`. | `lane_role` is `None` and `related_id` is `None` in history — there is no other side. |
 | 12 | **Both panels show CURRENT Neo4j state**, with a muted "current state" caption. | Neo4j holds current state; `details` is empty for activity events, so an as-of-event panel is not available for the other side. One rule for both panels. |
 | 13 | **50/50 panel split, ONE shared body scroll.** | Nested scroll regions in a modal are awkward; keeping the panels aligned reads as one table pair. |
-| 14 | **The peek's headline becomes the same sentence**, gains a muted "Click for details" hint, and the native `title=` tooltip is REMOVED. | The peek currently shows `event["summary"]` — the field Plan 043 proved wrong — so hovering and clicking would describe one event two ways. The native tooltip duplicates the headline ~1s later and overlaps the portal. |
+| 14 | **The peek's headline becomes the same sentence**, gains a muted "Click for details" hint, and the native `title=` tooltip is REMOVED. | The peek currently shows `event["summary"]` — the field `d77db38` (#339) proved wrong — so hovering and clicking would describe one event two ways. The native tooltip duplicates the headline ~1s later and overlaps the portal. |
 | 15 | **Mock data (`mock_data.py`) is left exactly as it is — no lane-id rename, no `related_*` on `_materialize`, no `lane_role`.** The only mock-specific code in this plan is the gated branch in `detail_payload`. | Mock lane ids already resolve to no node: measured live, `MATCH (n) WHERE n.id STARTS WITH 'mock::' RETURN count(n)` is **0**, and a two-id fetch returns an empty node list. So clicking a mock card already exercises the per-panel "Not found" state with zero Neo4j traffic. The one thing mock mode lacks is a sibling id (mock events carry a sibling *type* but never a `related_id`), so `detail_payload` synthesises a three-segment placeholder under three guards — activity scope only, `mock::` lane only, no existing `related_wba_id` (see 4c). |
 | 16 | **The modal body's tables are emitted through a `_detail_panel` helper** carrying `.timeline-detail-panel` and the "Current state" caption. | Decision 13's 50/50 split and Decision 12's caption are both CSS/render requirements — the class must actually be emitted or `flex: 1 1 0` + `min-width: 0` never applies and long ids push the tables apart. One helper makes both impossible to forget. |
 | 17 | **`timeline-detail-store` carries the card's payload and is the only trigger for the panels.** No nonce. | The panels are a pure function of the two node ids in the payload, and the header is built from the same payload, so a byte-equal payload means an identical header *and* identical panels — nothing to correct. Dash's renderer already skips unchanged props by deep equality, so an equal payload simply does not re-fetch. `is_open` is owned by the clientside branch; the store too. |
@@ -337,7 +349,7 @@ anything that imports app code (`pytest.ini` sets it for tests).
 | Tests (the gate) | `pytest -m unit tests -q` | all pass |
 | One module | `pytest -m unit tests/test_activity_api_unit.py -q` | all pass (unchanged in this plan) |
 | API integration | `pytest -m unit tests/test_activity_api_integration.py -q` | all pass (mocked DB — needs no app, Postgres or mock mode) |
-| Migration (already applied) | `cd src/app && alembic current` | `51d673fb286f (head)` — Plan 043's `target_source` column is live |
+| Migration (already applied) | `cd src/app && alembic current` | `51d673fb286f (head)` — the `target_source` column from `d77db38` (#339) is live |
 | Components | `pytest -m unit tests/test_activity_timeline_ui_helpers.py -q` | all pass |
 | Security scan | `bandit -c .bandit.yml -r src/ -lll` | no High severity |
 | Spec freshness | `PYTHONPATH=src python scripts/generate_signal_activity_spec.py && git diff --stat docs/design/spec-activity-signal.md` | **no diff** |
@@ -950,7 +962,7 @@ def detail_payload(event: dict[str, Any], lane_label: str, lane_wba_id: str,
         # placeholder in the SAME {source}::{type}::{id} grammar as the lane id,
         # so graph_deep_link's middle-segment label is the sibling's real type.
         # A 4-segment id (e.g. "mock::Person::other::Issue") would parse the
-        # label as "Person" — the exact conflation Plan 043's mock guidance
+        # label as "Person" — the exact conflation the card-reading-order change's mock guidance
         # warns about.
         related_entity_type = str(event.get("entity_type") or "")
         if related_entity_type:
@@ -1015,7 +1027,7 @@ it is Phase 7's job. That failure is expected; do not revert the change.
 from `html.A` to `html.Div`, drop `href`/`target`/`rel`/`title`, and carry the
 richer detail payload. `build_event_card` needs the lane's label and wba id, so
 extend its signature and thread them through `build_cell` → `build_grid_body`
-(the same pattern Plan 043 used for `scope`).
+(the same pattern the card-reading-order change used for `scope`).
 
 ```python
 def build_event_card(
@@ -1954,7 +1966,8 @@ Machine-checkable. ALL must hold:
 
 Stop and report back — do not improvise — if:
 
-- **Plan 043 has not landed**: `TimelineEvent` has no `lane_role` /
+- **The card-reading-order change (`d77db38`, #339) has not landed**:
+  `TimelineEvent` has no `lane_role` /
   `related_id` / `related_name`, or `helpers.card_primary` does not exist, or
   `activity_actions` has no `target_source` column. This plan cannot be executed
   without it.
@@ -2024,7 +2037,7 @@ Stop and report back — do not improvise — if:
   defect, not a judgement call.
 - **The code at a cited location does not match the excerpt** in `## Current
   state` — the repo has drifted. (This is genuine drift, not staleness: the
-  excerpts were taken from the live tree at `202e763`.)
+  excerpts were taken from the live tree at `d77db38`.)
 
 ## Maintenance notes
 
@@ -2122,7 +2135,7 @@ Stop and report back — do not improvise — if:
 **Deliberately deferred (out of scope)**
 
 - **`GraphNode.display_name()`'s commit gap** (`src/connectors/neo4j_db/node_base.py:58`):
-  the same four-word lookup Plan 043 fixed in the writer, still present on the
+  the same four-word lookup `d77db38` (#339) fixed in the writer, still present on the
   graph side, so the **Graph page** shows SHAs for commits. Same defect,
   different surface (its own callers, tests and Cypher properties). Worth its own
   plan. This plan **reuses** the graph-side renderer, so the modal will show a
@@ -2130,7 +2143,7 @@ Stop and report back — do not improvise — if:
   with the Graph page, which is the point, but it means the modal does **not**
   launder the graph's naming defect.
 - Backfilling `activity_events.display_name` or `activity_actions.target_source`
-  — unchanged from Plan 043's stance.
+  — unchanged from `d77db38`'s (#339) stance.
 - Resolving a *mention-only* person (no `IdentityMapping`) — unchanged from the
   accepted limitation in the timeline design doc §5.3.8. Note that the
   `MAPS_TO` branch in `_NODE_PROPERTIES_CYPHER` **depends** on the

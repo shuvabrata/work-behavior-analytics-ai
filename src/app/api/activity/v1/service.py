@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import base64
 from datetime import datetime, timezone
+from typing import Literal
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -142,6 +143,9 @@ def _build_event(
     source: str,
     url: str | None,
     details: dict[str, object],
+    lane_role: Literal["actor", "target"] | None = None,
+    related_id: str | None = None,
+    related_name: str | None = None,
 ) -> TimelineEvent:
     """Assemble a ``TimelineEvent`` from a query row."""
     return TimelineEvent(
@@ -153,11 +157,15 @@ def _build_event(
         source=source,
         url=url,
         details=details,
+        lane_role=lane_role,
+        related_id=related_id,
+        related_name=related_name,
     )
 
 
 def _action_to_event(
     action: ActivityAction,
+    related_name: str | None,
     *,
     lane_entity_type: str,
     lane_identity_ids: frozenset[str],
@@ -169,14 +177,17 @@ def _action_to_event(
     ``lane_identity_ids`` is the full set of entity ids belonging to the lane, so
     a row whose actor is a *different* provider identity of the same person is
     still recognised as "the lane acting".
+
+    ``related_name`` is the resolved display name of that other side (read from
+    ``activity_events.display_name``), or ``None`` when it has no timeline row.
     """
-    if (
+    is_actor = (
         action.actor_entity_type == lane_entity_type
         and action.actor_entity_id in lane_identity_ids
-    ):
-        other_type = action.target_entity_type
-    else:
-        other_type = action.actor_entity_type
+    )
+    lane_role: Literal["actor", "target"] = "actor" if is_actor else "target"
+    other_type = action.target_entity_type if is_actor else action.actor_entity_type
+    related_id = action.target_entity_id if is_actor else action.actor_entity_id
     return _build_event(
         signal_id=action.signal_id,
         event_time=action.event_time,
@@ -186,6 +197,9 @@ def _action_to_event(
         source=action.source,
         url=action.url,
         details={},
+        lane_role=lane_role,
+        related_id=related_id,
+        related_name=related_name,
     )
 
 
@@ -288,13 +302,18 @@ async def _fetch_lane(
         )
         events = [
             _action_to_event(
-                row,
+                action,
+                related_name,
                 lane_entity_type=entity_type,
                 lane_identity_ids=frozenset(eid for _, eid in identities),
             )
-            for row in action_rows
+            for action, related_name in action_rows
         ]
-        last_row = action_rows[-1] if action_rows else None
+        # [0] is required: last_row feeds _encode_cursor(last_row.event_time,
+        # last_row.id) below, and a tuple has neither attribute — leaving it
+        # un-unpacked raises AttributeError on every full page, breaking
+        # "Load more events".
+        last_row = action_rows[-1][0] if action_rows else None
 
     # Keyset pagination: fetch limit+1 conceptually — but the query layer
     # already caps at limit, so a full page implies more may exist.  The

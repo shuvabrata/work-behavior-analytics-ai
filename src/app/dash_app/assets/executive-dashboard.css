@@ -1831,16 +1831,17 @@ input::placeholder {
     border-color: var(--color-navy);
 }
 
-.timeline-card-summary {
+.timeline-card-primary {
     font-family: 'Inter', sans-serif;
     font-size: 14px;
+    font-weight: var(--font-weight-medium);
     color: var(--color-charcoal-medium);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
 }
 
-.timeline-card-meta {
+.timeline-card-secondary {
     display: flex;
     align-items: center;
     gap: 4px;
@@ -1859,6 +1860,15 @@ input::placeholder {
 .timeline-card-sep {
     color: var(--color-gray-medium);
     opacity: 0.7;
+}
+
+/* The name grows and shrinks; the type label and separator keep their natural
+   width so the per-entity colour is never squeezed out. */
+.timeline-card-name {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .timeline-card-time {

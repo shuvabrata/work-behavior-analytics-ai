@@ -764,6 +764,7 @@ def render_grid(
         effective_theme.get("nodes") if isinstance(effective_theme, dict) else None
     )
     rows = build_grid(lanes, granularity, get_app_timezone())
+    scope = str((data.get("params") or {}).get("scope") or "activity")
     body = build_grid_body(
         rows,
         current,
@@ -773,6 +774,7 @@ def render_grid(
         expanded_runs=expanded_runs,
         expanded_cells=expanded_cells,
         granularity=granularity,
+        scope=scope,
     )
     if has_more(lanes):
         body.append(build_load_more())

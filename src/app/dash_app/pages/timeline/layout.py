@@ -21,14 +21,15 @@ from app.dash_app.components.common import (
     create_page_header,
 )
 from app.dash_app.pages.timeline.helpers import (
+    _popup_headline,
     cap_cell,
-    card_summary,
+    card_primary,
+    card_secondary,
     cell_expansion_key,
     entity_type_color,
     entity_type_icon,
     entity_type_label,
     find_idle_runs,
-    humanize_relationship,
     idle_run_key,
     idle_run_label,
     idle_run_period_labels,
@@ -558,31 +559,60 @@ def _format_full_datetime(raw: Any) -> str:
 
 
 def build_event_card(
-    event: dict[str, Any], lane_color: str, type_color: str
+    event: dict[str, Any],
+    lane_color: str,
+    type_color: str,
+    *,
+    scope: str = "activity",
 ) -> html.A:
     """Build the 2-line event card.
 
-    Line 1: the summary (with fallback). Line 2: ``<Type(colored)> · <relationship>
-    · <time>``. The lane accent is a left border; the type colour comes from the
-    effective theme. The summary is also set as the card ``title`` (a touch
-    fallback alongside the hover popup).
+    ``activity`` scope reads relationship-first: line 1 is the humanized
+    relationship (the scan axis when many cards stack), line 2 is
+    ``<Type(colored)> · <other side's name>`` + time.  ``history`` scope inverts
+    it — the lane entity *is* the subject, so line 1 is its ``<Type> · <name>``
+    and line 2 is the state change (``Updated``) + time.
+
+    The lane accent is a left border; the type colour comes from the effective
+    theme.  ``title`` stays the event's ``summary`` (a touch fallback alongside
+    the hover popup).
     """
-    summary = card_summary(event)
-    relationship = humanize_relationship(str(event.get("relationship_type") or ""))
     type_label = entity_type_label(str(event.get("entity_type") or ""))
     time_text = _format_event_time(event.get("event_time"))
+    name_text = card_secondary(event)
+    time_span = (
+        html.Span(time_text, className="timeline-card-time") if time_text else None
+    )
 
-    meta: list[Any] = [
-        html.Span(
-            type_label, className="timeline-card-type", style={"color": type_color}
-        )
+    # ``<Type(colored)> · <name>`` — the object identity row.  The layout owns the
+    # type label (and ``type_color``); ``card_secondary`` returns the name alone
+    # so the two are never fused into one span.
+    identity: list[Any] = [
+        html.Span(type_label, className="timeline-card-type", style={"color": type_color}),
+        html.Span("·", className="timeline-card-sep"),
+        html.Span(name_text, className="timeline-card-name"),
     ]
-    if relationship:
-        meta.append(html.Span("·", className="timeline-card-sep"))
-        meta.append(html.Span(relationship, className="timeline-card-rel"))
-    if time_text:
-        meta.append(html.Span("·", className="timeline-card-sep"))
-        meta.append(html.Span(time_text, className="timeline-card-time"))
+
+    if scope == "history":
+        # History inverts: the lane entity is the subject, so its identity leads
+        # and the state change (``Updated``) follows with the time.
+        line_one: Any = html.Div(identity, className="timeline-card-primary")
+        second_row: list[Any] = [html.Span(card_primary(event))]
+        if time_span is not None:
+            second_row.append(time_span)
+        line_two: Any = html.Div(second_row, className="timeline-card-secondary")
+    else:
+        # Activity reads relationship-first: the action is the scan axis when
+        # many cards stack; the object identity follows on line 2.
+        line_one = html.Div(card_primary(event), className="timeline-card-primary")
+        if time_span is not None:
+            identity.append(time_span)
+        line_two = html.Div(identity, className="timeline-card-secondary")
+
+    lines: list[Any] = [line_one, line_two]
+    # ``title`` stays byte-identical to the pre-change value (the old
+    # retired ``card_summary`` output) — hover/tooltip content is out of scope.
+    title_text = _popup_headline(event)
 
     card_style: dict[str, Any] = (
         {"borderLeft": f"3px solid {lane_color}"} if lane_color else {}
@@ -595,16 +625,13 @@ def build_event_card(
         )
     }
     return html.A(
-        [
-            html.Div(summary, className="timeline-card-summary", title=summary),
-            html.Div(meta, className="timeline-card-meta"),
-        ],
+        lines,
         href="/app/graph",
         target="_blank",
         rel="noopener noreferrer",
         className="timeline-card",
         style=card_style,
-        title=summary,
+        title=title_text,
         **payload,
     )
 
@@ -619,12 +646,14 @@ def build_cell(  # pylint: disable=too-many-arguments
     expanded: bool = False,
     row_key: str = "",
     lane_key: str = "",
+    scope: str = "activity",
 ) -> html.Div:
     """One lane cell: the cards for a period, an empty-lane note, or a dashed
     vertical guide continuing the lane through the gap.
 
     A cell is capped at :data:`MAX_CELL_CARDS` cards with a "+N more" toggle for
-    the withheld, already-loaded events; ``expanded`` reveals them.
+    the withheld, already-loaded events; ``expanded`` reveals them.  ``scope``
+    selects the card's reading order (see :func:`build_event_card`).
     """
     if not events:
         if show_empty_note:
@@ -641,6 +670,7 @@ def build_cell(  # pylint: disable=too-many-arguments
             entity_type_color(
                 str(event.get("entity_type") or ""), effective_nodes, base_tokens
             ),
+            scope=scope,
         )
         for event in shown
     ]
@@ -706,6 +736,7 @@ def build_grid_body(  # pylint: disable=too-many-arguments,too-many-locals
     expanded_runs: list[str] | None = None,
     expanded_cells: list[str] | None = None,
     granularity: str = "day",
+    scope: str = "activity",
 ) -> list[Any]:
     """Return the flat grid-item list for the body.
 
@@ -736,6 +767,7 @@ def build_grid_body(  # pylint: disable=too-many-arguments,too-many-locals
                     effective_nodes,
                     base_tokens,
                     show_empty_note=True,
+                    scope=scope,
                 )
             )
         return children
@@ -760,6 +792,7 @@ def build_grid_body(  # pylint: disable=too-many-arguments,too-many-locals
                     expanded=cell_expansion_key(row_key, wba_id) in expanded_cell_set,
                     row_key=row_key,
                     lane_key=wba_id,
+                    scope=scope,
                 )
             )
         first_row = False
@@ -779,6 +812,7 @@ def build_grid_body(  # pylint: disable=too-many-arguments,too-many-locals
                             lane_colors.get(wba_id, ""),
                             effective_nodes,
                             base_tokens,
+                            scope=scope,
                         )
                     )
     return children

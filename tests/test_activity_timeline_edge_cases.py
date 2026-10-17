@@ -129,7 +129,9 @@ def test_history_scope_person_state_change() -> None:
         )
     ]
     texts = _texts(_render(lanes))
-    assert "Alice Johnson" in texts
+    # The name sits inside the line-2 identity row (``<Type> · <name>``), so match
+    # as a substring rather than a whole leaf.
+    assert any("Alice Johnson" in text for text in texts)
     assert "Updated" in texts
 
 

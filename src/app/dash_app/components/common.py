@@ -14,6 +14,7 @@ Usage:
     ])
 """
 
+from collections.abc import Set as AbstractSet
 from typing import Any
 
 from datetime import datetime
@@ -661,8 +662,12 @@ def _panel_is_visible_key(key: str) -> bool:
     return not str(key).startswith("_")
 
 
-def _panel_build_visible_properties(data: dict[str, Any], exclude_keys: set[Any]) -> dict[str, Any]:
-    """Return a filtered property dict for the properties panel."""
+def _panel_build_visible_properties(data: dict[str, Any], exclude_keys: AbstractSet[Any]) -> dict[str, Any]:
+    """Return a filtered property dict for the properties panel.
+
+    ``set`` is invariant in mypy, so a ``frozenset`` constant cannot be passed
+    to a ``set`` parameter.  This is a read-only use, so take the abstract type.
+    """
     return {
         k: v
         for k, v in data.items()
@@ -690,8 +695,12 @@ def _panel_resolve_endpoint(edge_data: dict[str, Any], endpoint: str) -> str:
 _DATE_TIME_KEYS = {"start_date", "created_at", "updated_at", "due_date"}
 
 
-def _panel_properties_table(items: list[Any]) -> html.Table:
-    """Render (key, value) pairs as an Executive Dashboard tabular layout."""
+def render_properties_table(items: list[Any]) -> html.Table:
+    """Render (key, value) pairs as an Executive Dashboard tabular layout.
+
+    The single shared ``(key, value)`` table renderer: used by the graph right
+    panel, the collaboration network right panel and the timeline detail modal.
+    """
     rows = []
     for key, value in items:
         str_value = str(value)
@@ -793,6 +802,34 @@ def _panel_properties_table(items: list[Any]) -> html.Table:
     return html.Table(html.Tbody(rows), style=DETAILS_TABLE_STYLE)
 
 
+#: The same synthetic keys the graph right panel hides, so the modal shows the
+#: same rows as the panel it mirrors (see ``build_element_properties_content``).
+_PANEL_NODE_EXCLUDE_KEYS = frozenset(
+    {"displayLabel", "id", "wba_id", "label", "nodeType", "elementType"}
+)
+
+
+def render_visible_properties(props: dict[str, Any]) -> html.Div:
+    """Render a node's properties, hiding private/internal keys and None values.
+
+    The shared entry point for the timeline detail modal.  It applies the *exact*
+    visibility rule the graph right panel applies — ``_panel_build_visible_properties``
+    with the same ``_PANEL_NODE_EXCLUDE_KEYS`` — so the modal and the panel show
+    the same rows in the same style, and then delegates to
+    ``render_properties_table``.
+    """
+    properties = _panel_build_visible_properties(props, _PANEL_NODE_EXCLUDE_KEYS)
+    items = sorted(properties.items())
+    wba_id = props.get("wba_id") or props.get("id")
+    if wba_id is not None:
+        items = [("id", wba_id)] + items
+    if not items:
+        return html.P(
+            "No properties", className="text-muted", style=DETAILS_MUTED_TEXT_STYLE
+        )
+    return render_properties_table(items)
+
+
 def build_element_properties_content(
     data: dict[str, Any],
     *,
@@ -821,7 +858,7 @@ def build_element_properties_content(
 
     if not is_edge:
         # --- Node ---
-        exclude_keys = {"displayLabel", "id", "wba_id", "label", "nodeType", "elementType"}
+        exclude_keys: AbstractSet[Any] = _PANEL_NODE_EXCLUDE_KEYS
         properties = _panel_build_visible_properties(data, exclude_keys)
         wba_id = data.get("wba_id") or data.get("id")
         sorted_items = sorted(properties.items())
@@ -834,7 +871,7 @@ def build_element_properties_content(
         ], className="mb-3")
 
         if sorted_items:
-            properties_section: list[Any] = [_panel_properties_table(sorted_items)]
+            properties_section: list[Any] = [render_properties_table(sorted_items)]
         else:
             properties_section = [
                 html.P("No properties", className="text-muted", style=DETAILS_MUTED_TEXT_STYLE)
@@ -885,7 +922,7 @@ def build_element_properties_content(
     if properties:
         meta_items += sorted(properties.items())
 
-    return html.Div([header, _panel_properties_table(meta_items)])
+    return html.Div([header, render_properties_table(meta_items)])
 
 
 def create_info_card(title: str, content: str, accent_color: str | None = None) -> html.Div:

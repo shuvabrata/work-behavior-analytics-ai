@@ -11,7 +11,7 @@ from __future__ import annotations
 import re
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
-from urllib.parse import parse_qs
+from urllib.parse import parse_qs, quote
 from zoneinfo import ZoneInfo
 
 from app.common.timezone import get_app_timezone
@@ -460,20 +460,30 @@ def card_secondary(event: dict[str, Any]) -> str:
     return ""
 
 
-def _popup_headline(event: dict[str, Any]) -> str:
-    """Return the hover popup's headline (``summary`` → ``<Rel> · <Type>`` → "Event").
+def detail_sentence(
+    event: dict[str, Any], lane_label: str, *, scope: str = "activity"
+) -> str:
+    """Return the card's full sentence: ``<subject> <relationship> <object>``.
 
-    NOTE: this intentionally duplicates a variant of the retired ``card_summary``
-    so the popup's output stays byte-identical while the card format moved on.
-    Consolidate it with the card helpers in the later hover/popup plan.
+    The card elides the subject into the sticky lane header, so ``lane_label``
+    supplies it here.  Returns a fragment (never empty) so both the modal header
+    and the hover peek can render it unconditionally.
+
+    The object is appended **only in activity scope**.  ``card_secondary`` falls
+    back to ``event["summary"]`` after ``related_name``/``related_id``, and in
+    history scope that summary is the lane's OWN display name
+    (``_event_to_event`` sets ``summary=event.display_name``, with no
+    ``related_*``), so appending it would render
+    "Alice Johnson Updated Alice Johnson".
     """
-    summary = event.get("summary")
-    if isinstance(summary, str) and summary.strip():
-        return summary.strip()
+    subject = (lane_label or "").strip()
     relationship = humanize_relationship(str(event.get("relationship_type") or ""))
-    entity_type = entity_type_label(str(event.get("entity_type") or ""))
-    fallback = " · ".join(part for part in (relationship, entity_type) if part)
-    return fallback or "Event"
+    if not relationship:
+        relationship = entity_type_label(str(event.get("entity_type") or ""))
+    parts = [part for part in (subject, relationship) if part]
+    if scope != "history":
+        parts.append(card_secondary(event))
+    return " ".join(part for part in parts if part) or "Event"
 
 
 def entity_type_token(entity_type: str) -> str:
@@ -509,25 +519,146 @@ def entity_type_color(
     )
 
 
-def popup_fields(event: dict[str, Any], datetime_text: str) -> dict[str, Any]:
+def popup_fields(
+    event: dict[str, Any],
+    datetime_text: str,
+    lane_label: str = "",
+    *,
+    scope: str = "activity",
+) -> dict[str, Any]:
     """Build the JSON payload carried on each card for the hover popup.
+
+    ``summary`` is the same sentence the detail modal's header shows
+    (``detail_sentence``), so hovering and clicking describe the event
+    identically — the previous headline helper preferred ``event["summary"]``,
+    which is the *actor's* title and is frequently absent for Person-actor
+    events.  ``hint`` drives the peek's muted "Click for details" affordance.
+    ``scope`` is forwarded to ``detail_sentence`` so history cards do not repeat
+    the lane's own name (see 4a).
 
     Includes the source ``url`` key **only** when the event has one, so the
     popup renders the "Open source" link only when there is somewhere to go.
     """
     fields: dict[str, Any] = {
-        "summary": _popup_headline(event),
+        "summary": detail_sentence(event, lane_label, scope=scope),
         "relationship": humanize_relationship(
             str(event.get("relationship_type") or "")
         ),
         "entity_type": entity_type_label(str(event.get("entity_type") or "")),
         "source": str(event.get("source") or ""),
         "datetime": datetime_text,
+        "hint": "Click for details",
     }
     url = event.get("url")
     if isinstance(url, str) and url:
         fields["url"] = url
     return fields
+
+
+def detail_payload(event: dict[str, Any], lane_label: str, lane_wba_id: str,
+                   datetime_text: str, scope: str) -> dict[str, Any]:
+    """Build the JSON payload carried on each card for the detail modal.
+
+    Everything the modal needs to render its header and issue its one Neo4j
+    fetch, with no second round trip.  In ``history`` scope there is no other
+    side (``lane_role`` is None), so ``related_wba_id`` is None and the modal
+    renders a single panel.  The lane's OWN type is not carried here: it is the
+    middle segment of ``lane_wba_id`` (Decision 7b), which the clientside branch
+    passes straight through.
+    """
+    related = event.get("related_wba_id")
+    related_wba_id = related if isinstance(related, str) and related else None
+    if (
+        related_wba_id is None
+        and scope != "history"          # Decision 11: history is one panel, always
+        and lane_wba_id.startswith("mock::")   # mock lanes only — never real data
+    ):
+        # Mock events carry a sibling TYPE but no sibling id.  Build a
+        # placeholder in the SAME {source}::{type}::{id} grammar as the lane id,
+        # so graph_deep_link's middle-segment label is the sibling's real type.
+        # A 4-segment id (e.g. "mock::Person::other::Issue") would parse the
+        # label as "Person" — the exact conflation the card-reading-order change's
+        # mock guidance warns about.
+        related_entity_type = str(event.get("entity_type") or "")
+        if related_entity_type:
+            related_wba_id = f"mock::{related_entity_type}::mock-other"
+    return {
+        "lane_wba_id": lane_wba_id,
+        "lane_label": lane_label,
+        "related_wba_id": related_wba_id,
+        "relationship": humanize_relationship(
+            str(event.get("relationship_type") or "")
+        ),
+        "datetime": datetime_text,
+        "scope": scope,
+        # Needs ``related_wba_id`` normalised first, hence the local above.
+        "graph_url": graph_deep_link(lane_wba_id, related_wba_id),
+    }
+
+
+def _node_pattern(var: str, wba_id: str) -> str:
+    """Return a label-scoped Cypher pattern that resolves ``wba_id`` to a node.
+
+    A Person is resolved through its ``IdentityMapping`` plus one ``MAPS_TO``
+    hop, because a Person's provider-scoped id may not be its node id at all
+    (Decision 9b).  Every other entity type is matched directly on its own id,
+    which the per-label ``id`` index serves as a seek.
+    """
+    source, entity_type, entity_id = wba_id.split("::", 2)
+    if entity_type == "Person":
+        mapping_id = f"{source}::IdentityMapping::{entity_id}"
+        return (
+            f"(i_{var}:IdentityMapping {{id: '{mapping_id}'}})"
+            f"-[:MAPS_TO]-({var}:Person)"
+        )
+    return f"({var}:{entity_type} {{id: '{wba_id}'}})"
+
+
+def graph_deep_link(lane_wba_id: str, related_wba_id: str | None) -> str:
+    """Return the ``/app/graph?cypher=`` URL for this event's entities.
+
+    With a ``related_wba_id`` the query loads the two nodes and the
+    relationship between them (what the modal shows); without one — history
+    scope, where there is no other side — it loads the lane node and its
+    immediate neighbours.  The ``?cypher=`` shape is the one
+    ``pages/search.py:349`` and ``:458`` construct; the Graph page reads it in
+    ``handle_url_deep_link_tab`` (``graph/callbacks/right_panel.py:100-105``) to
+    open the Console tab, pre-fill the query and auto-execute it.
+
+    Both labels are read from their own WBA id (``{source}::{type}::{id}``), so
+    callers pass ids only — the same ``split("::", 2)[1]`` idiom
+    ``selection_from_wba_ids`` uses.
+
+    **Both MATCHes are label-scoped on purpose.**  The ``id`` index is
+    **per-label** (every entity label, created by
+    ``src/app/scripts/create_neo4j_indexes.py``), so an *unlabelled*
+    ``MATCH (a {id: …})`` cannot use any of them — it plans as
+    ``AllNodesScan > Filter``.  Both labels come from parsed WBA ids, and
+    ``detail_payload`` only ever passes ids that came from a validated lane key
+    (``parse_wba_id`` in ``service.py``) or from the API's ``related_wba_id``.
+
+    **A Person id is matched through its ``IdentityMapping``.**  A Person id on
+    either side may be a provider-scoped id whose Person node was never created,
+    because Neo4j deduped the person onto another provider's canonical node
+    (Decision 9b).  The label alone would then match nothing and the Graph page
+    would open empty.  Anchoring on the ``IdentityMapping`` (which *is* created
+    for every provider identity) and hopping one ``MAPS_TO`` to the Person
+    resolves the deduped case as well as the ordinary one, since a non-deduped
+    Person has its own mapping too.
+    """
+    lane_pattern = _node_pattern("a", lane_wba_id)
+    if related_wba_id:
+        cypher = (
+            f"MATCH {lane_pattern} "
+            f"MATCH {_node_pattern('b', related_wba_id)} "
+            "MATCH (a)-[r]-(b) RETURN a, r, b LIMIT 50"
+        )
+    else:
+        cypher = (
+            f"MATCH {lane_pattern} "
+            "OPTIONAL MATCH (a)-[r]-(b) RETURN a, r, b LIMIT 50"
+        )
+    return f"/app/graph?cypher={quote(cypher)}"
 
 
 # ---------------------------------------------------------------------------

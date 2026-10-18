@@ -16,7 +16,7 @@ Only the plans below remain.
 | 022  | [Retire AUTHORED_BY → CREATED_BY](022-retire-authored-by-unify-created-by.md) | P1 | M | — | DONE ✓ — merged to `main` at `b28598b` |
 | 023  | [Catalog Editor — Quick Test & View Test Buttons](023-catalog-editor-test-buttons.md) | P1 | M | — | DONE ✓ — all 5 phases, committed `bff99d9`→`ce02408` on `feature/editor-test-buttons` (pushed); operator manual regression pending |
 | 043  | [Activity Timeline — make event cards read as a sentence](043-activity-timeline-card-reading-order.md) | P1 | M | — | DONE ✓ — squash-merged to `main` as `d77db38` (#339); all gates green, migration applied at `51d673fb286f` |
-| 044  | [Activity Timeline — event detail modal](044-activity-timeline-detail-modal.md) | P1 | L | `d77db38` (#339) | TODO |
+| 044  | [Activity Timeline — event detail modal](044-activity-timeline-detail-modal.md) | P1 | L | `d77db38` (#339) | **DONE ✓ (code)** — executed on `worktree-agent-a5bb2ce2abf236bf2` at `b07edba`; all CI gates green. **Operator action pending**: merge the worktree branch, then the manual/browser + live-Neo4j passes |
 | 045  | [Graph query validator rejects entity ids containing a write keyword](045-graph-query-validator-rejects-entity-ids.md) | P2 | — | — | **PROBLEM STATEMENT ONLY** — no solution specified; not executable |
 
 ## Notes
@@ -76,6 +76,36 @@ Only the plans below remain.
   — the Graph validator rejecting ids that contain a write keyword
   (`github::Repository::acme/merge-queue` → HTTP 400) — is recorded separately as
   **045** and is deliberately not fixed in 044.
+- **044 (executed 2026-10-18)**: dispatched to an executor in an isolated worktree
+  (branch `worktree-agent-a5bb2ce2abf236bf2`, HEAD `b07edba`, unmerged). The first
+  run **stopped** on a genuine plan defect, which the executor correctly refused
+  to improvise around: Phase 5a routes every card through `detail_payload` →
+  `graph_deep_link` → `_node_pattern`, which unpacks the lane id as
+  `{source}::{type}::{id}`, but four tests in
+  `tests/test_activity_timeline_edge_cases.py` render hand-built single-segment
+  lane ids (`"a"`). Reproduced independently: `ValueError: not enough values to
+  unpack` at `helpers.py:607`, 4 failed / 3 passed. The plan simultaneously
+  required the gate green, forbade touching that file, and forbade a fallback —
+  unsatisfiable as written. **Plan amended** (new Scope row + step 7f +
+  narrowed STOP condition): the fixtures are not valid WBA ids (`parse_wba_id`
+  guarantees three segments), so the fixtures became `github::Person::…` and no
+  production guard was added. Re-run completed.
+  **Reviewer verdict: APPROVE**, after re-running every done criterion
+  independently in the worktree — `pytest -m unit tests` **1912 passed**
+  (was 1877), `mypy src/` clean, `pylint` **9.68**, `bandit` **0 High**, spec
+  regeneration **no diff**, every Done-criteria grep clean, and
+  `query.py` / `mock_data.py` / `test_activity_person_identity.py` untouched.
+  Phase 2's "pure refactor" claim was verified by loading `common.py` from
+  `d77db38` and the worktree side by side and diffing
+  `build_element_properties_content`'s output over five fixtures (node
+  expandable / not expandable / edge / empty / no-wba_id) — **byte-identical**.
+  **Not verified**: the live-Neo4j claims (the `MAPS_TO` recovery for a deduped
+  Person sibling and the deep-link forms) and the browser pass —
+  no services were running, and they are not CI gates. They are the part of
+  this design with real data behind it, so they remain an operator check before
+  merge. Residual nit: the 7c renderer-parity test compares row *keys* rather
+  than key+value text as the plan specified; the independent full-output diff
+  above is the stronger evidence.
 - **045**: `validate_read_only_query` (`api/graph/v1/query.py:38-83`) uppercases
   the whole query and word-matches write keywords, so it also matches inside
   string literals — an id like `github::Repository::facebook/create-react-app`

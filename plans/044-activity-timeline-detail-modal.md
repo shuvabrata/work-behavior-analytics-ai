@@ -75,6 +75,17 @@
   pre-existing deep-link validator defect found in the same review is recorded
   separately in `plans/045-graph-query-validator-rejects-entity-ids.md` and is
   **not** fixed here.
+- **Revised 2026-10-18 (post-execution)**: the first executor run hit the stop
+  condition *"`lane_wba_id` turns out not to have three `::`-separated segments"*
+  — 4 tests in `tests/test_activity_timeline_edge_cases.py` render hand-built
+  single-segment lane ids (`"a"`) through `build_grid_body`, so Phase 5a's
+  unconditional `detail_payload` call raises `ValueError`. The finding is
+  confirmed (reproduced in the executor's worktree). Resolution: the fixtures are
+  invalid WBA ids that never occur in production (`parse_wba_id` guarantees three
+  segments), so **step 7f** makes them well-formed and that test file is added to
+  Scope. No production guard is added — a type-segment-less id cannot produce a
+  label-scoped `MATCH` and therefore cannot be handled without changing the query
+  shape. The corresponding STOP condition is narrowed accordingly.
 
 ## Why this matters
 
@@ -382,6 +393,7 @@ running.
 | `tests/test_activity_api_integration.py` | `related_wba_id` assertions (both directions, None for history) | 7 |
 | `tests/test_activity_timeline_ui_helpers.py` | updated `popup_fields` test + new `detail_*` tests | 7 |
 | `tests/test_activity_timeline_detail_modal.py` | **create** — cypher shape, fetch keying, panel helpers, payload builders | 7 |
+| `tests/test_activity_timeline_edge_cases.py` | synthetic lane ids made well-formed (`"a"` → `"github::Person::a"`) — see 7f | 7 |
 | `docs/design/activity-timeline-design.md` | §5.1, §5.3, §7.4, §11 | 7 |
 
 **Out of scope** — do NOT touch:
@@ -1852,6 +1864,43 @@ preference to the raw `summary` — the whole point of Decision 14.
   same card re-opens from the already-rendered panels.
 - §11 Source map — add `tests/test_activity_timeline_detail_modal.py`.
 
+**7f.** `tests/test_activity_timeline_edge_cases.py` — **fixture fix only.** This
+file's `_lane` helper builds lane dicts by hand and four of its tests render them
+through `build_grid_body`, so Phase 5a now routes every card through
+`detail_payload` → `graph_deep_link` → `_node_pattern`, which unpacks the lane id
+as `{source}::{type}::{id}`. The hand-built ids (`"a"`, `"b"`, `"lane0"`) have one
+segment and raise `ValueError: not enough values to unpack (expected 3, got 1)`.
+
+A lane id reaching the timeline from the API is **always** three segments —
+`parse_wba_id` in `service.py` rejects anything else — so the malformed ids exist
+only as test fixtures. Fix the fixtures, **not** the production code:
+
+- In the rendering tests, replace every single-segment lane id with a well-formed
+  one. The minimal set:
+  - `"a"` → `"github::Person::a"` (lines ~76, ~84, ~93, ~111, ~119)
+  - `"b"` → `"github::Person::b"` (lines ~85, ~93)
+  - `f"lane{index}"` → `f"github::Person::lane{index}"` (line ~101)
+- `_lane`'s `"label": wba_id` line may stay as it is — the label becomes the
+  sentence's subject, and no assertion in this file depends on its text.
+- Leave `test_lane_exactly_limit_clears_cursor_on_empty_page` (line ~141) alone:
+  its `{"wba_id": "a", …}` is passed to `has_more`/`merge_lane_page`, which never
+  render a card.
+- Change **nothing else** in this file — no new assertions, no behavioural edits.
+  It stays the render sweep it was; only the ids become valid.
+
+**Do not** instead add a guard or fallback in `graph_deep_link` /
+`_node_pattern` / `detail_payload` for ids without a type segment. `_node_pattern`
+needs the middle segment to emit a **label-scoped** `MATCH`, and a bare
+`MATCH (a: {id: …})` is a Cypher syntax error — so a "guard" could not merely drop
+a label, it would have to change the query shape or suppress the deep link for a
+real event. Malformed lane ids never reach production code, so that branch would
+be dead code guarding an impossible input.
+
+**Verify (7f)**
+```
+pytest -m unit tests/test_activity_timeline_edge_cases.py -q   # all pass
+```
+
 **Verify**
 ```
 pytest -m unit tests -q
@@ -1871,6 +1920,7 @@ slipped in that this plan did not intend.
 | `tests/test_activity_timeline_detail_modal.py` | **create** | Cypher shape (both branches, one `UNION`); `_mapping_id_for`; fetch keying **by requested id** (incl. the differing-`wba_id` and order-independence pins); `_detail_panel`; error copy; payload equality (no nonce); mock-sibling narrowness; label-scoped deep link + `_node_pattern` Person hop; table-renderer parity; visible-property filtering; `detail_payload` for activity + history; `detail_sentence` incl. the history single-name case |
 | `tests/test_activity_timeline_ui_helpers.py` | update | `popup_fields` headline is the sentence + `hint`; `related_name` beats `summary` |
 | `tests/test_activity_api_integration.py` | update | `related_wba_id` correct in both directions (fake session shape unchanged) and using `target_source`; `None` for history |
+| `tests/test_activity_timeline_edge_cases.py` | update (fixtures only) | lane ids become `{source}::{type}::{id}` so the render sweep still renders now that every card builds a `graph_deep_link` — see 7f. No new assertions. |
 
 Model the new test module structurally on
 `tests/test_activity_timeline_ui_helpers.py` (module docstring, `pytestmark`,
@@ -1959,6 +2009,11 @@ Machine-checkable. ALL must hold:
       returns **no matches** (Decision 7b). *(Do not widen this to `src/`: the
       pre-existing private `lane_entity_type` parameter in `service.py` and
       `mock_data.py` is untouched and must stay.)*
+- [ ] `tests/test_activity_timeline_edge_cases.py` renders with well-formed
+      three-segment lane ids (step 7f) and `git diff d77db38 -- tests/test_activity_timeline_edge_cases.py`
+      shows **only** those id literals changed — no new assertions, no behavioural
+      edits. `graph_deep_link` / `_node_pattern` / `detail_payload` carry **no**
+      guard for an id without a type segment.
 - [ ] No file outside the `## Scope` table is modified (`git status --short`).
 - [ ] `plans/README.md` status row updated.
 
@@ -2001,11 +2056,17 @@ Stop and report back — do not improvise — if:
   must match `query.py`'s `related_source` `CASE` exactly. If the live code
   computes that source differently (a new column, an extra fallback), stop — a
   divergent id would make the sibling panel silently miss.
-- **`lane_wba_id` turns out not to have three `::`-separated segments.** Phase 5c
-  derives the lane's `MATCH` label from `lane_wba_id.split("::", 2)[1]` and does
-  **not** guard for an empty label (a bare `MATCH (a: {id: …})` is a syntax
-  error, so a fallback would change the query shape). If a lane id can arrive
-  without a type segment, stop and report rather than adding a fallback.
+- **`lane_wba_id` turns out not to have three `::`-separated segments — in a
+  code path other than the ones step 7f already covers.** Phase 5c derives the
+  lane's `MATCH` label from `lane_wba_id.split("::", 2)[1]` and does **not** guard
+  for an empty label (a bare `MATCH (a: {id: …})` is a syntax error, so a fallback
+  would change the query shape). Every lane id the **API** produces has three
+  segments (`parse_wba_id` rejects anything else), and the one known source of
+  malformed ids — the hand-built lane fixtures in
+  `tests/test_activity_timeline_edge_cases.py` — is fixed by **step 7f**, which is
+  in Scope. So this is **no longer a STOP** for that file: apply 7f. It remains a
+  STOP if you find *another* caller passing an id without a type segment that 7f
+  does not cover — report it rather than adding a fallback.
 - **`pytest -m unit tests -q` goes red in Phase 1.** The whole point of building
   `related_wba_id` in `_action_to_event` is that **no** existing test needs to
   change. A red run means the change was made in the wrong layer (most likely a

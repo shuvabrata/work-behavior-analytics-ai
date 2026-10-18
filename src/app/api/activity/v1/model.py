@@ -92,6 +92,15 @@ class TimelineEvent(BaseModel):
             "timeline row yet — the UI falls back to related_id, then summary."
         ),
     )
+    related_wba_id: str | None = Field(
+        default=None,
+        description=(
+            "Canonical WBA id of the *other* side, "
+            "'{source}::{entity_type}::{id}'. None for scope=history, and None "
+            "when the other side's source is unknown. The UI uses this to look "
+            "the sibling node up in Neo4j."
+        ),
+    )
 
 
 class TimelineLane(BaseModel):

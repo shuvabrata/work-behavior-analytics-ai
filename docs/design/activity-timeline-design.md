@@ -526,8 +526,9 @@ Analytics sub-page.
 - **Hover/focus popup:** a single portal rendered **outside** the scrolling grid
   (`position: fixed`, high `z-index`), filled from a per-card
   `data-timeline-event` JSON attribute with `textContent` (never `innerHTML` —
-  summaries/labels/urls are untrusted ingested data). Shows the same sentence the
-  modal header shows (via `detail_sentence`), humanized relationship, entity
+  summaries/labels/urls are untrusted ingested data). Shows the same subject,
+  relationship and object the modal header shows (the peek joins them with
+  spaces, the header with `·`), humanized relationship, entity
   type, source, full datetime, a muted "Click for details" hint, and an
   "Open source ↗" link when the event has a URL. It hides on
   scroll/resize/Escape.
@@ -545,10 +546,10 @@ Analytics sub-page.
 Clicking a card opens a large (`size="xl"`, scrollable) modal that reads as the
 complete sentence the card fragments:
 
-- **Header** = `lane name · relationship · time` — the full sentence, including
-  the subject the sticky lane header elides. The header is set on the client
-  from the card's `data-timeline-detail` payload, so the modal opens immediately
-  with a populated title and no round trip.
+- **Header** = `lane name · relationship · object name · time` — the full
+  sentence, including the subject the sticky lane header elides. The header is
+  set on the client from the card's `data-timeline-detail` payload, so the modal
+  opens immediately with a populated title and no round trip.
 - **Graph deep-link** in the header (right side, new tab). It points at
   `/app/graph?cypher=…` with a **server-built**, label-scoped Cypher query that
   loads the two entities and the edge between them. A Person id on either side is

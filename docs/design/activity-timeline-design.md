@@ -546,10 +546,13 @@ Analytics sub-page.
 Clicking a card opens a large (`size="xl"`, scrollable) modal that reads as the
 complete sentence the card fragments:
 
-- **Header** = `lane name · relationship · object name · time` — the full
+- **Header** = `lane name · relationship · object name · duration` — the full
   sentence, including the subject the sticky lane header elides. The header is
   set on the client from the card's `data-timeline-detail` payload, so the modal
-  opens immediately with a populated title and no round trip.
+  opens immediately with a populated title and no round trip. The duration reads
+  relative to now ("2 hrs ago"); the **exact time is not lost** — it renders as
+  small muted text beneath the Graph link (from `datetime_exact`), and the hover
+  peek still shows the absolute time.
 - **Graph deep-link** in the header (right side, new tab). It points at
   `/app/graph?cypher=…` with a **server-built**, label-scoped Cypher query that
   loads the two entities and the edge between them. A Person id on either side is

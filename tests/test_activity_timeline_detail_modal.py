@@ -555,6 +555,48 @@ def test_detail_payload_history_has_no_sibling() -> None:
     assert payload["related_wba_id"] is None
 
 
+def test_detail_payload_title_names_the_object() -> None:
+    """The header names the object — the modal completes the card's sentence."""
+    payload = detail_payload(
+        _event(relationship_type="CREATED_BY", related_name="Plan document"),
+        "Alice Johnson",
+        "github::Person::alice",
+        "Mar 15, 2026 2:30 PM",
+        "activity",
+    )
+    assert payload["object_name"] == "Plan document"
+    assert (
+        payload["title"]
+        == "Alice Johnson  ·  Created By  ·  Plan document  ·  Mar 15, 2026 2:30 PM"
+    )
+
+
+def test_detail_payload_history_title_names_the_lane_once() -> None:
+    """History's summary is the lane's OWN name, so the object stays empty."""
+    payload = detail_payload(
+        {"relationship_type": "STATE_CHANGE", "summary": "Alice Johnson"},
+        "Alice Johnson",
+        "github::Person::alice",
+        "Mar 15, 2026 2:30 PM",
+        "history",
+    )
+    assert payload["object_name"] == ""
+    assert payload["title"].count("Alice Johnson") == 1
+
+
+def test_detail_payload_title_omits_missing_parts() -> None:
+    """An unknown object drops cleanly — no doubled or trailing separator."""
+    payload = detail_payload(
+        _event(relationship_type="CREATED_BY", summary=""),
+        "Alice Johnson",
+        "github::Person::alice",
+        "Mar 15, 2026 2:30 PM",
+        "activity",
+    )
+    assert payload["object_name"] == ""
+    assert payload["title"] == "Alice Johnson  ·  Created By  ·  Mar 15, 2026 2:30 PM"
+
+
 def test_detail_payload_identical_events_are_equal() -> None:
     """Two payloads from the same event compare equal (no per-click nonce)."""
     event = _event(related_wba_id="github::PullRequest::x")

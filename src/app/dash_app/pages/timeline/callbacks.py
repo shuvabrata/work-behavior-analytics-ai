@@ -1088,10 +1088,8 @@ clientside_callback(
                 var data;
                 try { data = JSON.parse(raw); } catch (e) { return false; }
                 window.__timelinePopupHide();
-                var title = [data.lane_label, data.relationship, data.datetime]
-                    .filter(Boolean).join('  \\u00b7  ');
                 if (window.dash_clientside && window.dash_clientside.set_props) {
-                    window.dash_clientside.set_props('timeline-detail-title', {children: title});
+                    window.dash_clientside.set_props('timeline-detail-title', {children: data.title});
                     if (data.graph_url) {
                         window.dash_clientside.set_props('timeline-detail-graph-link', {href: data.graph_url});
                     }

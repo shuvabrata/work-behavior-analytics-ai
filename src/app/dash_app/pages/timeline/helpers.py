@@ -560,11 +560,13 @@ def detail_payload(event: dict[str, Any], lane_label: str, lane_wba_id: str,
     """Build the JSON payload carried on each card for the detail modal.
 
     Everything the modal needs to render its header and issue its one Neo4j
-    fetch, with no second round trip.  In ``history`` scope there is no other
-    side (``lane_role`` is None), so ``related_wba_id`` is None and the modal
-    renders a single panel.  The lane's OWN type is not carried here: it is the
-    middle segment of ``lane_wba_id`` (Decision 7b), which the clientside branch
-    passes straight through.
+    fetch, with no second round trip.  The header string itself is carried as
+    ``title``, composed here rather than in the clientside branch so it is
+    reachable from this repo's Python tests.  In ``history`` scope there is no
+    other side (``lane_role`` is None), so ``related_wba_id`` is None and the
+    modal renders a single panel.  The lane's OWN type is not carried here: it is
+    the middle segment of ``lane_wba_id`` (Decision 7b), which the clientside
+    branch passes straight through.
     """
     related = event.get("related_wba_id")
     related_wba_id = related if isinstance(related, str) and related else None
@@ -582,15 +584,32 @@ def detail_payload(event: dict[str, Any], lane_label: str, lane_wba_id: str,
         related_entity_type = str(event.get("entity_type") or "")
         if related_entity_type:
             related_wba_id = f"mock::{related_entity_type}::mock-other"
+    relationship = humanize_relationship(
+        str(event.get("relationship_type") or "")
+    )
+    # The object the event is *about* — the same name the card's line 2 and the
+    # hover peek show.  Empty in history scope, where ``card_secondary`` falls
+    # back to ``summary`` and that summary is the lane's OWN display name
+    # (``_event_to_event`` sets ``summary=event.display_name``), so appending it
+    # would render "Alice Johnson Updated Alice Johnson".  Same guard as
+    # ``detail_sentence``.
+    object_name = "" if scope == "history" else card_secondary(event)
     return {
         "lane_wba_id": lane_wba_id,
         "lane_label": lane_label,
         "related_wba_id": related_wba_id,
-        "relationship": humanize_relationship(
-            str(event.get("relationship_type") or "")
-        ),
+        "relationship": relationship,
+        "object_name": object_name,
         "datetime": datetime_text,
         "scope": scope,
+        # The modal header, composed here rather than in the clientside branch:
+        # a JavaScript join is not reachable from this repo's Python tests, and
+        # an untested header is exactly how the object name went missing.
+        "title": "  ·  ".join(
+            part
+            for part in (lane_label, relationship, object_name, datetime_text)
+            if part
+        ),
         # Needs ``related_wba_id`` normalised first, hence the local above.
         "graph_url": graph_deep_link(lane_wba_id, related_wba_id),
     }

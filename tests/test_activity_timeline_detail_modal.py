@@ -300,7 +300,8 @@ def test_detail_panel_carries_class_and_caption() -> None:
 
 
 def test_detail_error_neo4j_disabled_copy(monkeypatch: pytest.MonkeyPatch) -> None:
-    """An HTTP 500 (Neo4j disabled) reads as a configuration, not a failure."""
+    """With Neo4j disabled the copy reads as a configuration, not a failure."""
+    monkeypatch.setattr(callbacks.settings, "NEO4J_ENABLED", False)
 
     def boom(_ids: list[str]) -> dict[str, dict[str, Any]]:
         raise NodePropertiesError("HTTP 500")
@@ -312,8 +313,31 @@ def test_detail_error_neo4j_disabled_copy(monkeypatch: pytest.MonkeyPatch) -> No
     assert "Neo4j is not available" in _join_texts(out)
 
 
-def test_detail_error_generic_copy(monkeypatch: pytest.MonkeyPatch) -> None:
-    """A non-500 failure gets the generic message."""
+def test_detail_error_query_failure_is_not_called_disabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An HTTP 500 with Neo4j enabled is a query failure, not a config problem.
+
+    The graph API answers 500 for *any* Cypher runtime error, so the identical
+    exception text as the disabled case must not render the disabled-graph copy.
+    """
+    monkeypatch.setattr(callbacks.settings, "NEO4J_ENABLED", True)
+
+    def boom(_ids: list[str]) -> dict[str, dict[str, Any]]:
+        raise NodePropertiesError("HTTP 500")
+
+    monkeypatch.setattr(callbacks, "fetch_node_properties", boom)
+    out = callbacks.render_detail_panels(
+        {"lane_wba_id": "github::Person::a", "related_wba_id": None}
+    )
+    text = _join_texts(out)
+    assert "Could not load properties for this event." in text
+    assert "not available" not in text
+
+
+def test_detail_error_transport_failure_copy(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A transport failure (no HTTP status involved) gets the generic message."""
+    monkeypatch.setattr(callbacks.settings, "NEO4J_ENABLED", True)
 
     def boom(_ids: list[str]) -> dict[str, dict[str, Any]]:
         raise NodePropertiesError("request failed: boom")

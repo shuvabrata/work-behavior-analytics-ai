@@ -81,6 +81,7 @@ from app.dash_app.styles import (
     FONT_SIZE_XTINY,
     get_theme_tokens,
 )
+from app.settings import settings
 from common.logger import logger
 
 _SUGGESTION_LIMIT = 10
@@ -1219,10 +1220,15 @@ def render_detail_panels(payload: dict[str, Any] | None) -> Any:
     ids = [left] if not right else [left, right]
     try:
         nodes = fetch_node_properties(ids)
-    except NodePropertiesError as exc:
-        # With Neo4j disabled the graph API answers 500, so a plain "failed"
-        # would be a dead end for a normal, supported configuration.
-        if "500" in str(exc):
+    except NodePropertiesError:
+        # Ask the SAME question the server's guard asks (api/graph/v1/query.py:262
+        # reads this same flag) instead of inferring it from the HTTP status.
+        # The graph API answers 500 for *every* Cypher runtime error, not only
+        # for a disabled graph, so "500" cannot tell the two apart.  The Dash app
+        # shares this process with the API (main.py mounts it via a2wsgi), so the
+        # flag is directly readable — the same approach pages/search.py:769 uses
+        # for ELASTICSEARCH_ENABLED.
+        if not settings.NEO4J_ENABLED:
             return _detail_error(
                 "Neo4j is not available — graph properties are disabled."
             )

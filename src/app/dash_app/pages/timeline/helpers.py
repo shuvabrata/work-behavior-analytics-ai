@@ -14,7 +14,7 @@ from typing import Any
 from urllib.parse import parse_qs, quote
 from zoneinfo import ZoneInfo
 
-from app.common.timezone import get_app_timezone
+from app.common.timezone import get_app_timezone, humanize_duration, to_app_timezone
 
 # Soft cap on the number of lanes (design decision #4).
 MAX_LANES = 5
@@ -149,6 +149,20 @@ def _parse_event_time(raw: Any) -> datetime | None:
         return datetime.fromisoformat(raw.replace("Z", "+00:00"))
     except ValueError:
         return None
+
+
+def _humanize_event_time(raw: Any) -> str:
+    """Return the event time as a relative duration ("2 hrs ago"), or "".
+
+    ``humanize_duration`` needs a ``datetime``, but the card only carries the
+    raw ISO string — so parse here rather than threading a second value through
+    the call chain.  An unparseable/absent timestamp yields "" so the header
+    simply omits the duration, exactly as it omits an empty ``datetime_text``.
+    """
+    parsed = _parse_event_time(raw)
+    if parsed is None:
+        return ""
+    return humanize_duration(to_app_timezone(parsed))
 
 
 def _week_start(value: datetime) -> date:
@@ -562,11 +576,14 @@ def detail_payload(event: dict[str, Any], lane_label: str, lane_wba_id: str,
     Everything the modal needs to render its header and issue its one Neo4j
     fetch, with no second round trip.  The header string itself is carried as
     ``title``, composed here rather than in the clientside branch so it is
-    reachable from this repo's Python tests.  In ``history`` scope there is no
-    other side (``lane_role`` is None), so ``related_wba_id`` is None and the
-    modal renders a single panel.  The lane's OWN type is not carried here: it is
-    the middle segment of ``lane_wba_id`` (Decision 7b), which the clientside
-    branch passes straight through.
+    reachable from this repo's Python tests.  The header ends with a *duration*
+    ("2 hrs ago") rather than the absolute date — an activity timeline is about
+    when relative to now — while the exact timestamp travels separately as
+    ``datetime_exact``, which the modal renders as small muted text.  In
+    ``history`` scope there is no other side (``lane_role`` is None), so
+    ``related_wba_id`` is None and the modal renders a single panel.  The lane's
+    OWN type is not carried here: it is the middle segment of ``lane_wba_id``
+    (Decision 7b), which the clientside branch passes straight through.
     """
     related = event.get("related_wba_id")
     related_wba_id = related if isinstance(related, str) and related else None
@@ -594,6 +611,11 @@ def detail_payload(event: dict[str, Any], lane_label: str, lane_wba_id: str,
     # would render "Alice Johnson Updated Alice Johnson".  Same guard as
     # ``detail_sentence``.
     object_name = "" if scope == "history" else card_secondary(event)
+    # The header reads as a DURATION ("2 hrs ago") — an activity timeline is
+    # about when relative to now, and an absolute date makes the reader do the
+    # arithmetic.  The exact time is not lost: it is carried as
+    # ``datetime_exact`` and rendered as small muted text under the header.
+    duration_text = _humanize_event_time(event.get("event_time"))
     return {
         "lane_wba_id": lane_wba_id,
         "lane_label": lane_label,
@@ -601,13 +623,14 @@ def detail_payload(event: dict[str, Any], lane_label: str, lane_wba_id: str,
         "relationship": relationship,
         "object_name": object_name,
         "datetime": datetime_text,
+        "datetime_exact": datetime_text,
         "scope": scope,
         # The modal header, composed here rather than in the clientside branch:
         # a JavaScript join is not reachable from this repo's Python tests, and
         # an untested header is exactly how the object name went missing.
         "title": "  ·  ".join(
             part
-            for part in (lane_label, relationship, object_name, datetime_text)
+            for part in (lane_label, relationship, object_name, duration_text)
             if part
         ),
         # Needs ``related_wba_id`` normalised first, hence the local above.

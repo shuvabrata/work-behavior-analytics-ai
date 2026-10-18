@@ -1090,6 +1090,7 @@ clientside_callback(
                 window.__timelinePopupHide();
                 if (window.dash_clientside && window.dash_clientside.set_props) {
                     window.dash_clientside.set_props('timeline-detail-title', {children: data.title});
+                    window.dash_clientside.set_props('timeline-detail-time', {children: data.datetime_exact});
                     if (data.graph_url) {
                         window.dash_clientside.set_props('timeline-detail-graph-link', {href: data.graph_url});
                     }

@@ -264,6 +264,7 @@ DETAIL_TITLE_ID = "timeline-detail-title"
 DETAIL_STORE_ID = "timeline-detail-store"
 DETAIL_PANELS_ID = "timeline-detail-panels"
 DETAIL_GRAPH_LINK_ID = "timeline-detail-graph-link"
+DETAIL_TIME_ID = "timeline-detail-time"
 
 
 def _empty_state() -> html.Div:
@@ -397,17 +398,32 @@ def get_layout() -> html.Div:
                             # so the modal opens with a populated header and no
                             # round trip; the panels fill behind the spinner.
                             dbc.ModalTitle("", id=DETAIL_TITLE_ID),
-                            # The Graph deep-link (Decision 8) — a NEW TAB.  Its
-                            # href is set clientside from the card payload,
-                            # because it embeds a URL-encoded Cypher query.
-                            html.A(
-                                [html.I(className="fas fa-diagram-project me-1"),
-                                 "Explore in Graph"],
-                                id=DETAIL_GRAPH_LINK_ID,
-                                href="#",
-                                target="_blank",
-                                rel="noopener noreferrer",
-                                className="timeline-detail-graph-link ms-auto me-3",
+                            # Right-aligned column: the Graph link with the exact
+                            # event time stacked beneath it.  ``ms-auto`` lives on
+                            # THIS wrapper (not the link) so the whole column is
+                            # pushed right; the link keeps ``me-3`` for its inset.
+                            html.Div(
+                                [
+                                    # The Graph deep-link (Decision 8) — a NEW
+                                    # TAB.  Its href is set clientside from the
+                                    # card payload, because it embeds a
+                                    # URL-encoded Cypher query.
+                                    html.A(
+                                        [html.I(className="fas fa-diagram-project me-1"),
+                                         "Explore in Graph"],
+                                        id=DETAIL_GRAPH_LINK_ID,
+                                        href="#",
+                                        target="_blank",
+                                        rel="noopener noreferrer",
+                                        className="timeline-detail-graph-link",
+                                    ),
+                                    # The absolute time the header's duration
+                                    # summarises.  Filled clientside from
+                                    # ``datetime_exact``, same as the title.
+                                    html.Div("", id=DETAIL_TIME_ID,
+                                             className="timeline-detail-time"),
+                                ],
+                                className="timeline-detail-header-aside ms-auto me-3",
                             ),
                         ],
                         close_button=True,

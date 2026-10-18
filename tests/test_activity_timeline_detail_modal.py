@@ -30,6 +30,7 @@ from app.dash_app.pages.timeline.api import (
     fetch_node_properties,
 )
 from app.dash_app.pages.timeline.helpers import (
+    _humanize_event_time,
     _node_pattern,
     detail_payload,
     detail_sentence,
@@ -556,7 +557,11 @@ def test_detail_payload_history_has_no_sibling() -> None:
 
 
 def test_detail_payload_title_names_the_object() -> None:
-    """The header names the object — the modal completes the card's sentence."""
+    """The header names the object — the modal completes the card's sentence.
+
+    The header's last segment is now a *duration* relative to now, so this test
+    asserts on the deterministic prefix rather than the clock-dependent suffix.
+    """
     payload = detail_payload(
         _event(relationship_type="CREATED_BY", related_name="Plan document"),
         "Alice Johnson",
@@ -565,10 +570,10 @@ def test_detail_payload_title_names_the_object() -> None:
         "activity",
     )
     assert payload["object_name"] == "Plan document"
-    assert (
-        payload["title"]
-        == "Alice Johnson  ·  Created By  ·  Plan document  ·  Mar 15, 2026 2:30 PM"
+    assert payload["title"].startswith(
+        "Alice Johnson  ·  Created By  ·  Plan document  ·  "
     )
+    assert "Mar 15, 2026" not in payload["title"]
 
 
 def test_detail_payload_history_title_names_the_lane_once() -> None:
@@ -582,6 +587,7 @@ def test_detail_payload_history_title_names_the_lane_once() -> None:
     )
     assert payload["object_name"] == ""
     assert payload["title"].count("Alice Johnson") == 1
+    assert "Mar 15, 2026" not in payload["title"]
 
 
 def test_detail_payload_title_omits_missing_parts() -> None:
@@ -594,7 +600,28 @@ def test_detail_payload_title_omits_missing_parts() -> None:
         "activity",
     )
     assert payload["object_name"] == ""
-    assert payload["title"] == "Alice Johnson  ·  Created By  ·  Mar 15, 2026 2:30 PM"
+    assert payload["title"].startswith("Alice Johnson  ·  Created By  ·  ")
+    assert "Mar 15, 2026" not in payload["title"]
+
+
+def test_detail_payload_exact_time_is_carried_separately() -> None:
+    """The exact time the header demotes to small text travels as its own key."""
+    payload = detail_payload(
+        _event(relationship_type="CREATED_BY", related_name="Plan document"),
+        "Alice Johnson",
+        "github::Person::alice",
+        "Mar 15, 2026 2:30 PM",
+        "activity",
+    )
+    assert payload["datetime_exact"] == "Mar 15, 2026 2:30 PM"
+    assert payload["datetime_exact"] == payload["datetime"]
+
+
+def test_humanize_event_time_handles_bad_input() -> None:
+    """Garbage timestamps yield "" so the header omits the duration cleanly."""
+    assert _humanize_event_time(None) == ""
+    assert _humanize_event_time("") == ""
+    assert _humanize_event_time("not-a-date") == ""
 
 
 def test_detail_payload_identical_events_are_equal() -> None:

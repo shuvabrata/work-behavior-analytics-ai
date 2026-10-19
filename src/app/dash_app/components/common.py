@@ -809,7 +809,7 @@ _PANEL_NODE_EXCLUDE_KEYS = frozenset(
 )
 
 
-def render_visible_properties(props: dict[str, Any]) -> html.Div:
+def render_visible_properties(props: dict[str, Any]) -> html.Table | html.P:
     """Render a node's properties, hiding private/internal keys and None values.
 
     The shared entry point for the timeline detail modal.  It applies the *exact*
@@ -817,6 +817,12 @@ def render_visible_properties(props: dict[str, Any]) -> html.Div:
     with the same ``_PANEL_NODE_EXCLUDE_KEYS`` — so the modal and the panel show
     the same rows in the same style, and then delegates to
     ``render_properties_table``.
+
+    Returns ``html.Table`` when there is at least one visible property (or an id
+    to inject), and the muted ``html.P`` empty state otherwise — hence the union
+    return.  Note that ``mypy.ini`` disables ``return-value`` for
+    ``app.dash_app.*``, so an incorrect annotation here would not be caught by
+    the typecheck gate.
     """
     properties = _panel_build_visible_properties(props, _PANEL_NODE_EXCLUDE_KEYS)
     items = sorted(properties.items())

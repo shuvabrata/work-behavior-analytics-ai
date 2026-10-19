@@ -13,7 +13,7 @@ from typing import Any
 from urllib.parse import parse_qs, unquote
 
 import pytest
-from dash import html
+from dash import html, no_update
 
 from app.dash_app.components.common import (
     build_element_properties_content,
@@ -653,6 +653,53 @@ def test_detail_payload_identical_events_are_equal() -> None:
     event = _event(related_wba_id="github::PullRequest::x")
     args = ("Alice Johnson", "github::Person::alice", "Mar 15, 2026 2:30 PM", "activity")
     assert detail_payload(event, *args) == detail_payload(event, *args)
+
+
+def test_detail_payload_has_no_graph_url() -> None:
+    """The grid must not carry a per-card Cypher URL — it is built at click time.
+
+    A future change that reintroduces ``graph_url`` would silently re-add ~350
+    bytes to every card, so this pin is the regression guard.  The two ids it
+    would be built from must still be present: they are what makes the deferred
+    build possible.
+    """
+    payload = detail_payload(
+        _event(related_wba_id="github::PullRequest::org/repo#1"),
+        "Alice Johnson",
+        "github::Person::alice",
+        "Mar 15, 2026 2:30 PM",
+        "activity",
+    )
+    assert "graph_url" not in payload
+    assert payload["lane_wba_id"] == "github::Person::alice"
+    assert payload["related_wba_id"] == "github::PullRequest::org/repo#1"
+
+
+# ---------------------------------------------------------------------------
+# render_detail_graph_link — the click-time Graph deep-link
+# ---------------------------------------------------------------------------
+
+
+def test_render_detail_graph_link_matches_the_card_url() -> None:
+    """The callback builds the identical URL the card used to carry.
+
+    Asserting equality with ``graph_deep_link``'s own output (rather than a
+    hardcoded URL) pins the behaviour without duplicating the URL-encoding.
+    """
+    out = callbacks.render_detail_graph_link(
+        {"lane_wba_id": "github::Person::a", "related_wba_id": "github::PullRequest::b"}
+    )
+    assert out == graph_deep_link("github::Person::a", "github::PullRequest::b")
+
+
+def test_render_detail_graph_link_no_update_without_payload() -> None:
+    """A falsy payload or an empty lane id returns ``no_update``, not a raise.
+
+    ``graph_deep_link("")`` raises ``ValueError``, so these guards are required —
+    they keep that ValueError unreachable from a click.
+    """
+    assert callbacks.render_detail_graph_link(None) is no_update
+    assert callbacks.render_detail_graph_link({"lane_wba_id": ""}) is no_update
 
 
 # ---------------------------------------------------------------------------

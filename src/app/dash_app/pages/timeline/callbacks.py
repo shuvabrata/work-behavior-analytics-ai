@@ -49,6 +49,7 @@ from app.dash_app.pages.timeline.helpers import (
     entity_type_icon,
     entity_type_label,
     extract_mock_scenario,
+    graph_deep_link,
     has_more,
     is_full,
     merge_lane_page,
@@ -1078,11 +1079,10 @@ clientside_callback(
             }
 
             // Detail modal — the card is a plain div now, so this is the only
-            // click affordance.  The header and the Graph link are set here
-            // (no round trip) so the modal opens immediately with a populated
-            // header; the panels are filled by the server callback on
-            // timeline-detail-store.  No Cypher is built here — data.graph_url
-            // is built server-side.
+            // click affordance.  The header is set here (no round trip) so the
+            // modal opens immediately with a populated title; the Graph link and
+            // the panels are filled by server callbacks on timeline-detail-store.
+            // No Cypher is built here — the link's URL is built server-side.
             function openDetail(card) {
                 var raw = card.getAttribute('data-timeline-detail');
                 if (!raw) { return false; }
@@ -1092,9 +1092,6 @@ clientside_callback(
                 if (window.dash_clientside && window.dash_clientside.set_props) {
                     window.dash_clientside.set_props('timeline-detail-title', {children: data.title});
                     window.dash_clientside.set_props('timeline-detail-time', {children: data.datetime_exact});
-                    if (data.graph_url) {
-                        window.dash_clientside.set_props('timeline-detail-graph-link', {href: data.graph_url});
-                    }
                     // The payload IS the store value, unchanged (Decision 17).
                     // A byte-equal payload means an identical header and
                     // identical panels (both derive from the same two node
@@ -1258,3 +1255,28 @@ def render_detail_panels(payload: dict[str, Any] | None) -> Any:
         ],
         className="timeline-detail-grid",
     )
+
+
+@callback(
+    Output("timeline-detail-graph-link", "href"),
+    Input("timeline-detail-store", "data"),
+    prevent_initial_call=True,
+)
+def render_detail_graph_link(payload: dict[str, Any] | None) -> Any:
+    """Set the modal's Graph deep-link from the clicked card's two node ids.
+
+    Built here, at click time, rather than per card in the grid: the URL embeds
+    both ids, so it is unique per card and cannot be deduplicated by Dash's
+    payload diff — measured at 350 bytes/card, 57% of the card's payload, and
+    re-sent on every theme toggle, regroup, expand and "Load more".
+    ``graph_deep_link`` is a pure function of these two ids, so this produces the
+    identical string the card used to carry.
+    """
+    if not payload:
+        return no_update
+    lane = str(payload.get("lane_wba_id") or "")
+    if not lane:
+        return no_update
+    related = payload.get("related_wba_id")
+    related = str(related) if isinstance(related, str) and related else None
+    return graph_deep_link(lane, related)

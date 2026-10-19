@@ -584,6 +584,13 @@ def detail_payload(event: dict[str, Any], lane_label: str, lane_wba_id: str,
     ``related_wba_id`` is None and the modal renders a single panel.  The lane's
     OWN type is not carried here: it is the middle segment of ``lane_wba_id``
     (Decision 7b), which the clientside branch passes straight through.
+
+    The Graph deep-link URL is deliberately **not** here.  It is built at click
+    time by ``render_detail_graph_link`` from ``lane_wba_id`` + ``related_wba_id``
+    (``graph_deep_link`` is a pure function of those two ids), so the grid does
+    not carry a per-card Cypher string: the URL embeds both ids, so it is unique
+    per card and cannot be deduplicated by Dash's payload diff, and the grid is
+    re-sent in full on every theme toggle, regroup, cell expand and "Load more".
     """
     related = event.get("related_wba_id")
     related_wba_id = related if isinstance(related, str) and related else None
@@ -633,8 +640,6 @@ def detail_payload(event: dict[str, Any], lane_label: str, lane_wba_id: str,
             for part in (lane_label, relationship, object_name, duration_text)
             if part
         ),
-        # Needs ``related_wba_id`` normalised first, hence the local above.
-        "graph_url": graph_deep_link(lane_wba_id, related_wba_id),
     }
 
 

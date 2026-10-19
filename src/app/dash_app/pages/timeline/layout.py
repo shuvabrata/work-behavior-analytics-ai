@@ -405,9 +405,11 @@ def get_layout() -> html.Div:
                             html.Div(
                                 [
                                     # The Graph deep-link (Decision 8) — a NEW
-                                    # TAB.  Its href is set clientside from the
-                                    # card payload, because it embeds a
-                                    # URL-encoded Cypher query.
+                                    # TAB.  Starts at ``#``; its href is filled
+                                    # by ``render_detail_graph_link`` on the
+                                    # detail store, so the URL-encoded Cypher is
+                                    # built server-side at click time — never in
+                                    # the browser, and never per card.
                                     html.A(
                                         [html.I(className="fas fa-diagram-project me-1"),
                                          "Explore in Graph"],

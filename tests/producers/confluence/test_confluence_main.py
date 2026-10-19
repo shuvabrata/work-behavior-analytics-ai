@@ -231,6 +231,60 @@ async def test_process_account_publishes_space_content_and_person_signals(monkey
     assert "REACTED_TO" in relationship_types
 
 
+def _http_error(status: int) -> requests.exceptions.HTTPError:
+    response = requests.Response()
+    response.status_code = status
+    return requests.exceptions.HTTPError(f"HTTP {status}", response=response)
+
+
+async def _run_account_with_page_error(
+    monkeypatch: pytest.MonkeyPatch, error: Exception
+) -> tuple[Mock, int]:
+    from connectors.producers.confluence import main as confluence_main
+
+    publisher = Mock()
+    publisher.publish = AsyncMock()
+    monkeypatch.setattr(confluence_main, "get_sync_cursor", AsyncMock(return_value=None))
+    monkeypatch.setattr(confluence_main, "set_sync_cursor", AsyncMock())
+    monkeypatch.setattr(
+        confluence_main,
+        "get_spaces",
+        AsyncMock(return_value=[{"key": "~BAD", "name": "Gone", "type": "personal"}]),
+    )
+    monkeypatch.setattr(confluence_main, "get_space_pages", AsyncMock(side_effect=error))
+    monkeypatch.setattr(confluence_main, "get_user_details_async", AsyncMock(return_value={}))
+    published = await confluence_main.process_account(
+        publisher,
+        Mock(),
+        {"id": 7, "url": "https://example.atlassian.net", "email": "t@example.com",
+         "api_token": "x", "include_spaces": [], "exclude_spaces": [], "enabled": True},
+    )
+    return publisher, published
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", [403, 404, 500])
+async def test_process_account_skips_inaccessible_space(
+    monkeypatch: pytest.MonkeyPatch, status: int
+) -> None:
+    """Any HTTP failure on one space skips it; the scan still completes."""
+    from connectors.producers.confluence import main as confluence_main
+
+    _, published = await _run_account_with_page_error(monkeypatch, _http_error(status))
+
+    assert published == 1  # only the Space signal
+    assert confluence_main.set_sync_cursor.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_process_account_propagates_retry_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Retry-budget exhaustion is not skipped, so the cursor is not advanced."""
+    from connectors.producers.github.retry_with_backoff import WbaRetryTimeoutError
+
+    with pytest.raises(WbaRetryTimeoutError):
+        await _run_account_with_page_error(monkeypatch, WbaRetryTimeoutError(60, OSError("down")))
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 #  test_connection — connectivity check
 # ═══════════════════════════════════════════════════════════════════════════

@@ -24,6 +24,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple
 
 from atlassian import Confluence
+from requests.exceptions import HTTPError
 
 from common.activity_signal.models import (
     ActivitySignal,
@@ -740,7 +741,16 @@ async def process_account(
         # Fetch all pages/blogposts in this space modified since the cursor.
         # Uses the storage-layer content API (not CQL search) to avoid
         # Confluence Cloud index gaps that silently skip pages.
-        space_items = await get_space_pages(confluence, str(key), since_date or datetime.min)
+        try:
+            space_items = await get_space_pages(confluence, str(key), since_date or datetime.min)
+        except HTTPError as exc:
+            # Any HTTP failure on one space (deleted, archived, restricted,
+            # server error) must not abort the whole account; otherwise Person
+            # signals are never published for every other space. Retry-budget
+            # exhaustion is a different exception and still propagates.
+            status = getattr(exc.response, "status_code", None)
+            logger.warning(f"Skipping space {key}: content fetch failed (HTTP {status}): {exc}")
+            continue
         logger.info(f"Space {key}: processing {len(space_items)} content items")
         
         # First assume that the body of pages was last synced at the 

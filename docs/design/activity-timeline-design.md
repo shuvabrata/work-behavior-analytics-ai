@@ -555,9 +555,12 @@ complete sentence the card fragments:
   peek still shows the absolute time.
 - **Graph deep-link** in the header (right side, new tab). It points at
   `/app/graph?cypher=…` with a **server-built**, label-scoped Cypher query that
-  loads the two entities and the edge between them. A Person id on either side is
-  matched through its `IdentityMapping` plus one `MAPS_TO` hop, so a deduped
-  Person sibling does not open an empty canvas. The browser never builds Cypher.
+  loads the two entities and the edge between them, built by the modal's own
+  callback from the two ids in the card payload — **not** carried per card in the
+  grid (it embeds both ids, so it is unique per card and would be re-sent on
+  every re-render). A Person id on either side is matched through its
+  `IdentityMapping` plus one `MAPS_TO` hop, so a deduped Person sibling does not
+  open an empty canvas. The browser never builds Cypher.
 - **Two panels, side by side** (50/50, one shared body scroll —  no per-panel
   scroll regions). The **lane entity is always the LEFT panel**; the connector
   between them is **non-directional** (a link glyph, not an arrow), because

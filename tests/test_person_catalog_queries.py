@@ -12,16 +12,11 @@ import pytest
 
 from app.api.graph.v1.query import execute_cypher_query
 from app.query_catalog import load_catalog
-from app.settings import settings
 
 
 pytestmark = [pytest.mark.integration, pytest.mark.neo4j]
 
 
-@pytest.mark.skipif(
-    not settings.NEO4J_ENABLED,
-    reason="Neo4j is not enabled (NEO4J_ENABLED=false)"
-)
 class TestPersonCatalogQueries:
     """Smoke tests for the Person catalog queries against live Neo4j."""
 

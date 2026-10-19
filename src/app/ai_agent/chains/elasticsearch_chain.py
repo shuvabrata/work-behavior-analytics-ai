@@ -296,7 +296,7 @@ async def augment_message_with_es_stream(
     - Yields a ``thinking_end`` event when processing is complete.
     - Yields an ``augmented_message`` event carrying the ES envelope dict.
 
-    The chain is a no-op (applied=False) when ELASTICSEARCH_ENABLED is false,
+    The chain is a no-op (applied=False) when ELASTICSEARCH_AI_LOOKUP_ENABLED is false,
     when the relevance gate does not fire, when the LLM cannot generate a valid
     SearchRequest, or when ES returns zero results.
 
@@ -310,7 +310,7 @@ async def augment_message_with_es_stream(
     """
     _not_applied: dict[str, Any] = {"source": "elasticsearch", "applied": False, "context": ""}
 
-    if not settings.ELASTICSEARCH_ENABLED:
+    if not settings.ELASTICSEARCH_AI_LOOKUP_ENABLED:
         yield {"type": "augmented_message", "content": _not_applied}
         return
 

@@ -47,7 +47,7 @@ type parseable without additional metadata.
 
 Creates all Elasticsearch indexes with explicit field mappings and registers them under the
 `wba_all` alias. Called automatically from `src/app/entrypoint.sh` on every app container
-start (guarded by `ELASTICSEARCH_ENABLED=true`). Idempotent — safe to re-run on every
+start. Idempotent — safe to re-run on every
 startup (`ignore=400` for existing indexes).
 
 The Neo4j index creation script (`src/app/scripts/create_neo4j_indexes.py`, moved from
@@ -73,7 +73,7 @@ to `models.py` must also be added to `MANAGED_INDEXES` — the integration test 
 1. Wait for PostgreSQL → run `alembic upgrade head`
 2. Run `init_rabbitmq.py`
 3. Run `create_neo4j_indexes.py` (always)
-4. Run `create_es_indexes.py` (only if `ELASTICSEARCH_ENABLED=true`)
+4. Run `create_es_indexes.py` (always)
 5. Start uvicorn
 
 ---
@@ -308,7 +308,7 @@ The following env vars are already defined in `.env.example`. Wire them into
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `ELASTICSEARCH_ENABLED` | `false` | Feature flag. Sink and search API are no-ops when `false`. |
+| `ELASTICSEARCH_AI_LOOKUP_ENABLED` | `false` | Feature flag. Controls AI agent ES lookups only; the sink and search API are always active. |
 | `ELASTICSEARCH_URL` | `http://localhost:9200` | ES HTTP endpoint. |
 | `ELASTIC_PASSWORD` | — | ES password (only needed if xpack security is enabled). |
 
@@ -357,7 +357,7 @@ entity context from Elasticsearch. When the user asks about a person, ticket, or
 repository, the chain queries ES for matching documents and injects the top results
 as structured context into the LLM prompt, alongside the existing Neo4j and MCP chains.
 
-Feature flag: `ELASTICSEARCH_ENABLED` (reuses the existing setting).
+Feature flag: `ELASTICSEARCH_AI_LOOKUP_ENABLED` (renamed from `ELASTICSEARCH_ENABLED`; it gates the AI agent chain only).
 
 ---
 
@@ -366,7 +366,7 @@ Feature flag: `ELASTICSEARCH_ENABLED` (reuses the existing setting).
 ### Phase A — Infrastructure & indexing pipeline ✅ Complete (2026-05-21)
 
 - [x] Add `elasticsearch` to `requirements.github-consumer.txt` and `requirements.jira-consumer.txt`
-- [x] Wire `ELASTICSEARCH_ENABLED`, `ELASTICSEARCH_URL`, `ELASTIC_PASSWORD` into `src/app/settings.py`
+- [x] Wire `ELASTICSEARCH_AI_LOOKUP_ENABLED`, `ELASTICSEARCH_URL`, `ELASTIC_PASSWORD` into `src/app/settings.py`
 - [x] Create `src/app/scripts/create_es_indexes.py` — define mappings for all 13 indexes, register `wba_all` alias; **must export `MANAGED_INDEXES: list[tuple[str, str]]`** (imported by the coverage test); apply standard analyser to `key`, `login`, `email`
 - [x] ⁠~~`scripts/create_neo4j_indexes.py`~~ already done — moved from `scripts/create_indexes.py` and wired into `entrypoint.sh`
 - [x] Create `src/connectors/consumers/sinks/elasticsearch_sink.py` — builds a flat document by merging signal envelope fields (`wba_id`, `source`, `entity_type`, `source_config`, `event_time`) with all attribute fields at the top level; stores `relationship_ids` as a WBA canonical key array; uses `wba_id` as the ES `_id`; upserts via `client.index()`
@@ -645,9 +645,9 @@ its answers with real entity data from Elasticsearch.
   - Generates a validated `SearchRequest` JSON — never falls back to raw message as query
   - Calls `service.search()` with `full=True`; formats top-N results as a bounded context block
   - Returns `applied=False` silently on any failure path
-  - Returns immediately (`applied=False`) when `ELASTICSEARCH_ENABLED=false`
+  - Returns immediately (`applied=False`) when `ELASTICSEARCH_AI_LOOKUP_ENABLED=false`
 - [x] Register in `chains.py` `augment_message_stream()` guarded by
-  `settings.ELASTICSEARCH_ENABLED`, between the Neo4j and MCP blocks
+  `settings.ELASTICSEARCH_AI_LOOKUP_ENABLED`, between the Neo4j and MCP blocks
 - [x] Add `ES_CHAIN_MAX_RESULTS: int = 5` and `AUGMENTATION_HISTORY_TURNS: int = 5` to `settings.py`
 - [x] Wire `conversation_history` into all three chains (Neo4j, ES, MCP) for pronoun/reference resolution across turns
 - [x] Create `src/app/ai_agent/es_prompt.md` — static curated schema prompt (entity registry, field mappings, relevance criteria, `SearchRequest` JSON schema)

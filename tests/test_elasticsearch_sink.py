@@ -6,7 +6,7 @@ Verifies:
 - index_signal calls client.index() with the correct index name, _id, and document
 - index_signal_with_canonical_id routes to client.index() (no dedup) or
   client.update() (cross-provider Person dedup)
-- build_es_client() returns None when ELASTICSEARCH_ENABLED is falsy
+- build_es_client() builds an ES client from ELASTICSEARCH_URL and ELASTIC_PASSWORD
 
 Run with:
     pytest -m unit tests/test_elasticsearch_sink.py -v
@@ -258,20 +258,3 @@ def test_index_signal_with_canonical_id_dedup_update_targets_canonical_index() -
     assert call_kwargs["id"] == "github::Person::alice"
 
 
-# ---------------------------------------------------------------------------
-# build_es_client — disabled when ELASTICSEARCH_ENABLED is falsy
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.parametrize("env_value", ["false", "0", "no", ""])
-def test_build_es_client_returns_none_when_disabled(env_value: str) -> None:
-    with patch.dict(os.environ, {"ELASTICSEARCH_ENABLED": env_value}):
-        result = build_es_client()
-    assert result is None
-
-
-def test_build_es_client_returns_none_when_env_var_absent() -> None:
-    env_without_es = {k: v for k, v in os.environ.items() if k != "ELASTICSEARCH_ENABLED"}
-    with patch.dict(os.environ, env_without_es, clear=True):
-        result = build_es_client()
-    assert result is None

@@ -289,7 +289,7 @@ def client(fake_db: FakeSession) -> httpx.AsyncClient:
 def _stub_person_identity_resolution(monkeypatch: pytest.MonkeyPatch) -> None:
     """Keep the unit gate offline — Person lanes must not reach Neo4j here.
 
-    The repo's local ``.env`` ships ``NEO4J_ENABLED=true``; without this stub the
+    The repo's local ``.env`` ships ``NEO4J_AI_LOOKUP_ENABLED=true``; without this stub the
     Person-lane tests would attempt a real ``verify_connectivity()`` from inside
     ``-m unit``. Stub once per module rather than in each test.
     """

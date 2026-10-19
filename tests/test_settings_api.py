@@ -356,12 +356,12 @@ class TestRuntimeSnapshot:
 
     @pytest.mark.asyncio
     async def test_returns_valid_runtime_config(self) -> None:
-        """The snapshot returns all 41 fields with correct types."""
+        """The snapshot returns all 42 fields with correct types."""
         async with httpx.AsyncClient(base_url=BASE_URL) as client:
             resp = await client.get("/api/v1/settings/runtime-snapshot")
         assert resp.status_code == 200
         data = resp.json()
-        assert len(data) == 41
+        assert len(data) == 42
         assert isinstance(data["HTTP_REQUEST_TIMEOUT"], int)
         assert isinstance(data["TIMEZONE"], str)
         assert isinstance(data["FF_NEO4J_USE_PROVIDER_PIPELINE"], bool)
@@ -371,7 +371,8 @@ class TestRuntimeSnapshot:
         assert isinstance(data["LLM_PROVIDER"], str)
         assert isinstance(data["MAX_TOKENS"], int)
         assert isinstance(data["GITHUB_MCP_ENABLED"], bool)
-        assert isinstance(data["NEO4J_ENABLED"], bool)
+        assert isinstance(data["NEO4J_AI_LOOKUP_ENABLED"], bool)
+        assert isinstance(data["ELASTICSEARCH_AI_LOOKUP_ENABLED"], bool)
         assert isinstance(data["LOG_LEVEL"], str)
         assert isinstance(data["ENABLE_FILE_LOGGING"], bool)
         assert isinstance(data["COMMIT_DAYS_LIMIT"], int)

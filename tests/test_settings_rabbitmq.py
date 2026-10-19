@@ -187,7 +187,7 @@ class TestListenerLifecycle:
                     MAX_TOKENS=16000,
                     GITHUB_MCP_ENABLED=False,
                     ATLASSIAN_MCP_ENABLED=False,
-                    NEO4J_ENABLED=False,
+                    NEO4J_AI_LOOKUP_ENABLED=False,
                     COMMIT_DAYS_LIMIT=60,
                     PULL_REQUEST_DAYS_LIMIT=60,
                     IDENTITY_REFRESH_DAYS=7,

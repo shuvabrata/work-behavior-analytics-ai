@@ -21,7 +21,6 @@ from app.api.activity.v1 import identity, query
 from app.api.activity.v1.identity import parse_identity_id, resolve_person_identities
 from app.api.activity.v1.service import _action_to_event
 from app.db.models.activity_action import ActivityAction
-from app.settings import settings
 
 pytestmark = [pytest.mark.unit]
 
@@ -59,13 +58,6 @@ class TestParseIdentityId:
 
 
 class TestResolvePersonIdentities:
-    @pytest.fixture(autouse=True)
-    def _graph_enabled(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        # The NEO4J_ENABLED guard runs *before* the try block, so every test
-        # that wants the "raises → []" path must enable the graph first —
-        # otherwise the guard returns [] for entirely the wrong reason.
-        monkeypatch.setattr(settings, "NEO4J_ENABLED", True)
-
     @pytest.mark.asyncio
     async def test_parses_and_preserves_order(
         self, monkeypatch: pytest.MonkeyPatch
@@ -130,21 +122,6 @@ class TestResolvePersonIdentities:
             ("github", "alice"),
             ("confluence", "557058:abc"),
         ]
-
-    @pytest.mark.asyncio
-    async def test_disabled_graph_returns_empty_without_touching_driver(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        monkeypatch.setattr(settings, "NEO4J_ENABLED", False)
-        calls: list[str] = []
-
-        def _record(pid: str) -> list[str]:
-            calls.append(pid)
-            return []
-
-        monkeypatch.setattr(identity, "_fetch_identities", _record)
-        assert await resolve_person_identities("github::Person::alice") == []
-        assert calls == []
 
 
 # ---------------------------------------------------------------------------

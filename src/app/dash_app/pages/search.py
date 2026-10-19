@@ -52,7 +52,6 @@ from app.dash_app.styles import (
     CARD_CONTAINER_STYLE,
 )
 from app.runtime_settings import runtime_settings
-from app.settings import settings
 from app.scripts.create_es_indexes import MANAGED_INDEXES
 from common.logger import logger
 
@@ -764,21 +763,6 @@ def _build_pagination_row() -> html.Div:
 def get_layout() -> html.Div:
     """Return the Search page layout (static — callbacks wired in C1b / C1c)."""
 
-    # Non-blocking warning banner when Elasticsearch is disabled
-    es_disabled_banner = None
-    if not settings.ELASTICSEARCH_ENABLED:
-        es_disabled_banner = create_alert(
-            [
-                html.I(className="fas fa-exclamation-triangle me-2"),
-                "Elasticsearch is disabled. Set ",
-                html.Code("ELASTICSEARCH_ENABLED=true"),
-                " in your environment to activate search.",
-            ],
-            color="warning",
-            dismissable=True,
-            class_name="mb-3",
-        )
-
     return html.Div(
         [
             create_page_header(
@@ -792,9 +776,6 @@ def get_layout() -> html.Div:
 
             html.Div(
                 [
-                    # Optional ES-disabled banner
-                    es_disabled_banner,
-
                     # ── Search bar — centered, constrained (Option A) ──────
                     html.Div(
                         [

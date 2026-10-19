@@ -32,12 +32,10 @@ def get_driver() -> Any:
         The shared neo4j.GraphDatabase.driver instance.
 
     Raises:
-        RuntimeError: if the driver cannot be created — not enabled, or the
-            initial connection/verification fails.
+        RuntimeError: if the driver cannot be created — the initial connection
+            or verification fails.
     """
     global _driver_instance
-    if not settings.NEO4J_ENABLED:
-        raise RuntimeError("Neo4j is not enabled. Set NEO4J_ENABLED=true in .env")
     if _driver_instance is not None:
         return _driver_instance  # type: ignore[unreachable]
     with _driver_lock:

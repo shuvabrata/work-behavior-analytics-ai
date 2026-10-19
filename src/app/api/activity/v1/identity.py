@@ -6,9 +6,8 @@ truth for the Person ↔ IdentityMapping relationship, so a Person lane is expan
 into every provider identity that maps to that person before the timeline query
 runs.
 
-This module is best-effort: when the graph is disabled or the driver is unavailable
-(Neo4j unreachable) the caller falls back to the single lane identity (today's
-behaviour).
+This module is best-effort: when the driver is unavailable (Neo4j unreachable)
+the caller falls back to the single lane identity (today's behaviour).
 """
 
 from __future__ import annotations
@@ -18,7 +17,6 @@ import asyncio
 from neo4j.exceptions import Neo4jError, ServiceUnavailable
 
 from app.common.neo4j_driver import get_driver
-from app.settings import settings
 from common.logger import logger
 
 # Undirected: MAPS_TO is stored as a single undirected edge
@@ -60,17 +58,10 @@ def _fetch_identities(person_wba_id: str) -> list[str]:
 async def resolve_person_identities(person_wba_id: str) -> list[tuple[str, str]]:
     """Return ``[(source, entity_id), ...]`` for a canonical Person.
 
-    Returns an empty list when the graph is disabled, when Neo4j is unreachable,
-    or when the person has no identity mappings — the caller treats that as "use
-    the lane identity only". Never raises.
+    Returns an empty list when Neo4j is unreachable or when the person has no
+    identity mappings — the caller treats that as "use the lane identity only".
+    Never raises.
     """
-    # A disabled graph is a supported configuration, not a failure — return
-    # immediately and do NOT log. This matches every other graph reader in the app
-    # (chains.py:47, neo4j_chain.py:400, graph/v1/router.py:324). This function
-    # runs once per Person lane, so a warning here would be per-lane log spam.
-    if not settings.NEO4J_ENABLED:
-        return []
-
     try:
         raw = await asyncio.to_thread(_fetch_identities, person_wba_id)
     except (RuntimeError, Neo4jError, ServiceUnavailable) as exc:

@@ -47,7 +47,7 @@ CUSTOM_API_URL=https://api.yourcompany.com/chat  # Your custom API endpoint
 
 ### Neo4j Configuration (Optional)
 ```bash
-NEO4J_ENABLED=true  # Set to false to disable
+
 NEO4J_URI=bolt://localhost:7687
 NEO4J_USERNAME=neo4j
 NEO4J_PASSWORD=your_neo4j_password

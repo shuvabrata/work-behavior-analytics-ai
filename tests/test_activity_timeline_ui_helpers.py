@@ -367,27 +367,52 @@ def test_popup_fields_from_event() -> None:
     """The popup payload includes a source link only when the event has a url."""
     with_url = popup_fields(
         {
-            "summary": "Reviewed PR",
+            "summary": "feat: add timeline API",
             "relationship_type": "REVIEWED",
             "entity_type": "PullRequest",
             "source": "github",
             "url": "https://example.com/pr/1",
         },
         "Mar 15, 2026 2:30 PM",
+        lane_label="Alice Johnson",
     )
     assert with_url["url"] == "https://example.com/pr/1"
     assert with_url["relationship"] == "Reviewed"
     assert with_url["entity_type"] == "PR"
     assert with_url["datetime"] == "Mar 15, 2026 2:30 PM"
-    # Headline is unchanged by the card restructure (hover is out of scope).
-    assert with_url["summary"] == "Reviewed PR"
+    # The headline is now the shared sentence (Decision 14): subject,
+    # relationship, object — the same text the modal header shows.
+    assert with_url["summary"] == "Alice Johnson Reviewed feat: add timeline API"
+    # The peek gains a muted click affordance.
+    assert with_url["hint"] == "Click for details"
 
     without_url = popup_fields(
         {"summary": None, "relationship_type": "CREATED", "entity_type": "File"},
         "",
     )
     assert "url" not in without_url
-    assert without_url["summary"] == "Created · File"
+    # No subject, no object (summary is None) — the sentence is the verb alone.
+    assert without_url["summary"] == "Created"
+
+
+def test_popup_headline_prefers_related_name_over_summary() -> None:
+    """Decision 14: the sentence uses the other side's resolved name, not summary.
+
+    The old ``_popup_headline`` preferred ``event["summary"]`` (the *actor's*
+    title), which is frequently absent or wrong for lane-as-actor cards.
+    """
+    fields = popup_fields(
+        {
+            "summary": "Alice's stale actor title",
+            "related_name": "Fix the timeline bug",
+            "relationship_type": "MENTIONED",
+            "entity_type": "Issue",
+            "source": "github",
+        },
+        "Mar 15, 2026 2:30 PM",
+        lane_label="Alice Johnson",
+    )
+    assert fields["summary"] == "Alice Johnson Mentioned Fix the timeline bug"
 
 
 # ---------------------------------------------------------------------------

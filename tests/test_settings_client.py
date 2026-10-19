@@ -45,6 +45,7 @@ def _valid_payload(**overrides: object) -> dict[str, object]:
         "ATLASSIAN_MCP_ENABLED": False,
         # ── System ────────────────────────────────────────────────
         "NEO4J_AI_LOOKUP_ENABLED": True,
+        "ELASTICSEARCH_AI_LOOKUP_ENABLED": True,
         # ── Connectors ────────────────────────────────────────────
         "COMMIT_DAYS_LIMIT": 60,
         "PULL_REQUEST_DAYS_LIMIT": 60,

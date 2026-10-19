@@ -26,6 +26,21 @@ from app.api.activity.v1.service import (
 pytestmark = [pytest.mark.unit]
 
 
+@pytest.fixture(autouse=True)
+def _stub_person_identity_resolution(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep the unit gate offline — Person lanes must not reach Neo4j here.
+
+    The repo's local ``.env`` ships ``NEO4J_ENABLED=true``; without this stub
+    ``_fetch_lane`` for a Person lane would attempt a real ``verify_connectivity()``
+    from inside ``-m unit``. Stub once per module rather than in each test.
+    """
+
+    async def _no_identities(_person_wba_id: str) -> list[tuple[str, str]]:
+        return []
+
+    monkeypatch.setattr(service, "resolve_person_identities", _no_identities)
+
+
 # ---------------------------------------------------------------------------
 # WBA ID parsing
 # ---------------------------------------------------------------------------

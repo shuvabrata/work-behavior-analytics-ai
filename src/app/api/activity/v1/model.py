@@ -74,6 +74,33 @@ class TimelineEvent(BaseModel):
         default_factory=dict,
         description="Attributes snapshot of the signal entity at event_time.",
     )
+    lane_role: Literal["actor", "target"] | None = Field(
+        default=None,
+        description=(
+            "Which side of the relationship the lane entity was on. None for "
+            "scope=history, where the lane entity is the subject itself."
+        ),
+    )
+    related_id: str | None = Field(
+        default=None, description="Entity id of the *other* side, when known."
+    )
+    related_name: str | None = Field(
+        default=None,
+        description=(
+            "Resolved display name of the *other* side, read from "
+            "activity_events.display_name. None when the other side has no "
+            "timeline row yet — the UI falls back to related_id, then summary."
+        ),
+    )
+    related_wba_id: str | None = Field(
+        default=None,
+        description=(
+            "Canonical WBA id of the *other* side, "
+            "'{source}::{entity_type}::{id}'. None for scope=history, and None "
+            "when the other side's source is unknown. The UI uses this to look "
+            "the sibling node up in Neo4j."
+        ),
+    )
 
 
 class TimelineLane(BaseModel):

@@ -21,7 +21,7 @@ from app.api.commands.v1.router import router as commands_v1_router
 from app.api.settings.v1.router import router as settings_v1_router
 from app.api.graph_themes.v1.router import router as graph_themes_v1_router
 from app.api.activity.v1.router import router as activity_v1_router
-from app.api.graph.v1.query import close_driver
+from app.common.neo4j_driver import close_driver
 from app.dash_app.layout import create_dash_app
 from app.db.session import ASYNC_SESSION_LOCAL
 from app.runtime_settings import load_db_overrides_from_session

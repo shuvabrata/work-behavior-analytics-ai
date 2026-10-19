@@ -1831,16 +1831,17 @@ input::placeholder {
     border-color: var(--color-navy);
 }
 
-.timeline-card-summary {
+.timeline-card-primary {
     font-family: 'Inter', sans-serif;
     font-size: 14px;
+    font-weight: var(--font-weight-medium);
     color: var(--color-charcoal-medium);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
 }
 
-.timeline-card-meta {
+.timeline-card-secondary {
     display: flex;
     align-items: center;
     gap: 4px;
@@ -1859,6 +1860,15 @@ input::placeholder {
 .timeline-card-sep {
     color: var(--color-gray-medium);
     opacity: 0.7;
+}
+
+/* The name grows and shrinks; the type label and separator keep their natural
+   width so the per-entity colour is never squeezed out. */
+.timeline-card-name {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .timeline-card-time {
@@ -1922,6 +1932,98 @@ input::placeholder {
 
 .timeline-popup-link:hover {
     text-decoration: underline;
+}
+
+/* ---------------------------------------------------------------------------
+   Activity Timeline — event detail modal
+--------------------------------------------------------------------------- */
+.timeline-detail-grid {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--spacing-xsmall);
+}
+
+.timeline-detail-panel {
+    flex: 1 1 0;
+    min-width: 0;   /* allow the table to shrink instead of overflowing */
+}
+
+.timeline-detail-connector {
+    flex: 0 0 auto;
+    align-self: center;
+    padding: 0 4px;
+    color: var(--color-gray-medium);
+    font-size: 14px;
+}
+
+.timeline-detail-caption {
+    font-size: 10px;
+    color: var(--color-gray-medium);
+    text-transform: uppercase;
+    letter-spacing: 0.7px;
+    margin-bottom: 6px;
+}
+
+.timeline-detail-missing {
+    padding: 12px 0;
+    font-style: italic;
+    color: var(--color-gray-medium);
+    font-size: 12px;
+}
+
+.timeline-detail-missing-title {
+    /* Used by both _not_found and _detail_error.  The parent's italic already
+       carries the tone; this is a no-op unless the title needs its own weight. */
+    font-style: normal;
+    font-weight: var(--font-weight-medium);
+}
+
+.timeline-detail-missing-id {
+    margin-top: 4px;
+    font-family: 'Inter', sans-serif;
+    font-size: 10px;
+    word-break: break-all;
+}
+
+/* The Graph deep-link in the modal header (Decision 8) — opens a new tab. */
+.timeline-detail-graph-link {
+    font-family: 'Inter', sans-serif;
+    font-size: 12px;
+    color: var(--color-navy);
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+.timeline-detail-graph-link:hover {
+    text-decoration: underline;
+}
+
+/* The exact event time under the Graph link — the header's duration summarises
+   this, so it is demoted to muted text at the link's own size. */
+.timeline-detail-time {
+    font-family: 'Inter', sans-serif;
+    font-size: 12px;
+    color: var(--color-gray-medium);
+    white-space: nowrap;
+    text-align: right;
+}
+
+.timeline-detail-header-aside {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    /* Bootstrap's .modal-header is a flex row (display:flex, align-items:center,
+       justify-content:space-between) with the close button as a later sibling.
+       ms-auto on this wrapper is what pushes the column right; flex-shrink:0
+       stops a long title from squeezing the link and time. */
+    flex-shrink: 0;
+}
+
+.timeline-popup-hint {
+    margin-top: 6px;
+    font-size: 10px;
+    color: var(--timeline-popup-muted);
+    opacity: 0.85;
 }
 
 /* ---------------------------------------------------------------------------

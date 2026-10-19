@@ -140,6 +140,7 @@ One row per relationship observed in a signal. Backs `scope=activity`.
 | `actor_entity_type` / `actor_entity_id` | `VARCHAR` | Who initiated the relationship. |
 | `relationship_type` | `VARCHAR(32)` | `CREATED`, `REVIEWED`, `COMMENTED_ON`, … |
 | `target_entity_type` / `target_entity_id` | `VARCHAR` | What the action targeted. |
+| `target_source` | `VARCHAR(32)` | The target's own origin system (`RelationshipTarget.source`), which can differ from the signal's `source` (e.g. a github Issue `REFERENCES` a jira Issue). Nullable; `NULL` on rows written before the column existed. |
 | `summary` | `VARCHAR(512)` | Denormalized context (e.g. PR title) for fast reads. |
 | `url` | `VARCHAR(1024)` | Link to the target in the source system. |
 
@@ -162,6 +163,17 @@ the migration in `src/app/alembic/versions/`.
 | Everything Alice did | `activity_actions` (`actor_*`) | `idx_activity_actions_actor` |
 | Everything involving Alice | `activity_actions` (`actor_*` OR `target_*`) | both action indexes |
 | Who interacted with Issue Y | `activity_actions` (`target_*`) | `idx_activity_actions_target` |
+
+**Person lanes are expanded across providers.** The timeline store holds **raw**
+provider-scoped entity ids (§4.2), while search returns the **canonical** Person
+`wba_id`. Before the Postgres query runs, a `Person` lane is expanded to every
+`IdentityMapping` identity that maps to the canonical person — resolved at
+request time from Neo4j, the single source of truth for
+Person ↔ IdentityMapping. Each resolved `(source, entity_id)` pair becomes its
+own index-friendly disjunct on **both** the actor and target sides, so
+cross-provider activity lands in one lane. Non-Person lanes (Issues / Pages /
+PRs, which are not cross-provider deduped) keep a single identity and issue
+exactly today's predicate.
 
 ---
 
@@ -189,9 +201,16 @@ For each signal:
 
 1. Compute `content_hash = SHA-256(json(attributes) + json(relationships))` with
    `sort_keys=True` — stable regardless of dict insertion order.
-2. Compute `display_name`: first non-empty of `attributes.name` / `title` /
-   `summary` / `key`, else the raw entity `id`. Mirrors
-   `GraphNode.display_name()`.
+2. Compute `display_name` from the first non-empty of the entity's `name` /
+   `title` / `summary` / `key` / `full_name` / `message` attributes, else the
+   raw entity `id`. The last two exist because `CommitAttributes` stores its
+   name in `message` and `PersonAttributes` in `full_name`, and neither defines
+   any of the first four — without them a commit's name is its 40-character SHA
+   and a person's is their provider account id. The result is clamped to 512
+   characters (the column width) because a producer may emit a commit message up
+   to 2000 characters; an over-long value would make the INSERT fail and drop
+   the whole signal. This deliberately diverges from `GraphNode.display_name()`,
+   which still uses only the first four fields (see §10).
 3. Compute `avatar_url`: `attributes.avatar_url` when `entity_type == "Person"`,
    else `NULL`.
 4. `INSERT … ON CONFLICT (source, entity_type, entity_id, event_time,
@@ -243,6 +262,11 @@ class TimelineEvent:
     source: str               # github | jira | confluence
     url: str | None           # source-system link
     details: dict             # {} for scope=activity; attribute snapshot for history
+    lane_role: str | None     # "actor" | "target"; None for scope=history
+    related_id: str | None    # the *other* side's entity id, when known
+    related_name: str | None  # resolved display name of the *other* side (see §5.3)
+    related_wba_id: str | None  # the *other* side's canonical "{source}::{type}::{id}"
+                              # None for scope=history (there is no other side)
 
 class TimelineLane:
     wba_id: str
@@ -261,6 +285,31 @@ class TimelineResponse:
     meta: TimelineMeta
 ```
 
+**The lane's own entity type is deliberately not a field.** A lane's WBA id
+already *is* `{source}::{entity_type}::{id}` (`service.py::_fetch_lane` builds it
+that way), and in history scope `entity_type` is already the lane's own type
+(`_event_to_event`). So both the UI and the Graph deep link derive the lane's
+type by splitting its WBA id (the same `split("::", 2)[1]` idiom
+`selection_from_wba_ids` uses), and no second field is needed.
+
+**The two sides are looked up in Neo4j differently, and the asymmetry matters.**
+Both are resolved in **one** `POST /api/v1/graph/execute` call, and the result is
+keyed by the id **requested**, not by the `wba_id` that comes back:
+
+- **(a) The lane** is looked up by its own canonical id, with **no**
+  `IdentityMapping` hop. A lane only ever comes from the Elasticsearch-backed
+  typeahead, whose Person documents are keyed by the canonical Neo4j id, so a
+  lane id *is* its node id — the property `service.py` already relies on when
+  expanding a Person lane.
+- **(b) The sibling** may need one `MAPS_TO` hop. Its id is built from the raw
+  `activity_actions` row and is **provider-scoped**; when Neo4j deduped that
+  person onto another provider's canonical node, the provider-scoped id was
+  never created as a node (see `connectors/commons/person_cache.py`), so a naive
+  lookup silently returns nothing. The `IdentityMapping` node *is* created for
+  every provider identity, so the sibling is resolved by matching the mapping and
+  hopping one `MAPS_TO` to the Person. Conflating the two rules is the defect
+  this design avoids.
+
 ### 5.2 `GET /api/v1/activity/suggest`
 
 Typeahead for the entity selector. `q` requires **≥ 3 characters**
@@ -272,9 +321,17 @@ Response: `{"results": [{wba_id, label, entity_type, source, avatar_url}]}`.
 
 These are deliberate properties of v1, not bugs:
 
-1. **Activity events carry no related-entity id.** `TimelineEvent` exposes the
-   *other* side's `entity_type` but not its id; `details` is `{}` for
-   `scope=activity`. Cards therefore show `summary`, not "PR #142".
+1. **Activity events name the related entity.** `TimelineEvent` carries the
+   *other* side's `entity_type`, its `related_id`, and a resolved `related_name`
+   read from `activity_events.display_name` (plus `lane_role`, saying whether the
+   lane entity was the actor or the target). `details` stays `{}` for
+   `scope=activity`. The resolved name is only as good as the stored
+   `display_name`: rows written before the six-field rule was extended (see §4.2)
+   still hold a raw id for commits and people, so a card may fall back to
+   `related_id` and then to `summary`. The event also carries the sibling's
+   canonical id as **`related_wba_id`** (`{source}::{entity_type}::{id}`, built in
+   `_action_to_event` from the row's own `target_source`); the UI uses it to look
+   the sibling up in Neo4j (§5.1/§7.4). It is `None` for `scope=history`.
 2. **No per-lane event count.** `TimelineLane` has no `total_count`.
 3. **The cursor is per-lane, not global.** A request accepts one `cursor`
    applied to *all* lanes, while each lane returns its own `next_cursor`. Because
@@ -294,6 +351,15 @@ These are deliberate properties of v1, not bugs:
 7. **`from` is optional.** Omitted means "all time" — the query is still
    keyset-bounded to `limit` rows per lane, so paging backward needs no backend
    change.
+8. **Person lanes read Neo4j at request time.** A `Person` lane is expanded to
+   all `IdentityMapping` identities resolved from Neo4j before the Postgres
+   query (§3.3). This is **best-effort**: when the graph is disabled or
+   unreachable, the lane degrades to its single canonical identity (today's
+   behaviour) and the request still succeeds. Accepted limitation: **mention-only
+   people** — those who only ever appear as a relationship target and therefore
+   have no `IdentityMapping` node — are not expanded and stay invisible under a
+   different provider's raw id. The timeline store still holds **raw** provider
+   ids (unchanged); the read-time expansion exists precisely because of that.
 
 ---
 
@@ -442,22 +508,85 @@ Analytics sub-page.
 
 ### 7.4 Cards & interaction
 
-- **Two lines:** line 1 = `summary` (ellipsised; fallback = humanized relationship
-  + entity type); line 2 = `<EntityType (colored)> · <relationship> · <time>`,
-  with a left accent border in the lane color.
+- **Two lines, relationship-first.** The card is a fragment — the **sticky lane
+  header** is the sentence's subject, so the subject is elided and the card
+  reads as *has a <relation> relationship to <object>*:
+  - `scope=activity`: line 1 = the humanized relationship (the scan axis when
+    many cards stack; `humanize_relationship` output, verbatim and neutral — no
+    inverse map, no `_BY` special-casing); line 2 =
+    `<EntityType (colored)> · <other side's name>` + right-aligned time.
+  - `scope=history`: inverted — line 1 = `<EntityType (colored)> · <lane name>`
+    (the lane entity *is* the subject here); line 2 = `Updated` + time.
+  - Line 2's name resolves `related_name → related_id → summary` (see §5.3), so
+    it degrades to a readable key when the other side has no timeline row yet.
+    A left accent border in the lane color and the per-entity type color are
+    both retained.
 - **Cell overflow:** at most **3** cards per cell, then a "+N more ▾" link that
   reveals *already-loaded* events only (never fetches).
 - **Hover/focus popup:** a single portal rendered **outside** the scrolling grid
   (`position: fixed`, high `z-index`), filled from a per-card
   `data-timeline-event` JSON attribute with `textContent` (never `innerHTML` —
-  summaries/labels/urls are untrusted ingested data). Shows summary, humanized
-  relationship, entity type, source, full datetime, and an "Open source ↗" link
-  when the event has a URL. It hides on scroll/resize/Escape.
-- **Click a card** → `/app/graph` in a new tab.
+  summaries/labels/urls are untrusted ingested data). Shows the same subject,
+  relationship and object the modal header shows (the peek joins them with
+  spaces, the header with `·`), humanized relationship, entity
+  type, source, full datetime, a muted "Click for details" hint, and an
+  "Open source ↗" link when the event has a URL. It hides on
+  scroll/resize/Escape.
+- **The card is a modal trigger, not a link.** It is a `role="button"` `div`
+  (focusable, Enter/Space-activatable); clicking it opens the **event detail
+  modal** below. The previous `/app/graph` navigation moves into the modal
+  header, where it runs the two-node subgraph in a new tab.
 - **Pagination:** a global **"▼ Load more events"** button. It issues one
   single-lane request per lane (each with its own cursor), dedups by event
   identity, clears a lane's cursor on an empty page, and preserves the reader's
   scroll position. The button hides when every lane is exhausted.
+
+#### 7.4.1 Event detail modal
+
+Clicking a card opens a large (`size="xl"`, scrollable) modal that reads as the
+complete sentence the card fragments:
+
+- **Header** = `lane name · relationship · object name · duration` — the full
+  sentence, including the subject the sticky lane header elides. The header is
+  set on the client from the card's `data-timeline-detail` payload, so the modal
+  opens immediately with a populated title and no round trip. The duration reads
+  relative to now ("2 hrs ago"); the **exact time is not lost** — it renders as
+  small muted text beneath the Graph link (from `datetime_exact`), and the hover
+  peek still shows the absolute time.
+- **Graph deep-link** in the header (right side, new tab). It points at
+  `/app/graph?cypher=…` with a **server-built**, label-scoped Cypher query that
+  loads the two entities and the edge between them, built by the modal's own
+  callback from the two ids in the card payload — **not** carried per card in the
+  grid (it embeds both ids, so it is unique per card and would be re-sent on
+  every re-render). A Person id on either side is matched through its
+  `IdentityMapping` plus one `MAPS_TO` hop, so a deduped Person sibling does not
+  open an empty canvas. The browser never builds Cypher.
+- **Two panels, side by side** (50/50, one shared body scroll —  no per-panel
+  scroll regions). The **lane entity is always the LEFT panel**; the connector
+  between them is **non-directional** (a link glyph, not an arrow), because
+  `direction` is not usable and the relationship label is verbatim and neutral.
+  In **history** scope there is no other side, so the modal renders a **single**
+  panel and no connector.
+- **Both panels render the entity's CURRENT Neo4j properties**, each with a muted
+  "Current state" caption — these are not an as-of-event snapshot. Each panel's
+  table is produced by the **same** `render_properties_table` function the Graph
+  page's right panel uses (and the Collaboration Network page), so a change to
+  that renderer changes all three surfaces.
+- **Fetching:** the two node ids come from the payload (`lane_wba_id` and
+  `related_wba_id`); `is_open` is owned by the clientside branch and the panels
+  by a server callback, so the store is the only thing crossing between them.
+  Both ids are resolved in **one** `/graph/execute` call (the `MAPS_TO` hop is a
+  second branch of the same query, not a second request). Because the panels are
+  a pure function of those two ids, a repeat click on the same card re-opens from
+  the already-rendered panels (there is no per-click nonce).
+- **Degradation:** the modal always opens. A node missing from Neo4j shows a
+  per-panel "Not found in graph" note; both missing shows it on both sides. When
+  Neo4j is disabled the graph API answers HTTP 500, which the modal reports as
+  *"Neo4j is not available — graph properties are disabled."* rather than a
+  generic failure.
+- **The hover peek stays.** Hovering still shows the popover, now with the same
+  sentence as the modal header plus a muted "Click for details" hint, and the
+  native `title=` tooltip is gone (it duplicated the headline ~1s later).
 
 ### 7.5 Theming & time
 
@@ -590,10 +719,20 @@ curl "http://localhost:8000/api/v1/activity/suggest?q=none&mock=suggest_variants
 - Outbound "View Timeline" buttons from Search, Graph, and Collaboration Network.
 - Entity-specific Graph deep-link from a card click (currently plain `/app/graph`).
 - Per-lane event totals in lane headers (needs a backend COUNT query).
-- The related-entity id on activity cards (needs an additive API field).
+- The hover popup's headline/field design — the card format moved on (see §7.4)
+  while the popup's payload stayed byte-identical; consolidating the popup's
+  headline helper with the card helpers is its own follow-up.
 - A single multi-lane request with real per-lane cursors (backend change).
 - Touch/mobile-optimised interactions.
-- Timeline backfill / replay.
+- Timeline backfill / replay (including backfilling `display_name` and
+  `target_source` for rows written before §4.2 / §3.2 changed).
+
+**Known defect — `GraphNode.display_name()` (`src/connectors/neo4j_db/node_base.py`).**
+It still uses only the four-field rule (`name` / `title` / `summary` / `key`), so
+it shares the commit gap this design fixed in §4.2: on the **Graph** page a
+`Commit` (whose name lives in `message`) renders as its 40-character SHA. Same
+defect, different feature surface (its own callers, tests and Cypher
+properties) — worth its own plan, not folded in here.
 
 ---
 
@@ -610,4 +749,4 @@ curl "http://localhost:8000/api/v1/activity/suggest?q=none&mock=suggest_variants
 | Page CSS | `src/app/dash_app/assets/executive-dashboard.css` (`.timeline-*`) |
 | Lane tokens | `src/app/dash_app/styles.py` (`timeline.lane.1`–`.5`) |
 | Route + sidebar | `src/app/dash_app/layout.py` |
-| Tests | `tests/test_activity_api_unit.py`, `tests/test_activity_api_integration.py`, `tests/test_activity_timeline_ui_helpers.py`, `tests/test_activity_timeline_mock.py`, `tests/test_activity_timeline_edge_cases.py` |
+| Tests | `tests/test_activity_api_unit.py`, `tests/test_activity_api_integration.py`, `tests/test_activity_person_identity.py`, `tests/test_activity_timeline_ui_helpers.py`, `tests/test_activity_timeline_mock.py`, `tests/test_activity_timeline_edge_cases.py`, `tests/test_activity_timeline_detail_modal.py`, `tests/test_activity_writer_display_name.py` |

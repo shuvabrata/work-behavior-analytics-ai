@@ -23,7 +23,9 @@ from typing import Any
 
 import httpx
 import pytest
+from sqlalchemy.sql import visitors
 
+from app.api.activity.v1 import service
 from app.api.activity.v1.service import _decode_cursor
 from app.db.models.activity_action import ActivityAction
 from app.db.models.activity_event import ActivityEvent
@@ -48,6 +50,9 @@ class FakeResult:
     def __init__(self, rows: list[Any]) -> None:
         self._rows = rows
 
+    def all(self) -> list[Any]:
+        return self._rows
+
     def scalars(self) -> "FakeScalars":
         return FakeScalars(self._rows)
 
@@ -60,7 +65,16 @@ class FakeScalars:
         self._rows = rows
 
     def all(self) -> list[Any]:
-        return self._rows
+        # Mirror real SQLAlchemy semantics: ``.scalars()`` yields only the FIRST
+        # column of each row.  The actions branch returns ``(action, name)``
+        # pairs, so under ``.scalars()`` the name is dropped — exactly the silent
+        # production regression this fake must be able to catch.
+        return [
+            row[0]
+            if isinstance(row, tuple) and row and isinstance(row[0], ActivityAction)
+            else row
+            for row in self._rows
+        ]
 
 
 class FakeSession:
@@ -71,12 +85,16 @@ class FakeSession:
 
     * ``SELECT display_name, avatar_url FROM activity_events ...`` → label lookup
     * ``SELECT * FROM activity_events ...`` → event history
-    * ``SELECT * FROM activity_actions ...`` → actions
+    * ``SELECT activity_actions.*, <related_name subquery> ...`` → actions
+
+    The actions branch returns ``(action, related_name)`` **pairs** — the
+    service unpacks them (``for action, related_name in action_rows``), so a
+    bare ``ActivityAction`` list here would fail with ``ValueError``.
     """
 
     def __init__(
         self,
-        actions: list[Any],
+        actions: list[tuple[ActivityAction, str | None]],
         events: list[Any],
         labels: dict[str, tuple[str | None, str | None]],
     ) -> None:
@@ -98,17 +116,19 @@ class FakeSession:
     def _label_row(self, stmt: Any) -> tuple[str | None, str | None]:
         """Return the canned label row for the entity in *stmt*.
 
-        The fake derives the entity key from the statement's WHERE criteria
-        by scanning for the ``entity_id`` equality value.  Falls back to
-        matching the compiled SQL text (contains the literal entity id).
+        The fake derives the entity key from the statement's WHERE criteria by
+        walking the (possibly nested) criteria for the ``entity_id`` equality
+        value.  The identity predicate is an ``or_`` of ``and_`` groups, so the
+        comparison is not a top-level criterion.
         """
         entity_id: str | None = None
         for crit in getattr(stmt, "_where_criteria", []):
-            text = str(crit)
-            if "entity_id" in text:
-                right = getattr(crit, "right", None)
-                if right is not None:
-                    entity_id = getattr(right, "value", None)
+            for element in visitors.iterate(crit):
+                left = getattr(element, "left", None)
+                if getattr(left, "name", None) == "entity_id":
+                    right = getattr(element, "right", None)
+                    if right is not None:
+                        entity_id = getattr(right, "value", None)
         if entity_id is None:
             return None, None
         for key, value in self.labels.items():
@@ -129,6 +149,7 @@ def _make_action(
     target_id: str,
     summary: str | None = None,
     url: str | None = None,
+    target_source: str | None = None,
     row_id: int = 1,
 ) -> ActivityAction:
     return ActivityAction(
@@ -141,6 +162,7 @@ def _make_action(
         relationship_type=rel_type,
         target_entity_type=target_type,
         target_entity_id=target_id,
+        target_source=target_source,
         summary=summary,
         url=url,
     )
@@ -185,32 +207,41 @@ def _compiled_sql(stmt: Any) -> str:
 @pytest.fixture
 def fake_db(monkeypatch: pytest.MonkeyPatch) -> FakeSession:
     """Override the ``get_async_db`` dependency with a canned fake session."""
-    actions = [
-        _make_action(
-            signal_id="11111111-1111-1111-1111-111111111111",
-            source="github",
-            event_time=datetime(2026, 3, 15, 14, 30, 0, tzinfo=timezone.utc),
-            actor_type="Person",
-            actor_id="alice",
-            rel_type="CREATED",
-            target_type="PullRequest",
-            target_id="org/repo#142",
-            summary="feat: add user activity timeline API",
-            url="https://github.com/org/repo/pull/142",
-            row_id=10,
+    # (action, related_name) pairs — the shape ``fetch_actions_for_entity`` now
+    # returns.  One row has a resolved name and one has ``None`` so both the
+    # resolved path and the raw-id fallback stay pinned.
+    actions: list[tuple[ActivityAction, str | None]] = [
+        (
+            _make_action(
+                signal_id="11111111-1111-1111-1111-111111111111",
+                source="github",
+                event_time=datetime(2026, 3, 15, 14, 30, 0, tzinfo=timezone.utc),
+                actor_type="Person",
+                actor_id="alice",
+                rel_type="CREATED",
+                target_type="PullRequest",
+                target_id="org/repo#142",
+                summary="feat: add user activity timeline API",
+                url="https://github.com/org/repo/pull/142",
+                row_id=10,
+            ),
+            "feat: add user activity timeline API",
         ),
-        _make_action(
-            signal_id="22222222-2222-2222-2222-222222222222",
-            source="github",
-            event_time=datetime(2026, 3, 14, 9, 0, 0, tzinfo=timezone.utc),
-            actor_type="Person",
-            actor_id="bob",
-            rel_type="REVIEWED",
-            target_type="PullRequest",
-            target_id="org/repo#142",
-            summary="LGTM",
-            url="https://github.com/org/repo/pull/142#review",
-            row_id=9,
+        (
+            _make_action(
+                signal_id="22222222-2222-2222-2222-222222222222",
+                source="github",
+                event_time=datetime(2026, 3, 14, 9, 0, 0, tzinfo=timezone.utc),
+                actor_type="Person",
+                actor_id="bob",
+                rel_type="REVIEWED",
+                target_type="PullRequest",
+                target_id="org/repo#142",
+                summary="LGTM",
+                url="https://github.com/org/repo/pull/142#review",
+                row_id=9,
+            ),
+            None,
         ),
     ]
     events = [
@@ -252,6 +283,21 @@ def client(fake_db: FakeSession) -> httpx.AsyncClient:
         transport=httpx.ASGITransport(app=app),
         base_url=BASE_URL,
     )
+
+
+@pytest.fixture(autouse=True)
+def _stub_person_identity_resolution(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep the unit gate offline — Person lanes must not reach Neo4j here.
+
+    The repo's local ``.env`` ships ``NEO4J_ENABLED=true``; without this stub the
+    Person-lane tests would attempt a real ``verify_connectivity()`` from inside
+    ``-m unit``. Stub once per module rather than in each test.
+    """
+
+    async def _no_identities(_person_wba_id: str) -> list[tuple[str, str]]:
+        return []
+
+    monkeypatch.setattr(service, "resolve_person_identities", _no_identities)
 
 
 # ---------------------------------------------------------------------------
@@ -351,6 +397,8 @@ class TestTimelineEndpoint:
         assert event["details"]["status"] == "open"
         # url is extracted from attributes.url so history cards are clickable.
         assert event["url"] == "https://github.com/org/repo/issues/42"
+        # History has no other side, so the sibling's canonical id is None.
+        assert event["related_wba_id"] is None
 
     async def test_full_page_emits_cursor_matching_last_row(
         self, client: httpx.AsyncClient, fake_db: FakeSession
@@ -366,7 +414,7 @@ class TestTimelineEndpoint:
         lane = resp.json()["lanes"][0]
         assert isinstance(lane["next_cursor"], str)
         assert lane["next_cursor"]
-        last_action = fake_db.actions[-1]
+        last_action = fake_db.actions[-1][0]
         decoded_time, decoded_id = _decode_cursor(lane["next_cursor"])
         assert decoded_time == last_action.event_time
         assert decoded_id == last_action.id
@@ -460,6 +508,97 @@ class TestTimelineEndpoint:
                 params={"wba_ids": "github::Person::alice", "limit": 0},
             )
         assert resp.status_code == 422
+
+    async def test_lane_role_and_related_id_in_both_directions(
+        self, client: httpx.AsyncClient
+    ) -> None:
+        """Each event names which side the lane was on and the other side's id.
+
+        The canned set returns both directions for the ``alice`` lane: the first
+        action's actor is the lane (role ``actor``), the second action's actor is
+        a different person (role ``target``).
+        """
+        async with client:
+            resp = await client.get(
+                TIMELINE_URL,
+                params={"wba_ids": "github::Person::alice", "limit": 5},
+            )
+        assert resp.status_code == 200
+        events = resp.json()["lanes"][0]["events"]
+        assert len(events) == 2
+        actor_side, target_side = events[0], events[1]
+        # lane is the actor → the other side is the target (the PR).
+        assert actor_side["lane_role"] == "actor"
+        assert actor_side["related_id"] == "org/repo#142"
+        assert actor_side["entity_type"] == "PullRequest"
+        # The canonical WBA id of the other side is built from the row's own
+        # source when ``target_source`` is unset (Phase 1c's ``other_source``).
+        assert actor_side["related_wba_id"] == "github::PullRequest::org/repo#142"
+        # lane is the target → the other side is the actor (the other person).
+        assert target_side["lane_role"] == "target"
+        assert target_side["related_id"] == "bob"
+        assert target_side["entity_type"] == "Person"
+        assert target_side["related_wba_id"] == "github::Person::bob"
+
+    async def test_related_wba_id_uses_target_source_for_actor_direction(
+        self, client: httpx.AsyncClient, fake_db: FakeSession
+    ) -> None:
+        """When the lane is the actor, the sibling's source is the row's target_source.
+
+        Mirrors the query layer's ``related_source`` ``CASE`` (Phase 1c).
+        """
+        fake_db.actions[0][0].target_source = "jira"
+        async with client:
+            resp = await client.get(
+                TIMELINE_URL,
+                params={"wba_ids": "github::Person::alice", "limit": 5},
+            )
+        assert resp.status_code == 200
+        actor_side = resp.json()["lanes"][0]["events"][0]
+        assert actor_side["lane_role"] == "actor"
+        assert actor_side["related_wba_id"] == "jira::PullRequest::org/repo#142"
+
+    async def test_related_name_resolved_and_raw_id_fallback(
+        self, client: httpx.AsyncClient
+    ) -> None:
+        """One action carries a resolved name; the other falls back to ``None``."""
+        async with client:
+            resp = await client.get(
+                TIMELINE_URL,
+                params={"wba_ids": "github::Person::alice", "limit": 5},
+            )
+        assert resp.status_code == 200
+        events = resp.json()["lanes"][0]["events"]
+        assert events[0]["related_name"] == "feat: add user activity timeline API"
+        assert events[1]["related_name"] is None
+
+    async def test_row_multiplication_guard(
+        self, client: httpx.AsyncClient, fake_db: FakeSession
+    ) -> None:
+        """The other side having several activity_events rows must not inflate the
+        lane: one event per action row."""
+        # Give the related entity several history rows; a naive join would
+        # multiply the lane by this count.
+        fake_db.events = [
+            _make_event(
+                signal_id=f"event-{index}",
+                source="github",
+                entity_type="PullRequest",
+                entity_id="org/repo#142",
+                event_time=datetime(2026, 3, 12, index, 0, 0, tzinfo=timezone.utc),
+                display_name=f"state {index}",
+                row_id=index,
+            )
+            for index in range(5)
+        ]
+        async with client:
+            resp = await client.get(
+                TIMELINE_URL,
+                params={"wba_ids": "github::Person::alice", "limit": 50},
+            )
+        assert resp.status_code == 200
+        events = resp.json()["lanes"][0]["events"]
+        assert len(events) == len(fake_db.actions) == 2
 
 
 # ---------------------------------------------------------------------------

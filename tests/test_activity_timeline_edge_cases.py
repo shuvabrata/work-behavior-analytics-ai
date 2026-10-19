@@ -73,7 +73,7 @@ def _render(lanes: list[dict[str, Any]], *, granularity: str = "day") -> list[An
 
 def test_single_lane_renders() -> None:
     """One lane with events renders its cards and no empty note."""
-    lanes = [_lane("a", [_event("s1", "2026-03-15T10:00:00+00:00")])]
+    lanes = [_lane("github::Person::a", [_event("s1", "2026-03-15T10:00:00+00:00")])]
     texts = _texts(_render(lanes))
     assert _EMPTY_NOTE not in texts
 
@@ -81,8 +81,8 @@ def test_single_lane_renders() -> None:
 def test_one_lane_empty_shows_note() -> None:
     """A lane with no events gets the empty note; the active lane does not."""
     lanes = [
-        _lane("a", [_event("s1", "2026-03-15T10:00:00+00:00")]),
-        _lane("b", []),
+        _lane("github::Person::a", [_event("s1", "2026-03-15T10:00:00+00:00")]),
+        _lane("github::Person::b", []),
     ]
     texts = _texts(_render(lanes))
     assert texts.count(_EMPTY_NOTE) == 1
@@ -90,7 +90,7 @@ def test_one_lane_empty_shows_note() -> None:
 
 def test_all_lanes_empty_in_range() -> None:
     """No rows at all still renders every lane (with the empty note)."""
-    lanes = [_lane("a", []), _lane("b", [])]
+    lanes = [_lane("github::Person::a", []), _lane("github::Person::b", [])]
     body = _render(lanes)
     assert _texts(body).count(_EMPTY_NOTE) == len(lanes)
 
@@ -98,7 +98,7 @@ def test_all_lanes_empty_in_range() -> None:
 def test_five_lanes_render() -> None:
     """The soft cap (5 lanes) renders one cell per lane per row."""
     lanes = [
-        _lane(f"lane{index}", [_event(f"s{index}", "2026-03-15T10:00:00+00:00")])
+        _lane(f"github::Person::lane{index}", [_event(f"s{index}", "2026-03-15T10:00:00+00:00")])
         for index in range(5)
     ]
     body = _render(lanes)
@@ -108,7 +108,7 @@ def test_five_lanes_render() -> None:
 
 def test_custom_range_with_no_events() -> None:
     """An empty window (no events in the range) is the same as an empty grid."""
-    body = _render([_lane("a", [])])
+    body = _render([_lane("github::Person::a", [])])
     assert _texts(body).count(_EMPTY_NOTE) == 1
 
 
@@ -117,7 +117,7 @@ def test_history_scope_person_state_change() -> None:
     assert humanize_relationship("STATE_CHANGE") == "Updated"
     lanes = [
         _lane(
-            "a",
+            "github::Person::a",
             [
                 _event(
                     "s1",
@@ -129,7 +129,9 @@ def test_history_scope_person_state_change() -> None:
         )
     ]
     texts = _texts(_render(lanes))
-    assert "Alice Johnson" in texts
+    # The name sits inside the line-2 identity row (``<Type> · <name>``), so match
+    # as a substring rather than a whole leaf.
+    assert any("Alice Johnson" in text for text in texts)
     assert "Updated" in texts
 
 

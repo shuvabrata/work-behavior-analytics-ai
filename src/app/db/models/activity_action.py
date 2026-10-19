@@ -53,5 +53,9 @@ class ActivityAction(Base):
     relationship_type: Mapped[str] = mapped_column(String(32), nullable=False)
     target_entity_type: Mapped[str] = mapped_column(String(32), nullable=False)
     target_entity_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    # The target's own origin system — RelationshipTarget.source, which can
+    # differ from the signal's source (e.g. a github Issue REFERENCES a jira
+    # Issue).  Nullable for rows written before this column existed.
+    target_source: Mapped[str | None] = mapped_column(String(32), nullable=True)
     summary: Mapped[str | None] = mapped_column(String(512), nullable=True)
     url: Mapped[str | None] = mapped_column(String(1024), nullable=True)

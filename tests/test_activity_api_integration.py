@@ -397,6 +397,8 @@ class TestTimelineEndpoint:
         assert event["details"]["status"] == "open"
         # url is extracted from attributes.url so history cards are clickable.
         assert event["url"] == "https://github.com/org/repo/issues/42"
+        # History has no other side, so the sibling's canonical id is None.
+        assert event["related_wba_id"] is None
 
     async def test_full_page_emits_cursor_matching_last_row(
         self, client: httpx.AsyncClient, fake_db: FakeSession
@@ -529,10 +531,32 @@ class TestTimelineEndpoint:
         assert actor_side["lane_role"] == "actor"
         assert actor_side["related_id"] == "org/repo#142"
         assert actor_side["entity_type"] == "PullRequest"
+        # The canonical WBA id of the other side is built from the row's own
+        # source when ``target_source`` is unset (Phase 1c's ``other_source``).
+        assert actor_side["related_wba_id"] == "github::PullRequest::org/repo#142"
         # lane is the target → the other side is the actor (the other person).
         assert target_side["lane_role"] == "target"
         assert target_side["related_id"] == "bob"
         assert target_side["entity_type"] == "Person"
+        assert target_side["related_wba_id"] == "github::Person::bob"
+
+    async def test_related_wba_id_uses_target_source_for_actor_direction(
+        self, client: httpx.AsyncClient, fake_db: FakeSession
+    ) -> None:
+        """When the lane is the actor, the sibling's source is the row's target_source.
+
+        Mirrors the query layer's ``related_source`` ``CASE`` (Phase 1c).
+        """
+        fake_db.actions[0][0].target_source = "jira"
+        async with client:
+            resp = await client.get(
+                TIMELINE_URL,
+                params={"wba_ids": "github::Person::alice", "limit": 5},
+            )
+        assert resp.status_code == 200
+        actor_side = resp.json()["lanes"][0]["events"][0]
+        assert actor_side["lane_role"] == "actor"
+        assert actor_side["related_wba_id"] == "jira::PullRequest::org/repo#142"
 
     async def test_related_name_resolved_and_raw_id_fallback(
         self, client: httpx.AsyncClient

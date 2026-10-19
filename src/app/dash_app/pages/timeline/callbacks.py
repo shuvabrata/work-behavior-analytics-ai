@@ -25,11 +25,17 @@ from dash import (
 from dash.exceptions import PreventUpdate
 
 from app.common.timezone import get_app_timezone
-from app.dash_app.components.common import create_alert, register_loading_overlay_hider
+from app.dash_app.components.common import (
+    create_alert,
+    register_loading_overlay_hider,
+    render_visible_properties,
+)
 from app.dash_app.pages.graph.utils import fetch_effective_theme
 from app.dash_app.pages.timeline.api import (
+    NodePropertiesError,
     SuggestionFetchError,
     TimelineFetchError,
+    fetch_node_properties,
     fetch_suggestions,
     fetch_timeline,
 )
@@ -43,6 +49,7 @@ from app.dash_app.pages.timeline.helpers import (
     entity_type_icon,
     entity_type_label,
     extract_mock_scenario,
+    graph_deep_link,
     has_more,
     is_full,
     merge_lane_page,
@@ -75,6 +82,7 @@ from app.dash_app.styles import (
     FONT_SIZE_XTINY,
     get_theme_tokens,
 )
+from app.settings import settings
 from common.logger import logger
 
 _SUGGESTION_LIMIT = 10
@@ -992,6 +1000,9 @@ clientside_callback(
                 if (data.datetime) {
                     frag.appendChild(make('div', 'timeline-popup-time', data.datetime));
                 }
+                if (data.hint) {
+                    frag.appendChild(make('div', 'timeline-popup-hint', data.hint));
+                }
                 if (data.url) {
                     var link = document.createElement('a');
                     link.href = data.url;
@@ -1067,6 +1078,31 @@ clientside_callback(
                     : null;
             }
 
+            // Detail modal — the card is a plain div now, so this is the only
+            // click affordance.  The header is set here (no round trip) so the
+            // modal opens immediately with a populated title; the Graph link and
+            // the panels are filled by server callbacks on timeline-detail-store.
+            // No Cypher is built here — the link's URL is built server-side.
+            function openDetail(card) {
+                var raw = card.getAttribute('data-timeline-detail');
+                if (!raw) { return false; }
+                var data;
+                try { data = JSON.parse(raw); } catch (e) { return false; }
+                window.__timelinePopupHide();
+                if (window.dash_clientside && window.dash_clientside.set_props) {
+                    window.dash_clientside.set_props('timeline-detail-title', {children: data.title});
+                    window.dash_clientside.set_props('timeline-detail-time', {children: data.datetime_exact});
+                    // The payload IS the store value, unchanged (Decision 17).
+                    // A byte-equal payload means an identical header and
+                    // identical panels (both derive from the same two node
+                    // ids), so Dash's own change detection skipping the repeat
+                    // is the correct behaviour.
+                    window.dash_clientside.set_props('timeline-detail-store', {data: data});
+                    window.dash_clientside.set_props('timeline-detail-modal', {is_open: true});
+                }
+                return true;
+            }
+
             document.addEventListener('mouseover', function(ev) {
                 var card = cardFrom(ev.target);
                 if (card) { clearTimeout(window.__timelinePopupTimer); }
@@ -1096,8 +1132,15 @@ clientside_callback(
                     }
                 }, 0);
             });
+            document.addEventListener('click', function(ev) {
+                var card = cardFrom(ev.target);
+                if (card) { openDetail(card); }
+            });
             document.addEventListener('keydown', function(ev) {
-                if (ev.key === 'Escape') { window.__timelinePopupHide(); }
+                if (ev.key === 'Escape') { window.__timelinePopupHide(); return; }
+                if (ev.key !== 'Enter' && ev.key !== ' ') { return; }
+                var card = cardFrom(ev.target);
+                if (card && openDetail(card)) { ev.preventDefault(); }
             }, true);
             document.addEventListener('scroll', window.__timelinePopupHide, true);
             window.addEventListener('resize', window.__timelinePopupHide);
@@ -1118,3 +1161,122 @@ clientside_callback(
     Output("timeline-popup-dummy", "children"),
     Input("timeline-grid-body", "children"),
 )
+
+
+# ---------------------------------------------------------------------------
+# Event detail modal — the panels
+# ---------------------------------------------------------------------------
+def _detail_panel(body: Any) -> html.Div:
+    """One side of the modal.
+
+    ``.timeline-detail-panel`` is the flex child: ``flex: 1 1 0`` +
+    ``min-width: 0`` (5g) is what makes the two tables share the width and wrap
+    long WBA ids instead of pushing each other apart.  The caption is Decision
+    12 — these are the entities' CURRENT properties, not an as-of-event snapshot.
+    """
+    return html.Div(
+        [
+            html.Div("Current state", className="timeline-detail-caption"),
+            body,
+        ],
+        className="timeline-detail-panel",
+    )
+
+
+def _detail_error(message: str) -> html.Div:
+    """Modal-body error state.  NOT ``create_alert`` — see step 3 above."""
+    return html.Div(
+        [html.Div(message, className="timeline-detail-missing-title")],
+        className="timeline-detail-missing",
+    )
+
+
+def _not_found(wba_id: str) -> html.Div:
+    """Per-panel state when the entity has no node in Neo4j."""
+    return html.Div(
+        [
+            html.Div("Not found in graph", className="timeline-detail-missing-title"),
+            html.Div(wba_id, className="timeline-detail-missing-id"),
+        ],
+        className="timeline-detail-missing",
+    )
+
+
+@callback(
+    Output("timeline-detail-panels", "children"),
+    Input("timeline-detail-store", "data"),
+    prevent_initial_call=True,
+)
+def render_detail_panels(payload: dict[str, Any] | None) -> Any:
+    """Fetch both entities' Neo4j properties and render the side-by-side panels."""
+    if not payload:
+        return no_update
+    left = str(payload.get("lane_wba_id") or "")
+    right = payload.get("related_wba_id")
+    right = str(right) if isinstance(right, str) and right else None
+    ids = [left] if not right else [left, right]
+    try:
+        nodes = fetch_node_properties(ids)
+    except NodePropertiesError:
+        # Ask the SAME question the server's guard asks (api/graph/v1/query.py:262
+        # reads this same flag) instead of inferring it from the HTTP status.
+        # The graph API answers 500 for *every* Cypher runtime error, not only
+        # for a disabled graph, so "500" cannot tell the two apart.  The Dash app
+        # shares this process with the API (main.py mounts it via a2wsgi), so the
+        # flag is directly readable — the same approach pages/search.py:769 uses
+        # for ELASTICSEARCH_ENABLED.
+        if not settings.NEO4J_ENABLED:
+            return _detail_error(
+                "Neo4j is not available — graph properties are disabled."
+            )
+        return _detail_error("Could not load properties for this event.")
+
+    if right is None:
+        body = (
+            _detail_panel(render_visible_properties(nodes[left]))
+            if left in nodes
+            else _detail_panel(_not_found(left))
+        )
+        return body
+
+    relationship = str(payload.get("relationship") or "")
+    return html.Div(
+        [
+            _detail_panel(render_visible_properties(nodes[left]))
+            if left in nodes
+            else _detail_panel(_not_found(left)),
+            html.Div(
+                [html.I(className="fas fa-link", title=relationship)],
+                className="timeline-detail-connector",
+            ),
+            _detail_panel(render_visible_properties(nodes[right]))
+            if right in nodes
+            else _detail_panel(_not_found(right)),
+        ],
+        className="timeline-detail-grid",
+    )
+
+
+@callback(
+    Output("timeline-detail-graph-link", "href"),
+    Input("timeline-detail-store", "data"),
+    prevent_initial_call=True,
+)
+def render_detail_graph_link(payload: dict[str, Any] | None) -> Any:
+    """Set the modal's Graph deep-link from the clicked card's two node ids.
+
+    Built here, at click time, rather than per card in the grid: the URL embeds
+    both ids, so it is unique per card and cannot be deduplicated by Dash's
+    payload diff — measured at 350 bytes/card, 57% of the card's payload, and
+    re-sent on every theme toggle, regroup, expand and "Load more".
+    ``graph_deep_link`` is a pure function of these two ids, so this produces the
+    identical string the card used to carry.
+    """
+    if not payload:
+        return no_update
+    lane = str(payload.get("lane_wba_id") or "")
+    if not lane:
+        return no_update
+    related = payload.get("related_wba_id")
+    related = str(related) if isinstance(related, str) and related else None
+    return graph_deep_link(lane, related)

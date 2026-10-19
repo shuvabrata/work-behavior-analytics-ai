@@ -21,11 +21,11 @@ from app.dash_app.components.common import (
     create_page_header,
 )
 from app.dash_app.pages.timeline.helpers import (
-    _popup_headline,
     cap_cell,
     card_primary,
     card_secondary,
     cell_expansion_key,
+    detail_payload,
     entity_type_color,
     entity_type_icon,
     entity_type_label,
@@ -257,6 +257,15 @@ _EVENT_TIME_FORMAT = "%I:%M %p"
 # never clipped by the grid's overflow; the clientside listener fills it.
 POPUP_PORTAL_ID = "timeline-popup-portal"
 
+# Event detail modal — the card's full sentence, both entities' current Neo4j
+# properties, and the Graph deep-link.
+DETAIL_MODAL_ID = "timeline-detail-modal"
+DETAIL_TITLE_ID = "timeline-detail-title"
+DETAIL_STORE_ID = "timeline-detail-store"
+DETAIL_PANELS_ID = "timeline-detail-panels"
+DETAIL_GRAPH_LINK_ID = "timeline-detail-graph-link"
+DETAIL_TIME_ID = "timeline-detail-time"
+
 
 def _empty_state() -> html.Div:
     """Timeline empty state with a muted Font Awesome icon.
@@ -379,6 +388,60 @@ def get_layout() -> html.Div:
                 id="timeline-cell-expansion-store", storage_type="memory", data=[]
             ),
             dcc.Store(id="timeline-deeplink-applied", storage_type="memory", data=False),
+            dcc.Store(id=DETAIL_STORE_ID, storage_type="memory", data=None),
+            dbc.Modal(
+                [
+                    dbc.ModalHeader(
+                        [
+                            # The whole sentence the card fragments.  Children
+                            # are filled by the clientside set_props in step 5d
+                            # so the modal opens with a populated header and no
+                            # round trip; the panels fill behind the spinner.
+                            dbc.ModalTitle("", id=DETAIL_TITLE_ID),
+                            # Right-aligned column: the Graph link with the exact
+                            # event time stacked beneath it.  ``ms-auto`` lives on
+                            # THIS wrapper (not the link) so the whole column is
+                            # pushed right; the link keeps ``me-3`` for its inset.
+                            html.Div(
+                                [
+                                    # The Graph deep-link (Decision 8) — a NEW
+                                    # TAB.  Starts at ``#``; its href is filled
+                                    # by ``render_detail_graph_link`` on the
+                                    # detail store, so the URL-encoded Cypher is
+                                    # built server-side at click time — never in
+                                    # the browser, and never per card.
+                                    html.A(
+                                        [html.I(className="fas fa-diagram-project me-1"),
+                                         "Explore in Graph"],
+                                        id=DETAIL_GRAPH_LINK_ID,
+                                        href="#",
+                                        target="_blank",
+                                        rel="noopener noreferrer",
+                                        className="timeline-detail-graph-link",
+                                    ),
+                                    # The absolute time the header's duration
+                                    # summarises.  Filled clientside from
+                                    # ``datetime_exact``, same as the title.
+                                    html.Div("", id=DETAIL_TIME_ID,
+                                             className="timeline-detail-time"),
+                                ],
+                                className="timeline-detail-header-aside ms-auto me-3",
+                            ),
+                        ],
+                        close_button=True,
+                    ),
+                    dbc.ModalBody(
+                        dcc.Loading(
+                            type="circle",
+                            children=html.Div(id=DETAIL_PANELS_ID),
+                        )
+                    ),
+                ],
+                id=DETAIL_MODAL_ID,
+                size="xl",
+                scrollable=True,
+                is_open=False,
+            ),
         ]
     )
 
@@ -564,7 +627,9 @@ def build_event_card(
     type_color: str,
     *,
     scope: str = "activity",
-) -> html.A:
+    lane_label: str = "",
+    lane_wba_id: str = "",
+) -> html.Div:
     """Build the 2-line event card.
 
     ``activity`` scope reads relationship-first: line 1 is the humanized
@@ -574,9 +639,8 @@ def build_event_card(
     and line 2 is the state change (``Updated``) + time.
 
     The lane accent is a left border; the type colour comes from the effective
-    theme.  ``title`` stays the event's ``summary`` (a touch fallback alongside
-    the hover popup).
-    """
+    theme.  ``lane_label``/``lane_wba_id`` come from the lane dict and feed the
+    modal payload (the sentence's subject and the lane's Neo4j lookup id)."""
     type_label = entity_type_label(str(event.get("entity_type") or ""))
     time_text = _format_event_time(event.get("event_time"))
     name_text = card_secondary(event)
@@ -610,28 +674,41 @@ def build_event_card(
         line_two = html.Div(identity, className="timeline-card-secondary")
 
     lines: list[Any] = [line_one, line_two]
-    # ``title`` stays byte-identical to the pre-change value (the old
-    # retired ``card_summary`` output) — hover/tooltip content is out of scope.
-    title_text = _popup_headline(event)
 
     card_style: dict[str, Any] = (
         {"borderLeft": f"3px solid {lane_color}"} if lane_color else {}
     )
-    # The whole card links to the Graph page in a new tab; the hover popup detail
-    # is carried as a JSON data attribute and rendered by the clientside listener.
+    # The card triggers the detail modal; the hover popup detail and the modal
+    # payload are carried as JSON data attributes rendered/consumed by the
+    # clientside listener.
     payload: Any = {
         "data-timeline-event": json.dumps(
-            popup_fields(event, _format_full_datetime(event.get("event_time")))
-        )
+            # ``lane_label`` is REQUIRED here, not optional: it is the sentence's
+            # subject.  Omitting it yields "<relationship> <object>" with no
+            # subject — the exact failure Decision 14 exists to prevent.
+            popup_fields(
+                event,
+                _format_full_datetime(event.get("event_time")),
+                lane_label,
+                scope=scope,
+            )
+        ),
+        "data-timeline-detail": json.dumps(
+            detail_payload(
+                event,
+                lane_label,
+                lane_wba_id,
+                _format_full_datetime(event.get("event_time")),
+                scope,
+            )
+        ),
     }
-    return html.A(
+    return html.Div(
         lines,
-        href="/app/graph",
-        target="_blank",
-        rel="noopener noreferrer",
         className="timeline-card",
-        style=card_style,
-        title=title_text,
+        style={**card_style, "cursor": "pointer"},
+        role="button",
+        tabIndex=0,
         **payload,
     )
 
@@ -646,6 +723,7 @@ def build_cell(  # pylint: disable=too-many-arguments
     expanded: bool = False,
     row_key: str = "",
     lane_key: str = "",
+    lane_label: str = "",
     scope: str = "activity",
 ) -> html.Div:
     """One lane cell: the cards for a period, an empty-lane note, or a dashed
@@ -671,6 +749,8 @@ def build_cell(  # pylint: disable=too-many-arguments
                 str(event.get("entity_type") or ""), effective_nodes, base_tokens
             ),
             scope=scope,
+            lane_label=lane_label,
+            lane_wba_id=lane_key,
         )
         for event in shown
     ]
@@ -749,6 +829,10 @@ def build_grid_body(  # pylint: disable=too-many-arguments,too-many-locals
     expanded = set(expanded_runs or [])
     expanded_cell_set = set(expanded_cells or [])
     lane_ids = [str(lane.get("wba_id") or "") for lane in lanes]
+    lane_labels = {
+        str(lane.get("wba_id") or ""): str(lane.get("label") or "")
+        for lane in lanes
+    }
     children: list[Any] = []
 
     lane_empty = {
@@ -792,6 +876,7 @@ def build_grid_body(  # pylint: disable=too-many-arguments,too-many-locals
                     expanded=cell_expansion_key(row_key, wba_id) in expanded_cell_set,
                     row_key=row_key,
                     lane_key=wba_id,
+                    lane_label=lane_labels.get(wba_id, ""),
                     scope=scope,
                 )
             )

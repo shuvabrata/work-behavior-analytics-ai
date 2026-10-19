@@ -146,6 +146,7 @@ def _build_event(
     lane_role: Literal["actor", "target"] | None = None,
     related_id: str | None = None,
     related_name: str | None = None,
+    related_wba_id: str | None = None,
 ) -> TimelineEvent:
     """Assemble a ``TimelineEvent`` from a query row."""
     return TimelineEvent(
@@ -160,6 +161,7 @@ def _build_event(
         lane_role=lane_role,
         related_id=related_id,
         related_name=related_name,
+        related_wba_id=related_wba_id,
     )
 
 
@@ -188,6 +190,12 @@ def _action_to_event(
     lane_role: Literal["actor", "target"] = "actor" if is_actor else "target"
     other_type = action.target_entity_type if is_actor else action.actor_entity_type
     related_id = action.target_entity_id if is_actor else action.actor_entity_id
+    # The other side's own source: the target's when the lane is the actor, else
+    # the row's own source.  Mirrors ``related_source`` in the query layer, and
+    # ``target_source`` is never empty when written (activity_writer.py:134).
+    other_source = (
+        (action.target_source or action.source) if is_actor else action.source
+    )
     return _build_event(
         signal_id=action.signal_id,
         event_time=action.event_time,
@@ -200,6 +208,7 @@ def _action_to_event(
         lane_role=lane_role,
         related_id=related_id,
         related_name=related_name,
+        related_wba_id=f"{other_source}::{other_type}::{related_id}",
     )
 
 

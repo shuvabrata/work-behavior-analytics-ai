@@ -9,6 +9,7 @@ from common.logger import logger
 from common.activity_signal.models import ActivitySignal
 from connectors.producers.github.fetch_github import fetch_commits, resolve_commits_since_date
 from connectors.producers.github.process_single_commit import process_single_commit
+from connectors.producers.person_tracking import PersonSeenTracker
 
 
 async def process_commits(
@@ -18,11 +19,11 @@ async def process_commits(
     last_synced_at: Optional[datetime],
     published: Dict[str, int],
     pub_callback: Callable[[Optional[ActivitySignal]], Awaitable[None]],
-) -> tuple[set[str], set[str]]:
+) -> tuple[set[str], PersonSeenTracker]:
     """Fetch and process commits for a repo.
 
     Returns:
-        (seen_commits, published_persons) — both sets are populated during processing
+        (seen_commits, published_persons) — the commit-sha set and the Person tracker are populated during processing
         and consumed by downstream processors (e.g. process_prs, process_teams).
     """
     since = resolve_commits_since_date(last_synced_at)
@@ -30,7 +31,7 @@ async def process_commits(
     commits_raw = await asyncio.to_thread(fetch_commits, repo, since)
     logger.info(f"Number of commits fetched for {full_name} = {len(commits_raw)}")
 
-    published_persons: set[str] = set()
+    published_persons = PersonSeenTracker()
     seen_commits: set[str] = set()
 
     semaphore = asyncio.Semaphore(3)  # Capped concurrency to prevent API rate limits

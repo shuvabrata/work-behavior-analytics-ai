@@ -26,13 +26,15 @@ from connectors.producers.github.map_github import (
 from common.logger import logger
 from common.activity_signal.models import ActivitySignal
 from connectors.producers.github.retry_with_backoff import WbaRetryTimeoutError
+from connectors.producers.person_tracking import PersonSeenTracker
+from connectors.producers.person_tracking import looks_like_profile
 
 async def process_single_pr(pr: Any, 
                             repo: Any,
                             repo_data:Dict[str, Any],
                             repo_owner: str,
                             seen_commits: set[str],
-                            published_persons: set[str],
+                            published_persons: PersonSeenTracker,
                             _pub: Callable[[Optional[ActivitySignal]], Awaitable[None]]) -> None:
     """Process a single PR and publish its signals."""
 
@@ -134,13 +136,23 @@ async def process_single_pr(pr: Any,
                     pr_a_data, pr_c_data = await asyncio.to_thread(extract_pr_commit_data)
 
                     pr_login = pr_a_data.get("login") or pr_a_data.get("name", "unknown")
-                    if pr_login not in published_persons:
-                        published_persons.add(pr_login)
+                    pr_is_profile = looks_like_profile(pr_login, pr_a_data.get("name"), pr_a_data.get("email"))
+                    if published_persons.claim(pr_login, is_profile=pr_is_profile):
+                        logger.info(
+                            f"Person published kind={'profile' if pr_is_profile else 'stub'} login={pr_login} "
+                            f"source=pr_commit_author name={pr_a_data.get('name')!r} "
+                            f"email_present={bool(pr_a_data.get('email'))}"
+                        )
                         logger.debug(
                             f"[person:pr_commit_author] login={pr_login!r}  name={pr_a_data.get('name')!r}  email="
                             f"{pr_a_data.get('email')!r}  pr=#{pr.number}  sha={c_sha[:8]}"
                         )
                         await _pub(build_person_signal(pr_a_data))
+                    else:
+                        logger.info(
+                            f"Person skipped (already published) kind={'profile' if pr_is_profile else 'stub'} "
+                            f"login={pr_login} source=pr_commit_author"
+                        )
 
                     # Note: branch_name is set to None because we aren't certain which branch it belongs to here
                     # After PR is merged, the commit will be associated with the default branch in process_commits, 
@@ -283,51 +295,97 @@ async def process_single_pr(pr: Any,
 
     # Emit Person signals for author + reviewers
     for person_login, _ in [(author_data.get("login") or author_data.get("name", "unknown"), None)]:
-        if person_login not in published_persons:
-            published_persons.add(person_login)
+        author_is_profile = looks_like_profile(person_login, author_data.get("name"), author_data.get("email"))
+        if published_persons.claim(person_login, is_profile=author_is_profile):
+            logger.info(
+                f"Person published kind={'profile' if author_is_profile else 'stub'} login={person_login} "
+                f"source=pr_author name={author_data.get('name')!r} email_present={bool(author_data.get('email'))}"
+            )
             logger.debug(
                 f"[person:pr_author] login={person_login!r}  name={author_data.get('name')!r}  email="
                 f"{author_data.get('email')!r}  pr=#{pr.number}"
             )
             p_sig = build_person_signal(author_data)
             await _pub(p_sig)
+        else:
+            logger.info(
+                f"Person skipped (already published) kind={'profile' if author_is_profile else 'stub'} "
+                f"login={person_login} source=pr_author"
+            )
 
     for r_login in reviewer_logins:
-        if r_login not in published_persons:
-            published_persons.add(r_login)
-            r_data = reviewer_user_data.get(r_login, {"login": r_login, "name": r_login, "email": ""})
+        r_data = reviewer_user_data.get(r_login, {"login": r_login, "name": r_login, "email": ""})
+        r_is_profile = looks_like_profile(r_login, r_data.get("name"), r_data.get("email"))
+        if published_persons.claim(r_login, is_profile=r_is_profile):
+            logger.info(
+                f"Person published kind={'profile' if r_is_profile else 'stub'} login={r_login} "
+                f"source=pr_reviewer name={r_data.get('name')!r} email_present={bool(r_data.get('email'))}"
+            )
             logger.debug(
                 f"[person:pr_reviewer] login={r_login!r}  name={r_data.get('name')!r}  email={r_data.get('email')!r}  "
                 f"pr=#{pr.number}"
             )
             r_sig = build_person_signal(r_data)
             await _pub(r_sig)
+        else:
+            logger.info(
+                f"Person skipped (already published) kind={'profile' if r_is_profile else 'stub'} "
+                f"login={r_login} source=pr_reviewer"
+            )
 
     for rr_login, rr_data in requested_reviewer_user_data.items():
-        if rr_login not in published_persons:
-            published_persons.add(rr_login)
+        rr_is_profile = looks_like_profile(rr_login, rr_data.get("name"), rr_data.get("email"))
+        if published_persons.claim(rr_login, is_profile=rr_is_profile):
+            logger.info(
+                f"Person published kind={'profile' if rr_is_profile else 'stub'} login={rr_login} "
+                f"source=pr_requested_reviewer name={rr_data.get('name')!r} email_present={bool(rr_data.get('email'))}"
+            )
             logger.debug(
                 f"[person:requested_reviewer] login={rr_login!r}  name={rr_data.get('name')!r}  email="
                 f"{rr_data.get('email')!r}  pr=#{pr.number}"
             )
             await _pub(build_person_signal(rr_data))
+        else:
+            logger.info(
+                f"Person skipped (already published) kind={'profile' if rr_is_profile else 'stub'} "
+                f"login={rr_login} source=pr_requested_reviewer"
+            )
 
     for c_login, c_data in commenter_user_data.items():
-        if c_login not in published_persons:
-            published_persons.add(c_login)
+        c_is_profile = looks_like_profile(c_login, c_data.get("name"), c_data.get("email"))
+        if published_persons.claim(c_login, is_profile=c_is_profile):
+            logger.info(
+                f"Person published kind={'profile' if c_is_profile else 'stub'} login={c_login} "
+                f"source=pr_commenter name={c_data.get('name')!r} email_present={bool(c_data.get('email'))}"
+            )
             logger.debug(
                 f"[person:pr_commenter] login={c_login!r}  name={c_data.get('name')!r}  email={c_data.get('email')!r}"
                 f"  pr=#{pr.number}"
             )
             await _pub(build_person_signal(c_data))
+        else:
+            logger.info(
+                f"Person skipped (already published) kind={'profile' if c_is_profile else 'stub'} "
+                f"login={c_login} source=pr_commenter"
+            )
 
-    if merger_login and merger_data and merger_login not in published_persons:
-        published_persons.add(merger_login)
-        logger.debug(
-            f"[person:merger] login={merger_login!r}  name={merger_data.get('name')!r}  email="
-            f"{merger_data.get('email')!r}  pr=#{pr.number}"
-        )
-        await _pub(build_person_signal(merger_data))
+    if merger_login and merger_data:
+        merger_is_profile = looks_like_profile(merger_login, merger_data.get("name"), merger_data.get("email"))
+        if published_persons.claim(merger_login, is_profile=merger_is_profile):
+            logger.info(
+                f"Person published kind={'profile' if merger_is_profile else 'stub'} login={merger_login} "
+                f"source=pr_merger name={merger_data.get('name')!r} email_present={bool(merger_data.get('email'))}"
+            )
+            logger.debug(
+                f"[person:merger] login={merger_login!r}  name={merger_data.get('name')!r}  email="
+                f"{merger_data.get('email')!r}  pr=#{pr.number}"
+            )
+            await _pub(build_person_signal(merger_data))
+        else:
+            logger.info(
+                f"Person skipped (already published) kind={'profile' if merger_is_profile else 'stub'} "
+                f"login={merger_login} source=pr_merger"
+            )
 
     pr_sig = build_pull_request_signal(
         pr_data,

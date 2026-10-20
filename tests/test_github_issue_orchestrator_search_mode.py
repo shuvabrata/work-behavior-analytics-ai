@@ -26,6 +26,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from connectors.producers.github.process_issues import process_issues
+from connectors.producers.person_tracking import PersonSeenTracker
 from connectors.producers.github.retry_with_backoff import WbaRetryTimeoutError
 
 _MODULE = "connectors.producers.github.process_issues"
@@ -161,7 +162,7 @@ async def test_search_mode_uses_search_api():
             full_name=_REPO_FULL_NAME,
             last_synced_at=None,
             published={},
-            seen_persons=set(),
+            seen_persons=PersonSeenTracker(),
             pub_callback=AsyncMock(),
             github_obj=MagicMock(),
         )
@@ -189,7 +190,7 @@ async def test_search_mode_never_calls_direct_even_on_empty():
             full_name=_REPO_FULL_NAME,
             last_synced_at=None,
             published={},
-            seen_persons=set(),
+            seen_persons=PersonSeenTracker(),
             pub_callback=AsyncMock(),
             github_obj=MagicMock(),
         )
@@ -217,7 +218,7 @@ async def test_search_mode_requires_github_obj():
             full_name=_REPO_FULL_NAME,
             last_synced_at=None,
             published={},
-            seen_persons=set(),
+            seen_persons=PersonSeenTracker(),
             pub_callback=pub,
             github_obj=None,
         )
@@ -250,7 +251,7 @@ async def test_search_mode_failure_is_fatal_no_fallback():
             full_name=_REPO_FULL_NAME,
             last_synced_at=None,
             published={},
-            seen_persons=set(),
+            seen_persons=PersonSeenTracker(),
             pub_callback=pub,
             github_obj=MagicMock(),
         )
@@ -282,7 +283,7 @@ async def test_search_mode_propagates_wba_timeout():
                 full_name=_REPO_FULL_NAME,
                 last_synced_at=None,
                 published={},
-                seen_persons=set(),
+                seen_persons=PersonSeenTracker(),
                 pub_callback=AsyncMock(),
                 github_obj=MagicMock(),
             )
@@ -312,7 +313,7 @@ async def test_search_mode_publishes_issue_signal_per_issue():
             full_name=_REPO_FULL_NAME,
             last_synced_at=None,
             published={},
-            seen_persons=set(),
+            seen_persons=PersonSeenTracker(),
             pub_callback=pub,
             github_obj=MagicMock(),
         )
@@ -334,7 +335,7 @@ async def test_search_mode_emits_person_signals_for_unseen_users():
             patch(f"{_MODULE}.resolve_issues_since_date", return_value=datetime(2026, 1, 1, tzinfo=timezone.utc))
         )
         _enter_patches(stack, _common_patches(issues=[issue], comments=comments, mentions=["dave"]))
-        seen: set = set()
+        seen = PersonSeenTracker()
         pub = AsyncMock()
         await process_issues(
             repo=_make_repo(),
@@ -349,7 +350,7 @@ async def test_search_mode_emits_person_signals_for_unseen_users():
         )
         person_signals = [c for c in pub.call_args_list if getattr(c.args[0], "_signal_kind", None) == "Person"]
         assert len(person_signals) == 3
-        assert {"bob", "charlie", "dave"}.issubset(seen)
+        assert {"bob", "charlie", "dave"} <= seen.stub_only_ids()
 
 
 @pytest.mark.unit
@@ -380,7 +381,7 @@ async def test_search_mode_continues_on_per_issue_exception():
             full_name=_REPO_FULL_NAME,
             last_synced_at=None,
             published={},
-            seen_persons=set(),
+            seen_persons=PersonSeenTracker(),
             pub_callback=pub,
             github_obj=MagicMock(),
         )

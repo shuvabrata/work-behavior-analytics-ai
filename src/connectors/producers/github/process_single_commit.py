@@ -10,6 +10,7 @@ from connectors.producers.github.map_github import fetch_github_user, map_commit
 from connectors.producers.github.build_commit_signal import build_commit_signal
 from connectors.producers.github.build_file_signal import build_file_signal
 from connectors.producers.github.build_person_signal import build_person_signal
+from connectors.producers.person_tracking import PersonSeenTracker, looks_like_profile
 from connectors.producers.github.retry_with_backoff import (
     WbaRetryTimeoutError,
     retry_with_backoff,
@@ -41,7 +42,7 @@ async def process_single_commit(
     semaphore: asyncio.Semaphore,
     repo: Any,
     repo_owner: str,
-    published_persons: set[str],
+    published_persons: PersonSeenTracker,
     seen_commits: set[str],
     pub_callback: Callable[[Optional[ActivitySignal]], Awaitable[None]],
 ) -> None:
@@ -67,13 +68,23 @@ async def process_single_commit(
 
             # Back on the async event loop (thread-safe updates)
             login = author_data.get("login") or author_data.get("name", "unknown")
-            if login not in published_persons:
-                published_persons.add(login)
+            is_profile = looks_like_profile(login, author_data.get("name"), author_data.get("email"))
+            if published_persons.claim(login, is_profile=is_profile):
+                logger.info(
+                    f"Person published kind={'profile' if is_profile else 'stub'} login={login} "
+                    f"source=commit_author name={author_data.get('name')!r} "
+                    f"email_present={bool(author_data.get('email'))}"
+                )
                 logger.debug(
                     f"[person:commit_author] login={login!r}  name={author_data.get('name')!r}  email="
                     f"{author_data.get('email')!r}  sha={commit_data.get('sha', '?')[:8]}"
                 )
                 await pub_callback(build_person_signal(author_data))
+            else:
+                logger.info(
+                    f"Person skipped (already published) kind={'profile' if is_profile else 'stub'} "
+                    f"login={login} source=commit_author"
+                )
 
             sha_short = commit_data.get("sha", "?")[:8]
             seen_commits.add(commit_data.get("sha") or "")

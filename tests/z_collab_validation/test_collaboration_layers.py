@@ -1,6 +1,6 @@
 """Per-layer validation of the collaboration score Cypher query against live Neo4j.
 
-Runs automatically whenever NEO4J_ENABLED=true. No extra opt-in flag required.
+Requires a live Neo4j instance.
 
 Each test isolates one collaboration layer by enabling only that layer, runs the
 full query against the live graph, and asserts at least one person-pair is
@@ -59,10 +59,6 @@ def _render_query(query: str, parameters: dict[str, Any]) -> str:
     return rendered
 
 
-@pytest.mark.skipif(
-    not settings.NEO4J_ENABLED,
-    reason="Requires live Neo4j. Set NEO4J_ENABLED=true to run.",
-)
 @pytest.mark.parametrize("layer", LAYER_ORDER)
 def test_each_layer_returns_data(layer: str, track_result):
     """Validate each collaboration layer returns at least one person-pair from Neo4j."""

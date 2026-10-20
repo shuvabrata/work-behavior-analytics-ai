@@ -44,7 +44,7 @@ async def _augment_message_with_neo4j_stream(
     envelopes: list[dict[str, Any]],
     sources_used: list[dict[str, Any]],
 ) -> AsyncIterator[dict[str, Any]]:
-    if not settings.NEO4J_ENABLED:
+    if not settings.NEO4J_AI_LOOKUP_ENABLED:
         logger.info("Neo4j not enabled")
         return
 
@@ -71,7 +71,7 @@ async def _augment_message_with_elasticsearch_stream(
     envelopes: list[dict[str, Any]],
     sources_used: list[dict[str, Any]],
 ) -> AsyncIterator[dict[str, Any]]:
-    if not settings.ELASTICSEARCH_ENABLED:
+    if not settings.ELASTICSEARCH_AI_LOOKUP_ENABLED:
         logger.info("Elasticsearch not enabled")
         return
 

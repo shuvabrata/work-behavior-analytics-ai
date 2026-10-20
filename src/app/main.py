@@ -148,9 +148,8 @@ async def lifespan(app_instance: FastAPI) -> AsyncGenerator[None, None]:
         await _rabbitmq_connection.close()
         logger.info("[Shutdown] RabbitMQ connection closed")
 
-    if settings.NEO4J_ENABLED:
-        close_driver()
-        logger.info("[Shutdown] Neo4j driver connection closed")
+    close_driver()
+    logger.info("[Shutdown] Neo4j driver connection closed")
 
 
 app = FastAPI(lifespan=lifespan)

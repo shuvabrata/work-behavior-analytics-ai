@@ -227,7 +227,6 @@ async def get_collaboration_network(
         CollaborationNetworkResponse with elements and summary stats
 
     Raises:
-        HTTPException 503: If Neo4j is not enabled
         HTTPException 404: If query returns no collaboration data
         HTTPException 500: If Neo4j execution or community detection fails
     """
@@ -296,7 +295,7 @@ async def get_collaboration_network(
             detail={
                 "error": "Execution failed",
                 "message": str(e),
-                "hint": "Check Neo4j connection and NEO4J_ENABLED setting.",
+                "hint": "Check Neo4j connection.",
             },
         ) from e
 
@@ -319,17 +318,6 @@ async def health_check() -> dict[str, str]:
     Returns:
         dict: Status information including Neo4j connection state
     """
-    from app.settings import settings
-    
-    if not settings.NEO4J_ENABLED:
-        raise HTTPException(
-            status_code=503,
-            detail={
-                "status": "unavailable",
-                "message": "Neo4j is not enabled in configuration"
-            }
-        )
-    
     # Try to execute a simple query to verify connectivity
     try:
         test_query = "RETURN 1 as test"

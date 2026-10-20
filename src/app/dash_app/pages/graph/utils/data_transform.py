@@ -191,13 +191,6 @@ def parse_error_response(error_data: dict[str, Any], status_code: int) -> tuple[
                 f"{CYPHER_DOCS}syntax/",
                 "danger"
             )
-        elif "not enabled" in error_message.lower():
-            return (
-                "⚙️ Neo4j Not Enabled",
-                "Neo4j integration is not enabled in the application configuration. Contact your administrator.",
-                None,
-                "warning"
-            )
         else:
             return (
                 "💥 Query Execution Failed",

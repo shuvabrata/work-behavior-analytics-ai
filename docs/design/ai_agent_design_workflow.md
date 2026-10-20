@@ -92,8 +92,8 @@ Before a message reaches the LLM, `augment_message_stream()` in `chains.py` fans
 ```mermaid
 graph LR
     Input["User Message"] --> Orchestrator["augment_message_stream()<br/>chains.py"]
-    Orchestrator -->|"NEO4J_ENABLED=true"| NChain["Neo4j Chain"]
-    Orchestrator -->|"ELASTICSEARCH_ENABLED=true"| ESChain["Elasticsearch Chain"]
+    Orchestrator -->|"NEO4J_AI_LOOKUP_ENABLED=true"| NChain["Neo4j Chain"]
+    Orchestrator -->|"ELASTICSEARCH_AI_LOOKUP_ENABLED=true"| ESChain["Elasticsearch Chain"]
     Orchestrator -->|"backends enabled"| MChain["MCP Chain"]
     NChain -->|"context envelope"| Compose["_compose_multi_source_message()"]
     ESChain -->|"context envelope"| Compose
@@ -152,7 +152,7 @@ flowchart TD
 ```
 
 **Configuration:**
-- `ELASTICSEARCH_ENABLED` — feature flag (default `false`)
+- `ELASTICSEARCH_AI_LOOKUP_ENABLED` — feature flag (default `true`)
 - `ES_CHAIN_MAX_RESULTS` — max hits included in the context block (default `5`)
 - `AUGMENTATION_HISTORY_TURNS` — prior turns passed to both LLM calls for reference resolution (shared with all chains)
 
@@ -184,7 +184,7 @@ sequenceDiagram
 
     Agent->>Chains: augment_message_stream(message)
 
-    Note over Chains,Neo4j: Neo4j Chain (if NEO4J_ENABLED)
+    Note over Chains,Neo4j: Neo4j Chain (if NEO4J_AI_LOOKUP_ENABLED)
     Chains->>NChain: augment_message_with_neo4j_stream()
     NChain->>Provider: Relevance Gate
     NChain-->>UI: thinking_chunk (progress)
@@ -192,7 +192,7 @@ sequenceDiagram
     Neo4j-->>NChain: results
     NChain-->>Chains: context envelope
 
-    Note over Chains,ES: Elasticsearch Chain (if ELASTICSEARCH_ENABLED)
+    Note over Chains,ES: Elasticsearch Chain (if ELASTICSEARCH_AI_LOOKUP_ENABLED)
     Chains->>ESChain: augment_message_with_es_stream()
     ESChain->>Provider: Relevance Gate
     ESChain-->>UI: thinking_chunk (progress)

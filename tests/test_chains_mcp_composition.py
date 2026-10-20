@@ -21,7 +21,7 @@ async def _collect_augmented_message(user_message: str) -> str:
 @pytest.mark.asyncio
 async def test_augment_message_preserves_neo4j_only_behavior(monkeypatch):
     """Neo4j-only augmentation should return the Neo4j-formatted message unchanged."""
-    monkeypatch.setattr(settings, "NEO4J_ENABLED", True)
+    monkeypatch.setattr(settings, "NEO4J_AI_LOOKUP_ENABLED", True)
     
     async def _neo4j_stream(*_args, **_kwargs):
         yield {"type": "augmented_message", "content": {"source": "neo4j", "applied": True, "context": "neo4j-only-result"}}
@@ -42,7 +42,7 @@ async def test_augment_message_preserves_neo4j_only_behavior(monkeypatch):
 @pytest.mark.asyncio
 async def test_augment_message_combines_neo4j_and_mcp_context(monkeypatch):
     """When both sources apply, dispatcher should build a combined bounded prompt block."""
-    monkeypatch.setattr(settings, "NEO4J_ENABLED", True)
+    monkeypatch.setattr(settings, "NEO4J_AI_LOOKUP_ENABLED", True)
     
     async def _neo4j_stream(*_args, **_kwargs):
         yield {"type": "augmented_message", "content": {"source": "neo4j", "applied": True, "context": "neo4j-context"}}

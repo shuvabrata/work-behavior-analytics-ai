@@ -26,13 +26,9 @@ cd /app && python app/scripts/create_neo4j_indexes.py
 
 >&2 echo "Neo4j indexes ready - creating Elasticsearch indexes"
 
-# Create Elasticsearch indexes and wba_all alias (idempotent, skipped if disabled)
-if [ "$ELASTICSEARCH_ENABLED" = "true" ]; then
-  cd /app && python app/scripts/create_es_indexes.py
-  >&2 echo "Elasticsearch indexes ready - starting application"
-else
-  >&2 echo "Elasticsearch disabled - skipping index creation"
-fi
+# Create Elasticsearch indexes and wba_all alias (idempotent)
+cd /app && python app/scripts/create_es_indexes.py
+>&2 echo "Elasticsearch indexes ready - starting application"
 
 # Start the application
 cd /app && uvicorn app.main:app --host 0.0.0.0 --port 8000

@@ -136,7 +136,7 @@ async def test_rest_chat_flow_github_prompt_injects_mcp_context(monkeypatch):
     monkeypatch.setattr(ai_agent, "_provider", fake_provider)
     monkeypatch.setattr(settings, "GITHUB_MCP_ENABLED", True)
     monkeypatch.setattr(settings, "ATLASSIAN_MCP_ENABLED", False)
-    monkeypatch.setattr(settings, "NEO4J_ENABLED", False)
+    monkeypatch.setattr(settings, "NEO4J_AI_LOOKUP_ENABLED", False)
     monkeypatch.setattr(settings, "MAX_MCP_ITERATIONS", 2)
     monkeypatch.setattr(
         mcp_chain,
@@ -198,7 +198,7 @@ async def test_rest_chat_flow_atlassian_jira_prompt_injects_mcp_context(monkeypa
     class FakeAtlassianManager:
         atlassian_enabled = True
     monkeypatch.setattr(mcp_chain, "_build_atlassian_manager", lambda: FakeAtlassianManager())
-    monkeypatch.setattr(settings, "NEO4J_ENABLED", False)
+    monkeypatch.setattr(settings, "NEO4J_AI_LOOKUP_ENABLED", False)
     monkeypatch.setattr(settings, "MAX_MCP_ITERATIONS", 2)
     monkeypatch.setattr(
         mcp_chain,
@@ -259,7 +259,7 @@ async def test_rest_chat_flow_atlassian_confluence_prompt_injects_mcp_context(mo
     class FakeAtlassianManager:
         atlassian_enabled = True
     monkeypatch.setattr(mcp_chain, "_build_atlassian_manager", lambda: FakeAtlassianManager())
-    monkeypatch.setattr(settings, "NEO4J_ENABLED", False)
+    monkeypatch.setattr(settings, "NEO4J_AI_LOOKUP_ENABLED", False)
     monkeypatch.setattr(settings, "MAX_MCP_ITERATIONS", 2)
     monkeypatch.setattr(
         mcp_chain,
@@ -316,7 +316,7 @@ async def test_rest_chat_flow_both_backends_github_prompt_uses_github_tools_only
     monkeypatch.setattr(ai_agent, "_provider", fake_provider)
     monkeypatch.setattr(settings, "GITHUB_MCP_ENABLED", True)
     monkeypatch.setattr(settings, "ATLASSIAN_MCP_ENABLED", True)
-    monkeypatch.setattr(settings, "NEO4J_ENABLED", False)
+    monkeypatch.setattr(settings, "NEO4J_AI_LOOKUP_ENABLED", False)
     monkeypatch.setattr(settings, "MAX_MCP_ITERATIONS", 2)
     monkeypatch.setattr(
         mcp_chain,
@@ -377,7 +377,7 @@ async def test_rest_chat_flow_atlassian_unavailable_does_not_break_response(monk
     monkeypatch.setattr(ai_agent, "_provider", fake_provider)
     monkeypatch.setattr(settings, "GITHUB_MCP_ENABLED", False)
     monkeypatch.setattr(settings, "ATLASSIAN_MCP_ENABLED", True)
-    monkeypatch.setattr(settings, "NEO4J_ENABLED", False)
+    monkeypatch.setattr(settings, "NEO4J_AI_LOOKUP_ENABLED", False)
     monkeypatch.setattr(settings, "MAX_MCP_ITERATIONS", 2)
     monkeypatch.setattr(
         mcp_chain,
@@ -427,7 +427,7 @@ async def test_rest_chat_flow_atlassian_disabled_preserves_github_only_path(monk
     monkeypatch.setattr(ai_agent, "_provider", fake_provider)
     monkeypatch.setattr(settings, "GITHUB_MCP_ENABLED", True)
     monkeypatch.setattr(settings, "ATLASSIAN_MCP_ENABLED", False)
-    monkeypatch.setattr(settings, "NEO4J_ENABLED", False)
+    monkeypatch.setattr(settings, "NEO4J_AI_LOOKUP_ENABLED", False)
     monkeypatch.setattr(settings, "MAX_MCP_ITERATIONS", 2)
     monkeypatch.setattr(
         mcp_chain,
@@ -481,7 +481,7 @@ async def test_rest_chat_flow_session_continuity_unchanged(monkeypatch):
     monkeypatch.setattr(ai_agent, "_provider", fake_provider)
     monkeypatch.setattr(settings, "GITHUB_MCP_ENABLED", False)
     monkeypatch.setattr(settings, "ATLASSIAN_MCP_ENABLED", False)
-    monkeypatch.setattr(settings, "NEO4J_ENABLED", False)
+    monkeypatch.setattr(settings, "NEO4J_AI_LOOKUP_ENABLED", False)
 
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app), base_url="http://test"
@@ -512,7 +512,7 @@ async def test_rest_chat_flow_non_github_prompt_keeps_baseline(monkeypatch):
     monkeypatch.setattr(ai_agent, "_provider", fake_provider)
     monkeypatch.setattr(settings, "GITHUB_MCP_ENABLED", True)
     monkeypatch.setattr(settings, "ATLASSIAN_MCP_ENABLED", False)
-    monkeypatch.setattr(settings, "NEO4J_ENABLED", False)
+    monkeypatch.setattr(settings, "NEO4J_AI_LOOKUP_ENABLED", False)
     monkeypatch.setattr(settings, "MAX_MCP_ITERATIONS", 2)
     monkeypatch.setattr(
         mcp_chain,

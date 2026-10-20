@@ -58,6 +58,7 @@ from connectors.producers.jira.fetch_jira import (
     fetch_issues,
     fetch_projects,
     fetch_sprints_by_ids,
+    fetch_user,
 )
 from connectors.producers.jira.map_jira import (
     extract_mentions_from_texts,
@@ -91,6 +92,10 @@ _JIRA_FETCH_COMMENTS = os.getenv("JIRA_FETCH_COMMENTS", "true").lower() in (
 _JIRA_COMMENT_FETCH_CONCURRENCY = int(
     os.getenv("JIRA_COMMENT_FETCH_CONCURRENCY", "5")
 )
+
+# Feature flag + concurrency for the end-of-scan lookup of mention-only users.
+_JIRA_LOOKUP_STUB_USERS = os.getenv("JIRA_LOOKUP_STUB_USERS", "true").lower() in ("true", "1", "yes")
+_JIRA_USER_LOOKUP_CONCURRENCY = int(os.getenv("JIRA_USER_LOOKUP_CONCURRENCY", "3"))
 
 
 def _truncate(value: Any) -> str:
@@ -1222,6 +1227,35 @@ async def publish_signals(
     )
 
     logger.info(f"Issues done ({published.get('Issue', 0)})")
+    if _JIRA_LOOKUP_STUB_USERS:
+        pending = sorted(person_tracker.stub_only_ids())
+        if pending:
+            logger.info(f"Looking up {len(pending)} mention-only Jira users...")
+            semaphore = asyncio.Semaphore(max(1, _JIRA_USER_LOOKUP_CONCURRENCY))
+
+            async def _lookup(account_id: str) -> None:
+                async with semaphore:
+                    raw = await asyncio.to_thread(fetch_user, jira, account_id)
+                if not raw:
+                    return
+                user_data = map_jira_user({**raw, "accountId": raw.get("accountId") or account_id})
+                if user_data["account_id"] != account_id or not looks_like_profile(
+                    account_id, user_data.get("display_name"), user_data.get("email")
+                ):
+                    return          # nothing richer than the stub we already sent
+                await _emit_person(user_data)
+
+            # return_exceptions=True: a bare gather() raises on the first failure
+            # but leaves the other lookups running in worker threads, so they
+            # could publish after the caller has torn the publisher down.
+            # Wait for all of them, then re-raise the first error.
+            results = await asyncio.gather(
+                *(_lookup(a) for a in pending), return_exceptions=True
+            )
+            for result in results:
+                if isinstance(result, BaseException):
+                    raise result
+
     logger.info(f"Persons done ({published.get('Person', 0)})")
 
     return published

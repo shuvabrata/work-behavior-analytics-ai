@@ -1233,17 +1233,33 @@ async def publish_signals(
             logger.info(f"Looking up {len(pending)} mention-only Jira users...")
             semaphore = asyncio.Semaphore(max(1, _JIRA_USER_LOOKUP_CONCURRENCY))
 
+            resolved = 0
+
             async def _lookup(account_id: str) -> None:
+                nonlocal resolved
                 async with semaphore:
                     raw = await asyncio.to_thread(fetch_user, jira, account_id)
                 if not raw:
+                    logger.info(f"Jira user lookup returned nothing account_id={account_id}; keeping stub")
                     return
                 user_data = map_jira_user({**raw, "accountId": raw.get("accountId") or account_id})
                 if user_data["account_id"] != account_id or not looks_like_profile(
                     account_id, user_data.get("display_name"), user_data.get("email")
                 ):
-                    return          # nothing richer than the stub we already sent
+                    # nothing richer than the stub we already sent
+                    logger.info(
+                        f"Jira user lookup had no usable profile account_id={account_id}; keeping stub"
+                    )
+                    return
                 await _emit_person(user_data)
+                resolved += 1
+                # Log presence of an email, never its value (see plan 048 scope).
+                logger.info(
+                    f"Jira user lookup resolved account_id={account_id} "
+                    f"display_name={user_data.get('display_name')!r} "
+                    f"email_present={bool(user_data.get('email'))} "
+                    f"({resolved}/{len(pending)})"
+                )
 
             # return_exceptions=True: a bare gather() raises on the first failure
             # but leaves the other lookups running in worker threads, so they

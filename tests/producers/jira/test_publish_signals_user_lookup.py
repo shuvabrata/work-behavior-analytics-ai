@@ -170,6 +170,28 @@ async def test_lookup_concurrency_is_bounded() -> None:
 
 
 @pytest.mark.asyncio
+async def test_successful_lookup_logs_detail_without_email(caplog: pytest.LogCaptureFixture) -> None:
+    fetch = MagicMock(return_value={"accountId": "m1", "displayName": "Mia", "emailAddress": "secret@example.com"})
+    with caplog.at_level("INFO"):
+        await _run(_issue(["m1"]), fetch)
+
+    assert "Jira user lookup resolved account_id=m1" in caplog.text
+    assert "display_name='Mia'" in caplog.text
+    assert "email_present=True" in caplog.text
+    assert "(1/1)" in caplog.text
+    assert "secret@example.com" not in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_empty_lookup_logs_info_line(caplog: pytest.LogCaptureFixture) -> None:
+    fetch = MagicMock(return_value={})
+    with caplog.at_level("INFO"):
+        await _run(_issue(["m1"]), fetch)
+
+    assert "Jira user lookup returned nothing account_id=m1" in caplog.text
+
+
+@pytest.mark.asyncio
 async def test_email_not_logged(caplog: pytest.LogCaptureFixture) -> None:
     fetch = MagicMock(return_value={"accountId": "m1", "displayName": "Mia", "emailAddress": "secret@example.com"})
     with caplog.at_level("INFO"):

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 from datetime import datetime, timezone
 from pathlib import Path
@@ -229,6 +230,171 @@ async def test_process_account_publishes_space_content_and_person_signals(monkey
     content_signal = publisher.publish.await_args_list[1].args[0]
     relationship_types = {rel.type for rel in content_signal.relationships}
     assert "REACTED_TO" in relationship_types
+
+
+def _http_error(status: int) -> requests.exceptions.HTTPError:
+    response = requests.Response()
+    response.status_code = status
+    return requests.exceptions.HTTPError(f"HTTP {status}", response=response)
+
+
+async def _run_account_with_page_error(
+    monkeypatch: pytest.MonkeyPatch, error: Exception
+) -> tuple[Mock, int]:
+    from connectors.producers.confluence import main as confluence_main
+
+    publisher = Mock()
+    publisher.publish = AsyncMock()
+    monkeypatch.setattr(confluence_main, "get_sync_cursor", AsyncMock(return_value=None))
+    monkeypatch.setattr(confluence_main, "set_sync_cursor", AsyncMock())
+    monkeypatch.setattr(
+        confluence_main,
+        "get_spaces",
+        AsyncMock(return_value=[{"key": "~BAD", "name": "Gone", "type": "personal"}]),
+    )
+    monkeypatch.setattr(confluence_main, "get_space_pages", AsyncMock(side_effect=error))
+    monkeypatch.setattr(confluence_main, "get_user_details_async", AsyncMock(return_value={}))
+    published = await confluence_main.process_account(
+        publisher,
+        Mock(),
+        {"id": 7, "url": "https://example.atlassian.net", "email": "t@example.com",
+         "api_token": "x", "include_spaces": [], "exclude_spaces": [], "enabled": True},
+    )
+    return publisher, published
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", [403, 404, 500])
+async def test_process_account_skips_inaccessible_space(
+    monkeypatch: pytest.MonkeyPatch, status: int
+) -> None:
+    """Any HTTP failure on one space skips it; the scan still completes."""
+    from connectors.producers.confluence import main as confluence_main
+
+    _, published = await _run_account_with_page_error(monkeypatch, _http_error(status))
+
+    assert published == 1  # only the Space signal
+    assert confluence_main.set_sync_cursor.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_process_account_propagates_retry_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Retry-budget exhaustion is not skipped, so the cursor is not advanced."""
+    from connectors.producers.github.retry_with_backoff import WbaRetryTimeoutError
+
+    with pytest.raises(WbaRetryTimeoutError):
+        await _run_account_with_page_error(monkeypatch, WbaRetryTimeoutError(60, OSError("down")))
+
+
+@pytest.mark.asyncio
+async def test_process_account_reports_skipped_space_in_aggregate_warning(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A skipped space is named in an aggregate WARNING (not just the per-space one)."""
+    with caplog.at_level(logging.WARNING):
+        _, published = await _run_account_with_page_error(monkeypatch, _http_error(500))
+
+    assert published == 1  # only the Space signal
+    assert "Content fetch failed for 1 of 1 space(s)" in caplog.text
+    assert "~BAD (HTTP 500)" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_process_account_summary_reports_skipped_space_count(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """The account summary line carries the skipped-space count."""
+    with caplog.at_level(logging.INFO):
+        await _run_account_with_page_error(monkeypatch, _http_error(500))
+
+    assert "SpacesSkipped=1" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_process_account_clean_scan_reports_no_skip(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A scan with no failing space emits neither the warning nor a non-zero count."""
+    from connectors.producers.confluence import main as confluence_main
+
+    publisher = Mock()
+    publisher.publish = AsyncMock()
+    monkeypatch.setattr(confluence_main, "get_sync_cursor", AsyncMock(return_value=None))
+    monkeypatch.setattr(confluence_main, "set_sync_cursor", AsyncMock())
+    monkeypatch.setattr(
+        confluence_main,
+        "get_spaces",
+        AsyncMock(
+            return_value=[
+                {
+                    "key": "ENG",
+                    "name": "Engineering",
+                    "type": "global",
+                    "_links": {"webui": "/wiki/spaces/ENG"},
+                }
+            ]
+        ),
+    )
+    monkeypatch.setattr(confluence_main, "get_space_pages", AsyncMock(return_value=[]))
+    monkeypatch.setattr(confluence_main, "get_user_details_async", AsyncMock(return_value={}))
+
+    with caplog.at_level(logging.INFO):
+        published = await confluence_main.process_account(
+            publisher,
+            Mock(),
+            {"id": 7, "url": "https://example.atlassian.net", "email": "t@example.com",
+             "api_token": "x", "include_spaces": [], "exclude_spaces": [], "enabled": True},
+        )
+
+    assert published == 1  # only the Space signal
+    assert "Content fetch failed" not in caplog.text
+    assert "SpacesSkipped=0" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_process_account_counts_only_the_failed_space(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """With one good and one failing space, only the failing one is reported."""
+
+    def _pages_for(confluence: Mock, space_key: str, since_date: datetime) -> list[dict[str, object]]:
+        if space_key.upper() == "~BAD":
+            raise _http_error(403)
+        return []
+
+    from connectors.producers.confluence import main as confluence_main
+
+    publisher = Mock()
+    publisher.publish = AsyncMock()
+    monkeypatch.setattr(confluence_main, "get_sync_cursor", AsyncMock(return_value=None))
+    monkeypatch.setattr(confluence_main, "set_sync_cursor", AsyncMock())
+    monkeypatch.setattr(
+        confluence_main,
+        "get_spaces",
+        AsyncMock(
+            return_value=[
+                {"key": "GOOD", "name": "Good", "type": "global"},
+                {"key": "~BAD", "name": "Gone", "type": "personal"},
+            ]
+        ),
+    )
+    monkeypatch.setattr(confluence_main, "get_space_pages", AsyncMock(side_effect=_pages_for))
+    monkeypatch.setattr(confluence_main, "get_user_details_async", AsyncMock(return_value={}))
+
+    with caplog.at_level(logging.INFO):
+        published = await confluence_main.process_account(
+            publisher,
+            Mock(),
+            {"id": 7, "url": "https://example.atlassian.net", "email": "t@example.com",
+             "api_token": "x", "include_spaces": [], "exclude_spaces": [], "enabled": True},
+        )
+
+    assert published == 2  # two Space signals
+    assert "Content fetch failed for 1 of 2 space(s)" in caplog.text
+    assert "~BAD (HTTP 403)" in caplog.text
+    assert "GOOD (HTTP" not in caplog.text
+    assert "SpacesSkipped=1" in caplog.text
+    assert confluence_main.set_sync_cursor.await_count == 1
 
 
 # ═══════════════════════════════════════════════════════════════════════════

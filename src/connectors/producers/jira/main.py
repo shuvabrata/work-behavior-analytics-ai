@@ -58,6 +58,7 @@ from connectors.producers.jira.fetch_jira import (
     fetch_issues,
     fetch_projects,
     fetch_sprints_by_ids,
+    fetch_user,
 )
 from connectors.producers.jira.map_jira import (
     extract_mentions_from_texts,
@@ -69,6 +70,7 @@ from connectors.producers.jira.map_jira import (
     map_project,
     map_sprint,
 )
+from connectors.producers.person_tracking import PersonSeenTracker, looks_like_profile
 from connectors.producers.sync_cursor import get_sync_cursor, set_sync_cursor
 from connectors.producers.daemon_common import ScanResult, producer_main
 from connectors.producers.github.retry_with_backoff import WbaRetryTimeoutError
@@ -90,6 +92,10 @@ _JIRA_FETCH_COMMENTS = os.getenv("JIRA_FETCH_COMMENTS", "true").lower() in (
 _JIRA_COMMENT_FETCH_CONCURRENCY = int(
     os.getenv("JIRA_COMMENT_FETCH_CONCURRENCY", "5")
 )
+
+# Feature flag + concurrency for the end-of-scan lookup of mention-only users.
+_JIRA_LOOKUP_STUB_USERS = os.getenv("JIRA_LOOKUP_STUB_USERS", "true").lower() in ("true", "1", "yes")
+_JIRA_USER_LOOKUP_CONCURRENCY = int(os.getenv("JIRA_USER_LOOKUP_CONCURRENCY", "3"))
 
 
 def _truncate(value: Any) -> str:
@@ -789,7 +795,7 @@ async def publish_signals(
     """
     published: Dict[str, int] = {}
 
-    seen_persons: set[str] = set()
+    person_tracker = PersonSeenTracker()
 
     def _inc(entity_type: str) -> None:
         published[entity_type] = published.get(entity_type, 0) + 1
@@ -804,10 +810,17 @@ async def publish_signals(
     # Concurrency helpers
     # ------------------------------------------------------------------
 
-    # Guard for the shared ``seen_persons`` set under concurrent processing.
-    # All per-entity processing (which reads/writes ``seen_persons``) runs
-    # through this lock so the check-then-add is atomic at concurrency > 1.
-    _seen_lock = asyncio.Lock()
+    async def _emit_person(user_data: Dict[str, Any]) -> None:
+        """Publish a Person signal unless an equal-or-richer one already went out."""
+        account_id = user_data.get("account_id", "")
+        if not account_id:
+            return
+        is_profile = looks_like_profile(
+            account_id, user_data.get("display_name"), user_data.get("email")
+        )
+        if not person_tracker.claim(account_id, is_profile=is_profile):
+            return
+        await _pub(build_person_signal(user_data, jira_base_url))
 
     async def _process_entities(
         entity_items: List[Dict[str, Any]],
@@ -928,10 +941,6 @@ async def publish_signals(
             all_account_ids.add(m)
 
         for account_id in all_account_ids:
-            async with _seen_lock:
-                if account_id in seen_persons:
-                    continue
-                seen_persons.add(account_id)
             # Build a minimal Person signal from the accountId.
             # Full user data (displayName, email) is only available for
             # commenters; mentioned users get a stub. The stub carries the
@@ -958,7 +967,7 @@ async def publish_signals(
                         person_data = map_jira_user(raw_author)
                     break
 
-            await _pub(build_person_signal(person_data, jira_base_url))
+            await _emit_person(person_data)
 
         # Build and publish the entity signal
         signal = build_fn(
@@ -1012,10 +1021,7 @@ async def publish_signals(
             user_data = map_jira_user(reporter_raw)
             reporter_person_id = user_data.get("account_id", "")
             if reporter_person_id:
-                async with _seen_lock:
-                    if reporter_person_id not in seen_persons:
-                        seen_persons.add(reporter_person_id)
-                        await _pub(build_person_signal(user_data, jira_base_url))
+                await _emit_person(user_data)
 
         # Person: assignee
         assignee_person_id: Optional[str] = None
@@ -1024,10 +1030,7 @@ async def publish_signals(
             user_data = map_jira_user(assignee_raw)
             assignee_person_id = user_data.get("account_id", "")
             if assignee_person_id:
-                async with _seen_lock:
-                    if assignee_person_id not in seen_persons:
-                        seen_persons.add(assignee_person_id)
-                        await _pub(build_person_signal(user_data, jira_base_url))
+                await _emit_person(user_data)
 
         logger.debug(f"Processing initiative '{i_data.get('key')}': '{str(i_data.get('summary', ''))[:60]}'")
         initiative_items.append({
@@ -1076,10 +1079,7 @@ async def publish_signals(
             user_data = map_jira_user(reporter_raw)
             reporter_person_id = user_data.get("account_id", "")
             if reporter_person_id:
-                async with _seen_lock:
-                    if reporter_person_id not in seen_persons:
-                        seen_persons.add(reporter_person_id)
-                        await _pub(build_person_signal(user_data, jira_base_url))
+                await _emit_person(user_data)
 
         # Person: assignee
         assignee_person_id = None
@@ -1088,10 +1088,7 @@ async def publish_signals(
             user_data = map_jira_user(assignee_raw)
             assignee_person_id = user_data.get("account_id", "")
             if assignee_person_id:
-                async with _seen_lock:
-                    if assignee_person_id not in seen_persons:
-                        seen_persons.add(assignee_person_id)
-                        await _pub(build_person_signal(user_data, jira_base_url))
+                await _emit_person(user_data)
 
         team_id = f"jira_team_{e_data['team_value']}" if e_data.get("team_value") else None
 
@@ -1156,10 +1153,7 @@ async def publish_signals(
                 user_data = map_jira_user(assignee_raw)
                 assignee_person_id = user_data.get("account_id", "")
                 if assignee_person_id:
-                    async with _seen_lock:
-                        if assignee_person_id not in seen_persons:
-                            seen_persons.add(assignee_person_id)
-                            await _pub(build_person_signal(user_data, jira_base_url))
+                    await _emit_person(user_data)
 
             # Person: reporter
             reporter_person_id = None
@@ -1168,10 +1162,7 @@ async def publish_signals(
                 user_data = map_jira_user(reporter_raw)
                 reporter_person_id = user_data.get("account_id", "")
                 if reporter_person_id:
-                    async with _seen_lock:
-                        if reporter_person_id not in seen_persons:
-                            seen_persons.add(reporter_person_id)
-                            await _pub(build_person_signal(user_data, jira_base_url))
+                    await _emit_person(user_data)
 
             # Resolve parent epic
             parent_jira_id = i_data.get("parent_jira_id")
@@ -1236,6 +1227,51 @@ async def publish_signals(
     )
 
     logger.info(f"Issues done ({published.get('Issue', 0)})")
+    if _JIRA_LOOKUP_STUB_USERS:
+        pending = sorted(person_tracker.stub_only_ids())
+        if pending:
+            logger.info(f"Looking up {len(pending)} mention-only Jira users...")
+            semaphore = asyncio.Semaphore(max(1, _JIRA_USER_LOOKUP_CONCURRENCY))
+
+            resolved = 0
+
+            async def _lookup(account_id: str) -> None:
+                nonlocal resolved
+                async with semaphore:
+                    raw = await asyncio.to_thread(fetch_user, jira, account_id)
+                if not raw:
+                    logger.info(f"Jira user lookup returned nothing account_id={account_id}; keeping stub")
+                    return
+                user_data = map_jira_user({**raw, "accountId": raw.get("accountId") or account_id})
+                if user_data["account_id"] != account_id or not looks_like_profile(
+                    account_id, user_data.get("display_name"), user_data.get("email")
+                ):
+                    # nothing richer than the stub we already sent
+                    logger.info(
+                        f"Jira user lookup had no usable profile account_id={account_id}; keeping stub"
+                    )
+                    return
+                await _emit_person(user_data)
+                resolved += 1
+                # Log presence of an email, never its value (see plan 048 scope).
+                logger.info(
+                    f"Jira user lookup resolved account_id={account_id} "
+                    f"display_name={user_data.get('display_name')!r} "
+                    f"email_present={bool(user_data.get('email'))} "
+                    f"({resolved}/{len(pending)})"
+                )
+
+            # return_exceptions=True: a bare gather() raises on the first failure
+            # but leaves the other lookups running in worker threads, so they
+            # could publish after the caller has torn the publisher down.
+            # Wait for all of them, then re-raise the first error.
+            results = await asyncio.gather(
+                *(_lookup(a) for a in pending), return_exceptions=True
+            )
+            for result in results:
+                if isinstance(result, BaseException):
+                    raise result
+
     logger.info(f"Persons done ({published.get('Person', 0)})")
 
     return published

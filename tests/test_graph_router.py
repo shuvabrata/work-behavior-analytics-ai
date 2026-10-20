@@ -10,8 +10,6 @@ Run with: pytest tests/test_graph_router.py -v
 import pytest
 import httpx
 
-from app.settings import settings
-
 
 BASE_URL = "http://localhost:8000"
 EXECUTE_URL = "/api/v1/graph/execute"
@@ -31,10 +29,6 @@ def raw_execute_payload(query: str) -> dict:
 
 
 @pytest.mark.asyncio
-@pytest.mark.skipif(
-    not settings.NEO4J_ENABLED,
-    reason="Neo4j is not enabled (NEO4J_ENABLED=false)"
-)
 class TestGraphRouterEndpoints:
     """Integration tests for Graph API router endpoints."""
     
@@ -285,10 +279,6 @@ class TestGraphRouterValidation:
 
 
 @pytest.mark.asyncio
-@pytest.mark.skipif(
-    not settings.NEO4J_ENABLED,
-    reason="Neo4j is not enabled"
-)
 class TestGraphRouterErrorHandling:
     """Tests for error handling in router endpoints."""
     
@@ -350,26 +340,18 @@ class TestGraphRouterErrorHandling:
 class TestGraphRouterHealthCheckEdgeCases:
     """Tests for health check endpoint edge cases."""
     
-    async def test_health_check_when_neo4j_disabled(self, monkeypatch):
-        """Test health check when Neo4j is disabled."""
-        # This test would require mocking settings, skip if Neo4j is enabled
-        if settings.NEO4J_ENABLED:
-            pytest.skip("Neo4j is enabled, cannot test disabled state")
-        
+    async def test_health_check_reports_healthy(self):
+        """Health check reports a connected Neo4j."""
         async with httpx.AsyncClient(base_url=BASE_URL) as client:
             response = await client.get("/api/v1/graph/health")
-            
-            assert response.status_code == 503
+
+            assert response.status_code == 200
             data = response.json()
-            assert "detail" in data
-            assert "unavailable" in data["detail"]["status"].lower()
+            assert data["status"] == "healthy"
+            assert data["neo4j"] == "connected"
 
 
 @pytest.mark.asyncio
-@pytest.mark.skipif(
-    not settings.NEO4J_ENABLED,
-    reason="Neo4j is not enabled"
-)
 class TestGraphRouterComplexQueries:
     """Tests for complex query scenarios."""
     

@@ -85,10 +85,6 @@ def _to_datetime(val: object) -> datetime:
 # ── Tests ─────────────────────────────────────────────────────────────────────
 
 
-@pytest.mark.skipif(
-    not settings.NEO4J_ENABLED,
-    reason="Neo4j is not enabled (NEO4J_ENABLED=false)",
-)
 class TestTimestampValidity:
     """Validate that all timestamp properties are convertible to Python datetime."""
 

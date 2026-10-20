@@ -540,3 +540,31 @@ def fetch_comments(
         logger.error(f"Error fetching comments for {issue_id_or_key}: {e}")
         logger.exception(e)
         return []
+
+
+def fetch_user(
+    jira: Any,
+    account_id: str,
+    retry_timeout: int | None = None,
+) -> Dict[str, Any]:
+    """Fetch one Jira user via ``GET /rest/api/3/user?accountId=<id>``.
+
+    Returns the raw user dict (``accountId``, ``displayName``, and
+    ``emailAddress`` when the caller may see it), or ``{}`` if the user cannot
+    be read (deleted, not permitted, malformed response, non-retryable HTTP
+    error). ``WbaRetryTimeoutError`` is re-raised so the caller can leave the
+    sync cursor untouched, matching ``fetch_comments``.
+    """
+    try:
+        response = retry_with_backoff(
+            lambda: jira.get("rest/api/3/user", params={"accountId": account_id}),
+            retry_budget=retry_timeout,
+        )
+        if not isinstance(response, dict):
+            return {}
+        return response
+    except WbaRetryTimeoutError:
+        raise
+    except Exception as exc:  # pylint: disable=broad-exception-caught
+        logger.warning(f"Could not fetch Jira user {account_id}: {exc}")
+        return {}

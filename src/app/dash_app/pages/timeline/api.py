@@ -214,8 +214,7 @@ def fetch_node_properties(wba_ids: list[str]) -> dict[str, dict[str, Any]]:
     so the ``data`` dict's own ``wba_id`` must not be used as the key.
 
     Raises :class:`NodePropertiesError` on a transport error or a non-200
-    response, which includes the HTTP 500 the backend returns when
-    ``NEO4J_ENABLED`` is false.
+    response.
     """
     ids = [str(w) for w in wba_ids if w]
     if not ids:

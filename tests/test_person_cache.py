@@ -176,6 +176,13 @@ def test_merge_person_sets_name_when_real_name() -> None:
 def test_cache_hit_upgrades_person_with_real_name() -> None:
     """On a provider-cache hit, the incoming richer name should be merged."""
     session = MagicMock()
+
+    def run_side_effect(query: str, **_kwargs):
+        if "WHERE p.email = $email" in query:
+            return _SingleResult(None)
+        raise AssertionError(f"Unexpected query: {query}")
+
+    session.run.side_effect = run_side_effect
     cache = PersonCache()
     cache._provider_cache[("jira", "acc123")] = "confluence::Person::acc123"
 
@@ -242,3 +249,137 @@ def test_atlassian_account_cache_hit_remerges_richer_person() -> None:
     mock_merge_person.assert_called_once()
     person = mock_merge_person.call_args.args[1]
     assert person.name == "Lalika Doe"
+
+def _reroute_session(owner_id: str | None = "github::Person::alice") -> MagicMock:
+    """Session whose email lookup returns ``owner_id`` and everything else misses."""
+    session = MagicMock()
+
+    def run_side_effect(query: str, **_kwargs):
+        if "WHERE p.email = $email" in query:
+            return _SingleResult({"id": owner_id} if owner_id else None)
+        return _SingleResult(None)
+
+    session.run.side_effect = run_side_effect
+    return session
+
+
+def _two_calls(cache: PersonCache, session: MagicMock) -> tuple[str, str]:
+    first_id, _ = cache.get_or_create_person(
+        session, email=None, name="712020:abc",
+        provider="jira", external_id="712020:abc", account_id="712020:abc",
+    )
+    second_id, _ = cache.get_or_create_person(
+        session, email="alice@x.com", name="Alice",
+        provider="jira", external_id="712020:abc", account_id="712020:abc",
+    )
+    return first_id, second_id
+
+
+def test_provider_cache_hit_with_email_owned_by_other_person_reroutes() -> None:
+    cache = PersonCache()
+    session = _reroute_session()
+
+    with patch("connectors.commons.person_cache.merge_person"), \
+            patch("connectors.commons.person_cache.rehome_person") as mock_rehome:
+        first_id, second_id = _two_calls(cache, session)
+
+    assert first_id == "jira::Person::712020:abc"
+    assert second_id == "github::Person::alice"
+    mock_rehome.assert_called_once_with(session, "jira::Person::712020:abc", "github::Person::alice")
+
+
+def test_reroute_repoints_caches_and_third_call_needs_no_query() -> None:
+    cache = PersonCache()
+    session = _reroute_session()
+    with patch("connectors.commons.person_cache.merge_person"), \
+            patch("connectors.commons.person_cache.rehome_person"):
+        _two_calls(cache, session)
+        queries_before = cache.db_queries
+        third_id, _ = cache.get_or_create_person(
+            session, email="alice@x.com", name="Alice",
+            provider="jira", external_id="712020:abc", account_id="712020:abc",
+        )
+    assert third_id == "github::Person::alice"
+    assert cache.db_queries == queries_before
+    assert cache._provider_cache[("jira", "712020:abc")] == "github::Person::alice"
+    assert cache._atlassian_account_cache["712020:abc"] == "github::Person::alice"
+    assert cache._email_cache["alice@x.com"] == "github::Person::alice"
+
+
+def test_no_owner_merges_email_onto_cached_person_without_rehome() -> None:
+    cache = PersonCache()
+    session = _reroute_session(owner_id=None)
+    with patch("connectors.commons.person_cache.merge_person") as mock_merge, \
+            patch("connectors.commons.person_cache.rehome_person") as mock_rehome:
+        _, second_id = _two_calls(cache, session)
+    assert second_id == "jira::Person::712020:abc"
+    mock_rehome.assert_not_called()
+    assert mock_merge.call_args.args[1].email == "alice@x.com"
+    assert cache._email_cache["alice@x.com"] == "jira::Person::712020:abc"
+
+
+def test_rehome_failure_returns_cached_id_and_warns() -> None:
+    cache = PersonCache()
+    session = _reroute_session()
+    with patch("connectors.commons.person_cache.merge_person"), \
+            patch("connectors.commons.person_cache.rehome_person", side_effect=RuntimeError("boom")), \
+            patch("connectors.commons.person_cache.logger") as mock_logger:
+        _, second_id = _two_calls(cache, session)
+    assert second_id == "jira::Person::712020:abc"
+    mock_logger.warning.assert_called_once()
+    assert cache._provider_cache[("jira", "712020:abc")] == "jira::Person::712020:abc"
+
+
+def test_owner_is_cached_person_does_not_rehome() -> None:
+    cache = PersonCache()
+    session = _reroute_session(owner_id="jira::Person::712020:abc")
+    with patch("connectors.commons.person_cache.merge_person"), \
+            patch("connectors.commons.person_cache.rehome_person") as mock_rehome:
+        _, second_id = _two_calls(cache, session)
+    assert second_id == "jira::Person::712020:abc"
+    mock_rehome.assert_not_called()
+
+
+def test_repeated_hits_with_same_email_query_owner_at_most_once() -> None:
+    cache = PersonCache()
+    session = _reroute_session(owner_id=None)
+    with patch("connectors.commons.person_cache.merge_person"), \
+            patch("connectors.commons.person_cache.rehome_person"):
+        _two_calls(cache, session)
+        queries_before = cache.db_queries
+        cache.get_or_create_person(
+            session, email="alice@x.com", name="Alice",
+            provider="jira", external_id="712020:abc", account_id="712020:abc",
+        )
+    assert cache.db_queries == queries_before
+
+
+def test_pending_identity_mapping_is_repointed_on_reroute() -> None:
+    cache = PersonCache()
+    session = _reroute_session()
+    with patch("connectors.commons.person_cache.merge_person"), \
+            patch("connectors.commons.person_cache.rehome_person"):
+        cache.get_or_create_person(
+            session, email=None, name="712020:abc",
+            provider="jira", external_id="712020:abc", account_id="712020:abc",
+        )
+        cache.queue_identity_mapping(
+            "jira::Person::712020:abc", "jira::IdentityMapping::712020:abc",
+            "jira", "712020:abc", "", "2026-01-01T00:00:00Z",
+        )
+        cache.get_or_create_person(
+            session, email="alice@x.com", name="Alice",
+            provider="jira", external_id="712020:abc", account_id="712020:abc",
+        )
+    _identity, rel = cache._pending_identities["jira::IdentityMapping::712020:abc"]
+    assert rel.to_id == "github::Person::alice"
+    assert rel.from_id == "jira::IdentityMapping::712020:abc"
+
+
+def test_unique_constraint_failure_in_merge_is_logged_as_warning() -> None:
+    cache = PersonCache()
+    err = RuntimeError("Node(1) already exists with label `Person` and property `email`")
+    with patch("connectors.commons.person_cache.merge_person", side_effect=err), \
+            patch("connectors.commons.person_cache.logger") as mock_logger:
+        cache._try_merge_richer_person(MagicMock(), "jira::Person::x", "X", "a@x.com", None, None)
+    mock_logger.warning.assert_called_once()

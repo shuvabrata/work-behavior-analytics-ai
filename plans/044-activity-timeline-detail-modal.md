@@ -238,8 +238,8 @@ catalog editor's test callbacks already do it,
   list[GraphNode]`, `relationships`, `rawResults`, `isGraph: bool`,
   `resultCount`). `GraphNode` = `wba_id, elementId, labels, properties`.
 - It validates write-keywords via `validate_read_only_query` and maps
-  `RuntimeError → HTTP 500` (`router.py:68`). With `NEO4J_ENABLED=false`, the
-  service raises `RuntimeError` → **HTTP 500**, not an empty payload.
+  `RuntimeError → HTTP 500` (`router.py:68`). An unreachable Neo4j makes the
+  service raise `RuntimeError` → **HTTP 500**, not an empty payload.
 
 ### The view test modal (the size/shape to mirror)
 
@@ -338,7 +338,7 @@ and `service.py:246-249` special-cases Person lanes with exactly this hop.
 | 7b | **The lane's entity type is derived from the lane's WBA id, not sent as a field.** | A lane id *is* `{source}::{entity_type}::{id}` (`service.py::_fetch_lane`), and `build_grid_body` already threads that id into every card as `lane_wba_id`. The other side's type is derived the same way (5c), so both sides use one idiom and the API gains one field instead of two. |
 | 8 | **The Graph deep-link opens in a NEW TAB** and runs the 2-node subgraph. | Matches today's card behaviour (`target="_blank"`). The subgraph shows what the modal shows, including the edge. |
 | 9 | **The LANE is looked up by its own canonical WBA id — no `IdentityMapping` hop, no label. The SIBLING is looked up through the `MAPS_TO` hop when it is a Person.** | These are two different questions and the earlier draft of this row conflated them. **(a) The lane**: a lane can only come from the ES-backed typeahead, and every Person document in ES is keyed by the canonical Neo4j id (the ES sink refuses to create a shadow document), so a lane id IS the node id — this is the property `service.py:246-249` already relies on. **(b) The sibling**: it does *not* come from the typeahead — it is built from the raw `activity_actions` row (`target_entity_id` / `actor_entity_id`), which carries the **provider-scoped** id. When a Person arrived from a second provider, Neo4j reused the canonical node and the provider-scoped id was **never created** (`person_cache.py:125-151`; `elasticsearch_sink.index_signal_with_canonical_id`, `:154-192`). So `confluence::Person::557058:…` is **not** a node id when the node is `jira::Person::557058:…`. Measured on the live graph: **3 of 9** distinct real Person sibling ids miss, covering 58 of 382 Person-involving rows (~15%) — and on the lane `confluence::Page::26705923`, **11 of its 14 events** carry a `confluence::Person::…` sibling. Without the hop the right panel reads "Not found in graph" for a person who is in the graph, and the deep link returns `nodes=0 rels=0`. The hop is therefore a **second branch of the same single query**, and the result is keyed by the id **requested** — not by the `wba_id` that comes back, which legitimately differs in exactly this case. See 3a. |
-| 10 | **The modal always opens**; a missing node degrades to a per-panel "Not found in graph" note. Both missing → one empty state. `NEO4J_ENABLED=false` → one explanatory state reading *"Neo4j is not available — graph properties are disabled."* (see step 5e.3). | The header needs no network, so the click is never dead. The graph API answers **HTTP 500** when Neo4j is disabled, so the disabled case is a normal configuration and must not read as a generic failure. |
+| 10 | **The modal always opens**; a missing node degrades to a per-panel "Not found in graph" note. Both missing → one empty state. A failed properties fetch → the generic *"Could not load properties for this event."* (see step 5e.3). | The header needs no network, so the click is never dead. The graph API answers **HTTP 500** for any Cypher runtime error, so a 500 must not be diagnosed as a configuration problem. |
 | 11 | **History scope shows a ONE-panel modal** (no connector, no second fetch), header `<lane name> · Updated · <time>`. | `lane_role` is `None` and `related_id` is `None` in history — there is no other side. |
 | 12 | **Both panels show CURRENT Neo4j state**, with a muted "current state" caption. | Neo4j holds current state; `details` is empty for activity events, so an as-of-event panel is not available for the other side. One rule for both panels. |
 | 13 | **50/50 panel split, ONE shared body scroll.** | Nested scroll regions in a modal are awkward; keeping the panels aligned reads as one table pair. |
@@ -678,8 +678,7 @@ def fetch_node_properties(wba_ids: list[str]) -> dict[str, dict[str, Any]]:
     so the ``data`` dict's own ``wba_id`` must not be used as the key.
 
     Raises :class:`NodePropertiesError` on a transport error or a non-200
-    response, which includes the HTTP 500 the backend returns when
-    ``NEO4J_ENABLED`` is false.
+    response.
     """
     ids = [str(w) for w in wba_ids if w]
     if not ids:
@@ -1539,16 +1538,12 @@ def _detail_error(message: str) -> html.Div:
     )
 ```
 
-The `except` branch distinguishes the two causes the API can actually report:
+The `except` branch reports a single generic cause — the API answers HTTP 500
+for every Cypher runtime error, so a 500 cannot be diagnosed as a
+configuration problem:
 
 ```python
-    except NodePropertiesError as exc:
-        # With Neo4j disabled the graph API answers 500, so a plain "failed"
-        # would be a dead end for a normal, supported configuration.
-        if "500" in str(exc):
-            return _detail_error(
-                "Neo4j is not available — graph properties are disabled."
-            )
+    except NodePropertiesError:
         return _detail_error("Could not load properties for this event.")
 ```
 
@@ -1786,9 +1781,9 @@ is the fix from `90c9674`.
 - **`_detail_panel`** (Decision 16): the returned `html.Div` has
   `className == "timeline-detail-panel"` and its first child carries
   `className == "timeline-detail-caption"` with the "Current state" text.
-- **`_detail_error` copy**: a `NodePropertiesError("HTTP 500")` path
-  yields the "Neo4j is not available" sentence and a different error yields the
-  generic one.
+- **`_detail_error` copy**: a `NodePropertiesError` path — whether from an HTTP
+  500 or a transport failure — yields the generic "Could not load properties for
+  this event." sentence.
 - **`detail_payload` carries no nonce** (Decision 17): two payloads built from
   *identical* events compare **equal**, so a re-click on the same card does not
   re-fetch. Assert equality directly — that is the property the design now relies

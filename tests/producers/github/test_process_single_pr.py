@@ -19,6 +19,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from typing import Any
 
 from connectors.producers.github.process_single_pr import process_single_pr
+from connectors.producers.person_tracking import PersonSeenTracker
 
 _MODULE = "connectors.producers.github.process_single_pr"
 
@@ -143,7 +144,7 @@ async def test_commit_comments_fetched_concurrently():
             await process_single_pr(
                 pr=_make_pr(), repo=_make_repo(),
                 repo_data={"name": "test-repo"}, repo_owner="org",
-                seen_commits=set(), published_persons=set(), _pub=_pub,
+                seen_commits=set(), published_persons=PersonSeenTracker(), _pub=_pub,
             )
 
     assert mock_fcc.call_count == 3, \
@@ -187,7 +188,7 @@ async def test_commit_comments_partial_failure(caplog):
         await process_single_pr(
             pr=_make_pr(), repo=_make_repo(),
             repo_data={"name": "test-repo"}, repo_owner="org",
-            seen_commits=set(), published_persons=set(), _pub=_pub,
+            seen_commits=set(), published_persons=PersonSeenTracker(), _pub=_pub,
         )
 
     assert any("sha2" in r.message for r in caplog.records), \
@@ -251,7 +252,7 @@ async def test_commenter_user_data_deduplicated():
         await process_single_pr(
             pr=_make_pr(), repo=_make_repo(),
             repo_data={"name": "test-repo"}, repo_owner="org",
-            seen_commits=set(), published_persons=set(), _pub=_pub,
+            seen_commits=set(), published_persons=PersonSeenTracker(), _pub=_pub,
         )
 
     commenter_calls = [l for l in fetch_calls if l in ("alice", "bob", "carol")]
@@ -310,7 +311,7 @@ async def test_commenter_user_data_partial_failure(caplog):
             await process_single_pr(
                 pr=_make_pr(), repo=_make_repo(),
                 repo_data={"name": "test-repo"}, repo_owner="org",
-                seen_commits=set(), published_persons=set(), _pub=_pub,
+                seen_commits=set(), published_persons=PersonSeenTracker(), _pub=_pub,
             )
 
     # No warning — fetch_github_user returns fallback data instead of raising.

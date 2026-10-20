@@ -51,7 +51,7 @@ entity id happens to contain one of those words as a hyphen-delimited token.**
 ## Measured evidence
 
 All of the following were run on 2026-10-17 against the live local stack
-(`POST /api/v1/graph/execute`, `NEO4J_ENABLED=true`, 456 nodes), using the exact
+(`POST /api/v1/graph/execute`, 456 nodes), using the exact
 query shape the timeline deep link builds:
 
 ```cypher

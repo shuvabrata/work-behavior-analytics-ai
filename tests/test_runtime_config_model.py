@@ -44,7 +44,8 @@ class TestRuntimeConfigDefaults:
             ("GITHUB_MCP_ENABLED", False),
             ("ATLASSIAN_MCP_ENABLED", False),
             # ── System ────────────────────────────────────────────────
-            ("NEO4J_ENABLED", False),
+            ("NEO4J_AI_LOOKUP_ENABLED", True),
+            ("ELASTICSEARCH_AI_LOOKUP_ENABLED", True),
             # ── Connectors ────────────────────────────────────────────
             ("COMMIT_DAYS_LIMIT", 60),
             ("PULL_REQUEST_DAYS_LIMIT", 60),
@@ -76,7 +77,7 @@ class TestRuntimeConfigDefaults:
     @pytest.mark.unit
     def test_all_fields_present(self) -> None:
         """The model exposes the expected number of runtime-configurable fields."""
-        assert len(RuntimeConfig.model_fields) == 41
+        assert len(RuntimeConfig.model_fields) == 42
 
 
 class TestRuntimeConfigValidation:

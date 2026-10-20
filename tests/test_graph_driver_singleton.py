@@ -16,7 +16,7 @@ class TestNeo4jDriverSingleton:
     def _setup(self, monkeypatch):
         """Enable Neo4j and reset driver state before each test."""
         close_driver()  # ensure clean state from prior tests
-        monkeypatch.setattr(settings, "NEO4J_ENABLED", True)
+        monkeypatch.setattr(settings, "NEO4J_AI_LOOKUP_ENABLED", True)
         # Replace GraphDatabase in the query module with a mock class so that
         # _get_driver() hits the mock instead of the real C extension class.
         mock_graph_db = MagicMock()

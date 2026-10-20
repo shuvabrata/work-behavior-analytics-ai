@@ -712,6 +712,7 @@ async def process_account(
     total_published = 0
     entity_type_counts = {"Page": 0, "Blogpost": 0, "Person": 0, "Space": 0}
     account_ids: Set[str] = set()
+    skipped_spaces: list[tuple[str, int | None]] = []
     include_space_keys = {
         _normalize_space_key(space) for space in include_spaces if _normalize_space_key(space)
     }
@@ -750,6 +751,7 @@ async def process_account(
             # exhaustion is a different exception and still propagates.
             status = getattr(exc.response, "status_code", None)
             logger.warning(f"Skipping space {key}: content fetch failed (HTTP {status}): {exc}")
+            skipped_spaces.append((str(key), status))
             continue
         logger.info(f"Space {key}: processing {len(space_items)} content items")
         
@@ -799,6 +801,12 @@ async def process_account(
             if entity_type in entity_type_counts:
                 entity_type_counts[entity_type] += published_count
 
+    if skipped_spaces:
+        logger.warning(
+            f"Content fetch failed for {len(skipped_spaces)} of {len(spaces)} space(s) — their pages were NOT "
+            f"processed: {', '.join(f'{space_key} (HTTP {status})' for space_key, status in skipped_spaces)}"
+        )
+
     person_published = await _publish_person_signals(
         publisher,
         confluence,
@@ -811,7 +819,8 @@ async def process_account(
     await set_sync_cursor(_SOURCE, sync_resource_id, scan_started_at)
     logger.info(
         f"Published counts: Pages={entity_type_counts['Page']}, Blogposts={entity_type_counts['Blogpost']}, Spaces="
-        f"{entity_type_counts['Space']}, People={entity_type_counts['Person']}"
+        f"{entity_type_counts['Space']}, People={entity_type_counts['Person']}, "
+        f"SpacesSkipped={len(skipped_spaces)}"
     )
     return total_published
 

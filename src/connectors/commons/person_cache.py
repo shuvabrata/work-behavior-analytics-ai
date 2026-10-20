@@ -1,9 +1,11 @@
 """Session-level Person cache."""
 
+import dataclasses
 from typing import Any, Dict, Optional, Set, Tuple
 
 from common.activity_signal.wba_node_id import wba_format
 from common.logger import logger
+from connectors.commons.person_merge import rehome_person
 from connectors.neo4j_db.models import (
     IdentityMapping,
     Person,
@@ -99,6 +101,13 @@ class PersonCache:
             self.cache_hits += 1
             person_id = self._provider_cache[(provider, external_id)]
             logger.debug(f"    ⚡ Cache hit (provider) {provider}:{external_id} -> {person_id}")
+            if email and self._email_cache.get(email) != person_id:
+                rerouted = self._reroute_to_email_owner(
+                    session, person_id, email, name, url, observed_at
+                )
+                if rerouted is not None:
+                    return rerouted, False
+                self._email_cache[email] = person_id
             # Re-merge on cache hit so a signal carrying a RICHER display name or
             # email can upgrade an earlier stub that only had a raw account id
             # (previously the good name was silently discarded on a cache hit).
@@ -241,6 +250,61 @@ class PersonCache:
 
         return None
 
+    def _reroute_to_email_owner(
+        self,
+        session: Any,
+        stale_id: str,
+        email: str,
+        name: str,
+        url: Optional[str],
+        observed_at: Optional[str],
+    ) -> Optional[str]:
+        """Fold ``stale_id`` into the Person that already owns ``email``.
+
+        Returns the owner id after a successful reroute, or ``None`` when there
+        is no different owner (or the rehome failed) so the caller keeps the
+        cached person.
+        """
+        owner_id = self._email_cache.get(email)
+        if owner_id is None:
+            self.db_queries += 1
+            row = session.run(
+                "MATCH (p:Person) WHERE p.email = $email RETURN p.id AS id LIMIT 1",
+                email=email,
+            ).single()
+            owner_id = row["id"] if row else None
+        if owner_id is None or owner_id == stale_id:
+            return None
+
+        try:
+            rehome_person(session, stale_id, owner_id)
+        except Exception as exc:
+            logger.warning(
+                f"    ! Failed to rehome Person {stale_id} onto email owner {owner_id}: {exc}"
+            )
+            return None
+
+        for key, value in list(self._provider_cache.items()):
+            if value == stale_id:
+                self._provider_cache[key] = owner_id
+        for acc, value in list(self._atlassian_account_cache.items()):
+            if value == stale_id:
+                self._atlassian_account_cache[acc] = owner_id
+        for mail, value in list(self._email_cache.items()):
+            if value == stale_id:
+                self._email_cache[mail] = owner_id
+        self._email_cache[email] = owner_id
+        self._flushed_persons.discard(stale_id)
+        for identity_id, (identity, rel) in list(self._pending_identities.items()):
+            if rel.to_id == stale_id:
+                self._pending_identities[identity_id] = (
+                    identity,
+                    dataclasses.replace(rel, to_id=owner_id),
+                )
+        logger.info(f"    Rerouted Person {stale_id} onto email owner {owner_id} (email {email})")
+        self._try_merge_richer_person(session, owner_id, name, None, url, observed_at)
+        return owner_id
+
     def _try_merge_richer_person(
         self,
         session: Any,
@@ -272,7 +336,10 @@ class PersonCache:
                 person.set_last_observed_at(observed_at)
             merge_person(session, person)
         except Exception as exc:  # pragma: no cover - defensive
-            logger.debug(f"    ! Failed to upgrade Person {person_id} on cache hit: {exc}")
+            if "already exists with label" in str(exc):
+                logger.warning(f"    ! Failed to upgrade Person {person_id} on cache hit: {exc}")
+            else:
+                logger.debug(f"    ! Failed to upgrade Person {person_id} on cache hit: {exc}")
 
     def queue_identity_mapping(
         self,

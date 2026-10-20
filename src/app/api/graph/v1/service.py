@@ -355,7 +355,7 @@ def get_collaboration_network(
         CollaborationNetworkResponse with elements and summary stats.
 
     Raises:
-        RuntimeError: If Neo4j is not enabled or query execution fails.
+        RuntimeError: If the Neo4j query execution fails.
         ValueError: If the query returns no data.
     """
     config = config or CollaborationNetworkConfig()

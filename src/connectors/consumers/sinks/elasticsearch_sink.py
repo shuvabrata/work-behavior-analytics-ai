@@ -10,8 +10,6 @@ Design constraints
 * The ES write is **non-fatal**.  Any exception is logged at WARNING level
   and the caller continues.  The caller must NOT nack the RabbitMQ message
   on an ES failure.
-* When ``ELASTICSEARCH_ENABLED`` is ``false`` (or unset) this module is a
-  no-op; the function returns immediately without touching Elasticsearch.
 * Relationships are stored as a list of WBA canonical key strings
   (``"{source}::{entity_type}::{id}"``), not as nested objects.
 * All attribute fields are flattened to the top level of the document.
@@ -195,21 +193,12 @@ def index_signal_with_canonical_id(
 def build_es_client() -> Elasticsearch | None:
     """Build an Elasticsearch client from environment variables.
 
-    Returns ``None`` when ``ELASTICSEARCH_ENABLED`` is falsy so the consumer
-    can skip ES writes without any extra branch logic.
-
     Environment variables
     ---------------------
-    ELASTICSEARCH_ENABLED   Must be ``true`` / ``1`` / ``yes`` (case-insensitive)
-                            to enable the sink.
     ELASTICSEARCH_URL       Base URL.  Default: ``http://localhost:9200``.
     ELASTIC_PASSWORD        Password for the ``elastic`` built-in user.
                             Leave empty when security is disabled.
     """
-    enabled = os.environ.get("ELASTICSEARCH_ENABLED", "").strip().lower()
-    if enabled not in ("1", "true", "yes"):
-        return None
-
     url = os.environ.get("ELASTICSEARCH_URL", "http://localhost:9200")
     password = os.environ.get("ELASTIC_PASSWORD", "")
     if password:

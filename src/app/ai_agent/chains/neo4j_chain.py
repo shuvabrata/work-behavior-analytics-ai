@@ -44,7 +44,7 @@ def get_neo4j_graph() -> Any:
         Neo4jGraph instance or None if connection fails or disabled
     """
     global _neo4j_graph
-    if _neo4j_graph is None and settings.NEO4J_ENABLED:
+    if _neo4j_graph is None and settings.NEO4J_AI_LOOKUP_ENABLED:
         try:
             _neo4j_graph = Neo4jGraph(
                 url=settings.NEO4J_URI,
@@ -397,7 +397,7 @@ def augment_message_with_neo4j(
         from app.ai_agent.providers import get_provider
         provider = get_provider()
         
-    if not settings.NEO4J_ENABLED:
+    if not settings.NEO4J_AI_LOOKUP_ENABLED:
         return None
     
     # Check if query is relevant

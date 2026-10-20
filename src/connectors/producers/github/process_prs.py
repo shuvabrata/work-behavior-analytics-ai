@@ -10,6 +10,7 @@ from common.logger import logger
 from connectors.producers.github.fetch_github import fetch_pull_requests_direct, resolve_prs_since_date
 from connectors.producers.github.process_single_pr import process_single_pr
 from connectors.producers.github.retry_with_backoff import WbaRetryTimeoutError
+from connectors.producers.person_tracking import PersonSeenTracker
 
 
 async def process_prs(
@@ -20,7 +21,7 @@ async def process_prs(
     last_synced_at: Optional[datetime],
     published: Dict[str, int],
     seen_commits: Set[str],
-    published_persons: Set[str],
+    published_persons: PersonSeenTracker,
     pub_callback: Callable[[Optional[ActivitySignal]], Awaitable[None]],
 ) -> None:
     """Fetch pull requests for *repo* and publish PullRequest and related signals."""

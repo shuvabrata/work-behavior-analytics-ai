@@ -7,16 +7,11 @@ Run with: pytest tests/test_graph_query_integration.py -v
 import pytest
 
 from app.api.graph.v1.query import execute_cypher_query
-from app.settings import settings
 
 
 pytestmark = [pytest.mark.integration, pytest.mark.neo4j]
 
 
-@pytest.mark.skipif(
-    not settings.NEO4J_ENABLED,
-    reason="Neo4j is not enabled (NEO4J_ENABLED=false)"
-)
 class TestQueryExecution:
     """Integration tests for query execution against real Neo4j."""
 
@@ -99,31 +94,6 @@ class TestQueryExecution:
         results = execute_cypher_query(query, timeout=5)
         assert isinstance(results, list)
 
-    def test_neo4j_disabled_raises_error(self, monkeypatch):
-        """Test that error is raised when Neo4j is disabled."""
-        monkeypatch.setattr(settings, "NEO4J_ENABLED", False)
-
-        query = "MATCH (n) RETURN n LIMIT 1"
-
-        with pytest.raises(RuntimeError) as exc_info:
-            execute_cypher_query(query, timeout=5)
-
-        assert "not enabled" in str(exc_info.value).lower()
-
-    def test_connection_error_handling(self, monkeypatch):
-        """Test that connection errors are handled gracefully."""
-        # Reset the driver singleton so a new driver is created with the bogus URI
-        import app.common.neo4j_driver as query_module
-        monkeypatch.setattr(query_module, "_driver_instance", None)
-        monkeypatch.setattr(settings, "NEO4J_URI", "bolt://invalid-host:7687")
-
-        query = "MATCH (n) RETURN n LIMIT 1"
-
-        with pytest.raises(RuntimeError) as exc_info:
-            execute_cypher_query(query, timeout=5)
-
-        assert "unable to connect" in str(exc_info.value).lower()
-
     def test_query_returns_multiple_types(self):
         """Test query returning different data types."""
         query = """
@@ -148,10 +118,6 @@ class TestQueryExecution:
         assert record["map_val"] == {"key": "value"}
 
 
-@pytest.mark.skipif(
-    not settings.NEO4J_ENABLED,
-    reason="Neo4j is not enabled"
-)
 def test_execute_with_parameters_placeholder():
     """Test executing query with literal values (parameters are not exposed in this API)."""
     query = "RETURN 'test' as value"

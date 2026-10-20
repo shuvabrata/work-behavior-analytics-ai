@@ -39,10 +39,6 @@ pytestmark = [
     pytest.mark.integration,
     pytest.mark.elasticsearch,
     pytest.mark.asyncio,
-    pytest.mark.skipif(
-        not settings.ELASTICSEARCH_ENABLED,
-        reason="Elasticsearch is not enabled (ELASTICSEARCH_ENABLED=false)",
-    ),
 ]
 
 # ---------------------------------------------------------------------------

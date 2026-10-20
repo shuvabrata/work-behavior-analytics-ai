@@ -13,12 +13,13 @@ from __future__ import annotations
 import asyncio
 import os
 from datetime import datetime, timezone
-from typing import Any, Awaitable, Callable, Dict, List, Optional, Set
+from typing import Any, Awaitable, Callable, Dict, List, Optional
 
 from common.activity_signal.models import ActivitySignal
 from common.logger import logger
 
 from connectors.producers.github.build_issue_signal import build_issue_signal
+from connectors.producers.person_tracking import PersonSeenTracker, looks_like_profile
 from connectors.producers.github.build_person_signal import build_person_signal
 from connectors.producers.github.fetch_github import (
     fetch_issue_comments,
@@ -62,7 +63,7 @@ async def process_issues(
     full_name: str,
     last_synced_at: Optional[datetime],
     published: Dict[str, int],
-    seen_persons: Set[str],
+    seen_persons: PersonSeenTracker,
     pub_callback: Callable[[Optional[ActivitySignal]], Awaitable[None]],
     github_obj: Optional[Any] = None,
 ) -> None:
@@ -75,7 +76,7 @@ async def process_issues(
         full_name: Repository full name (e.g. ``"owner/repo"``).
         last_synced_at: Last successful sync timestamp, or ``None`` for first run.
         published: Dict tracking published signal counts by entity_type.
-        seen_persons: Set of person logins already emitted in this sync run.
+        seen_persons: Tracker of Person signals already emitted in this sync run.
         pub_callback: Async callback for publishing signals.
         github_obj: Optional PyGithub ``Github`` client for Search API. If not
             provided, falls back to ``fetch_issues_direct``.
@@ -159,7 +160,7 @@ async def _process_single_issue(
     issue: Any,
     repo_data: Dict[str, Any],
     full_name: str,
-    seen_persons: Set[str],
+    seen_persons: PersonSeenTracker,
     pub_callback: Callable[[Optional[ActivitySignal]], Awaitable[None]],
 ) -> None:
     """Process a single issue: fetch comments, parse mentions/refs, build, publish."""
@@ -232,10 +233,9 @@ async def _process_single_issue(
     all_person_logins.extend(commenter_users.keys())
 
     for login in all_person_logins:
-        if login in seen_persons:
-            logger.debug(f"Person '{login}' already seen, skipping Person signal")
+        if seen_persons.has_profile(login):
+            logger.info(f"Person skipped (profile already published) login={login} source=issue_related")
             continue
-        seen_persons.add(login)
 
         # Fetch full user data for the Person signal
         user_obj = commenter_users.get(login)
@@ -246,6 +246,15 @@ async def _process_single_issue(
         else:
             person_data = await asyncio.to_thread(fetch_github_user, user_obj)
 
+        is_profile = looks_like_profile(login, person_data.get("name"), person_data.get("email"))
+        kind = "profile" if is_profile else "stub"
+        if not seen_persons.claim(login, is_profile=is_profile):
+            logger.info(f"Person skipped (already published) kind={kind} login={login} source=issue_related")
+            continue
+        logger.info(
+            f"Person published kind={kind} login={login} source=issue_related "
+            f"name={person_data.get('name')!r} email_present={bool(person_data.get('email'))}"
+        )
         logger.debug(
             f"[person:issue_related] login={login!r}  name={person_data.get('name')!r}  email="
             f"{person_data.get('email')!r}  issue=#{getattr(issue, 'number', '?')}"

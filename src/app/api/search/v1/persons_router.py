@@ -13,7 +13,6 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
 from common.logger import logger
-from app.settings import settings
 from .model import SearchRequest
 from . import service
 
@@ -95,10 +94,6 @@ async def search_persons(
 
     Typical use: catalog parameter pickers for person-to-person queries.
     """
-    if not settings.ELASTICSEARCH_ENABLED:
-        logger.debug("[PersonSearch] Elasticsearch disabled — returning empty suggestions")
-        return PersonSuggestResponse(results=[])
-
     request = SearchRequest(
         q=q,
         entity_type="Person",

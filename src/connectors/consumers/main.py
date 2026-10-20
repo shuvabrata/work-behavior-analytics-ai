@@ -12,7 +12,6 @@ RABBITMQ_URL         AMQP connection URL (default: ``amqp://guest:guest@localhos
 NEO4J_URI            Neo4j Bolt URI (default: ``bolt://localhost:7687``)
 NEO4J_USERNAME       Neo4j username (default: ``neo4j``)
 NEO4J_PASSWORD       Neo4j password (default: ``password``)
-ELASTICSEARCH_ENABLED  Set to ``true`` to enable the Elasticsearch sink.
 ELASTICSEARCH_URL    Elasticsearch base URL (default: ``http://localhost:9200``)
 ELASTIC_PASSWORD     Elasticsearch password (leave empty when security is off).
 

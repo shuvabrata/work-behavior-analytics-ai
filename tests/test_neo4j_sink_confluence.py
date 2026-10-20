@@ -264,12 +264,12 @@ def test_upsert_person_signal_with_person_cache_reuses_existing_jira_person_by_a
     with patch("connectors.commons.person_cache.merge_person") as mock_merge_person, patch(
         "connectors.commons.person_cache.merge_identity_mapping"
     ) as mock_merge_identity_mapping, patch(
-        "connectors.consumers.sinks.neo4j_sink._rehome_person_stub"
-    ) as mock_rehome_person_stub:
+        "connectors.consumers.sinks.neo4j_sink.rehome_person"
+    ) as mock_rehome_person:
         canonical_id = upsert_signal(session, signal, person_cache=person_cache)
 
     assert canonical_id == "jira::Person::acc123"
-    mock_rehome_person_stub.assert_called_once_with(
+    mock_rehome_person.assert_called_once_with(
         session,
         "confluence::Person::acc123",
         "jira::Person::acc123",
@@ -292,8 +292,8 @@ class _DataResult:
         return self._rows
 
 
-def test_rehome_person_stub_moves_relationships_and_deletes_stale_node() -> None:
-    from connectors.consumers.sinks.neo4j_sink import _rehome_person_stub
+def test_rehome_person_moves_relationships_and_deletes_stale_node() -> None:
+    from connectors.commons.person_merge import rehome_person
 
     session = MagicMock()
 
@@ -324,8 +324,8 @@ def test_rehome_person_stub_moves_relationships_and_deletes_stale_node() -> None
 
     session.run.side_effect = run_side_effect
 
-    with patch("connectors.consumers.sinks.neo4j_sink.merge_relationship") as mock_merge_relationship:
-        _rehome_person_stub(session, "confluence::Person::acc123", "jira::Person::acc123")
+    with patch("connectors.commons.person_merge.merge_relationship") as mock_merge_relationship:
+        rehome_person(session, "confluence::Person::acc123", "jira::Person::acc123")
 
     assert mock_merge_relationship.call_count == 2
     outgoing_rel = mock_merge_relationship.call_args_list[0].args[1]
@@ -356,7 +356,7 @@ def test_handle_person_github_provider_kwargs() -> None:
     person_cache = MagicMock(spec=PersonCache)
     person_cache.get_or_create_person.return_value = ("github::Person::alice", False)
 
-    with patch("connectors.consumers.sinks.neo4j_sink._rehome_person_stub") as mock_rehome:
+    with patch("connectors.consumers.sinks.neo4j_sink.rehome_person") as mock_rehome:
         canonical_id = upsert_signal(session, signal, person_cache=person_cache)
 
     assert canonical_id == "github::Person::alice"
@@ -392,7 +392,7 @@ def test_handle_person_jira_provider_kwargs() -> None:
     person_cache = MagicMock(spec=PersonCache)
     person_cache.get_or_create_person.return_value = ("jira::Person::bob123", False)
 
-    with patch("connectors.consumers.sinks.neo4j_sink._rehome_person_stub") as mock_rehome:
+    with patch("connectors.consumers.sinks.neo4j_sink.rehome_person") as mock_rehome:
         canonical_id = upsert_signal(session, signal, person_cache=person_cache)
 
     assert canonical_id == "jira::Person::bob123"
@@ -429,7 +429,7 @@ def test_handle_person_confluence_provider_kwargs() -> None:
     person_cache = MagicMock(spec=PersonCache)
     person_cache.get_or_create_person.return_value = ("confluence::Person::carol456", False)
 
-    with patch("connectors.consumers.sinks.neo4j_sink._rehome_person_stub") as mock_rehome:
+    with patch("connectors.consumers.sinks.neo4j_sink.rehome_person") as mock_rehome:
         canonical_id = upsert_signal(session, signal, person_cache=person_cache)
 
     assert canonical_id == "confluence::Person::carol456"
@@ -451,7 +451,7 @@ def test_handle_person_confluence_provider_kwargs() -> None:
 
 
 def test_handle_person_dedup_calls_rehome() -> None:
-    """When get_or_create_person returns a different canonical id, _rehome_person_stub is called."""
+    """When get_or_create_person returns a different canonical id, rehome_person is called."""
     session = MagicMock()
     signal = _signal(
         "confluence",
@@ -466,7 +466,7 @@ def test_handle_person_dedup_calls_rehome() -> None:
     # Return a Jira person id — different from confluence::Person::acc123
     person_cache.get_or_create_person.return_value = ("jira::Person::acc123", False)
 
-    with patch("connectors.consumers.sinks.neo4j_sink._rehome_person_stub") as mock_rehome:
+    with patch("connectors.consumers.sinks.neo4j_sink.rehome_person") as mock_rehome:
         canonical_id = upsert_signal(session, signal, person_cache=person_cache)
 
     assert canonical_id == "jira::Person::acc123"

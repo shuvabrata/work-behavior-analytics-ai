@@ -41,8 +41,8 @@ async def _collect(user_message: str, history=None) -> tuple[str | dict, list]:
 @pytest.mark.asyncio
 async def test_history_passed_to_neo4j_chain(monkeypatch):
     """Neo4j chain receives conversation_history kwarg."""
-    monkeypatch.setattr(settings, "NEO4J_ENABLED", True)
-    monkeypatch.setattr(settings, "ELASTICSEARCH_ENABLED", False)
+    monkeypatch.setattr(settings, "NEO4J_AI_LOOKUP_ENABLED", True)
+    monkeypatch.setattr(settings, "ELASTICSEARCH_AI_LOOKUP_ENABLED", False)
 
     received: dict = {}
 
@@ -65,8 +65,8 @@ async def test_history_passed_to_neo4j_chain(monkeypatch):
 @pytest.mark.asyncio
 async def test_history_passed_to_mcp_chain(monkeypatch):
     """MCP chain receives conversation_history kwarg."""
-    monkeypatch.setattr(settings, "NEO4J_ENABLED", False)
-    monkeypatch.setattr(settings, "ELASTICSEARCH_ENABLED", False)
+    monkeypatch.setattr(settings, "NEO4J_AI_LOOKUP_ENABLED", False)
+    monkeypatch.setattr(settings, "ELASTICSEARCH_AI_LOOKUP_ENABLED", False)
 
     received: dict = {}
 
@@ -85,8 +85,8 @@ async def test_history_passed_to_mcp_chain(monkeypatch):
 @pytest.mark.asyncio
 async def test_history_passed_to_es_chain(monkeypatch):
     """ES chain receives conversation_history kwarg."""
-    monkeypatch.setattr(settings, "NEO4J_ENABLED", False)
-    monkeypatch.setattr(settings, "ELASTICSEARCH_ENABLED", True)
+    monkeypatch.setattr(settings, "NEO4J_AI_LOOKUP_ENABLED", False)
+    monkeypatch.setattr(settings, "ELASTICSEARCH_AI_LOOKUP_ENABLED", True)
 
     received: dict = {}
 
@@ -109,8 +109,8 @@ async def test_history_passed_to_es_chain(monkeypatch):
 @pytest.mark.asyncio
 async def test_none_history_passed_when_omitted(monkeypatch):
     """When no history is provided, None is passed to all chains."""
-    monkeypatch.setattr(settings, "NEO4J_ENABLED", False)
-    monkeypatch.setattr(settings, "ELASTICSEARCH_ENABLED", False)
+    monkeypatch.setattr(settings, "NEO4J_AI_LOOKUP_ENABLED", False)
+    monkeypatch.setattr(settings, "ELASTICSEARCH_AI_LOOKUP_ENABLED", False)
 
     received: dict = {}
 
@@ -132,8 +132,8 @@ async def test_none_history_passed_when_omitted(monkeypatch):
 @pytest.mark.asyncio
 async def test_es_applied_envelope_added_to_sources(monkeypatch):
     """When ES chain fires (applied=True), sources_used contains an ES entry."""
-    monkeypatch.setattr(settings, "NEO4J_ENABLED", False)
-    monkeypatch.setattr(settings, "ELASTICSEARCH_ENABLED", True)
+    monkeypatch.setattr(settings, "NEO4J_AI_LOOKUP_ENABLED", False)
+    monkeypatch.setattr(settings, "ELASTICSEARCH_AI_LOOKUP_ENABLED", True)
 
     async def _es_stub(msg, provider=None, conversation_history=None):
         yield {
@@ -164,8 +164,8 @@ async def test_es_applied_envelope_added_to_sources(monkeypatch):
 @pytest.mark.asyncio
 async def test_es_not_applied_envelope_recorded_in_sources(monkeypatch):
     """When ES chain does not fire, sources_used records it as not applied."""
-    monkeypatch.setattr(settings, "NEO4J_ENABLED", False)
-    monkeypatch.setattr(settings, "ELASTICSEARCH_ENABLED", True)
+    monkeypatch.setattr(settings, "NEO4J_AI_LOOKUP_ENABLED", False)
+    monkeypatch.setattr(settings, "ELASTICSEARCH_AI_LOOKUP_ENABLED", True)
 
     async def _es_stub(msg, provider=None, conversation_history=None):
         yield {"type": "augmented_message", "content": {"source": "elasticsearch", "applied": False, "context": ""}}
@@ -186,8 +186,8 @@ async def test_es_not_applied_envelope_recorded_in_sources(monkeypatch):
 @pytest.mark.asyncio
 async def test_es_context_included_in_composed_message(monkeypatch):
     """ES context block appears in the final composed message."""
-    monkeypatch.setattr(settings, "NEO4J_ENABLED", False)
-    monkeypatch.setattr(settings, "ELASTICSEARCH_ENABLED", True)
+    monkeypatch.setattr(settings, "NEO4J_AI_LOOKUP_ENABLED", False)
+    monkeypatch.setattr(settings, "ELASTICSEARCH_AI_LOOKUP_ENABLED", True)
 
     async def _es_stub(msg, provider=None, conversation_history=None):
         yield {
@@ -216,9 +216,9 @@ async def test_es_context_included_in_composed_message(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_es_disabled_block_is_skipped(monkeypatch):
-    """When ELASTICSEARCH_ENABLED=false, the ES block is not called."""
-    monkeypatch.setattr(settings, "NEO4J_ENABLED", False)
-    monkeypatch.setattr(settings, "ELASTICSEARCH_ENABLED", False)
+    """When ELASTICSEARCH_AI_LOOKUP_ENABLED=false, the ES block is not called."""
+    monkeypatch.setattr(settings, "NEO4J_AI_LOOKUP_ENABLED", False)
+    monkeypatch.setattr(settings, "ELASTICSEARCH_AI_LOOKUP_ENABLED", False)
 
     called = {"es": False}
 
@@ -240,8 +240,8 @@ async def test_es_disabled_block_is_skipped(monkeypatch):
 @pytest.mark.asyncio
 async def test_neo4j_only_special_case_preserved_with_es_disabled(monkeypatch):
     """The existing Neo4j-only early-return path is not broken by the ES block."""
-    monkeypatch.setattr(settings, "NEO4J_ENABLED", True)
-    monkeypatch.setattr(settings, "ELASTICSEARCH_ENABLED", False)
+    monkeypatch.setattr(settings, "NEO4J_AI_LOOKUP_ENABLED", True)
+    monkeypatch.setattr(settings, "ELASTICSEARCH_AI_LOOKUP_ENABLED", False)
 
     async def _neo4j_stub(msg, provider=None, conversation_history=None):
         yield {"type": "augmented_message", "content": {"source": "neo4j", "applied": True, "context": "neo4j-only-result"}}
@@ -262,8 +262,8 @@ async def test_neo4j_only_special_case_preserved_with_es_disabled(monkeypatch):
 @pytest.mark.asyncio
 async def test_neo4j_and_es_both_applied_compose_correctly(monkeypatch):
     """When both Neo4j and ES fire, both contexts appear in the composed message."""
-    monkeypatch.setattr(settings, "NEO4J_ENABLED", True)
-    monkeypatch.setattr(settings, "ELASTICSEARCH_ENABLED", True)
+    monkeypatch.setattr(settings, "NEO4J_AI_LOOKUP_ENABLED", True)
+    monkeypatch.setattr(settings, "ELASTICSEARCH_AI_LOOKUP_ENABLED", True)
 
     async def _neo4j_stub(msg, provider=None, conversation_history=None):
         yield {"type": "augmented_message", "content": {"source": "neo4j", "applied": True, "context": "neo4j graph context"}}

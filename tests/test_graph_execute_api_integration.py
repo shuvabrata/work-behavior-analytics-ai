@@ -1,8 +1,7 @@
 """Live integration tests for the unified graph execution endpoint.
 
 These tests call /api/v1/graph/execute through the mounted FastAPI app and
-execute against Neo4j. They require NEO4J_ENABLED=true and a reachable Neo4j
-instance.
+execute against Neo4j. They require a reachable Neo4j instance.
 """
 
 from __future__ import annotations
@@ -13,17 +12,12 @@ import httpx
 import pytest
 
 from app.main import app
-from app.settings import settings
 
 
 pytestmark = [
     pytest.mark.integration,
     pytest.mark.neo4j,
     pytest.mark.asyncio,
-    pytest.mark.skipif(
-        not settings.NEO4J_ENABLED,
-        reason="Neo4j is not enabled (NEO4J_ENABLED=false)",
-    ),
 ]
 
 

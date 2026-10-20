@@ -319,8 +319,8 @@ class TestGenerateSearchRequest:
 
 @pytest.mark.asyncio
 async def test_stream_returns_not_applied_when_es_disabled(monkeypatch):
-    """Chain is a no-op when ELASTICSEARCH_ENABLED=false."""
-    monkeypatch.setattr(settings, "ELASTICSEARCH_ENABLED", False)
+    """Chain is a no-op when ELASTICSEARCH_AI_LOOKUP_ENABLED=false."""
+    monkeypatch.setattr(settings, "ELASTICSEARCH_AI_LOOKUP_ENABLED", False)
     from app.ai_agent.chains import elasticsearch_chain as ec
 
     events = []
@@ -333,7 +333,7 @@ async def test_stream_returns_not_applied_when_es_disabled(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_stream_not_applied_when_not_relevant(monkeypatch):
-    monkeypatch.setattr(settings, "ELASTICSEARCH_ENABLED", True)
+    monkeypatch.setattr(settings, "ELASTICSEARCH_AI_LOOKUP_ENABLED", True)
     from app.ai_agent.chains import elasticsearch_chain as ec
 
     monkeypatch.setattr(ec, "check_es_relevance", lambda *_a, **_kw: False)
@@ -350,7 +350,7 @@ async def test_stream_not_applied_when_not_relevant(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_stream_not_applied_when_query_generation_returns_none(monkeypatch):
-    monkeypatch.setattr(settings, "ELASTICSEARCH_ENABLED", True)
+    monkeypatch.setattr(settings, "ELASTICSEARCH_AI_LOOKUP_ENABLED", True)
     from app.ai_agent.chains import elasticsearch_chain as ec
 
     monkeypatch.setattr(ec, "check_es_relevance", lambda *_a, **_kw: True)
@@ -368,7 +368,7 @@ async def test_stream_not_applied_when_query_generation_returns_none(monkeypatch
 
 @pytest.mark.asyncio
 async def test_stream_not_applied_when_zero_results(monkeypatch):
-    monkeypatch.setattr(settings, "ELASTICSEARCH_ENABLED", True)
+    monkeypatch.setattr(settings, "ELASTICSEARCH_AI_LOOKUP_ENABLED", True)
     from app.ai_agent.chains import elasticsearch_chain as ec
 
     monkeypatch.setattr(ec, "check_es_relevance", lambda *_a, **_kw: True)
@@ -388,7 +388,7 @@ async def test_stream_not_applied_when_zero_results(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_stream_applied_with_results(monkeypatch):
-    monkeypatch.setattr(settings, "ELASTICSEARCH_ENABLED", True)
+    monkeypatch.setattr(settings, "ELASTICSEARCH_AI_LOOKUP_ENABLED", True)
     from app.ai_agent.chains import elasticsearch_chain as ec
 
     monkeypatch.setattr(ec, "check_es_relevance", lambda *_a, **_kw: True)
@@ -417,7 +417,7 @@ async def test_stream_applied_with_results(monkeypatch):
 @pytest.mark.asyncio
 async def test_stream_always_emits_thinking_end(monkeypatch):
     """thinking_end must be emitted on every code path."""
-    monkeypatch.setattr(settings, "ELASTICSEARCH_ENABLED", True)
+    monkeypatch.setattr(settings, "ELASTICSEARCH_AI_LOOKUP_ENABLED", True)
     from app.ai_agent.chains import elasticsearch_chain as ec
 
     monkeypatch.setattr(ec, "check_es_relevance", lambda *_a, **_kw: False)

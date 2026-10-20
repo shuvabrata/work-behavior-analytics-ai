@@ -14,16 +14,11 @@ Run with::
 import pytest
 
 from app.api.graph.v1.query import execute_cypher_query
-from app.settings import settings
 
 
 pytestmark = [pytest.mark.integration, pytest.mark.neo4j]
 
 
-@pytest.mark.skipif(
-    not settings.NEO4J_ENABLED,
-    reason="Neo4j is not enabled (NEO4J_ENABLED=false)",
-)
 class TestPersonIntegrity:
     """Data-integrity checks for Person nodes in Neo4j."""
 

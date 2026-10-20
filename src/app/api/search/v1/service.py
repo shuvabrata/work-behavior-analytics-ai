@@ -215,10 +215,6 @@ def search_in_graph(request: SearchRequest, graph_wba_ids: list[str]) -> SearchR
     if not graph_wba_ids:
         return SearchResponse(total=0, page=1, page_size=0, results=[])
 
-    if not settings.ELASTICSEARCH_ENABLED:
-        logger.debug("[Spotlight] Elasticsearch is disabled — returning empty response")
-        return SearchResponse(total=0, page=1, page_size=0, results=[])
-
     client = _build_client()
     body = _build_query_body(request)
 
@@ -257,13 +253,8 @@ def search_in_graph(request: SearchRequest, graph_wba_ids: list[str]) -> SearchR
 def search(request: SearchRequest) -> SearchResponse:
     """Execute a search against Elasticsearch and return a ``SearchResponse``.
 
-    Returns an empty response (total=0) when Elasticsearch is disabled or
-    when the target index does not exist.
+    Returns an empty response (total=0) when the target index does not exist.
     """
-    if not settings.ELASTICSEARCH_ENABLED:
-        logger.debug("[Search] Elasticsearch is disabled — returning empty response")
-        return SearchResponse(total=0, page=request.page, page_size=request.page_size, results=[])
-
     client = _build_client()
     index = _derive_index(request.source, request.entity_type)
     body = _build_query_body(request)

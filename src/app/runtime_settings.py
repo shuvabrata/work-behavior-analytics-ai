@@ -56,7 +56,8 @@ def _build_initial_config() -> RuntimeConfig:
         GITHUB_MCP_ENABLED=app_settings.GITHUB_MCP_ENABLED,
         ATLASSIAN_MCP_ENABLED=app_settings.ATLASSIAN_MCP_ENABLED,
         # ── System ────────────────────────────────────────────────────
-        NEO4J_ENABLED=app_settings.NEO4J_ENABLED,
+        NEO4J_AI_LOOKUP_ENABLED=app_settings.NEO4J_AI_LOOKUP_ENABLED,
+        ELASTICSEARCH_AI_LOOKUP_ENABLED=app_settings.ELASTICSEARCH_AI_LOOKUP_ENABLED,
         # ── Connectors ────────────────────────────────────────────────
         COMMIT_DAYS_LIMIT=app_settings.COMMIT_DAYS_LIMIT,
         PULL_REQUEST_DAYS_LIMIT=app_settings.PULL_REQUEST_DAYS_LIMIT,

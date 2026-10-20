@@ -98,7 +98,8 @@ class RuntimeSnapshotResponse(BaseModel):
     GITHUB_MCP_ENABLED: bool = False
     ATLASSIAN_MCP_ENABLED: bool = False
     # ── System ────────────────────────────────────────────────────────
-    NEO4J_ENABLED: bool = False
+    NEO4J_AI_LOOKUP_ENABLED: bool = True
+    ELASTICSEARCH_AI_LOOKUP_ENABLED: bool = True
     # ── Connectors ────────────────────────────────────────────────────
     COMMIT_DAYS_LIMIT: int = 60
     PULL_REQUEST_DAYS_LIMIT: int = 60

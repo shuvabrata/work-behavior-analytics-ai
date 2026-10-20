@@ -227,7 +227,7 @@ class TestApplyModeBadge:
 
     def test_restart_mode_badge(self) -> None:
         """Restart settings show a 'restart' badge."""
-        setting = _make_setting("NEO4J_ENABLED")
+        setting = _make_setting("NEO4J_AI_LOOKUP_ENABLED")
         setting["apply_mode"] = "restart"
         row = _build_setting_row(setting)
         key_div = row.children[0].children[0].children[0]

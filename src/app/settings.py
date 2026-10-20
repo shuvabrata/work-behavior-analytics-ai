@@ -11,14 +11,14 @@ class Settings(BaseSettings):
     NEO4J_URI: str = "bolt://localhost:7687"
     NEO4J_USERNAME: str = "neo4j"
     NEO4J_PASSWORD: str = ""
-    NEO4J_ENABLED: bool = False
+    NEO4J_AI_LOOKUP_ENABLED: bool = True
     FF_NEO4J_USE_PROVIDER_PIPELINE: bool = False
 
     # RabbitMQ configuration
     RABBITMQ_URL: str = "amqp://guest:guest@localhost:5672/"
 
     # Elasticsearch configuration
-    ELASTICSEARCH_ENABLED: bool = False
+    ELASTICSEARCH_AI_LOOKUP_ENABLED: bool = True
     ELASTICSEARCH_URL: str = "http://localhost:9200"
     ELASTIC_PASSWORD: str = ""
 

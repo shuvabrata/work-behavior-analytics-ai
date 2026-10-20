@@ -12,7 +12,7 @@ These tests run without any external services.
 Index existence (integration + elasticsearch)
 ---------------------------------------------
 Connects to a live Elasticsearch cluster and asserts that every managed index
-actually exists.  Automatically skipped when ``ELASTICSEARCH_ENABLED=false``.
+actually exists.  Requires a reachable Elasticsearch instance.
 
 Run schema coverage only:
     pytest -m unit tests/test_es_index_coverage.py -v
@@ -69,9 +69,6 @@ def test_managed_index_name_follows_pattern(source: str, entity_type: str) -> No
 # Index existence — requires live Elasticsearch (integration + elasticsearch)
 # ---------------------------------------------------------------------------
 
-_es_enabled: bool = settings.ELASTICSEARCH_ENABLED
-
-
 def _build_es_client():
     """Return a connected Elasticsearch client using application settings."""
     from elasticsearch import Elasticsearch  # pylint: disable=import-outside-toplevel
@@ -91,10 +88,6 @@ def _build_es_client():
 )
 @pytest.mark.integration
 @pytest.mark.elasticsearch
-@pytest.mark.skipif(
-    not _es_enabled,
-    reason="Elasticsearch is not enabled (ELASTICSEARCH_ENABLED=false)",
-)
 def test_managed_index_exists_in_elasticsearch(source: str, entity_type: str) -> None:
     """Each managed index must exist in the live Elasticsearch cluster.
 
@@ -111,10 +104,6 @@ def test_managed_index_exists_in_elasticsearch(source: str, entity_type: str) ->
 
 @pytest.mark.integration
 @pytest.mark.elasticsearch
-@pytest.mark.skipif(
-    not _es_enabled,
-    reason="Elasticsearch is not enabled (ELASTICSEARCH_ENABLED=false)",
-)
 def test_wba_all_alias_exists_and_covers_all_managed_indexes() -> None:
     """The 'wba_all' alias must exist and point to every managed index."""
     client = _build_es_client()

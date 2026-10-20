@@ -59,7 +59,8 @@ class RuntimeConfig(BaseModel):
     ATLASSIAN_MCP_ENABLED: StrictBool = False
 
     # ── System ───────────────────────────────────────────────────────────
-    NEO4J_ENABLED: StrictBool = False
+    NEO4J_AI_LOOKUP_ENABLED: StrictBool = True
+    ELASTICSEARCH_AI_LOOKUP_ENABLED: StrictBool = True
 
     # ── Connectors ───────────────────────────────────────────────────────
     COMMIT_DAYS_LIMIT: int = Field(default=60, ge=1)

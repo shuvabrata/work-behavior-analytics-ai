@@ -180,8 +180,7 @@ def fetch_relationships_between_nodes(node_ids: List[str]) -> List[Dict[str, Any
         >>> all('r' in record for record in rels)
         True
     """
-    # Use the module-level driver singleton — _get_driver handles the
-    # NEO4J_ENABLED check.
+    # Use the module-level driver singleton — raises RuntimeError on connection failure.
     if not node_ids or len(node_ids) == 0:
         logger.info("No node IDs provided, returning empty relationship list")
         return []
@@ -259,9 +258,6 @@ def expand_node_query(
         >>> len(result['nodes']) <= 10
         True
     """
-    if not settings.NEO4J_ENABLED:
-        raise RuntimeError("Neo4j is not enabled. Set NEO4J_ENABLED=true in .env")
-    
     # Use configured default if limit not provided
     if limit is None:
         limit = settings.GRAPH_UI_MAX_NODES_TO_EXPAND

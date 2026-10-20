@@ -30,7 +30,7 @@ pytestmark = [pytest.mark.unit]
 def _stub_person_identity_resolution(monkeypatch: pytest.MonkeyPatch) -> None:
     """Keep the unit gate offline — Person lanes must not reach Neo4j here.
 
-    The repo's local ``.env`` ships ``NEO4J_ENABLED=true``; without this stub
+    The repo's local ``.env`` ships ``NEO4J_AI_LOOKUP_ENABLED=true``; without this stub
     ``_fetch_lane`` for a Person lane would attempt a real ``verify_connectivity()``
     from inside ``-m unit``. Stub once per module rather than in each test.
     """

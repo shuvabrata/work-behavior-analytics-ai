@@ -299,30 +299,13 @@ def test_detail_panel_carries_class_and_caption() -> None:
     assert _join_texts(first) == "Current state"
 
 
-def test_detail_error_neo4j_disabled_copy(monkeypatch: pytest.MonkeyPatch) -> None:
-    """With Neo4j disabled the copy reads as a configuration, not a failure."""
-    monkeypatch.setattr(callbacks.settings, "NEO4J_ENABLED", False)
+def test_detail_error_query_failure_copy(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A query failure renders the generic message, never a config-specific one.
 
-    def boom(_ids: list[str]) -> dict[str, dict[str, Any]]:
-        raise NodePropertiesError("HTTP 500")
-
-    monkeypatch.setattr(callbacks, "fetch_node_properties", boom)
-    out = callbacks.render_detail_panels(
-        {"lane_wba_id": "github::Person::a", "related_wba_id": None}
-    )
-    assert "Neo4j is not available" in _join_texts(out)
-
-
-def test_detail_error_query_failure_is_not_called_disabled(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """An HTTP 500 with Neo4j enabled is a query failure, not a config problem.
-
-    The graph API answers 500 for *any* Cypher runtime error, so the identical
-    exception text as the disabled case must not render the disabled-graph copy.
+    The graph API answers 500 for *any* Cypher runtime error, so a 500 on this
+    path means the query failed — there is no disabled-graph configuration to
+    report, because Neo4j is always required.
     """
-    monkeypatch.setattr(callbacks.settings, "NEO4J_ENABLED", True)
-
     def boom(_ids: list[str]) -> dict[str, dict[str, Any]]:
         raise NodePropertiesError("HTTP 500")
 
@@ -337,8 +320,6 @@ def test_detail_error_query_failure_is_not_called_disabled(
 
 def test_detail_error_transport_failure_copy(monkeypatch: pytest.MonkeyPatch) -> None:
     """A transport failure (no HTTP status involved) gets the generic message."""
-    monkeypatch.setattr(callbacks.settings, "NEO4J_ENABLED", True)
-
     def boom(_ids: list[str]) -> dict[str, dict[str, Any]]:
         raise NodePropertiesError("request failed: boom")
 

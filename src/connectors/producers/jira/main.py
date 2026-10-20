@@ -69,6 +69,7 @@ from connectors.producers.jira.map_jira import (
     map_project,
     map_sprint,
 )
+from connectors.producers.person_tracking import PersonSeenTracker, looks_like_profile
 from connectors.producers.sync_cursor import get_sync_cursor, set_sync_cursor
 from connectors.producers.daemon_common import ScanResult, producer_main
 from connectors.producers.github.retry_with_backoff import WbaRetryTimeoutError
@@ -789,7 +790,7 @@ async def publish_signals(
     """
     published: Dict[str, int] = {}
 
-    seen_persons: set[str] = set()
+    person_tracker = PersonSeenTracker()
 
     def _inc(entity_type: str) -> None:
         published[entity_type] = published.get(entity_type, 0) + 1
@@ -804,10 +805,17 @@ async def publish_signals(
     # Concurrency helpers
     # ------------------------------------------------------------------
 
-    # Guard for the shared ``seen_persons`` set under concurrent processing.
-    # All per-entity processing (which reads/writes ``seen_persons``) runs
-    # through this lock so the check-then-add is atomic at concurrency > 1.
-    _seen_lock = asyncio.Lock()
+    async def _emit_person(user_data: Dict[str, Any]) -> None:
+        """Publish a Person signal unless an equal-or-richer one already went out."""
+        account_id = user_data.get("account_id", "")
+        if not account_id:
+            return
+        is_profile = looks_like_profile(
+            account_id, user_data.get("display_name"), user_data.get("email")
+        )
+        if not person_tracker.claim(account_id, is_profile=is_profile):
+            return
+        await _pub(build_person_signal(user_data, jira_base_url))
 
     async def _process_entities(
         entity_items: List[Dict[str, Any]],
@@ -928,10 +936,6 @@ async def publish_signals(
             all_account_ids.add(m)
 
         for account_id in all_account_ids:
-            async with _seen_lock:
-                if account_id in seen_persons:
-                    continue
-                seen_persons.add(account_id)
             # Build a minimal Person signal from the accountId.
             # Full user data (displayName, email) is only available for
             # commenters; mentioned users get a stub. The stub carries the
@@ -958,7 +962,7 @@ async def publish_signals(
                         person_data = map_jira_user(raw_author)
                     break
 
-            await _pub(build_person_signal(person_data, jira_base_url))
+            await _emit_person(person_data)
 
         # Build and publish the entity signal
         signal = build_fn(
@@ -1012,10 +1016,7 @@ async def publish_signals(
             user_data = map_jira_user(reporter_raw)
             reporter_person_id = user_data.get("account_id", "")
             if reporter_person_id:
-                async with _seen_lock:
-                    if reporter_person_id not in seen_persons:
-                        seen_persons.add(reporter_person_id)
-                        await _pub(build_person_signal(user_data, jira_base_url))
+                await _emit_person(user_data)
 
         # Person: assignee
         assignee_person_id: Optional[str] = None
@@ -1024,10 +1025,7 @@ async def publish_signals(
             user_data = map_jira_user(assignee_raw)
             assignee_person_id = user_data.get("account_id", "")
             if assignee_person_id:
-                async with _seen_lock:
-                    if assignee_person_id not in seen_persons:
-                        seen_persons.add(assignee_person_id)
-                        await _pub(build_person_signal(user_data, jira_base_url))
+                await _emit_person(user_data)
 
         logger.debug(f"Processing initiative '{i_data.get('key')}': '{str(i_data.get('summary', ''))[:60]}'")
         initiative_items.append({
@@ -1076,10 +1074,7 @@ async def publish_signals(
             user_data = map_jira_user(reporter_raw)
             reporter_person_id = user_data.get("account_id", "")
             if reporter_person_id:
-                async with _seen_lock:
-                    if reporter_person_id not in seen_persons:
-                        seen_persons.add(reporter_person_id)
-                        await _pub(build_person_signal(user_data, jira_base_url))
+                await _emit_person(user_data)
 
         # Person: assignee
         assignee_person_id = None
@@ -1088,10 +1083,7 @@ async def publish_signals(
             user_data = map_jira_user(assignee_raw)
             assignee_person_id = user_data.get("account_id", "")
             if assignee_person_id:
-                async with _seen_lock:
-                    if assignee_person_id not in seen_persons:
-                        seen_persons.add(assignee_person_id)
-                        await _pub(build_person_signal(user_data, jira_base_url))
+                await _emit_person(user_data)
 
         team_id = f"jira_team_{e_data['team_value']}" if e_data.get("team_value") else None
 
@@ -1156,10 +1148,7 @@ async def publish_signals(
                 user_data = map_jira_user(assignee_raw)
                 assignee_person_id = user_data.get("account_id", "")
                 if assignee_person_id:
-                    async with _seen_lock:
-                        if assignee_person_id not in seen_persons:
-                            seen_persons.add(assignee_person_id)
-                            await _pub(build_person_signal(user_data, jira_base_url))
+                    await _emit_person(user_data)
 
             # Person: reporter
             reporter_person_id = None
@@ -1168,10 +1157,7 @@ async def publish_signals(
                 user_data = map_jira_user(reporter_raw)
                 reporter_person_id = user_data.get("account_id", "")
                 if reporter_person_id:
-                    async with _seen_lock:
-                        if reporter_person_id not in seen_persons:
-                            seen_persons.add(reporter_person_id)
-                            await _pub(build_person_signal(user_data, jira_base_url))
+                    await _emit_person(user_data)
 
             # Resolve parent epic
             parent_jira_id = i_data.get("parent_jira_id")

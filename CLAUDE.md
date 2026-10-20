@@ -199,9 +199,16 @@ Loaded from `.env` (see `.env.example`) via `app.settings`. Key variables:
 
 **Neo4j** — `NEO4J_AI_LOOKUP_ENABLED` (default `true` — controls AI agent lookups only; Neo4j is always required), `NEO4J_URI` (`bolt://localhost:7687`), `NEO4J_USERNAME`, `NEO4J_PASSWORD`, `FF_NEO4J_USE_PROVIDER_PIPELINE` (default `false`), `NEO4J_QUERY_TIMEOUT` (default `10`).
 
+**Elasticsearch** — `ELASTICSEARCH_AI_LOOKUP_ENABLED` (default `true` — controls AI agent lookups only; the consumer sink and the search API are always active and Elasticsearch is always required), `ELASTICSEARCH_URL` (`http://localhost:9200`), `ELASTIC_PASSWORD`.
+
 **MCP** — `GITHUB_MCP_ENABLED` / `ATLASSIAN_MCP_ENABLED` (default `false`), `MAX_MCP_ITERATIONS` (default `3`), `GITHUB_MCP_TOKEN`, `GITHUB_MCP_SERVER_URL` (`http://github-mcp:8082/mcp`), `ATLASSIAN_MCP_SERVER_URL`.
 
 **Infrastructure & UI** — `RABBITMQ_URL`, `CONNECTOR_ENCRYPTION_KEY` (Fernet key for connector secrets, required), `HTTP_REQUEST_TIMEOUT` (default `60`), `TIMEZONE` (IANA name, default `UTC`), `UI_DATETIME_FORMAT` (`%b %d, %Y %I:%M %p`), `UI_DATE_FORMAT` (`%b %d, %Y`), `GRAPH_UI_MAX_NODES_TO_EXPAND` (default `20`), `GRAPH_UI_MAX_NODE_LABEL_CHARS` (default `10`).
+
+Note on the two `*_AI_LOOKUP_ENABLED` flags: the augmentation chains read them from the
+`app.settings` singleton (`.env` at startup), not from `runtime_settings`. Editing them in
+the Settings UI persists the value but does not change chain behaviour until the app is
+restarted.
 
 ## Reference documents
 

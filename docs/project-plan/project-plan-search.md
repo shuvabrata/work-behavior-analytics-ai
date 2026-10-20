@@ -308,7 +308,7 @@ The following env vars are already defined in `.env.example`. Wire them into
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `ELASTICSEARCH_AI_LOOKUP_ENABLED` | `false` | Feature flag. Controls AI agent ES lookups only; the sink and search API are always active. |
+| `ELASTICSEARCH_AI_LOOKUP_ENABLED` | `true` | Feature flag. Controls AI agent ES lookups only; the sink and search API are always active. |
 | `ELASTICSEARCH_URL` | `http://localhost:9200` | ES HTTP endpoint. |
 | `ELASTIC_PASSWORD` | — | ES password (only needed if xpack security is enabled). |
 

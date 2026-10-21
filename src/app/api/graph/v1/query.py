@@ -1,10 +1,10 @@
 """Query layer for Neo4j graph database operations."""
 
-import re
 from typing import Any, Dict, List
 import neo4j
 from neo4j.exceptions import Neo4jError, ServiceUnavailable
 
+from app.api.graph.v1.cypher_read_only import is_read_only_cypher
 from app.common.neo4j_driver import close_driver, get_driver as _get_driver
 from app.settings import settings
 from common.logger import logger
@@ -20,74 +20,41 @@ __all__ = [
 ]
 
 
-# Read-only Cypher keywords (case-insensitive)
-READ_ONLY_KEYWORDS = [
-    'MATCH', 'OPTIONAL', 'WITH', 'UNWIND', 'RETURN', 
-    'WHERE', 'ORDER', 'SKIP', 'LIMIT', 'UNION', 
-    'CALL'  # CALL is allowed for read-only procedures
-]
-
-# Write operation keywords that should be rejected
-WRITE_KEYWORDS = [
-    'CREATE', 'MERGE', 'DELETE', 'DETACH', 'SET', 
-    'REMOVE', 'DROP', 'FOREACH',
+# Write operations that hide inside string literals rather than appearing as a
+# Cypher clause, so they can only be caught by a raw-text substring scan. Every
+# other write keyword is detected from the lexer's token kinds, in
+# ``app.api.graph.v1.cypher_read_only``.
+APOC_WRITE_KEYWORDS = [
     'APOC.CYPHER.DOIT', 'APOC.CYPHER.RUN', 'APOC.PERIODIC.ITERATE'
 ]
 
 
 def validate_read_only_query(query: str) -> bool:
     """Validate that a Cypher query is read-only (no write operations).
-    
+
     This function checks if the query contains only read-only operations
     and rejects queries with write operations like CREATE, MERGE, DELETE, etc.
-    
+
     Args:
         query: The Cypher query string to validate
-        
+
     Returns:
         True if query is read-only, False if it contains write operations
-        
+
     Examples:
         >>> validate_read_only_query("MATCH (n) RETURN n")
         True
         >>> validate_read_only_query("CREATE (n:Test) RETURN n")
         False
     """
-    if not query or not query.strip():
-        return False
-    
-    # Normalize query: uppercase and remove extra whitespace
-    normalized = ' '.join(query.upper().split())
-    
-    # Check for write keywords using word boundaries to avoid false positives
-    for write_keyword in WRITE_KEYWORDS:
-        # Avoid \b for APOC checks because dots (.) are not word characters
-        if "APOC" in write_keyword:
-            if write_keyword in normalized:
-                logger.warning(f"Query validation failed: Contains write operation '{write_keyword}'")
-                return False
-        else:
-            # Use word boundary regex to match whole words only
-            pattern = r'\b' + re.escape(write_keyword) + r'\b'
-            if re.search(pattern, normalized):
-                logger.warning(f"Query validation failed: Contains write operation '{write_keyword}'")
-                return False
-    
-    # Additional safety check: query should start with a read operation
-    # (allowing comments with //)
-    query_start = normalized.lstrip('/').lstrip('*').lstrip()
-    
-    starts_with_read = False
-    for read_keyword in READ_ONLY_KEYWORDS:
-        if query_start.startswith(read_keyword):
-            starts_with_read = True
-            break
-    
-    if not starts_with_read:
-        logger.warning(f"Query validation failed: Does not start with read operation. Starts with: {query_start[:30]}")
-        return False
-    
-    return True
+    # ``ident_keywords`` keeps the conservative DROP handling: cypherast lexes
+    # DROP as an identifier (it only occurs in DROP INDEX / DROP CONSTRAINT),
+    # so it is opted in here rather than inferred from a token kind.
+    return is_read_only_cypher(
+        query,
+        substring_keywords=APOC_WRITE_KEYWORDS,
+        ident_keywords=("DROP",),
+    )
 
 
 def execute_cypher_query(

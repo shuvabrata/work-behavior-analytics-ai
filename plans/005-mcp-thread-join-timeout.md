@@ -2,7 +2,13 @@
 
 > **Executor instructions**: Follow this plan step by step.
 >
-> **Drift check (run first)**: `git diff --stat ec14dc5..HEAD -- src/app/ai_agent/mcp_integration/client_manager.py`
+> **Drift check (run first)**: `git diff --stat 40ef1e5..HEAD -- src/app/ai_agent/mcp_integration/client_manager.py`
+>
+> This file drifted between `ec14dc5` and `40ef1e5` (117 insertions / 9 deletions:
+> a `_with_session` debug log, a `# type: ignore` in `_serialize_content_item`,
+> and a new `_run_list_tools_test` method). `_run_sync` itself is unchanged, so
+> the steps below still apply verbatim. The stamp was refreshed to `40ef1e5`
+> during the 2026-10-21 reconcile.
 
 ## Status
 
@@ -11,7 +17,7 @@
 - **Risk**: LOW
 - **Depends on**: none
 - **Category**: bug
-- **Planned at**: commit `ec14dc5`, 2026-06-26
+- **Planned at**: commit `40ef1e5`, 2026-10-21 (originally `ec14dc5`, 2026-06-26)
 
 ## Why this matters
 
@@ -23,7 +29,8 @@ thread join.
 
 ## Current state
 
-- `src/app/ai_agent/mcp_integration/client_manager.py` — lines 35–57.
+- `src/app/ai_agent/mcp_integration/client_manager.py` — `_run_sync` spans
+  lines 35–59; the unguarded join is at `:53-54`.
 
 ```python
     def _run_sync(self, async_fn, *args):

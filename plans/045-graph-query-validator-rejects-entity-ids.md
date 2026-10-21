@@ -7,18 +7,25 @@
 > approach, and it is **not** ready for an executor. Do not implement from this
 > file; the design decision has not been made.
 >
-> Written 2026-10-17 at commit `1fa7800`. Found while reviewing
-> `plans/044-activity-timeline-detail-modal.md`, which is the first change to
-> route timeline card navigation through this code path.
+> Written 2026-10-17 at commit `1fa7800`. Found while reviewing the Activity
+> Timeline detail-modal work (shipped as PR #340, `a2ab3dd`) — the first change
+> to route timeline card navigation through this code path.
+>
+> **Reconciled 2026-10-21 at `40ef1e5`.** The finding is unchanged and was
+> re-reproduced (see "Measured evidence"). What changed is the *exposure*: 044
+> landed as PR #340 (`a2ab3dd`), so the Timeline card now auto-executes a
+> user-supplied id through this validator. Priority raised P2 → P1 accordingly,
+> and the "Affected surfaces" table below has been corrected.
 
 ## Status
 
-- **Priority**: P2 (P1 once any surface auto-executes a user-supplied id — see "Why this matters")
+- **Priority**: **P1** — the plan's own promotion condition is now met: a surface
+  auto-executes a user-supplied id (see "Affected surfaces")
 - **Effort**: not estimated (design undecided)
 - **Risk**: not assessed (design undecided)
 - **Depends on**: none
 - **Category**: bug (input validation is literal-blind)
-- **Planned at**: commit `1fa7800`, 2026-10-17
+- **Planned at**: commit `40ef1e5`, 2026-10-21 (originally `1fa7800`, 2026-10-17)
 - **Issue**: —
 
 ## The problem
@@ -99,14 +106,15 @@ The affected id shapes are **ordinary**, not adversarial:
 
 | Surface | How the id reaches the validator | Status |
 |---|---|---|
-| **Activity Timeline card → Graph deep link** (`plans/044-…` Phase 5c) | `graph_deep_link()` interpolates the id into Cypher and ships it as `/app/graph?cypher=…`; the Graph page pre-fills it into the Console and auto-executes (`graph/callbacks/right_panel.py:100-105` → `graph/callbacks/query.py:118,189`). | **Newly introduced by 044.** Today the card is `href="/app/graph"` with no query and cannot fail. |
-| **Search page "View in Graph" / person-activity buttons** (`pages/search.py:273-279`, `:349`, `:458`) | `_build_node_cypher()` builds the same interpolated shape from a `wba_id` and ships it as `?cypher=`. | **Pre-existing.** Same exposure today. |
+| **Activity Timeline card → Graph deep link** (added by PR #340) | `graph_deep_link()` (`pages/timeline/helpers.py:664`, called from `pages/timeline/callbacks.py:1270`) interpolates the id into Cypher and ships it as `/app/graph?cypher=…`; the Graph page pre-fills it into the Console and auto-executes (`graph/callbacks/right_panel.py:104` → `graph/callbacks/query.py:189`). | **LIVE on `40ef1e5`.** 044 landed as PR #340 (`a2ab3dd`), so the card now auto-executes the id and *can* fail. When this document was written the card was `href="/app/graph"` with no query; that is no longer true. |
+| **Search page "View in Graph" / person-activity buttons** (`pages/search.py:272` `_build_node_cypher`, hrefs at `:348` and `:457`) | `_build_node_cypher()` / `_build_person_activity_cypher()` build the same interpolated shape from a `wba_id` and ship it as `?cypher=`. | **Pre-existing.** Same exposure today. |
 | `POST /api/v1/graph/execute` generally | Any caller passing a raw query with an id inlined. | Pre-existing. |
 
-The Timeline properties fetch in `plans/044-…` is **not** affected: it uses a
-parameterised `MATCH (n) WHERE n.id IN $ids` (`_NODE_PROPERTIES_CYPHER`), so the
-id never enters the query text. The asymmetry — one path parameterised, one
-interpolated — is what makes this easy to miss in review.
+The Timeline properties fetch added by 044 is **not** affected: it uses a
+parameterised `MATCH (n) WHERE n.id IN $ids` (`_NODE_PROPERTIES_CYPHER` in
+`pages/timeline/helpers.py`), so the id never enters the query text. The
+asymmetry — one path parameterised, one interpolated — is what makes this easy
+to miss in review.
 
 ## Not yet decided
 
@@ -152,10 +160,10 @@ document is that the choice has not been made.
 
 ## Maintenance notes
 
-- The reviewer checklist in `plans/044-activity-timeline-detail-modal.md`
-  (~line 1822) asserts "the properties fetch is exactly one HTTP call per click"
-  and does not mention this validator. If 044 lands unchanged, its "Open in
-  Graph" link inherits this defect for any id matching the table above.
+- 044 landed as PR #340 (`a2ab3dd`) with its "Open in Graph" link intact, so
+  that link inherits this defect for any id matching the table above. The 044
+  plan file has since been removed from `plans/` (this directory drops plans as
+  they land) — the shipped behaviour is the reference, not the plan.
 - `WRITE_KEYWORDS` and `READ_ONLY_KEYWORDS` live at
   `src/app/api/graph/v1/query.py:24-35`; the validation function is directly
   below at `:38`. Any change here affects every raw-Cypher execution in the app,

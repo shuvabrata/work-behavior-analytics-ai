@@ -264,10 +264,18 @@ The catalog must never be able to mutate the graph. Read-only is enforced in
    `validate_read_only_query()` before writing, so the error is surfaced as a
    `422` at authoring time rather than as a load failure later.
 
-Both call the same predicate from the graph API (`CREATE`, `MERGE`, `DELETE`,
-`DETACH`, `SET`, `REMOVE`, `DROP`, `FOREACH`, and the APOC write procedures are
-rejected). The editor's "Test" runner additionally executes through the
-existing graph endpoint under `source="raw"`, which applies the same guard.
+Both call the same predicate from the graph API —
+`validate_read_only_query()` in `src/app/api/graph/v1/query.py`, which delegates
+to `is_read_only_cypher()` in `src/app/api/graph/v1/cypher_read_only.py`. The
+editor's "Test" runner additionally executes through the existing graph endpoint
+under `source="raw"`, which applies the same guard.
+
+Detection is syntax-aware: the query is lexed, and a write keyword is rejected
+only when it appears as syntax. A write keyword inside a *value* — a string
+literal, backtick identifier or comment — does not disqualify a query. APOC write
+procedures are the deliberate exception, still matched by raw-text substring
+because their write hides inside a string literal. The module docstring is the
+source of truth for the rule set.
 
 ---
 

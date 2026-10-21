@@ -148,12 +148,15 @@ class TestQueryValidation:
     def test_word_boundary_matching(self):
         """Test that validation uses word boundaries for Cypher keywords.
 
-        Note: Current implementation conservatively rejects queries with write
-        keywords even in string literals for security. This is acceptable as
-        users rarely need to search for these terms.
+        Note: The check is lexer-driven (see
+        ``app.api.graph.v1.cypher_read_only``, plan 047), so a write keyword
+        inside a string literal is a ``STRING`` token, not a keyword token, and
+        does not disqualify the query. Accepting it here is the behaviour change
+        plan 047 introduced: the previous text-wide regex scan rejected
+        ordinary read-only queries whose values contained such words.
         """
         query = "MATCH (n) WHERE n.description = 'create new' RETURN n"
-        assert validate_read_only_query(query) is False
+        assert validate_read_only_query(query) is True
 
         query_safe = "MATCH (n:Person) RETURN n"
         assert validate_read_only_query(query_safe) is True
@@ -180,16 +183,18 @@ class TestEdgeCases:
     def test_validation_with_comments(self):
         """Test validation with Cypher comments.
 
-        Note: Current implementation does not strip comments before validation.
-        This is acceptable as the validator checks for read operations anywhere
-        in the query. Queries starting with comments are conservatively rejected.
+        Note: The lexer never emits comments as tokens (see
+        ``app.api.graph.v1.cypher_read_only``, plan 047), so a leading comment
+        is skipped and the query is seen to start at ``MATCH``. The previous
+        text-wide implementation conservatively rejected queries starting with
+        comments; that false positive is gone.
         """
         query_with_leading_comment = """
         // This is a comment
         MATCH (n)
         RETURN n
         """
-        assert validate_read_only_query(query_with_leading_comment) is False
+        assert validate_read_only_query(query_with_leading_comment) is True
 
         query_with_inline_comment = "MATCH (n) /* comment */ RETURN n"
         assert validate_read_only_query(query_with_inline_comment) is True

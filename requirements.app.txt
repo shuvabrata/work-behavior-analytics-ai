@@ -28,3 +28,4 @@ neo4j==6.4.1
 aio-pika==10.1.1
 elasticsearch==9.5.1
 a2wsgi==1.10.10
+cypherast==0.1.12

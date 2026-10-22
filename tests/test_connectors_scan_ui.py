@@ -558,16 +558,15 @@ class TestCancelButtonCallback:
             result = handle_cancel_scan([1], "/app/connectors/github")
 
         assert result is not None
-        alert, poll_disabled = result
+        alert = result
         assert "Cancel sent" in _flatten_dash(alert)
-        assert poll_disabled is False
         mock_post.assert_called_once()
         call_kwargs = mock_post.call_args[1]
         assert call_kwargs["json"]["command_type"] == "cancel"
         assert call_kwargs["json"]["parameters"]["cancel_command_id"] == scan_command_id
 
     def test_cancel_no_trigger_returns_no_update(self):
-        """No trigger → returns no_update for both outputs."""
+        """No trigger → returns no_update."""
         from app.dash_app.pages.connectors.callbacks import handle_cancel_scan
 
         with patch("app.dash_app.pages.connectors.callbacks.callback_context") as mock_ctx:
@@ -575,7 +574,7 @@ class TestCancelButtonCallback:
 
             result = handle_cancel_scan([None], "/app/connectors/github")
 
-        assert result == (no_update, no_update)
+        assert result is no_update
 
     def test_cancel_no_pathname_returns_no_update(self):
         """No pathname → returns no_update."""
@@ -595,7 +594,95 @@ class TestCancelButtonCallback:
 
             result = handle_cancel_scan([1], None)
 
-        assert result == (no_update, no_update)
+        assert result is no_update
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  Recent Actions collapse / polling tests
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestRecentActionsCollapsePolling:
+    """Tests for collapse-driven polling and the ``load_recent_scans`` rule."""
+
+    def _run_load_recent_scans(self, commands, triggered_id):
+        """Invoke ``load_recent_scans`` with a mocked API and trigger."""
+        from app.dash_app.pages.connectors.callbacks import load_recent_scans
+
+        mock_response = MagicMock()
+        mock_response.raise_for_status.return_value = None
+        mock_response.json.return_value = {"commands": commands}
+
+        with (
+            patch("app.dash_app.pages.connectors.callbacks.callback_context") as mock_ctx,
+            patch("app.dash_app.pages.connectors.callbacks.requests.get") as mock_get,
+        ):
+            mock_ctx.triggered_id = triggered_id
+            mock_get.return_value = mock_response
+            return load_recent_scans(None, "/app/connectors/github")
+
+    def test_sync_poll_to_collapse(self):
+        """Expanded section polls; collapsed section does not."""
+        from app.dash_app.pages.connectors.callbacks import sync_poll_to_collapse
+
+        assert sync_poll_to_collapse(True) is False
+        assert sync_poll_to_collapse(False) is True
+
+    def test_load_recent_scans_expands_when_scan_active(self):
+        """A running scan opens the panel on navigation."""
+        commands = [
+            {"command_id": str(uuid.uuid4()), "command_type": "scan", "status": "running"},
+        ]
+        _children, collapse = self._run_load_recent_scans(commands, "url")
+        assert collapse is True
+
+    def test_load_recent_scans_expands_when_newest_failed(self):
+        """The newest action failing opens the panel."""
+        commands = [
+            {"command_id": str(uuid.uuid4()), "command_type": "scan", "status": "failed"},
+            {"command_id": str(uuid.uuid4()), "command_type": "scan", "status": "completed"},
+        ]
+        _children, collapse = self._run_load_recent_scans(commands, "url")
+        assert collapse is True
+
+    def test_load_recent_scans_collapses_when_all_terminal_clean(self):
+        """All-completed history leaves the panel closed."""
+        commands = [
+            {"command_id": str(uuid.uuid4()), "command_type": "scan", "status": "completed"},
+            {"command_id": str(uuid.uuid4()), "command_type": "scan", "status": "completed"},
+        ]
+        _children, collapse = self._run_load_recent_scans(commands, "url")
+        assert collapse is False
+
+    def test_load_recent_scans_expands_when_older_entry_running(self):
+        """Any action running opens the panel, even if an older one."""
+        commands = [
+            {"command_id": str(uuid.uuid4()), "command_type": "scan", "status": "completed"},
+            {"command_id": str(uuid.uuid4()), "command_type": "scan", "status": "running"},
+        ]
+        _children, collapse = self._run_load_recent_scans(commands, "url")
+        assert collapse is True
+
+    def test_load_recent_scans_ignores_older_failure(self):
+        """Only the NEWEST failure opens the panel.
+
+        An older failure still in the window must not reopen the panel on every
+        page load — this pins the "newest" qualifier on the failure half.
+        """
+        commands = [
+            {"command_id": str(uuid.uuid4()), "command_type": "scan", "status": "completed"},
+            {"command_id": str(uuid.uuid4()), "command_type": "scan", "status": "failed"},
+        ]
+        _children, collapse = self._run_load_recent_scans(commands, "url")
+        assert collapse is False
+
+    def test_load_recent_scans_leaves_is_open_alone_on_poll_tick(self):
+        """A poll tick never rewrites ``is_open``."""
+        commands = [
+            {"command_id": str(uuid.uuid4()), "command_type": "scan", "status": "running"},
+        ]
+        _children, collapse = self._run_load_recent_scans(commands, "connector-scans-poll")
+        assert collapse is no_update
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -689,11 +776,11 @@ class TestTestConnectionCallback:
             result = handle_item_test_connection([1])
 
         assert result is not None
-        alert, poll_disabled = result
+        alert, expand = result
         alert_text = _flatten_dash(alert)
         assert "Test triggered" in alert_text
         assert "Recent Actions" in alert_text
-        assert poll_disabled is False
+        assert expand is True
         mock_post.assert_called_once()
         call_kwargs = mock_post.call_args[1]
         assert call_kwargs["json"]["command_type"] == "test"
@@ -720,10 +807,10 @@ class TestTestConnectionCallback:
             result = handle_item_test_connection([1])
 
         assert result is not None
-        alert, poll_disabled = result
+        alert, expand = result
         alert_text = _flatten_dash(alert)
         assert "No producer container for slack" in alert_text
-        assert poll_disabled is no_update
+        assert expand is no_update
         mock_post.assert_not_called()
 
     def test_test_connection_no_trigger(self):

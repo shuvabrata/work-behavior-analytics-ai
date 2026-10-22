@@ -166,6 +166,7 @@ def _start_settings_listener(rabbitmq_url: str) -> None:
 
 # ── Module-level state (shared across daemon functions) ───────────────────
 _children: Dict[int, uuid.UUID] = {}  # pid → command_id
+_exited: Dict[int, tuple[uuid.UUID, int]] = {}  # pid → (command_id, exit code)
 _test_children: Dict[int, tuple[uuid.UUID, subprocess.Popen[Any]]] = {}  # pid → (command_id, Popen[Any])
 _max_scans: int = int(os.environ.get("MAX_CONCURRENT_SCANS", "5"))
 
@@ -176,7 +177,15 @@ def _api_base() -> str:
 
 
 def _reap_children(signum: int, frame: Any) -> None:  # pylint: disable=unused-argument
-    """SIGCHLD handler — reap finished children and log their exit."""
+    """SIGCHLD handler — record finished children so the loop can reconcile them.
+
+    The handler runs in signal context, so it does no HTTP work; it records the
+    command id and exit code in ``_exited`` and the consume loop's idle tick
+    reports them.  The exit code must be captured here rather than via
+    ``Popen.poll()``: this handler has already reaped the child through
+    ``os.waitpid``, so a later ``poll()`` sees ``ECHILD`` and returns ``0``,
+    which would look like success.
+    """
     while True:
         try:
             pid, exit_code = os.waitpid(-1, os.WNOHANG)
@@ -185,6 +194,7 @@ def _reap_children(signum: int, frame: Any) -> None:  # pylint: disable=unused-a
             command_id = _children.pop(pid, None)
             if command_id:
                 logger.info(f"Child reaped pid={pid} command_id={command_id} exit_code={exit_code}")
+                _exited[pid] = (command_id, exit_code)
         except ChildProcessError:
             break
 
@@ -253,6 +263,61 @@ def _poll_test_children() -> None:
             del _test_children[pid]
 
 
+def _poll_scan_children() -> None:
+    """Reconcile scan children that exited without reporting a terminal status.
+
+    The SIGCHLD handler records exits in ``_exited``; this drains that map and
+    marks any command still non-terminal as ``failed``.  A child that reported
+    ``completed`` before exiting is already terminal, so
+    ``_finalize_if_active`` leaves it alone.  ``_children`` is not consulted —
+    ``_reap_children`` has already removed the entry.
+    """
+    for pid in list(_exited.keys()):
+        command_id, exit_code = _exited.pop(pid)
+        _finalize_if_active(
+            command_id,
+            error_message=f"Scan process exited unexpectedly (exit code {exit_code})",
+            result_summary={"exit_code": exit_code},
+        )
+
+
+def _reconcile_startup_orphans(container_name: str) -> None:
+    """Mark scans left ``running`` by a previous daemon instance as failed.
+
+    Only rows in ``running`` are reconciled.  An ``accepted`` row may still be
+    queued in RabbitMQ waiting for this daemon to consume it, so it is left
+    alone — failing it would cancel a legitimate pending scan.
+    """
+    url = f"{_api_base()}/api/v1/commands/"
+    try:
+        with httpx.Client(timeout=10) as client:
+            resp = client.get(url, params={
+                "target": container_name,
+                "status": "running",
+                "limit": 100,
+            })
+            resp.raise_for_status()
+            commands = resp.json().get("commands", [])
+    except (httpx.HTTPError, ValueError, AttributeError) as exc:
+        logger.warning(f"Startup orphan reconciliation skipped — could not list commands: {exc}")
+        return
+
+    for command in commands:
+        if command.get("command_type") != "scan":
+            continue
+        command_id = command.get("command_id")
+        if not command_id:
+            continue
+        try:
+            parsed_id = uuid.UUID(str(command_id))
+        except ValueError:
+            continue
+        _finalize_if_active(
+            parsed_id,
+            error_message="Scan interrupted: producer restarted",
+        )
+
+
 def _update_status(command_id: uuid.UUID, update: CommandStatusUpdate) -> None:
     """PATCH a status update to the app's API (sync)."""
     url = f"{_api_base()}/api/v1/commands/{command_id}/status"
@@ -265,6 +330,59 @@ def _update_status(command_id: uuid.UUID, update: CommandStatusUpdate) -> None:
             resp.raise_for_status()
     except httpx.HTTPError as exc:
         logger.warning(f"Failed to update command status ({url} → {payload.get('status')}): {exc}")
+
+
+def _get_command_status(command_id: uuid.UUID) -> str | None:
+    """GET a command's current status, or ``None`` if it cannot be determined.
+
+    Returns ``None`` on any HTTP or parsing error so callers treat an
+    unreadable status as "do not touch" rather than guessing.
+    """
+    url = f"{_api_base()}/api/v1/commands/{command_id}"
+    try:
+        with httpx.Client(timeout=10) as client:
+            resp = client.get(url)
+            resp.raise_for_status()
+            return str(resp.json().get("status"))
+    except (httpx.HTTPError, ValueError, AttributeError) as exc:
+        logger.warning(f"Failed to read command status ({url}): {exc}")
+        return None
+
+
+def _finalize_if_active(
+    command_id: uuid.UUID,
+    error_message: str,
+    result_summary: dict[str, Any] | None = None,
+) -> bool:
+    """Mark a command ``failed`` unless it has already reached a terminal state.
+
+    Used to reconcile rows orphaned by a child process that died without
+    reporting.  A GET is issued first so an already-terminal row (``completed``,
+    ``failed``, ``cancelled``) is left untouched — the API rejects transitions
+    out of a terminal state with a 422, and a scan that legitimately finished
+    must not be relabelled a failure.
+
+    The GET-then-PATCH is deliberately not atomic.  If the row completes in
+    between, the PATCH is rejected by the server's transition validator and the
+    row correctly stays ``completed``; ``_update_status`` logs the rejection and
+    does not raise.  That is the desired outcome, so no locking is used.
+
+    Returns ``True`` when a terminal status was written.
+    """
+    current = _get_command_status(command_id)
+    if current is None:
+        return False
+    if current in ("completed", "failed", "cancelled"):
+        logger.debug(f"Command already terminal — not reconciling command_id={command_id} status={current}")
+        return False
+    logger.warning(f"Reconciling orphaned command command_id={command_id} was={current} error={error_message}")
+    _update_status(command_id, CommandStatusUpdate(
+        status="failed",
+        completed_at=datetime.now(timezone.utc),
+        error_message=error_message,
+        result_summary=result_summary,
+    ))
+    return True
 
 
 def _spawn_scan(
@@ -360,6 +478,10 @@ def _cancel_scan(envelope: CommandEnvelope) -> None:
     pid = _find_pid_by_command_id(target_command_id)
     if pid is None:
         logger.info(f"No running scan found for command_id={target_command_id}")
+        _finalize_if_active(
+            target_command_id,
+            error_message="Scan process not found — orphaned",
+        )
         _update_status(cancel_command_id, CommandStatusUpdate(
             status="completed", completed_at=datetime.now(timezone.utc),
             result_summary={"message": f"No running scan found for {target_command_id}"},
@@ -383,6 +505,10 @@ def _cancel_scan(envelope: CommandEnvelope) -> None:
     except ProcessLookupError:
         logger.warning(f"Process pid={pid} already exited for command_id={target_command_id}")
         _children.pop(pid, None)
+        _finalize_if_active(
+            target_command_id,
+            error_message="Scan process exited before cancel",
+        )
         _update_status(cancel_command_id, CommandStatusUpdate(
             status="completed", completed_at=datetime.now(timezone.utc),
             result_summary={"message": f"Process already exited for {target_command_id}"},
@@ -409,6 +535,8 @@ def run_daemon(
     queue_name = f"cnc.{container_name}"
 
     logger.info(f"Daemon started container={container_name} max_concurrent_scans={_max_scans}")
+
+    _reconcile_startup_orphans(container_name)
 
     connection = pika.BlockingConnection(pika.URLParameters(rabbitmq_url))
     channel = connection.channel()
@@ -442,6 +570,7 @@ def run_daemon(
         ):
             if method_frame is None:
                 _poll_test_children()  # poll test children on idle ticks
+                _poll_scan_children()  # reconcile scan children that died silently
                 continue  # timeout, loop back
 
             try:
@@ -467,13 +596,21 @@ def run_daemon(
     except KeyboardInterrupt:
         logger.info("Received KeyboardInterrupt — shutting down")
     finally:
-        for pid in list(_children.keys()):
+        for pid, command_id in list(_children.items()):
+            _finalize_if_active(
+                command_id,
+                error_message="Scan interrupted: producer shut down",
+            )
             try:
                 os.kill(pid, signal.SIGTERM)
                 logger.info(f"Sent SIGTERM to child pid={pid}")
             except ProcessLookupError:
                 pass
-        for pid in list(_test_children.keys()):
+        for pid, (command_id, _popen) in list(_test_children.items()):
+            _finalize_if_active(
+                command_id,
+                error_message="Test interrupted: producer shut down",
+            )
             try:
                 os.kill(pid, signal.SIGTERM)
             except ProcessLookupError:

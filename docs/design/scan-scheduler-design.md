@@ -92,4 +92,25 @@ submitted with the save payload. Leaving it blank disables scheduled scanning.
   `2 × tick_interval` and another instance takes over automatically.
 - **Concurrent scans**: the scheduler fires scans unconditionally; the producer is
   responsible for limiting concurrent scans via `MAX_CONCURRENT_SCANS`.
+- **Orphaned scans**: the producer daemon owns reconciliation for commands
+  targeting it. A scan child that dies without reporting (SIGKILL, OOM,
+  container restart) is marked `failed` by one of three paths:
+  - the SIGCHLD handler records the exit, and the daemon's idle consume tick
+    reports it as `failed` with the exit code;
+  - daemon shutdown finalizes in-flight scans as `failed` *before* terminating
+    their child processes;
+  - daemon startup marks rows left `running` by a previous instance as
+    `failed` ("Scan interrupted: producer restarted").
+
+  Startup reconciliation deliberately touches only `running` rows. An
+  `accepted` row may still be queued in RabbitMQ awaiting this daemon, so
+  failing it would cancel a legitimate pending scan.
+
+  Reconciliation is a GET-then-PATCH: a row already in a terminal state is left
+  untouched, and the API's transition validator rejects the PATCH if the row
+  completes in between, so a scan that legitimately finished is never
+  relabelled a failure.
+- **Cancelling a scan with no live process**: the cancel command reconciles the
+  target scan to `failed` ("Scan process not found — orphaned") and then reports
+  itself `completed`, since it correctly established that no scan was running.
 - **Tick errors**: errors during a tick are caught and logged; the loop never crashes.

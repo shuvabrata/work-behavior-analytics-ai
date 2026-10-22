@@ -352,15 +352,34 @@ def _render_recent_scans(_connector_type: str, connector_meta: dict[str, Any]) -
 
     return html.Div(
         [
-            _section_title("Recent Actions"),
             html.Div(
-                id="connector-scans-list",
-                children="No recent actions.",
+                [
+                    html.I(className="fas fa-history me-1", style={"fontSize": "11px"}),
+                    "Recent Actions",
+                ],
+                id="recent-actions-collapse-toggle",
+                className="collapse-toggle-subtle",
                 style={
-                    "fontFamily": FONT_SANS,
-                    "fontSize": FONT_SIZE_SMALL,
-                    "color": COLOR_GRAY_MEDIUM,
+                    "fontSize": "11px",
+                    "fontWeight": FONT_WEIGHT_SEMIBOLD,
+                    "color": COLOR_GRAY_DARK,
+                    "marginBottom": SPACING_XSMALL,
+                    "cursor": "pointer",
+                    "userSelect": "none",
                 },
+            ),
+            dbc.Collapse(
+                id="recent-actions-collapse",
+                is_open=False,
+                children=html.Div(
+                    id="connector-scans-list",
+                    children="No recent actions.",
+                    style={
+                        "fontFamily": FONT_SANS,
+                        "fontSize": FONT_SIZE_SMALL,
+                        "color": COLOR_GRAY_MEDIUM,
+                    },
+                ),
             ),
         ],
     )

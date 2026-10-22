@@ -30,6 +30,11 @@ import connectors.producers.daemon_common as daemon_mod
 
 pytestmark = pytest.mark.unit
 
+# The producers conftest neutralises ``_reconcile_startup_orphans`` by default so
+# the daemon's startup HTTP call stays hermetic.  Tests that exercise the real
+# implementation restore it from this import-time reference.
+_REAL_RECONCILE_STARTUP_ORPHANS = daemon_mod._reconcile_startup_orphans
+
 
 # ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -574,6 +579,220 @@ class TestFindPidByCommandId:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
+#  _reap_children — SIGCHLD exit recording
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestReapChildren:
+    """Tests for ``_reap_children()`` recording exits into ``_exited``.
+
+    No such test existed before this plan (the function is named only in the
+    module docstring), so this class is the sole coverage for the recording
+    behaviour the consume loop's reconciliation depends on.
+    """
+
+    def test_exit_recorded_in_exited(self):
+        """A reaped child is recorded as (command_id, raw exit code)."""
+        command_id = uuid.uuid4()
+        pid = 4242
+        daemon_mod._children[pid] = command_id
+
+        with patch("os.waitpid", side_effect=[(pid, 137), (0, 0)]):
+            daemon_mod._reap_children(17, None)
+
+        # The exit code arrives raw from waitpid, not shifted.
+        assert daemon_mod._exited[pid] == (command_id, 137)
+        # And the pid is gone from _children.
+        assert pid not in daemon_mod._children
+
+    def test_unknown_pid_ignored(self):
+        """A reaped pid absent from ``_children`` records nothing."""
+        with patch("os.waitpid", side_effect=[(9999, 0), (0, 0)]):
+            daemon_mod._reap_children(17, None)
+
+        assert daemon_mod._exited == {}
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  _finalize_if_active — orphan reconciliation helper
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestFinalizeIfActive:
+    """Tests for the ``_finalize_if_active()`` orphan reconciliation helper."""
+
+    def test_running_is_reconciled(self):
+        """A running row is PATCHed to failed with the given message."""
+        command_id = uuid.uuid4()
+
+        with patch.object(daemon_mod, "_get_command_status", return_value="running"):
+            with patch.object(daemon_mod, "_update_status") as mock_status:
+                result = daemon_mod._finalize_if_active(command_id, "test reason")
+
+        assert result is True
+        mock_status.assert_called_once()
+        assert mock_status.call_args[0][0] == command_id
+        update = mock_status.call_args[0][1]
+        assert update.status == "failed"
+        assert update.error_message == "test reason"
+        assert update.completed_at is not None
+
+    def test_completed_left_alone(self):
+        """A completed row is never relabelled a failure."""
+        command_id = uuid.uuid4()
+
+        with patch.object(daemon_mod, "_get_command_status", return_value="completed"):
+            with patch.object(daemon_mod, "_update_status") as mock_status:
+                result = daemon_mod._finalize_if_active(command_id, "test reason")
+
+        assert result is False
+        mock_status.assert_not_called()
+
+    @pytest.mark.parametrize("terminal", ["failed", "cancelled"])
+    def test_terminal_states_left_alone(self, terminal):
+        """Already-terminal rows are left untouched."""
+        command_id = uuid.uuid4()
+
+        with patch.object(daemon_mod, "_get_command_status", return_value=terminal):
+            with patch.object(daemon_mod, "_update_status") as mock_status:
+                result = daemon_mod._finalize_if_active(command_id, "test reason")
+
+        assert result is False
+        mock_status.assert_not_called()
+
+    def test_unreadable_status_takes_no_action(self):
+        """An unreadable status means 'do not touch'."""
+        command_id = uuid.uuid4()
+
+        with patch.object(daemon_mod, "_get_command_status", return_value=None):
+            with patch.object(daemon_mod, "_update_status") as mock_status:
+                result = daemon_mod._finalize_if_active(command_id, "test reason")
+
+        assert result is False
+        mock_status.assert_not_called()
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  _poll_scan_children — exit-code-driven reconciliation
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestPollScanChildren:
+    """Tests for ``_poll_scan_children()`` — exit-code-driven reconciliation."""
+
+    def test_dead_child_reconciled_with_exit_code(self):
+        """A recorded exit is reported as failed with the exit code."""
+        command_id = uuid.uuid4()
+        daemon_mod._exited[7001] = (command_id, 137)
+
+        with patch.object(daemon_mod, "_finalize_if_active") as mock_finalize:
+            daemon_mod._poll_scan_children()
+
+        mock_finalize.assert_called_once()
+        assert mock_finalize.call_args[0][0] == command_id
+        assert "137" in mock_finalize.call_args[1]["error_message"]
+
+    def test_exited_is_drained(self):
+        """The ``_exited`` map is emptied by the drain."""
+        command_id = uuid.uuid4()
+        daemon_mod._exited[7002] = (command_id, 1)
+
+        with patch.object(daemon_mod, "_finalize_if_active"):
+            daemon_mod._poll_scan_children()
+
+        assert daemon_mod._exited == {}
+
+    def test_clean_exit_still_reconciled(self):
+        """A child that exits 0 without reporting is still reconciled."""
+        command_id = uuid.uuid4()
+        daemon_mod._exited[7003] = (command_id, 0)
+
+        with patch.object(daemon_mod, "_finalize_if_active") as mock_finalize:
+            daemon_mod._poll_scan_children()
+
+        mock_finalize.assert_called_once()
+        assert "0" in mock_finalize.call_args[1]["error_message"]
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  _reconcile_startup_orphans — startup reconciliation
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestStartupOrphanReconciliation:
+    """Tests for ``_reconcile_startup_orphans()``."""
+
+    @pytest.fixture(autouse=True)
+    def _restore_real_impl(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Exercise the real implementation, not the conftest's neutralised stub."""
+        monkeypatch.setattr(daemon_mod, "_reconcile_startup_orphans", _REAL_RECONCILE_STARTUP_ORPHANS)
+
+    def test_running_scan_is_reconciled(self):
+        """A running scan for this target is finalized."""
+        command_id = uuid.uuid4()
+        mock_instance = MagicMock()
+        mock_instance.get.return_value = MagicMock(
+            raise_for_status=MagicMock(),
+            json=MagicMock(return_value={"commands": [
+                {"command_id": str(command_id), "command_type": "scan", "status": "running"},
+            ]}),
+        )
+
+        with patch("httpx.Client") as mock_client:
+            mock_client.return_value.__enter__.return_value = mock_instance
+            with patch.object(daemon_mod, "_finalize_if_active") as mock_finalize:
+                daemon_mod._reconcile_startup_orphans("github-producer")
+
+        mock_finalize.assert_called_once()
+        assert mock_finalize.call_args[0][0] == command_id
+        # Only running rows are requested.
+        assert mock_instance.get.call_args[1]["params"]["status"] == "running"
+
+    def test_non_scan_commands_skipped(self):
+        """A test command left in the list is not reconciled."""
+        mock_instance = MagicMock()
+        mock_instance.get.return_value = MagicMock(
+            raise_for_status=MagicMock(),
+            json=MagicMock(return_value={"commands": [
+                {"command_id": str(uuid.uuid4()), "command_type": "test", "status": "running"},
+            ]}),
+        )
+
+        with patch("httpx.Client") as mock_client:
+            mock_client.return_value.__enter__.return_value = mock_instance
+            with patch.object(daemon_mod, "_finalize_if_active") as mock_finalize:
+                daemon_mod._reconcile_startup_orphans("github-producer")
+
+        mock_finalize.assert_not_called()
+
+    def test_list_failure_is_non_fatal(self):
+        """An HTTP error while listing commands does not raise."""
+        mock_instance = MagicMock()
+        mock_instance.get.side_effect = __import__("httpx").HTTPError("boom")
+
+        with patch("httpx.Client") as mock_client:
+            mock_client.return_value.__enter__.return_value = mock_instance
+            daemon_mod._reconcile_startup_orphans("github-producer")
+
+    def test_malformed_command_id_skipped(self):
+        """A non-UUID command_id is skipped without raising."""
+        mock_instance = MagicMock()
+        mock_instance.get.return_value = MagicMock(
+            raise_for_status=MagicMock(),
+            json=MagicMock(return_value={"commands": [
+                {"command_id": "not-a-uuid", "command_type": "scan", "status": "running"},
+            ]}),
+        )
+
+        with patch("httpx.Client") as mock_client:
+            mock_client.return_value.__enter__.return_value = mock_instance
+            with patch.object(daemon_mod, "_finalize_if_active") as mock_finalize:
+                daemon_mod._reconcile_startup_orphans("github-producer")
+
+        mock_finalize.assert_not_called()
+
+
+# ═══════════════════════════════════════════════════════════════════════════
 #  run_scan — scan mode lifecycle
 # ═══════════════════════════════════════════════════════════════════════════
 
@@ -995,6 +1214,50 @@ class TestCancelHandler:
         # Should have removed from _children despite ProcessLookupError
         assert child_pid not in daemon_mod._children
         # Cancel command should be completed
+        assert (cancel_command_id, "completed") in status_updates
+
+    def test_cancel_no_live_process_reconciles_target(self):
+        """Cancel with no live child reconciles the target and reports completed.
+
+        Regression test for the reported bug: the cancel used to report success
+        while leaving the target row stuck in ``running`` forever.
+        """
+        cancel_command_id = uuid.uuid4()
+        scan_command_id = uuid.uuid4()
+        # The target scan is NOT in _children — no live process exists.
+
+        envelope = _make_envelope(
+            command_id=cancel_command_id,
+            command_type="cancel",
+            parameters={"cancel_command_id": str(scan_command_id)},
+        )
+        body = envelope.model_dump_json().encode()
+
+        mock_channel = MagicMock()
+        mock_connection = MagicMock()
+        mock_connection.channel.return_value = mock_channel
+        mock_frame = MagicMock()
+        mock_frame.delivery_tag = 1
+        mock_channel.consume.return_value = [(mock_frame, None, body)]
+
+        status_updates: list[tuple[uuid.UUID, str]] = []
+
+        def _track_status(cid, update):
+            status_updates.append((cid, update.status))
+
+        with patch.object(daemon_mod, "_finalize_if_active") as mock_finalize:
+            with patch.object(daemon_mod, "_update_status", side_effect=_track_status):
+                with patch("pika.BlockingConnection", return_value=mock_connection):
+                    with patch("signal.signal"):
+                        daemon_mod.run_daemon(
+                            container_name="test-container",
+                            producer_main_path="/fake/main.py",
+                        )
+
+        # The target scan is reconciled ...
+        mock_finalize.assert_called_once()
+        assert mock_finalize.call_args[0][0] == scan_command_id
+        # ... and the cancel command honestly reports itself completed.
         assert (cancel_command_id, "completed") in status_updates
 
     def test_unknown_command_type_logs_and_acks(self):

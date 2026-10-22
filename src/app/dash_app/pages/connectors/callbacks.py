@@ -288,6 +288,33 @@ def toggle_connector_settings_collapse(n_clicks: int | None, is_open: bool) -> b
 
 
 @callback(
+    Output("recent-actions-collapse", "is_open"),
+    Input("recent-actions-collapse-toggle", "n_clicks"),
+    State("recent-actions-collapse", "is_open"),
+    prevent_initial_call=True,
+)
+def toggle_recent_actions_collapse(n_clicks: int | None, is_open: bool) -> bool:
+    """Toggle the Recent Actions collapsible section."""
+    if not n_clicks:
+        raise PreventUpdate
+    return not is_open
+
+
+@callback(
+    Output("connector-scans-poll", "disabled"),
+    Input("recent-actions-collapse", "is_open"),
+)
+def sync_poll_to_collapse(is_open: bool) -> bool:
+    """Poll only while the Recent Actions section is expanded.
+
+    Derived from collapse state rather than toggled imperatively so that every
+    writer of ``is_open`` (the toggle, or ``handle_run_scan`` auto-expanding)
+    produces correct polling with no duplicate-output race.
+    """
+    return not is_open
+
+
+@callback(
     Output({"type": "connector-field", "connector_type": ALL, "section": "connector", "field": ALL}, "value"),
     Input("connector-detail-store", "data"),
     State({"type": "connector-field", "connector_type": ALL, "section": "connector", "field": ALL}, "id"),
@@ -928,7 +955,7 @@ def handle_item_cancel(_clicks: List[int | None]) -> tuple[Dict[str, Any] | Any,
 
 @callback(
     Output("connector-action-feedback", "children", allow_duplicate=True),
-    Output("connector-scans-poll", "disabled", allow_duplicate=True),
+    Output("recent-actions-collapse", "is_open", allow_duplicate=True),
     Input({"type": "connector-item-test", "connector_type": ALL, "item_id": ALL}, "n_clicks"),
     prevent_initial_call=True,
 )
@@ -985,7 +1012,7 @@ def handle_item_test_connection(_clicks: List[int | None]) -> tuple[dbc.Alert | 
                 color="info",
                 class_name="mb-0",
             ),
-            False,  # enable polling so result appears
+            True,  # expand Recent Actions so the result appears
         )
     except requests.exceptions.RequestException as exc:
         return (
@@ -1044,41 +1071,37 @@ def handle_mcp_test_connection(_clicks: List[int | None]) -> dbc.Alert | Any:
 
 @callback(
     Output("connector-action-feedback", "children", allow_duplicate=True),
-    Output("connector-scans-poll", "disabled", allow_duplicate=True),
     Input({"type": "connector-cancel-scan", "command_id": ALL}, "n_clicks"),
     State("url", "pathname"),
     prevent_initial_call=True,
 )
-def handle_cancel_scan(n_clicks: List[int | None], pathname: str | None) -> tuple[dbc.Alert | Any, bool | Any]:
+def handle_cancel_scan(n_clicks: List[int | None], pathname: str | None) -> dbc.Alert | Any:
     """Cancel a running scan by sending a cancel command via the API."""
     if not callback_context.triggered:
-        return no_update, no_update
+        return no_update
     triggered_value = callback_context.triggered[0].get("value")
     if not triggered_value:
-        return no_update, no_update
+        return no_update
     triggered = callback_context.triggered_id
     if not isinstance(triggered, dict):
-        return no_update, no_update
+        return no_update
 
     scan_command_id = triggered.get("command_id")
     if not scan_command_id:
-        return no_update, no_update
+        return no_update
 
     # Resolve container name from URL pathname
     if not pathname:
-        return no_update, no_update
+        return no_update
     connector_type = pathname.split("/app/connectors/")[-1]
     if not connector_type or connector_type not in CONNECTOR_REGISTRY:
-        return no_update, no_update
+        return no_update
     container_name = CONNECTOR_REGISTRY[connector_type].get("producer_container")
     if not container_name:
-        return (
-            create_alert(
-                f"No producer container for {connector_type}.",
-                color="warning",
-                class_name="mb-0",
-            ),
-            no_update,
+        return create_alert(
+            f"No producer container for {connector_type}.",
+            color="warning",
+            class_name="mb-0",
         )
 
     api_base = _get_api_base_url()
@@ -1093,22 +1116,16 @@ def handle_cancel_scan(n_clicks: List[int | None], pathname: str | None) -> tupl
             timeout=TIMEOUT_SECONDS,
         )
         response.raise_for_status()
-        return (
-            create_alert(
-                f"Cancel sent for scan {scan_command_id[:8]}...",
-                color="warning",
-                class_name="mb-0",
-            ),
-            False,  # re-enable polling to see status transition
+        return create_alert(
+            f"Cancel sent for scan {scan_command_id[:8]}...",
+            color="warning",
+            class_name="mb-0",
         )
     except requests.exceptions.RequestException as exc:
-        return (
-            create_alert(
-                f"Failed to cancel scan: {exc}",
-                color="danger",
-                class_name="mb-0",
-            ),
-            no_update,
+        return create_alert(
+            f"Failed to cancel scan: {exc}",
+            color="danger",
+            class_name="mb-0",
         )
 
 
@@ -1446,7 +1463,7 @@ def handle_inline_toggle(
 
 @callback(
     Output("connector-action-feedback", "children", allow_duplicate=True),
-    Output("connector-scans-poll", "disabled", allow_duplicate=True),
+    Output("recent-actions-collapse", "is_open", allow_duplicate=True),
     Output("connector-scans-list", "children", allow_duplicate=True),
     Input({"type": "connector-run-scan", "connector_type": ALL}, "n_clicks"),
     prevent_initial_call=True,
@@ -1454,9 +1471,9 @@ def handle_inline_toggle(
 def handle_run_scan(n_clicks: List[int | None]) -> tuple[dbc.Alert | Any, bool | Any, html.Div | Any]:
     """Send a scan command via the API when the "Run Scan" button is clicked.
 
-    Also enables the scan-polling interval so the scan list auto-refreshes,
-    and immediately loads the updated scan list so the new row appears
-    without waiting for the first poll tick.
+    Also expands the Recent Actions section (which turns polling on, since
+    polling is derived from collapse state) and immediately loads the updated
+    scan list so the new row appears without waiting for the first poll tick.
     """
     _ = n_clicks  # used by Dash as trigger
     if not callback_context.triggered:
@@ -1522,7 +1539,7 @@ def handle_run_scan(n_clicks: List[int | None]) -> tuple[dbc.Alert | Any, bool |
                 color="success",
                 class_name="mb-0",
             ),
-            False,  # enable the polling interval
+            True,  # expand Recent Actions so the new scan is visible
             scans_children,
         )
     except requests.exceptions.RequestException as exc:
@@ -1539,28 +1556,32 @@ def handle_run_scan(n_clicks: List[int | None]) -> tuple[dbc.Alert | Any, bool |
 
 @callback(
     Output("connector-scans-list", "children"),
+    Output("recent-actions-collapse", "is_open", allow_duplicate=True),
     [Input("connector-scans-poll", "n_intervals"),
      Input("url", "pathname")],
+    prevent_initial_call="initial_duplicate",
 )
 def load_recent_scans(
     n_intervals: int | None,
     pathname: str | None,
-) -> html.Div | Any:
+) -> tuple[html.Div | Any, bool | Any]:
     """Load recent scan commands for this connector.
 
-    Polled every 5 seconds while scans are in progress.  Disabled when idle.
+    Polled every 5 seconds while the Recent Actions section is expanded.
+    Also decides whether to expand that section, but only on load or
+    navigation — never on a poll tick.
     """
     _ = n_intervals  # used by Dash as trigger
     if not pathname or not pathname.startswith("/app/connectors/"):
-        return no_update
+        return no_update, no_update
 
     connector_type = pathname.split("/app/connectors/")[-1]
     if not connector_type or connector_type not in CONNECTOR_REGISTRY:
-        return no_update
+        return no_update, no_update
 
     container_name = CONNECTOR_REGISTRY[connector_type].get("producer_container")
     if not container_name:
-        return no_update
+        return no_update, no_update
 
     api_base = _get_api_base_url()
     try:
@@ -1580,64 +1601,29 @@ def load_recent_scans(
                     "fontSize": FONT_SIZE_SMALL,
                     "color": COLOR_GRAY_MEDIUM,
                 },
-            )
+            ), no_update
         items = [render_scan_item(cmd) for cmd in commands]
-        return html.Div(items)
+
+        # Decide open/closed only on load or navigation. On a poll tick the
+        # value is left alone so the panel never snaps shut while the user is
+        # watching a scan finish.
+        if callback_context.triggered_id == "connector-scans-poll":
+            collapse: bool | Any = no_update
+        else:
+            # Expand when any action is in flight, or when the newest action
+            # failed — a failure is the outcome the user most likely just
+            # caused.  ``commands[0]`` is the newest row: the API orders by
+            # ``created_at DESC`` (``service.py:158``) and this function does
+            # not re-sort.  The empty-list case returned earlier, so index 0
+            # is always safe here.
+            collapse = any(
+                cmd.get("status") == "running" for cmd in commands
+            ) or commands[0].get("status") == "failed"
+
+        return html.Div(items), collapse
     except requests.exceptions.RequestException:
         # Silently fail on poll — don't spam UI with errors every 5s
-        return no_update
-
-
-clientside_callback(
-    """
-    function(scans_children) {
-        // Recursively search for active scan status text in the serialized
-        // Dash component tree.  Returns true (disable poll) when no scans
-        // are in progress, false (keep polling) when any are still active.
-        if (!scans_children) {
-            return true;
-        }
-
-        var activeStatuses = ['Running', 'Queued', 'Accepted'];
-
-        function walk(node) {
-            if (typeof node === 'string') {
-                for (var i = 0; i < activeStatuses.length; i++) {
-                    if (node.indexOf(activeStatuses[i]) !== -1) {
-                        return true;
-                    }
-                }
-                return false;
-            }
-            if (node && node.props && node.props.children) {
-                var children = node.props.children;
-                if (!Array.isArray(children)) {
-                    children = [children];
-                }
-                for (var j = 0; j < children.length; j++) {
-                    if (walk(children[j])) {
-                        return true;
-                    }
-                }
-            }
-            return false;
-        }
-
-        // scans_children is the children of connector-scans-list.
-        // If it's an array, check each top-level item; otherwise check the single node.
-        var items = Array.isArray(scans_children) ? scans_children : [scans_children];
-        for (var k = 0; k < items.length; k++) {
-            if (walk(items[k])) {
-                return false;  // active scan found — keep polling
-            }
-        }
-        return true;  // no active scans — stop polling
-    }
-    """,
-    Output("connector-scans-poll", "disabled"),
-    Input("connector-scans-list", "children"),
-    prevent_initial_call=True,
-)
+        return no_update, no_update
 
 
 clientside_callback(

@@ -17,6 +17,7 @@ Usage:
 from collections.abc import Set as AbstractSet
 from typing import Any
 
+import itertools
 from datetime import datetime
 from dash import html, dcc
 import dash_bootstrap_components as dbc
@@ -695,6 +696,108 @@ def _panel_resolve_endpoint(edge_data: dict[str, Any], endpoint: str) -> str:
 _DATE_TIME_KEYS = {"start_date", "created_at", "updated_at", "due_date"}
 
 
+#: Long-form help for derived metrics the properties panel surfaces.  Keys are
+#: the element-data keys; the value is the Markdown body shown in a hover/focus
+#: popover behind an (i) icon rendered next to that row's key cell.
+#:
+#: These metrics are computed by the collaboration analytics pipeline and are
+#: not self-explanatory from their names, so the panel explains them in place
+#: rather than requiring a trip to the docs.
+_PANEL_METRIC_TOOLTIPS: dict[str, str] = {
+    "hub_score": (
+        "**How much total collaboration weight this person carries.**\n\n"
+        "Hub score is the sum of the raw weights of every collaboration edge "
+        "touching this person -- a plain weighted degree, with no normalization. "
+        "If Alice collaborates with Bob (weight 10) and Carol (weight 5), her hub "
+        "score is **15**.\n\n"
+        "Someone who reviews a lot of code, co-edits many files and shares many "
+        "sprints accumulates large edges on many sides, so they rank highly.\n\n"
+        "**What it drives:** node size (log-scaled into a 0.25x-2.0x multiplier so "
+        "a few giants do not dwarf everyone else) and layout position -- within "
+        "each community the highest scorer sits at the centre with others "
+        "radiating outward. These are the \"glue people\": remove one and the "
+        "cluster can fracture.\n\n"
+        "**Note:** the score is volume-biased. A prolific person ranks high partly "
+        "because they do more of everything, so a high hub score means \"a lot of "
+        "collaboration flows through this person\", not necessarily \"works more "
+        "closely than anyone else\"."
+    ),
+    "normalized_weight": (
+        "**How strong this connection is, on a 0-100 scale.**\n\n"
+        "The raw `weight` of an edge is an unbounded score -- it might be 5 for "
+        "one pair and 17,000 for another. To make that readable, every edge is "
+        "rescaled against the strongest edge in the graph you are currently "
+        "viewing:\n\n"
+        "`normalized = log(weight + 1) / log(strongest weight + 1) x 100`\n\n"
+        "- The strongest edge in the view is always **100**; everything else "
+        "scales down from it.\n"
+        "- The log compression matters: raw weights are heavily skewed, so a "
+        "plain rescale would push almost every ordinary edge to ~0 and make them "
+        "all look identical.\n\n"
+        "**What it drives:** edge colour (violet = weak through to red = strong), "
+        "edge opacity, and the render order of overlapping edges. It does not "
+        "affect community detection, and it does not set edge thickness.\n\n"
+        "**Note:** this value is relative, not absolute, and is computed once when "
+        "the graph loads. Introduce a very high-volume collaborator and a pair "
+        "that scored 100 yesterday may show a lower value today, despite no change "
+        "in how they work. Filtering edges in the UI does not re-scale the "
+        "survivors."
+    ),
+}
+
+#: Source of unique ids for the metric-tooltip icon/popover pairs.  The table is
+#: rebuilt on every selection, so ids cannot be derived from the key alone --
+#: two rendered tables could otherwise target the same popover.
+_METRIC_TOOLTIP_IDS = itertools.count()
+
+
+def _panel_metric_key_cell(key: Any) -> Any:
+    """Render a property key cell, adding an (i) popover for documented metrics.
+
+    Follows the app-wide "info hint" pattern (see ``pages/search.py`` and
+    ``pages/timeline/layout.py``): a bare ``fas fa-info-circle`` icon with
+    ``cursor: help``, targeted by a ``dbc.Popover`` on hover/focus.  The popover
+    carries Markdown, matching the query-description popover in
+    ``pages/graph/callbacks/catalog.py``.
+
+    Keys without an entry in ``_PANEL_METRIC_TOOLTIPS`` are returned unchanged,
+    so the plain string path stays byte-identical to the previous behaviour.
+    """
+    tooltip = _PANEL_METRIC_TOOLTIPS.get(str(key))
+    if tooltip is None:
+        return key
+
+    icon_id = f"panel-metric-info-{next(_METRIC_TOOLTIP_IDS)}"
+    return html.Span(
+        [
+            key,
+            html.I(
+                className="fas fa-info-circle",
+                id=icon_id,
+                style={
+                    "cursor": "help",
+                    "marginLeft": "6px",
+                    "color": COLOR_GRAY_MEDIUM,
+                    "fontSize": FONT_SIZE_XSMALL,
+                    "display": "inline-flex",
+                    "alignItems": "center",
+                },
+            ),
+            dbc.Popover(
+                dbc.PopoverBody(
+                    dcc.Markdown(tooltip),
+                    style={"maxWidth": "340px"},
+                ),
+                target=icon_id,
+                trigger="hover focus",
+                placement="auto",
+                class_name="popover-inverted",
+            ),
+        ],
+        style={"display": "inline-flex", "alignItems": "center"},
+    )
+
+
 def render_properties_table(items: list[Any]) -> html.Table:
     """Render (key, value) pairs as an Executive Dashboard tabular layout.
 
@@ -786,7 +889,7 @@ def render_properties_table(items: list[Any]) -> html.Table:
             )
         rows.append(html.Tr(
             [
-                html.Td(key, style=DETAILS_TABLE_KEY_STYLE),
+                html.Td(_panel_metric_key_cell(key), style=DETAILS_TABLE_KEY_STYLE),
                 html.Td(
                     value_cell,
                     style={

@@ -355,6 +355,103 @@ class TestBuildElementPropertiesContent:
         text = self._flatten_text(result)
         assert "weight" in text
 
+    # --- Metric (i) tooltips ---
+
+    def _collect_popovers(self, component):
+        """Collect every ``dbc.Popover`` under *component*."""
+        found = []
+        if isinstance(component, dbc.Popover):
+            found.append(component)
+        children = getattr(component, 'children', None)
+        if children is None:
+            return found
+        if not isinstance(children, list):
+            children = [children]
+        for child in children:
+            found.extend(self._collect_popovers(child))
+        return found
+
+    def test_undefined_metric_key_has_no_popover(self):
+        """Ordinary property rows must not grow an (i) icon.
+
+        Guards the registry lookup: only documented derived metrics get help,
+        so the plain-key path stays identical to the pre-tooltip rendering.
+        """
+        data = {
+            "id": "e1",
+            "source": "n1",
+            "target": "n2",
+            "relType": "WORKED_WITH",
+            "weight": 5,
+            "elementType": "edge",
+        }
+        result = build_element_properties_content(data)
+        assert self._collect_popovers(result) == []
+
+    def test_edge_normalized_weight_has_tooltip(self):
+        """The edge's ``normalized_weight`` row carries an (i) popover."""
+        data = {
+            "id": "e1",
+            "source": "n1",
+            "target": "n2",
+            "relType": "COLLABORATES",
+            "weight": 42,
+            "normalized_weight": 88.3,
+            "elementType": "edge",
+        }
+        result = build_element_properties_content(data)
+        popovers = self._collect_popovers(result)
+        assert len(popovers) == 1
+        assert popovers[0].target.startswith("panel-metric-info-")
+        assert "0-100 scale" in self._flatten_text(popovers[0])
+
+    def test_node_hub_score_has_tooltip(self):
+        """The node's ``hub_score`` row carries an (i) popover."""
+        data = {
+            "id": "github::Person::alice",
+            "wba_id": "github::Person::alice",
+            "label": "Alice",
+            "nodeType": "Person",
+            "community": 0,
+            "hub_score": 15.0,
+            "elementType": "node",
+        }
+        result = build_element_properties_content(data)
+        popovers = self._collect_popovers(result)
+        assert len(popovers) == 1
+        assert "weighted degree" in self._flatten_text(popovers[0])
+
+    def test_tooltip_icon_ids_are_unique_across_renders(self):
+        """Successive renders must not reuse a popover target id.
+
+        The panel is rebuilt on every selection, and Dash targets popovers by
+        id; a repeated id would make the icon open a stale popover (or none).
+        """
+        data = {
+            "id": "e1",
+            "source": "n1",
+            "target": "n2",
+            "relType": "COLLABORATES",
+            "normalized_weight": 88.3,
+            "elementType": "edge",
+        }
+        first = self._collect_popovers(build_element_properties_content(data))[0]
+        second = self._collect_popovers(build_element_properties_content(data))[0]
+        assert first.target != second.target
+
+    def test_metric_key_cell_keeps_key_text(self):
+        """The help icon is additive: the row still shows its key label."""
+        data = {
+            "id": "e1",
+            "source": "n1",
+            "target": "n2",
+            "relType": "COLLABORATES",
+            "normalized_weight": 88.3,
+            "elementType": "edge",
+        }
+        result = build_element_properties_content(data)
+        assert "normalized_weight" in self._flatten_text(result)
+
     # --- Node with a `source` property (regression) ---
 
     def test_node_with_source_property_is_not_misclassified_as_edge(self):

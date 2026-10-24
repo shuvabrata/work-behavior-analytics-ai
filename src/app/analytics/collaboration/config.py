@@ -91,6 +91,11 @@ class CollaborationNetworkConfig(BaseModel):
     ensure_min_connection: bool = Field(default=DEFAULT_ENSURE_MIN_CONNECTION)
     exclude_bots: bool = Field(default=DEFAULT_EXCLUDE_BOTS)
     excluded_file_suffixes: list[str] = Field(default_factory=lambda: list(DEFAULT_EXCLUDED_FILE_SUFFIXES))
+    focus_id: str | None = Field(
+        default=None,
+        description="Restrict output to pairs incident to this Person wba_id. "
+                    "None (default) returns the org-wide network.",
+    )
 
     @field_validator("enabled_layers")
     @classmethod
@@ -127,6 +132,7 @@ class CollaborationNetworkConfig(BaseModel):
             "min_pair_score": self.min_pair_score,
             "exclude_bots": self.exclude_bots,
             "excluded_file_suffixes": self.excluded_file_suffixes,
+            "focus_id": self.focus_id,
         }
 
         enabled = set(self.enabled_layers)

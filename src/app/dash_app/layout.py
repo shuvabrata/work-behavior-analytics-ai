@@ -7,7 +7,7 @@ from dash import clientside_callback
 from dash.exceptions import PreventUpdate
 from urllib.parse import quote
 
-from app.dash_app.pages import analytics, chat, collaboration_network, connectors, graph, search, settings, timeline, catalog
+from app.dash_app.pages import analytics, chat, collaboration_network, collaboration_network_ego, connectors, graph, search, settings, timeline, catalog
 from app.dash_app.components.setup_banner import get_banner_layout
 from app.settings import settings as app_settings
 from .styles import (
@@ -151,6 +151,7 @@ def create_dash_app() -> dash.Dash:
             "/app/library": catalog.get_layout,
             "/app/analytics/timeline": timeline.get_layout,
             "/app/collaboration": collaboration_network.get_layout,
+            "/app/collaboration/person": collaboration_network_ego.get_layout,
             "/app/graph": graph.get_layout,
             "/app/connectors": connectors.get_layout,
             "/app/settings": settings.get_layout,

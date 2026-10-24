@@ -15,15 +15,43 @@ from app.analytics.collaboration.algorithm import _compact_label, _weight_to_hex
 from app.runtime_settings import runtime_settings
 
 # Radial ring radii in layout units. The closest collaborator sits at R_IN,
-# the weakest at R_OUT. Chosen so that 25 evenly-spread spokes keep >=100px
-# separation at the default zoom (Person nodes are 66x56px).
+# the weakest at R_OUT.
+#
+# R_IN is a FLOOR, not the actual innermost radius: with a fixed R_IN the arc
+# between angularly-adjacent spokes shrinks as spokes are added, and Person
+# nodes (66x56px, see app/common/node_size.py) end up overlapping (35.3px apart
+# at 25 spokes, 17.2px at 50). The innermost radius is therefore scaled so the
+# arc can never fall below TARGET_SPOKE_SEPARATION — see
+# compute_radial_positions. Overlap is scale-invariant (cy.fit() zooms
+# uniformly), so it cannot be fixed at render time.
 RADIUS_MIN = 120.0
 RADIUS_MAX = 480.0
+TARGET_SPOKE_SEPARATION = 80.0
 DEFAULT_MAX_COLLABORATORS = 25
 
 # Collaborator-cap choices offered by both the Analytics card and the ego page's
 # in-page selector, so the two surfaces cannot offer different sets.
 COLLABORATOR_CAP_OPTIONS = [10, 25, 50, 100]
+
+
+def cap_options_for(max_collaborators: int) -> List[Dict[str, Any]]:
+    """Return the collaborator-cap choices that ``max_collaborators`` can honour.
+
+    The in-page selector slices an already-fetched element set, so a cap above
+    ``max_collaborators`` could never take effect. Offering it would be a dead
+    control, so the option list is truncated to the fetched ceiling — which is
+    always included, even when it is not one of COLLABORATOR_CAP_OPTIONS (the
+    API accepts any value in 1..500, so a hand-edited URL can produce one).
+
+    Args:
+        max_collaborators: The cap the current element set was fetched with.
+
+    Returns:
+        ``{"label": ..., "value": ...}`` dicts ordered ascending, ready for a
+        Dash options prop.
+    """
+    caps = sorted({*[c for c in COLLABORATOR_CAP_OPTIONS if c <= max_collaborators], max_collaborators})
+    return [{"label": f"Top {cap}", "value": cap} for cap in caps]
 
 
 def build_ego_graph(records: List[Dict[str, Any]], focus_id: str) -> nx.Graph:
@@ -120,8 +148,10 @@ def compute_radial_positions(
 ) -> Dict[str, Dict[str, float]]:
     """Place the focus at the origin and each spoke on a ring by its weight.
 
-    Strongest collaborator -> innermost ring (RADIUS_MIN).
-    Weakest   collaborator -> outermost ring (RADIUS_MAX).
+    Strongest collaborator -> innermost ring, at max(RADIUS_MIN,
+    count * TARGET_SPOKE_SEPARATION / (2*pi)).
+    Weakest   collaborator -> outermost ring, one fixed band (RADIUS_MAX -
+    RADIUS_MIN) further out.
     Angles are spread evenly, starting at 0 and proceeding clockwise.
 
     Args:
@@ -144,9 +174,19 @@ def compute_radial_positions(
     )
 
     count = len(ordered)
+    # Keep the angular gap between adjacent spokes at or above the target, so a
+    # spoke can never sit closer to its neighbour than a node is wide. The chord
+    # between adjacent spokes is >= the arc length at the innermost radius, so
+    # scaling R_IN by count * TARGET / (2*pi) is a sufficient guarantee; the
+    # radial offset only adds to it. R_MAX moves out by the same fixed band, so
+    # the ring thickness — and the weight-driven reading of the layout — is
+    # unchanged.
+    radius_min = max(RADIUS_MIN, count * TARGET_SPOKE_SEPARATION / (2.0 * math.pi))
+    radius_max = radius_min + (RADIUS_MAX - RADIUS_MIN)
+
     for index, spoke in enumerate(ordered):
         ratio = index / (count - 1) if count > 1 else 0.0
-        radius = RADIUS_MIN + (RADIUS_MAX - RADIUS_MIN) * ratio
+        radius = radius_min + (radius_max - radius_min) * ratio
         angle = -2.0 * math.pi * index / count
         positions[spoke] = {
             "x": radius * math.cos(angle),

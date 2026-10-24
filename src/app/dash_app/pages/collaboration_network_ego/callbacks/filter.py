@@ -8,7 +8,7 @@ from dash import Input, Output, State, callback, clientside_callback, ctx, html,
 from dash.exceptions import PreventUpdate
 
 from app.analytics.collaboration.config import CollaborationNetworkConfig, LAYER_ORDER
-from app.analytics.collaboration.ego import DEFAULT_MAX_COLLABORATORS
+from app.analytics.collaboration.ego import DEFAULT_MAX_COLLABORATORS, cap_options_for
 from app.api.graph.v1.service import get_ego_network
 from app.dash_app.components.common import register_loading_overlay_hider
 from app.dash_app.styles import FONT_SIZE_SMALL
@@ -47,24 +47,31 @@ def _parse_max_collaborators(raw: Any) -> int:
      Output("ego-banner",           "style"),
      Output("ego-empty-state",      "style"),
      Output("ego-loading-state",    "data"),
+     Output("ego-top-n-cap",        "options"),
      Output("ego-top-n-cap",        "value", allow_duplicate=True)],
     [Input({"type": "catalog-person-value", "name": "ego_focus"}, "data"),
      Input("url", "search"),
      Input("url", "pathname")],
+    [State("ego-top-n-cap", "value")],
     prevent_initial_call="initial_duplicate",
 )
 def load_ego_network(
     person_value: str | dict[str, Any] | None,
     search: str | None,
     pathname: str | None,
-) -> tuple[list[dict[str, Any]], dict[str, Any], list[Any], dict[str, Any], dict[str, Any], bool, Any]:
+    current_cap: int | None,
+) -> tuple[
+    list[dict[str, Any]], dict[str, Any], list[Any], dict[str, Any],
+    dict[str, Any], bool, list[dict[str, Any]], Any,
+]:
     """Fetch the focus person's star into the store when this page is active.
 
-    Note: prevent_initial_call is intentionally NOT set here.  In Dash's
-    multi-page pattern the output components don't exist until the user
+    Note: prevent_initial_call is "initial_duplicate" rather than True.  In
+    Dash's multi-page pattern the output components don't exist until the user
     navigates to this page.  When they first appear, Dash treats the callback
-    fire as an "initial call" — which prevent_initial_call=True would suppress.
-    The pathname guard handles all non-ego routes safely.
+    fire as an "initial call" — which prevent_initial_call=True would suppress,
+    leaving the page permanently empty.  The pathname guard handles all
+    non-ego routes safely.
     """
     if pathname != "/app/collaboration/person":
         raise PreventUpdate
@@ -86,10 +93,18 @@ def load_ego_network(
     elif isinstance(person_value, str):
         focus_id = person_value.strip()
 
-    # Adopt the Analytics card's Collaborator Cap into the in-page selector — but
-    # only when the URL triggered this load (first navigation or a fresh link).
-    # Re-applying it on every person pick would silently undo a choice the user
-    # just made in the page's own selector.
+    # The card's Collaborator Cap is this load's ceiling. The in-page selector
+    # slices the already-fetched store, so it may only be offered choices at or
+    # below it.
+    max_collaborators = _parse_max_collaborators(
+        params.get("max_collaborators", [None])[0]
+    )
+    cap_options = cap_options_for(max_collaborators)
+    cap_choices = {option["value"] for option in cap_options}
+
+    # Adopt the card's cap when the URL triggered this load (first navigation or a
+    # fresh link). Re-applying it on every person pick would silently undo a choice
+    # the user just made in the page's own selector.
     raw_cap = params.get("max_collaborators", [None])[0]
     url_triggered = any(
         str(item.get("prop_id", "")).startswith("url.")
@@ -97,11 +112,15 @@ def load_ego_network(
     )
     cap_update: Any = no_update
     if url_triggered and raw_cap not in (None, ""):
-        cap_update = _parse_max_collaborators(raw_cap)
+        cap_update = max_collaborators
+    elif current_cap not in cap_choices:
+        # The selection is above what this load fetched (or absent): clamp it into
+        # the offered range so the radio can never render with nothing selected.
+        cap_update = max_collaborators
 
     if not focus_id:
         # No person picked yet — show the empty state, do not call the API.
-        return [], _EGO_LAYOUT, [], hide, {**empty_state_style, "display": "block"}, False, cap_update
+        return [], _EGO_LAYOUT, [], hide, {**empty_state_style, "display": "block"}, False, cap_options, cap_update
 
     logger.info(f"[EGO-PAGE] Loading ego network person={focus_id} search={search!r}")
 
@@ -119,19 +138,12 @@ def load_ego_network(
         }
         config = CollaborationNetworkConfig.from_query_values(query_dict)
 
-        # The Analytics card carries a Collaborator Cap; the in-page selector
-        # narrows within whatever the server returned, so the card's value is
-        # what decides how many collaborators are fetched at all.
-        max_collaborators = _parse_max_collaborators(
-            params.get("max_collaborators", [None])[0]
-        )
-
         data = get_ego_network(focus_id, config=config, max_collaborators=max_collaborators)
         elements = data.elements
 
         if not elements:
             logger.warning("[EGO-PAGE] No elements returned")
-            return [], _EGO_LAYOUT, [], hide, {**empty_state_style, "display": "block"}, False, cap_update
+            return [], _EGO_LAYOUT, [], hide, {**empty_state_style, "display": "block"}, False, cap_options, cap_update
 
         logger.info(
             f"[EGO-PAGE] SUCCESS — {len(elements)} elements, "
@@ -143,15 +155,18 @@ def load_ego_network(
         # filter panel and the node labels, so the badge row was redundant. The
         # banner region is kept for error alerts, which still need somewhere to
         # surface (see the except blocks below).
-        return elements, _EGO_LAYOUT, [], hide, hide, False, cap_update
+        return elements, _EGO_LAYOUT, [], hide, hide, False, cap_options, cap_update
 
     except ValueError as exc:
         logger.warning(f"[EGO-PAGE] No data: {exc}")
-        return [], _EGO_LAYOUT, [_error_banner(str(exc))], show, hide, False, cap_update
+        return [], _EGO_LAYOUT, [_error_banner(str(exc))], show, hide, False, cap_options, cap_update
 
     except Exception as exc:  # pylint: disable=broad-except
         logger.exception(f"[EGO-PAGE] Unexpected error: {exc}")
-        return [], _EGO_LAYOUT, [_error_banner("An unexpected error occurred.")], show, hide, False, cap_update
+        return (
+            [], _EGO_LAYOUT, [_error_banner("An unexpected error occurred.")],
+            show, hide, False, cap_options, cap_update,
+        )
 
 
 # ---------------------------------------------------------------------------

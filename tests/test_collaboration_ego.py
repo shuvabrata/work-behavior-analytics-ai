@@ -10,6 +10,8 @@ decisions 4 and 7 of the ego plan and catch the most likely regressions.
 Run with: pytest tests/test_collaboration_ego.py -v
 """
 
+import math
+
 import pytest
 
 from app.analytics.collaboration.ego import (
@@ -18,6 +20,7 @@ from app.analytics.collaboration.ego import (
     RADIUS_MIN,
     build_ego_elements,
     build_ego_graph,
+    cap_options_for,
     compute_radial_positions,
     normalize_weights,
 )
@@ -27,6 +30,9 @@ from app.api.graph.v1.model import EgoNetworkResponse
 pytestmark = pytest.mark.unit
 
 FOCUS = "github::Person::focus"
+
+PERSON_NODE_WIDTH_PX = 66.0
+"""Rendered width of a Person node — app/common/node_size.py:16."""
 
 
 # ---------------------------------------------------------------------------
@@ -196,6 +202,55 @@ class TestComputeRadialPositions:
         positions = compute_radial_positions(FOCUS, [], {})
         assert positions == {FOCUS: {"x": 0.0, "y": 0.0}}
 
+    @pytest.mark.parametrize("count", (2, 5, 9, 10, 13, 14, 17, 25, 50, 100))
+    def test_no_two_spokes_overlap_at_any_count(self, count: int):
+        """No two spokes may sit closer than a Person node is wide."""
+        pairs = [(f"p{i}", float(count - i)) for i in range(count)]
+        g = build_ego_graph(_records(*pairs), FOCUS)
+        positions = compute_radial_positions(FOCUS, _spokes(*pairs), normalize_weights(g))
+
+        spoke_ids = [_wba(f"p{i}") for i in range(count)]
+
+        def point(spoke: str) -> tuple[float, float]:
+            pos = positions[spoke]
+            return (pos["x"], pos["y"])
+
+        separation = min(
+            math.dist(point(a), point(b))
+            for index, a in enumerate(spoke_ids)
+            for b in spoke_ids[index + 1:]
+        )
+        assert separation >= PERSON_NODE_WIDTH_PX, (
+            f"{count} spokes: min separation {separation:.1f}px "
+            f"< {PERSON_NODE_WIDTH_PX}px node width"
+        )
+
+    @pytest.mark.parametrize("count", (2, 5, 9))
+    def test_small_star_geometry_is_unchanged(self, count: int):
+        """Up to 9 spokes the innermost/outermost rings are the bare constants."""
+        pairs = [(f"p{i}", float(count - i)) for i in range(count)]
+        g = build_ego_graph(_records(*pairs), FOCUS)
+        positions = compute_radial_positions(FOCUS, _spokes(*pairs), normalize_weights(g))
+
+        def radius(spoke: str) -> float:
+            pos = positions[_wba(spoke)]
+            return (pos["x"] ** 2 + pos["y"] ** 2) ** 0.5
+
+        assert radius("p0") == pytest.approx(RADIUS_MIN)
+        assert radius(f"p{count - 1}") == pytest.approx(RADIUS_MAX)
+
+    @pytest.mark.parametrize("count", (10, 25, 50))
+    def test_innermost_radius_scales_with_count(self, count: int):
+        """Above the floor the innermost ring is scaled by the spoke count."""
+        pairs = [(f"p{i}", float(count - i)) for i in range(count)]
+        g = build_ego_graph(_records(*pairs), FOCUS)
+        positions = compute_radial_positions(FOCUS, _spokes(*pairs), normalize_weights(g))
+
+        pos = positions[_wba("p0")]
+        radius = (pos["x"] ** 2 + pos["y"] ** 2) ** 0.5
+        assert radius == pytest.approx(count * 80.0 / (2 * math.pi))
+        assert radius > RADIUS_MIN
+
 
 # ---------------------------------------------------------------------------
 # Element emission
@@ -314,6 +369,29 @@ class TestCapBehaviour:
         elements, _, _ = build_ego_elements(_records(*pairs), FOCUS, max_collaborators=3)
         focus = next(n for n in _nodes(elements) if n["data"]["role"] == "focus")
         assert focus["data"]["total_collaborators"] == 10
+
+
+# ---------------------------------------------------------------------------
+# cap_options_for
+# ---------------------------------------------------------------------------
+
+class TestCapOptionsFor:
+    @pytest.mark.parametrize("max_collaborators, expected", (
+        (25, [10, 25]),
+        (100, [10, 25, 50, 100]),
+        (30, [10, 25, 30]),
+        (1, [1]),
+        (500, [10, 25, 50, 100, 500]),
+    ))
+    def test_offers_only_what_the_fetched_cap_can_honour(
+        self, max_collaborators: int, expected: list[int]
+    ):
+        options = cap_options_for(max_collaborators)
+        assert [option["value"] for option in options] == expected
+
+    def test_labels_match_their_values(self):
+        for option in cap_options_for(100):
+            assert option["label"] == f"Top {option['value']}"
 
 
 # ---------------------------------------------------------------------------

@@ -75,7 +75,7 @@ def test_url_cap_is_fetched_and_reflected_in_page_selector(monkeypatch):
     captured = _stub_service(monkeypatch)
     monkeypatch.setattr(ego_filter, "ctx", _FakeCtx(["url.search"]))
 
-    result = ego_filter.load_ego_network(PERSON, "?max_collaborators=50", PAGE)
+    result = ego_filter.load_ego_network(PERSON, "?max_collaborators=50", PAGE, 50)
 
     assert captured["max_collaborators"] == 50
     assert result[-1] == 50, "the page selector should adopt the card's cap"
@@ -85,7 +85,7 @@ def test_absent_cap_uses_api_default_and_leaves_selector(monkeypatch):
     captured = _stub_service(monkeypatch)
     monkeypatch.setattr(ego_filter, "ctx", _FakeCtx(["url.search"]))
 
-    result = ego_filter.load_ego_network(PERSON, "", PAGE)
+    result = ego_filter.load_ego_network(PERSON, "", PAGE, DEFAULT_MAX_COLLABORATORS)
 
     assert captured["max_collaborators"] == DEFAULT_MAX_COLLABORATORS
     assert result[-1] is no_update
@@ -101,7 +101,7 @@ def test_person_pick_does_not_override_page_selector(monkeypatch):
         _FakeCtx(['{"type": "catalog-person-value", "name": "ego_focus"}.data']),
     )
 
-    result = ego_filter.load_ego_network(PERSON, "?max_collaborators=50", PAGE)
+    result = ego_filter.load_ego_network(PERSON, "?max_collaborators=50", PAGE, 25)
 
     assert captured["max_collaborators"] == 50
     assert result[-1] is no_update
@@ -112,7 +112,7 @@ def test_success_path_renders_no_summary_banner(monkeypatch):
     _stub_service(monkeypatch)
     monkeypatch.setattr(ego_filter, "ctx", _FakeCtx(["url.search"]))
 
-    result = ego_filter.load_ego_network(PERSON, "", PAGE)
+    result = ego_filter.load_ego_network(PERSON, "", PAGE, DEFAULT_MAX_COLLABORATORS)
 
     banner_children, banner_style = result[2], result[3]
     assert banner_children == []
@@ -127,14 +127,51 @@ def test_error_path_still_renders_an_alert(monkeypatch):
     monkeypatch.setattr(ego_filter, "get_ego_network", boom)
     monkeypatch.setattr(ego_filter, "ctx", _FakeCtx(["url.search"]))
 
-    result = ego_filter.load_ego_network(PERSON, "", PAGE)
+    result = ego_filter.load_ego_network(PERSON, "", PAGE, DEFAULT_MAX_COLLABORATORS)
 
     assert result[2] != [], "an error alert should be rendered"
     assert result[3]["display"] == "block", "the error alert should be visible"
+
+
+def test_options_only_offer_what_was_fetched(monkeypatch):
+    """The selector may not offer a cap the current element set cannot honour."""
+    _stub_service(monkeypatch)
+    monkeypatch.setattr(ego_filter, "ctx", _FakeCtx(["url.search"]))
+
+    result = ego_filter.load_ego_network(PERSON, "?max_collaborators=25", PAGE, 25)
+
+    offered = {option["value"] for option in result[-2]}
+    assert offered == {10, 25}
+
+
+def test_options_include_a_non_canonical_fetched_cap(monkeypatch):
+    """A fetched cap outside COLLABORATOR_CAP_OPTIONS is still offered."""
+    _stub_service(monkeypatch)
+    monkeypatch.setattr(ego_filter, "ctx", _FakeCtx(["url.search"]))
+
+    result = ego_filter.load_ego_network(PERSON, "?max_collaborators=30", PAGE, 30)
+
+    offered = {option["value"] for option in result[-2]}
+    assert offered == {10, 25, 30}
+
+
+def test_stale_selection_is_clamped_into_range(monkeypatch):
+    """A selection above the fetched cap is pulled back into the offered range."""
+    _stub_service(monkeypatch)
+    monkeypatch.setattr(
+        ego_filter,
+        "ctx",
+        _FakeCtx(['{"type": "catalog-person-value", "name": "ego_focus"}.data']),
+    )
+
+    result = ego_filter.load_ego_network(PERSON, "?max_collaborators=10", PAGE, 100)
+
+    assert result[-1] == 10
+    assert 10 in {option["value"] for option in result[-2]}
 
 
 def test_other_routes_are_ignored():
     from dash.exceptions import PreventUpdate
 
     with pytest.raises(PreventUpdate):
-        ego_filter.load_ego_network(PERSON, "", "/app/collaboration")
+        ego_filter.load_ego_network(PERSON, "", "/app/collaboration", DEFAULT_MAX_COLLABORATORS)

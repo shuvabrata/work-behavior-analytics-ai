@@ -165,22 +165,47 @@ def _create_analytic_card(analytic: Any) -> dbc.Card:
 
 _LAYER_GRID_TEMPLATE = "70px 1fr 110px"
 
-# Bounds for the cards' numeric controls, mirroring the Field constraints on
-# CollaborationNetworkConfig. Clamping here (rather than letting the model raise)
-# is what stops one out-of-range box from discarding every other setting on the
-# card — see _config_from_layer_inputs. The bounds are duplicated deliberately so
-# they are greppable next to the controls they guard;
-# tests/test_analytics_page.py::test_numeric_bounds_match_the_config_model fails
-# if they ever drift from the model.
-#
-# (lower, upper, label) — upper None means unbounded above.
-_NUMERIC_BOUNDS: dict[str, tuple[float | None, float | None, str]] = {
-    "lookback_days": (1, 365, "Lookback Days"),
-    "min_pair_score": (0, None, "Min Pair Score"),
-    "top_n_edges_per_node": (0, 200, "Top-N Edges / Node"),
-    "community_gap_x": (200, 10000, "Community Gap X"),
-    "community_gap_y": (200, 10000, "Community Gap Y"),
+# User-facing names for the cards' bounded numeric controls, keyed by the config
+# field they map to. Labels live here because the model has no notion of what a
+# field is called in the UI; the *bounds* for these same fields are read from the
+# model (see _bounds_for), so a Field change needs no edit here.
+_CONTROL_LABELS: dict[str, str] = {
+    "lookback_days": "Lookback Days",
+    "min_pair_score": "Min Pair Score",
+    "top_n_edges_per_node": "Top-N Edges / Node",
+    "community_gap_x": "Community Gap X",
+    "community_gap_y": "Community Gap Y",
 }
+
+
+def _bounds_for(key: str) -> tuple[float | None, float | None]:
+    """Return ``(lower, upper)`` for a config field, read from the model itself.
+
+    The bounds are *not* duplicated here: they come from the Field constraints on
+    :class:`CollaborationNetworkConfig`, which is the single place a range is
+    declared. Changing ``le=365`` to another value in the model is therefore the
+    only edit needed — the card follows automatically, and so does the message the
+    user sees. ``None`` means unbounded on that side.
+    """
+    schema = CollaborationNetworkConfig.model_json_schema()["properties"][key]
+    return schema.get("minimum"), schema.get("maximum")
+
+
+def _is_integer_field(key: str) -> bool:
+    """True when the config model declares this field as an ``int``.
+
+    Read from the model's own annotation, never restated here: ``lookback_days``
+    and ``top_n_edges_per_node`` are the two integer fields, while the two gaps
+    and the min pair score are floats and legitimately accept fractions.
+
+    This uses ``model_fields`` rather than ``model_json_schema()`` deliberately —
+    building the JSON schema costs ~1.3 ms per call, and this runs once per field
+    on every keystroke, for a single boolean. ``model_fields[key].annotation`` is
+    the same declaration the schema is generated from, so the single-source
+    property is unchanged.
+    """
+    return CollaborationNetworkConfig.model_fields[key].annotation is int
+
 
 WEIGHT_BOUNDS_LABEL = "Layer weight"
 
@@ -246,8 +271,7 @@ def _layer_row(layer: str, prefix: str) -> html.Div:
             dbc.Input(
                 id={"type": f"{prefix}-weight", "layer": layer},
                 type="number",
-                min=0,
-                step=0.1,
+                step="any",
                 value=DEFAULT_LAYER_WEIGHTS[layer],
                 size="sm",
                 style={
@@ -358,9 +382,7 @@ def _create_card_controls(spec: _CardControlsSpec) -> html.Div:
                             dbc.Input(
                                 id=f"{prefix}-community-gap-x",
                                 type="number",
-                                min=200,
-                                max=10000,
-                                step=10,
+                                step="any",
                                 value=DEFAULT_COMMUNITY_GAP_X,
                                 size="sm",
                             ),
@@ -373,9 +395,7 @@ def _create_card_controls(spec: _CardControlsSpec) -> html.Div:
                             dbc.Input(
                                 id=f"{prefix}-community-gap-y",
                                 type="number",
-                                min=200,
-                                max=10000,
-                                step=10,
+                                step="any",
                                 value=DEFAULT_COMMUNITY_GAP_Y,
                                 size="sm",
                             ),
@@ -402,14 +422,14 @@ def _create_card_controls(spec: _CardControlsSpec) -> html.Div:
         dbc.Col(
             [
                 html.Label("Lookback Days", style={"fontSize": FONT_SIZE_SMALL, "fontFamily": FONT_SANS}),
-                dbc.Input(id=f"{prefix}-lookback-days", type="number", min=1, max=365, step=1, value=DEFAULT_LOOKBACK_DAYS, size="sm"),
+                dbc.Input(id=f"{prefix}-lookback-days", type="number", step="any", value=DEFAULT_LOOKBACK_DAYS, size="sm"),
             ],
             md=topology_col_width,
         ),
         dbc.Col(
             [
                 html.Label("Min Pair Score", style={"fontSize": FONT_SIZE_SMALL, "fontFamily": FONT_SANS}),
-                dbc.Input(id=f"{prefix}-min-pair-score", type="number", min=0, step=0.1, value=DEFAULT_MIN_PAIR_SCORE, size="sm"),
+                dbc.Input(id=f"{prefix}-min-pair-score", type="number", step="any", value=DEFAULT_MIN_PAIR_SCORE, size="sm"),
             ],
             md=topology_col_width,
         ),
@@ -419,7 +439,7 @@ def _create_card_controls(spec: _CardControlsSpec) -> html.Div:
             dbc.Col(
                 [
                     html.Label("Top-N Edges / Node", style={"fontSize": FONT_SIZE_SMALL, "fontFamily": FONT_SANS}),
-                    dbc.Input(id=f"{prefix}-top-n-edges", type="number", min=0, max=200, step=1, value=DEFAULT_TOP_N_EDGES_PER_NODE, size="sm"),
+                    dbc.Input(id=f"{prefix}-top-n-edges", type="number", step="any", value=DEFAULT_TOP_N_EDGES_PER_NODE, size="sm"),
                 ],
                 md=topology_col_width,
             )
@@ -517,7 +537,18 @@ def _create_card_controls(spec: _CardControlsSpec) -> html.Div:
             # Feedback region for invalid control values, deliberately OUTSIDE the
             # Collapse: the panel defaults to closed, so a warning placed inside it
             # would be invisible exactly when the user needs it.
-            html.Div(id=f"{prefix}-config-alert", children=[], style={"display": "none"}),
+            #
+            # `card-config-alert` (executive-dashboard.css) makes the region sticky
+            # within the page's scroll container. The controls panel is ~1800px tall,
+            # so editing a field near its bottom (Lookback Days) scrolls this region
+            # off-screen above — it renders, and the user never sees it. Sticky pins
+            # it just below the topbar for as long as it has something to say.
+            html.Div(
+                id=f"{prefix}-config-alert",
+                children=[],
+                className="card-config-alert",
+                style={"display": "none"},
+            ),
             dbc.Collapse(collapse_children, id=f"{prefix}-controls-collapse", is_open=False),
             html.Div(
                 id=f"{prefix}-url-preview",
@@ -592,7 +623,10 @@ def _validate_control(key: str, raw: Any, label: str) -> _ControlProblem | None:
     if number is None:
         return _ControlProblem(label, f"{label} must be a number.")
 
-    lower, upper, _ = _NUMERIC_BOUNDS[key]
+    if _is_integer_field(key) and not number.is_integer():
+        return _ControlProblem(label, f"{label} must be a whole number.")
+
+    lower, upper = _bounds_for(key)
     if lower is not None and number < lower:
         if upper is not None:
             return _ControlProblem(label, f"{label} must be between {lower:g} and {upper:g}.")
@@ -661,7 +695,7 @@ def _config_from_layer_inputs(
 
     problems: list[_ControlProblem] = []
 
-    for key, (_lower, _upper, label) in _NUMERIC_BOUNDS.items():
+    for key, label in _CONTROL_LABELS.items():
         if query_values.get(key) is None:
             continue
         problem = _validate_control(key, query_values[key], label)
@@ -694,6 +728,13 @@ def _config_alert(
 
     Returns ``(children, style, blocked)``. ``blocked`` is True when the launch
     buttons must be disabled — i.e. when there is at least one problem.
+
+    The alert is **not dismissable**. It is the only explanation for the launch
+    buttons being disabled, so dismissing it would leave a dead button and no
+    stated reason; ``create_alert`` defaults to ``dismissable=True``, which is
+    right for a transient confirmation and wrong for this. The alert clears
+    itself as soon as the values are valid again, which is the dismissal the user
+    actually wants — see CLAUDE.md's "error alerts persist".
     """
     if not problems:
         return [], {"display": "none"}, False
@@ -707,6 +748,7 @@ def _config_alert(
         ],
         color="warning",
         class_name="mb-2",
+        dismissable=False,
     )
     return [alert], {"display": "block"}, True
 

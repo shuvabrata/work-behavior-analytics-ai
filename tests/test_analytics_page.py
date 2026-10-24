@@ -30,9 +30,11 @@ from app.dash_app.components.common import describe_config_error
 from app.dash_app.pages.analytics import (
     COLLABORATION_CARD_SPEC,
     PER_PERSON_CARD_SPEC,
-    _NUMERIC_BOUNDS,
+    _CONTROL_LABELS,
+    _bounds_for,
     _config_alert,
     _config_from_layer_inputs,
+    _is_integer_field,
     _toggle_controls_state,
     build_collaboration_href,
     build_per_person_href,
@@ -397,14 +399,42 @@ def _config_kwargs(**overrides) -> dict:
     return kwargs
 
 
-def test_numeric_bounds_match_the_config_model():
-    """_NUMERIC_BOUNDS duplicates the model's Field constraints; this is the guard."""
-    properties = CollaborationNetworkConfig.model_json_schema()["properties"]
-    assert set(_NUMERIC_BOUNDS) <= set(properties)
-    for key, (lower, upper, _label) in _NUMERIC_BOUNDS.items():
-        schema = properties[key]
-        assert lower == schema.get("minimum"), key
-        assert upper == schema.get("maximum"), key
+def test_numeric_inputs_carry_no_html_range_constraints():
+    """The card's inputs must not re-add min/max, and must stay step="any".
+
+    min/max make the browser reject a value before Dash sends it, so the callback
+    receives None — which the card treats as "cleared box, not an error" and
+    silently replaces with a default. Deleting step is NOT enough: HTML's default
+    step is 1, so an input with no step attribute still reports stepMismatch for
+    2.5 and posts None. Only step="any" disables it. Both halves were the bug plan
+    053 fixed: an out-of-range or fractional entry produced no alert and left the
+    launch buttons enabled. Validation belongs to _validate_control /
+    _validate_weight, which can explain itself in the alert region.
+    """
+    range_offenders = []
+    step_offenders = []
+    for node in _walk_tree(get_layout()):
+        if getattr(node, "type", None) != "number":
+            continue
+        node_id = str(getattr(node, "id", "?"))
+        for attr in ("min", "max"):
+            if getattr(node, attr, None) is not None:
+                range_offenders.append((node_id, attr))
+        if getattr(node, "step", None) != "any":
+            step_offenders.append((node_id, getattr(node, "step", None)))
+    assert range_offenders == [], (
+        "numeric inputs must not carry min/max: " + repr(range_offenders)
+    )
+    assert step_offenders == [], (
+        'numeric inputs must all be step="any": ' + repr(step_offenders)
+    )
+
+
+@pytest.mark.parametrize("key", sorted(_CONTROL_LABELS))
+def test_card_bounds_follow_the_model(key):
+    """A Field bound change must reach the card with no edit to analytics.py."""
+    schema = CollaborationNetworkConfig.model_json_schema()["properties"][key]
+    assert _bounds_for(key) == (schema.get("minimum"), schema.get("maximum")), key
 
 
 def test_valid_values_are_untouched():
@@ -450,10 +480,11 @@ def test_out_of_range_lookback_is_reported_not_changed():
     assert (config.community_gap_x, config.community_gap_y) == (2000.0, 1500.0)
 
 
-@pytest.mark.parametrize("key", sorted(_NUMERIC_BOUNDS))
+@pytest.mark.parametrize("key", sorted(_CONTROL_LABELS))
 def test_each_bounded_field_is_rejected_and_named(key):
     """Every bounded field reports a problem at both ends and names itself."""
-    lower, upper, label = _NUMERIC_BOUNDS[key]
+    lower, upper = _bounds_for(key)
+    label = _CONTROL_LABELS[key]
 
     _config, problems = _config_from_layer_inputs(**_config_kwargs(**{key: lower - 1}))
     assert [p.label for p in problems] == [label], key
@@ -474,6 +505,41 @@ def test_negative_weight_is_reported_and_named():
     _config, problems = _config_from_layer_inputs(**_config_kwargs(layer_weights=weights))
     assert any(LAYER_LABELS[layer] in problem.label for problem in problems)
     assert any("negative" in problem.message for problem in problems)
+
+
+def test_fractional_integer_field_is_reported_and_named():
+    """A fraction typed into an int field is reported, not silently truncated.
+
+    lookback_days and top_n_edges_per_node are ``int`` on the model, and the card
+    posts a float; from_query_values does int(raw), so 2.5 used to become 2 with
+    no problem reported (2.5 is inside 1..365, so the bounds check passed).
+    """
+    for key, label in (("lookback_days", "Lookback Days"),
+                       ("top_n_edges_per_node", "Top-N Edges / Node")):
+        _config, problems = _config_from_layer_inputs(**_config_kwargs(**{key: 2.5}))
+        assert [p.label for p in problems] == [label], key
+        assert problems[0].message == f"{label} must be a whole number.", key
+
+
+def test_whole_number_float_is_not_reported():
+    """2.0 is a whole number: a browser can post it for a box holding 2."""
+    for key in ("lookback_days", "top_n_edges_per_node"):
+        _config, problems = _config_from_layer_inputs(**_config_kwargs(**{key: 2.0}))
+        assert problems == [], (key, problems)
+
+
+@pytest.mark.parametrize("key", sorted(_CONTROL_LABELS))
+def test_float_fields_still_accept_fractions(key):
+    """The whole-number rule must not leak onto the float fields."""
+    if _is_integer_field(key):
+        pytest.skip(f"{key} is an integer field")
+    lower, upper = _bounds_for(key)
+    # pick a fractional value inside the field's own bounds
+    value = (lower if lower is not None else 0) + 0.5
+    if upper is not None and value > upper:
+        value = upper - 0.5
+    _config, problems = _config_from_layer_inputs(**_config_kwargs(**{key: value}))
+    assert problems == [], (key, value, problems)
 
 
 def test_cleared_field_uses_default_without_a_warning():
@@ -538,6 +604,41 @@ def test_config_alert_reports_each_problem():
     assert children == []
     assert style == {"display": "none"}
     assert blocked is False
+
+
+def test_config_alert_is_not_dismissable():
+    """The alert must not be closable: it is the only reason the buttons are dead.
+
+    ``create_alert`` defaults to ``dismissable=True``. Dismissing this alert hid
+    the explanation while leaving both launch buttons disabled with no ``href``,
+    stranding the user with no way forward and no stated cause. The alert clears
+    itself when the values become valid, which is the dismissal that is wanted.
+    """
+    from app.dash_app.pages.analytics import _ControlProblem
+
+    children, _style, _blocked = _config_alert(
+        [_ControlProblem("Lookback Days", "Lookback Days must be between 1 and 365.")]
+    )
+    assert children[0].dismissable is False
+
+
+def test_config_alert_region_is_sticky():
+    """Both cards' feedback regions carry the sticky class.
+
+    The region sits in the card's normal flow above a ~1800px controls panel, so
+    without `position: sticky` it renders off-screen above the user while they
+    edit a field near the panel's bottom. The rule itself lives in
+    executive-dashboard.css; this pins the class that activates it.
+    """
+    wanted = {f"{COLLAB}-config-alert", f"{EGO}-config-alert"}
+    alerts = {
+        node.id: node
+        for node in _walk_tree(get_layout())
+        if isinstance(getattr(node, "id", None), str) and node.id in wanted
+    }
+    assert set(alerts) == {f"{COLLAB}-config-alert", f"{EGO}-config-alert"}
+    for node_id, node in alerts.items():
+        assert "card-config-alert" in (node.className or ""), node_id
 
 
 @pytest.mark.parametrize(

@@ -266,6 +266,34 @@ class CollaborationNetworkResponse(BaseModel):
     )
 
 
+class EgoNetworkResponse(BaseModel):
+    """Response model for the per-person (ego) collaboration network endpoint.
+
+    A pure star: the focus Person at the centre plus one node per collaborator.
+    normalized_weight is scaled over the focus person's full collaborator set,
+    so the closest collaborator is always 100 regardless of active filters.
+    """
+
+    elements: List[Dict[str, Any]] = Field(
+        default_factory=list,
+        description="Cytoscape element dicts (focus node, collaborator nodes, edges)",
+    )
+    focus_person: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Identity of the focus Person (id, label)",
+    )
+    total_collaborators: int = Field(
+        ..., description="Collaborators before the cap was applied"
+    )
+    shown_collaborators: int = Field(
+        ..., description="Collaborators actually present in elements"
+    )
+    config: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Applied collaboration configuration (layers, weights, filters)",
+    )
+
+
 class PaginationMeta(BaseModel):
     """Pagination metadata for expansion results."""
     

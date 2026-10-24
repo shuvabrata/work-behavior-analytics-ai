@@ -1,147 +1,25 @@
 """Collaboration Network spotlight callbacks.
 
-Live spotlight search: debounce the input (400 ms, min 3 chars), perform a
-client-side case-insensitive substring match against the person fields already
-stored in the Cytoscape elements (label, full_name, name, email, login), then
-apply spotlight-match / spotlight-dim CSS classes to all Cytoscape elements —
-composing on top of any active filter classes.
+The implementation is shared with every other page that renders a spotlight
+search box — see ``app.dash_app.components.spotlight``. This module only binds
+it to the collab page's component ids (``collab-*``).
 
-Client-side matching is used instead of Elasticsearch because the collab
-network loads 1000+ nodes and sending that many wba_ids in an ES terms filter
-causes ES to return the total count but silently drop the hits array.  The
-person fields required for spotlight (name, email) are already present in the
-element data returned by the collaboration score query, so no ES round-trip is
-needed.
+Importing this module registers the two spotlight callbacks as a side effect,
+exactly as before the extraction.
 """
 
-from typing import Any
-from dash import Input, Output, State, callback, clientside_callback
-from dash.exceptions import PreventUpdate
-
-from app.dash_app.pages.graph.utils import is_node_data
-from common.logger import logger
-
-
-_MIN_QUERY_LENGTH = 3
-
-# Fields searched in priority order for each Person node.
-_SEARCH_FIELDS = ("label", "full_name", "name", "login", "email")
-
-
-# ---------------------------------------------------------------------------
-# Clientside debounce: raw input value → debounced store (400 ms)
-# ---------------------------------------------------------------------------
-
-clientside_callback(
-    """
-    function(value) {
-        if (window._collabSpotlightTimer) {
-            clearTimeout(window._collabSpotlightTimer);
-        }
-        return new Promise(function(resolve) {
-            window._collabSpotlightTimer = setTimeout(function() {
-                resolve(value !== undefined ? value : '');
-            }, 400);
-        });
-    }
-    """,
-    Output("collab-spotlight-debounced-store", "data"),
-    Input("collab-spotlight-input", "value"),
-    prevent_initial_call=True,
+from app.dash_app.components.spotlight import (
+    MIN_QUERY_LENGTH,
+    SEARCH_FIELDS,
+    apply_spotlight_classes,
+    match_node,
+    register_spotlight,
 )
 
+# Private aliases kept for the existing unit tests and any deep importers.
+_apply_spotlight_classes = apply_spotlight_classes
+_match_node = match_node
+_MIN_QUERY_LENGTH = MIN_QUERY_LENGTH
+_SEARCH_FIELDS = SEARCH_FIELDS
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-def _match_node(data: dict[str, Any], query_lower: str) -> bool:
-    """Return True if any searchable field in node data contains query_lower."""
-    for field in _SEARCH_FIELDS:
-        val = data.get(field)
-        if val and query_lower in str(val).lower():
-            return True
-    return False
-
-
-def _apply_spotlight_classes(elements: list[dict[str, Any]] | None, match_wba_ids: set[str] | None) -> list[dict[str, Any]]:
-    """Add spotlight-match / spotlight-dim classes to Cytoscape elements.
-
-    When match_wba_ids is None, all spotlight-* classes are stripped (clear mode).
-    For edges: spotlight-match when both endpoints match, otherwise spotlight-dim.
-    Non-spotlight classes (e.g. dimmed, community) are preserved.
-    """
-    # Pass 1 (nodes only): collect Cytoscape element ids of matching nodes
-    matching_cyto_ids: set[Any] = set()
-    if match_wba_ids is not None:
-        for elem in (elements or []):
-            data = elem.get("data", {})
-            if is_node_data(data) and data.get("wba_id", "") in match_wba_ids:
-                matching_cyto_ids.add(data.get("id", ""))
-
-    modified = []
-    for elem in (elements or []):
-        data = elem.get("data", {})
-        existing = elem.get("classes", "")
-        # Preserve all non-spotlight classes (dimmed, community, filter, etc.)
-        classes = {c for c in existing.split() if c and not c.startswith("spotlight-")}
-
-        if match_wba_ids is not None:
-            if is_node_data(data):
-                if data.get("wba_id", "") in match_wba_ids:
-                    classes.add("spotlight-match")
-                else:
-                    classes.add("spotlight-dim")
-            else:
-                # Edge: match only when both endpoints are in matching nodes
-                src = data.get("source", "")
-                tgt = data.get("target", "")
-                if src in matching_cyto_ids and tgt in matching_cyto_ids:
-                    classes.add("spotlight-match")
-                else:
-                    classes.add("spotlight-dim")
-
-        modified.append({**elem, "classes": " ".join(sorted(classes))})
-    return modified
-
-
-# ---------------------------------------------------------------------------
-# Server-side spotlight callback
-# ---------------------------------------------------------------------------
-
-@callback(
-    Output("collab-cytoscape", "elements", allow_duplicate=True),
-    Output("collab-spotlight-count", "children"),
-    Input("collab-spotlight-debounced-store", "data"),
-    State("collab-cytoscape", "elements"),
-    prevent_initial_call=True,
-)
-def update_collab_spotlight(query: str | None, elements: list[dict[str, Any]] | None) -> tuple[list[dict[str, Any]], str]:
-    """Apply spotlight highlighting to collab nodes using client-side field matching."""
-    if not elements:
-        raise PreventUpdate
-
-    # Clear spotlight when query is below the minimum length
-    if not query or len(query.strip()) < _MIN_QUERY_LENGTH:
-        cleared = _apply_spotlight_classes(elements, None)
-        return cleared, ""
-
-    q = query.strip()
-    q_lower = q.lower()
-
-    node_elements = [e for e in elements if is_node_data(e.get("data", {}))]
-
-    match_wba_ids = {
-        e["data"]["wba_id"]
-        for e in node_elements
-        if e["data"].get("wba_id") and _match_node(e["data"], q_lower)
-    }
-
-    node_count = len(node_elements)
-    match_count = len(match_wba_ids)
-
-    logger.info(f"[Collab Spotlight] query={q!r}  node_count={node_count}  match_count={match_count}")
-
-    updated = _apply_spotlight_classes(elements, match_wba_ids)
-    count_text = f"{match_count} of {node_count} nodes match" if node_count > 0 else ""
-    return updated, count_text
+register_spotlight("collab")

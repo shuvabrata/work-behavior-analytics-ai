@@ -9,6 +9,7 @@ from app.analytics.collaboration.config import CollaborationNetworkConfig
 from common.logger import logger
 from .model import (
     CollaborationNetworkResponse,
+    EgoNetworkResponse,
     GraphExecuteRequest,
     GraphResponse,
     NodeExpansionRequest,
@@ -197,6 +198,8 @@ async def get_collaboration_network(
     min_pair_score: float = Query(default=1.0, ge=0),
     top_n_edges_per_node: int = Query(default=0, ge=0, le=200),
     ensure_min_connection: bool = Query(default=True),
+    community_gap_x: float = Query(default=6000.0, ge=200, le=10000),
+    community_gap_y: float = Query(default=4000.0, ge=200, le=10000),
     exclude_bots: bool = Query(default=True),
     exclude_suffixes: str | None = Query(default=None, description="Comma-separated file suffixes to ignore"),
     w_reporter_assignee: float = Query(default=2.0, ge=0),
@@ -209,11 +212,19 @@ async def get_collaboration_network(
     w_confluence_comment_engagement: float = Query(default=2.0, ge=0),
     w_confluence_co_commenters: float = Query(default=1.0, ge=0),
     w_confluence_mentions: float = Query(default=2.0, ge=0),
+    w_github_pr_comment_engagement: float = Query(default=3.0, ge=0),
+    w_github_pr_co_commenters: float = Query(default=2.0, ge=0),
+    w_github_issue_comment_engagement: float = Query(default=3.0, ge=0),
+    w_github_issue_co_commenters: float = Query(default=2.0, ge=0),
+    w_jira_issue_comment_engagement: float = Query(default=3.0, ge=0),
+    w_jira_issue_co_commenters: float = Query(default=2.0, ge=0),
+    w_jira_epic_initiative_comment_engagement: float = Query(default=2.0, ge=0),
+    w_jira_epic_initiative_co_commenters: float = Query(default=1.0, ge=0),
 ) -> CollaborationNetworkResponse:
     """
     Build and return a collaboration network with Louvain community detection.
 
-    This endpoint runs the 6-scenario collaboration score Cypher query (last 90 days),
+    This endpoint runs the 18-block collaboration score Cypher query (last 90 days),
     feeds the results through NetworkX + python-louvain community detection, and
     returns Cytoscape-ready elements enriched with:
     - **community** (int): Louvain community ID — maps to a colour class in the stylesheet
@@ -239,6 +250,8 @@ async def get_collaboration_network(
                 "min_pair_score": min_pair_score,
                 "top_n_edges_per_node": top_n_edges_per_node,
                 "ensure_min_connection": ensure_min_connection,
+                "community_gap_x": community_gap_x,
+                "community_gap_y": community_gap_y,
                 "exclude_bots": exclude_bots,
                 "exclude_suffixes": exclude_suffixes,
                 "w_reporter_assignee": w_reporter_assignee,
@@ -251,6 +264,14 @@ async def get_collaboration_network(
                 "w_confluence_comment_engagement": w_confluence_comment_engagement,
                 "w_confluence_co_commenters": w_confluence_co_commenters,
                 "w_confluence_mentions": w_confluence_mentions,
+                "w_github_pr_comment_engagement": w_github_pr_comment_engagement,
+                "w_github_pr_co_commenters": w_github_pr_co_commenters,
+                "w_github_issue_comment_engagement": w_github_issue_comment_engagement,
+                "w_github_issue_co_commenters": w_github_issue_co_commenters,
+                "w_jira_issue_comment_engagement": w_jira_issue_comment_engagement,
+                "w_jira_issue_co_commenters": w_jira_issue_co_commenters,
+                "w_jira_epic_initiative_comment_engagement": w_jira_epic_initiative_comment_engagement,
+                "w_jira_epic_initiative_co_commenters": w_jira_epic_initiative_co_commenters,
             }
         )
         response = await asyncio.to_thread(service.get_collaboration_network, config=config)
@@ -306,6 +327,135 @@ async def get_collaboration_network(
             detail={
                 "error": "Internal server error",
                 "message": "An unexpected error occurred while building the collaboration network.",
+            },
+        ) from e
+
+
+@router.get("/collaboration-network/ego", response_model=EgoNetworkResponse)
+async def get_ego_collaboration_network(
+    person: str = Query(..., description="Focus Person wba_id"),
+    layers: str | None = Query(default=None, description="Comma-separated collaboration layers"),
+    max_collaborators: int | None = Query(default=25, ge=1, le=500),
+    lookback_days: int = Query(default=90, ge=1, le=365),
+    min_pair_score: float = Query(default=1.0, ge=0),
+    exclude_bots: bool = Query(default=True),
+    exclude_suffixes: str | None = Query(default=None, description="Comma-separated file suffixes to ignore"),
+    w_reporter_assignee: float = Query(default=2.0, ge=0),
+    w_pr_reviews: float = Query(default=3.0, ge=0),
+    w_shared_file_commits: float = Query(default=5.0, ge=0),
+    w_sprint_coworkers: float = Query(default=2.0, ge=0),
+    w_explicit_review_requests: float = Query(default=2.0, ge=0),
+    w_epic_overlap: float = Query(default=1.0, ge=0),
+    w_confluence_co_authorship: float = Query(default=3.0, ge=0),
+    w_confluence_comment_engagement: float = Query(default=2.0, ge=0),
+    w_confluence_co_commenters: float = Query(default=1.0, ge=0),
+    w_confluence_mentions: float = Query(default=2.0, ge=0),
+    w_github_pr_comment_engagement: float = Query(default=3.0, ge=0),
+    w_github_pr_co_commenters: float = Query(default=2.0, ge=0),
+    w_github_issue_comment_engagement: float = Query(default=3.0, ge=0),
+    w_github_issue_co_commenters: float = Query(default=2.0, ge=0),
+    w_jira_issue_comment_engagement: float = Query(default=3.0, ge=0),
+    w_jira_issue_co_commenters: float = Query(default=2.0, ge=0),
+    w_jira_epic_initiative_comment_engagement: float = Query(default=2.0, ge=0),
+    w_jira_epic_initiative_co_commenters: float = Query(default=1.0, ge=0),
+) -> EgoNetworkResponse:
+    """
+    Build a per-person (ego) collaboration network: a pure star around one Person.
+
+    Only edges incident to ``person`` are drawn, so the result answers "who does
+    this person work with, and how closely?" — the org-wide view answers a
+    different question. ``normalized_weight`` is re-scaled over the focus
+    person's full collaborator set (before any cap), so the closest collaborator
+    is always 100 regardless of the active threshold or cap. ``hub_score`` is
+    deliberately absent: weighted degree over the whole org graph is meaningless
+    in a star where every spoke holds exactly one edge.
+
+    Args:
+        person: wba_id of the Person at the centre of the star.
+
+    Returns:
+        EgoNetworkResponse with elements, focus identity and collaborator counts
+
+    Raises:
+        HTTPException 400: If the configuration or focus id is invalid
+        HTTPException 404: If the query returns no collaborations for the person
+        HTTPException 500: If Neo4j execution fails
+    """
+    try:
+        logger.info(f"Ego collaboration network request received for {person}.")
+        config = CollaborationNetworkConfig.from_query_values(
+            {
+                "layers": layers,
+                "lookback_days": lookback_days,
+                "min_pair_score": min_pair_score,
+                "exclude_bots": exclude_bots,
+                "exclude_suffixes": exclude_suffixes,
+                "w_reporter_assignee": w_reporter_assignee,
+                "w_pr_reviews": w_pr_reviews,
+                "w_shared_file_commits": w_shared_file_commits,
+                "w_sprint_coworkers": w_sprint_coworkers,
+                "w_explicit_review_requests": w_explicit_review_requests,
+                "w_epic_overlap": w_epic_overlap,
+                "w_confluence_co_authorship": w_confluence_co_authorship,
+                "w_confluence_comment_engagement": w_confluence_comment_engagement,
+                "w_confluence_co_commenters": w_confluence_co_commenters,
+                "w_confluence_mentions": w_confluence_mentions,
+                "w_github_pr_comment_engagement": w_github_pr_comment_engagement,
+                "w_github_pr_co_commenters": w_github_pr_co_commenters,
+                "w_github_issue_comment_engagement": w_github_issue_comment_engagement,
+                "w_github_issue_co_commenters": w_github_issue_co_commenters,
+                "w_jira_issue_comment_engagement": w_jira_issue_comment_engagement,
+                "w_jira_issue_co_commenters": w_jira_issue_co_commenters,
+                "w_jira_epic_initiative_comment_engagement": w_jira_epic_initiative_comment_engagement,
+                "w_jira_epic_initiative_co_commenters": w_jira_epic_initiative_co_commenters,
+            }
+        )
+        response = await asyncio.to_thread(
+            service.get_ego_network, person, config, max_collaborators
+        )
+        logger.info(
+            f"Ego network built for {person}: total={response.total_collaborators}, "
+            f"shown={response.shown_collaborators}"
+        )
+        return response
+
+    except ValidationError as e:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "Invalid collaboration configuration",
+                "message": str(e),
+            },
+        ) from e
+
+    except ValueError as e:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": "No collaboration data",
+                "message": str(e),
+                "hint": "Check the person id and that the lookback window contains activity.",
+            },
+        ) from e
+
+    except RuntimeError as e:
+        logger.error(f"Ego collaboration network execution error: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "Execution failed",
+                "message": str(e),
+                "hint": "Check Neo4j connection.",
+            },
+        ) from e
+
+    except Exception as e:
+        logger.error(f"Unexpected error building ego collaboration network: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "Internal server error",
+                "message": "An unexpected error occurred while building the ego collaboration network.",
             },
         ) from e
 

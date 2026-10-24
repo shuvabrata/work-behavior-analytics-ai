@@ -26,6 +26,7 @@ from dash import dcc, html
 import dash_bootstrap_components as dbc
 
 from app.dash_app.pages.graph.callbacks import catalog as catalog_callbacks
+from app.dash_app.components.person_picker import build_person_picker
 from app.api.search.v1 import persons_router
 
 
@@ -112,10 +113,20 @@ def _flatten_text(value):
 # ===========================================================================
 
 
+def _build_picker(parameter: dict, current_value=None):
+    """Call the extracted builder with the old dict-shaped parameter."""
+    return build_person_picker(
+        parameter.get("name", ""),
+        parameter.get("label") or parameter.get("name") or "Parameter",
+        required=parameter.get("required", False),
+        current_value=current_value,
+    )
+
+
 def test_build_person_picker_contains_text_input():
     """`_build_person_picker` must use a dbc.Input (not dcc.Dropdown)."""
     parameter = {"name": "person1_id", "required": True, "label": "First person", "type": "person_id"}
-    result = catalog_callbacks._build_person_picker(parameter, current_value=None)
+    result = _build_picker(parameter)
 
     assert isinstance(result, html.Div)
     # Must NOT contain a dcc.Dropdown
@@ -129,7 +140,7 @@ def test_build_person_picker_contains_text_input():
 def test_build_person_picker_input_id_uses_parameter_name():
     """The dbc.Input id must be the pattern-matching dict {type: catalog-person-input, name}."""
     parameter = {"name": "person2_id", "required": False, "label": "Second person"}
-    result = catalog_callbacks._build_person_picker(parameter, current_value=None)
+    result = _build_picker(parameter)
 
     text_input = _find_component_by_id_type(result, "catalog-person-input")
     assert text_input is not None
@@ -139,7 +150,7 @@ def test_build_person_picker_input_id_uses_parameter_name():
 def test_build_person_picker_has_suggestions_panel():
     """The picker must include a suggestions panel div."""
     parameter = {"name": "person1_id", "required": True, "label": "First person"}
-    result = catalog_callbacks._build_person_picker(parameter, current_value=None)
+    result = _build_picker(parameter)
 
     suggestions = _find_component_by_id_type(result, "catalog-person-suggestions")
     assert suggestions is not None
@@ -149,7 +160,7 @@ def test_build_person_picker_has_suggestions_panel():
 def test_build_person_picker_has_chip_area():
     """The picker must include a chip area div (initially hidden)."""
     parameter = {"name": "person1_id", "required": True, "label": "First person"}
-    result = catalog_callbacks._build_person_picker(parameter, current_value=None)
+    result = _build_picker(parameter)
 
     chip = _find_component_by_id_type(result, "catalog-person-chip")
     assert chip is not None
@@ -159,7 +170,7 @@ def test_build_person_picker_has_chip_area():
 def test_build_person_picker_has_value_store():
     """The picker must embed a catalog-person-value dcc.Store."""
     parameter = {"name": "person1_id", "required": True, "label": "First person"}
-    result = catalog_callbacks._build_person_picker(parameter, current_value=None)
+    result = _build_picker(parameter)
 
     value_store = _find_component_by_id_type(result, "catalog-person-value")
     assert value_store is not None
@@ -170,7 +181,7 @@ def test_build_person_picker_has_value_store():
 def test_build_person_picker_has_debounce_store():
     """The picker must embed a catalog-person-debounce dcc.Store."""
     parameter = {"name": "person1_id", "required": True, "label": "First person"}
-    result = catalog_callbacks._build_person_picker(parameter, current_value=None)
+    result = _build_picker(parameter)
 
     debounce_store = _find_component_by_id_type(result, "catalog-person-debounce")
     assert debounce_store is not None
@@ -180,7 +191,7 @@ def test_build_person_picker_has_debounce_store():
 def test_build_person_picker_label_shows_asterisk_for_required():
     """Required pickers must show an asterisk in the label."""
     parameter = {"name": "person1_id", "required": True, "label": "First person"}
-    result = catalog_callbacks._build_person_picker(parameter, current_value=None)
+    result = _build_picker(parameter)
 
     texts = _flatten_text(result)
     assert any("*" in t for t in texts), "Required picker label must contain '*'"
@@ -189,7 +200,7 @@ def test_build_person_picker_label_shows_asterisk_for_required():
 def test_build_person_picker_no_asterisk_for_optional():
     """Optional pickers must NOT show an asterisk."""
     parameter = {"name": "person1_id", "required": False, "label": "Some person"}
-    result = catalog_callbacks._build_person_picker(parameter, current_value=None)
+    result = _build_picker(parameter)
 
     label = result.children[0]  # First child is the Label
     assert "*" not in label.children

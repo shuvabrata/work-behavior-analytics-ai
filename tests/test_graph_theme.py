@@ -309,6 +309,7 @@ def test_stylesheet_uses_shared_translation_layer():
         ".selected-dim", "node.selected-dim", "edge.selected-dim",
         ".highlighted", ".dimmed", "node.dimmed", "edge.dimmed",
         *[f".community-{i}" for i in range(20)],
+        "node.ego-centre",
         "node.spotlight-dim", "node.spotlight-match",
         "edge.spotlight-dim", "edge.spotlight-match",
     }
@@ -398,6 +399,7 @@ def test_stylesheet_full_output_unchanged():
         ".community-17",
         ".community-18",
         ".community-19",
+        "node.ego-centre",
         "node.spotlight-dim",
         "node.spotlight-match",
         "edge.spotlight-dim",

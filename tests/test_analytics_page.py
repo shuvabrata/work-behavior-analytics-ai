@@ -12,6 +12,7 @@ from urllib.parse import parse_qs
 import pytest
 from dash import html
 from app.analytics.collaboration.config import (
+    CollaborationNetworkConfig,
     DEFAULT_COMMUNITY_GAP_X,
     DEFAULT_COMMUNITY_GAP_Y,
     DEFAULT_EXCLUDE_BOTS,
@@ -20,13 +21,18 @@ from app.analytics.collaboration.config import (
     DEFAULT_LOOKBACK_DAYS,
     DEFAULT_MIN_PAIR_SCORE,
     DEFAULT_TOP_N_EDGES_PER_NODE,
+    LAYER_LABELS,
     LAYER_ORDER,
 )
 from app.analytics.collaboration.ego import COLLABORATOR_CAP_OPTIONS, DEFAULT_MAX_COLLABORATORS
 from app.analytics.registry import GRAPH_ANALYTICS
+from app.dash_app.components.common import describe_config_error
 from app.dash_app.pages.analytics import (
     COLLABORATION_CARD_SPEC,
     PER_PERSON_CARD_SPEC,
+    _NUMERIC_BOUNDS,
+    _config_alert,
+    _config_from_layer_inputs,
     _toggle_controls_state,
     build_collaboration_href,
     build_per_person_href,
@@ -180,7 +186,7 @@ def _org_args(
 
 def test_build_collaboration_href_all_enabled():
     """Href builder outputs URLs with all enabled layers and default parameters."""
-    top_href, bottom_href, preview = build_collaboration_href(*_org_args())
+    top_href, bottom_href, preview, *_ = build_collaboration_href(*_org_args())
     assert top_href == bottom_href
     assert top_href.startswith("/app/collaboration?")
     assert f"URL: {top_href}" == preview
@@ -207,7 +213,7 @@ def test_build_collaboration_href_selective_layers():
     enables = [False] * len(LAYER_ORDER)
     enables[0] = True  # only the first layer is enabled
 
-    top_href, bottom_href, _ = build_collaboration_href(*_org_args(enables))
+    top_href, bottom_href, *_ = build_collaboration_href(*_org_args(enables))
     assert top_href == bottom_href
     assert f"layers={LAYER_ORDER[0]}" in top_href
     assert LAYER_ORDER[1] not in top_href.split("layers=")[1].split("&")[0]
@@ -215,7 +221,7 @@ def test_build_collaboration_href_selective_layers():
 
 def test_build_collaboration_href_all_layers_disabled():
     """Disabling every layer produces an empty enabled-layers query param."""
-    top_href, _, _ = build_collaboration_href(*_org_args([False] * len(LAYER_ORDER)))
+    top_href, *_ = build_collaboration_href(*_org_args([False] * len(LAYER_ORDER)))
     assert "layers=" in top_href
     assert top_href.split("layers=")[1].split("&")[0] == ""
 
@@ -224,7 +230,7 @@ def test_build_collaboration_href_uses_layer_order_for_weights():
     """Weights map to layers positionally, so a reordered LAYER_ORDER cannot
     silently attach a weight to the wrong layer."""
     weights = [float(i + 1) for i in range(len(LAYER_ORDER))]
-    top_href, _, _ = build_collaboration_href(*_org_args(weights=weights))
+    top_href, *_ = build_collaboration_href(*_org_args(weights=weights))
 
     parsed = parse_qs(top_href.split("?")[1])
     for layer, weight in zip(LAYER_ORDER, weights):
@@ -256,7 +262,7 @@ def _ego_args(
 
 
 def test_build_per_person_href_carries_shared_config_and_cap():
-    top_href, bottom_href, preview = build_per_person_href(*_ego_args())
+    top_href, bottom_href, preview, *_ = build_per_person_href(*_ego_args())
     assert top_href == bottom_href
     assert top_href.startswith("/app/collaboration/person?")
     assert f"URL: {top_href}" == preview
@@ -272,7 +278,7 @@ def test_build_per_person_href_carries_shared_config_and_cap():
 def test_build_per_person_href_omits_org_only_params():
     """The ego page ignores community/topology params, so the card must not
     advertise settings it cannot honour."""
-    top_href, _, _ = build_per_person_href(*_ego_args())
+    top_href, *_ = build_per_person_href(*_ego_args())
     parsed = parse_qs(top_href.split("?")[1])
     for absent in ("community_gap_x", "community_gap_y", "top_n_edges_per_node", "ensure_min_connection"):
         assert absent not in parsed
@@ -280,8 +286,8 @@ def test_build_per_person_href_omits_org_only_params():
 
 def test_both_cards_share_layer_configuration_keys():
     """Adding a layer must reach both cards: both emit the same w_<layer> set."""
-    org_href, _, _ = build_collaboration_href(*_org_args())
-    ego_href, _, _ = build_per_person_href(*_ego_args())
+    org_href, *_ = build_collaboration_href(*_org_args())
+    ego_href, *_ = build_per_person_href(*_ego_args())
 
     org_params = parse_qs(org_href.split("?")[1])
     ego_params = parse_qs(ego_href.split("?")[1])
@@ -324,8 +330,8 @@ def test_adding_a_layer_reaches_both_cards():
 
         # 2. Both href builders carry it, at the matching default weight.
         n = len(LAYER_ORDER)
-        org_href, _, _ = build_collaboration_href(*_org_args([True] * n))
-        ego_href, _, _ = build_per_person_href(*_ego_args([True] * n))
+        org_href, *_ = build_collaboration_href(*_org_args([True] * n))
+        ego_href, *_ = build_per_person_href(*_ego_args([True] * n))
 
         for href in (org_href, ego_href):
             parsed = parse_qs(href.split("?")[1])
@@ -364,3 +370,206 @@ def test_toggle_controls_state():
     assert is_open is False
     assert label == "Show Options"
     assert preview_style["display"] == "none"
+
+
+# ---------------------------------------------------------------------------
+# Out-of-range control values are reported, never rewritten
+# ---------------------------------------------------------------------------
+
+def _config_kwargs(**overrides) -> dict:
+    """Keyword args for _config_from_layer_inputs with a non-default baseline.
+
+    One layer is enabled with a weight the user changed, and every other control
+    differs from the model default, so a discarded configuration is detectable.
+    """
+    kwargs = {
+        "layer_enables": [layer == "pr_reviews" for layer in LAYER_ORDER],
+        "layer_weights": [DEFAULT_LAYER_WEIGHTS[layer] for layer in LAYER_ORDER],
+        "lookback_days": 30,
+        "min_pair_score": 2.0,
+        "exclude_bots": False,
+        "top_n_edges_per_node": 15,
+        "community_gap_x": 2000.0,
+        "community_gap_y": 1500.0,
+        "ensure_min_connection": False,
+    }
+    kwargs.update(overrides)
+    return kwargs
+
+
+def test_numeric_bounds_match_the_config_model():
+    """_NUMERIC_BOUNDS duplicates the model's Field constraints; this is the guard."""
+    properties = CollaborationNetworkConfig.model_json_schema()["properties"]
+    assert set(_NUMERIC_BOUNDS) <= set(properties)
+    for key, (lower, upper, _label) in _NUMERIC_BOUNDS.items():
+        schema = properties[key]
+        assert lower == schema.get("minimum"), key
+        assert upper == schema.get("maximum"), key
+
+
+def test_valid_values_are_untouched():
+    """An all-in-range configuration passes through with no problems."""
+    config, problems = _config_from_layer_inputs(**_config_kwargs())
+    assert problems == []
+    assert config.lookback_days == 30
+    assert config.min_pair_score == 2.0
+    assert config.exclude_bots is False
+    assert config.top_n_edges_per_node == 15
+    assert (config.community_gap_x, config.community_gap_y) == (2000.0, 1500.0)
+
+
+def test_out_of_range_lookback_is_reported_not_changed():
+    """The bad value is reported as a requirement, never rewritten into range.
+
+    The message states what the range *is* ("must be between 1 and 365") rather
+    than what the app did to the value ("was adjusted to 365"). Nothing rewrites
+    ``366`` anywhere in the card path.
+    """
+    weights = [DEFAULT_LAYER_WEIGHTS[layer] for layer in LAYER_ORDER]
+    weights[LAYER_ORDER.index("pr_reviews")] = 9.0
+    _config, problems = _config_from_layer_inputs(
+        **_config_kwargs(lookback_days=366, layer_weights=weights)
+    )
+    assert [problem.label for problem in problems] == ["Lookback Days"]
+    assert "between 1 and 365" in problems[0].message
+    assert "must be between" in problems[0].message
+    assert "adjusted" not in problems[0].message
+
+    # Contrast: the same inputs with an in-range lookback carry every user
+    # setting through untouched and report nothing.
+    config, problems = _config_from_layer_inputs(
+        **_config_kwargs(lookback_days=30, layer_weights=weights)
+    )
+    assert problems == []
+    assert config.lookback_days == 30
+    assert config.enabled_layers == ["pr_reviews"]
+    assert config.weights["pr_reviews"] == 9.0
+    assert config.min_pair_score == 2.0
+    assert config.exclude_bots is False
+    assert config.top_n_edges_per_node == 15
+    assert (config.community_gap_x, config.community_gap_y) == (2000.0, 1500.0)
+
+
+@pytest.mark.parametrize("key", sorted(_NUMERIC_BOUNDS))
+def test_each_bounded_field_is_rejected_and_named(key):
+    """Every bounded field reports a problem at both ends and names itself."""
+    lower, upper, label = _NUMERIC_BOUNDS[key]
+
+    _config, problems = _config_from_layer_inputs(**_config_kwargs(**{key: lower - 1}))
+    assert [p.label for p in problems] == [label], key
+    assert label in problems[0].message, key
+
+    if upper is not None:
+        _config, problems = _config_from_layer_inputs(**_config_kwargs(**{key: upper + 1}))
+        assert [p.label for p in problems] == [label], key
+        assert label in problems[0].message, key
+
+
+def test_negative_weight_is_reported_and_named():
+    """A negative layer weight is rejected, and the problem names the layer."""
+    layer = "pr_reviews"
+    weights = [DEFAULT_LAYER_WEIGHTS[other] for other in LAYER_ORDER]
+    weights[LAYER_ORDER.index(layer)] = -1.0
+
+    _config, problems = _config_from_layer_inputs(**_config_kwargs(layer_weights=weights))
+    assert any(LAYER_LABELS[layer] in problem.label for problem in problems)
+    assert any("negative" in problem.message for problem in problems)
+
+
+def test_cleared_field_uses_default_without_a_warning():
+    """A cleared box is not an error: the model default applies and nothing warns."""
+    config, problems = _config_from_layer_inputs(**_config_kwargs(lookback_days=None))
+    assert config.lookback_days == DEFAULT_LOOKBACK_DAYS
+    assert problems == []
+
+
+def test_unparseable_value_is_reported():
+    """A non-numeric value is reported rather than silently replaced."""
+    _config, problems = _config_from_layer_inputs(**_config_kwargs(lookback_days="abc"))
+    assert len(problems) == 1
+    assert problems[0].label == "Lookback Days"
+    assert "must be a number" in problems[0].message
+
+
+def test_href_callbacks_surface_the_alert_and_disable_the_buttons():
+    """Both cards report the problems and disable both launch buttons."""
+    _top, _bottom, _preview, alert, style, btn, btn_bottom = build_collaboration_href(
+        *_org_args(lookback_days=400)
+    )
+    assert alert
+    assert style == {"display": "block"}
+    assert btn is True
+    assert btn_bottom is True
+
+    _top, _bottom, _preview, alert, style, btn, btn_bottom = build_collaboration_href(
+        *_org_args()
+    )
+    assert alert == []
+    assert style == {"display": "none"}
+    assert btn is False
+    assert btn_bottom is False
+
+    _top, _bottom, _preview, alert, style, btn, btn_bottom = build_per_person_href(
+        *_ego_args()
+    )
+    assert alert == []
+    assert style == {"display": "none"}
+    assert btn is False
+    assert btn_bottom is False
+
+
+def test_config_alert_reports_each_problem():
+    """One <li> per problem while blocked; an empty, hidden region otherwise."""
+    from app.dash_app.pages.analytics import _ControlProblem
+
+    problems = [
+        _ControlProblem("Lookback Days", "Lookback Days must be between 1 and 365."),
+        _ControlProblem("Min Pair Score", "Min Pair Score must be at least 0."),
+    ]
+    children, style, blocked = _config_alert(problems)
+    assert blocked is True
+    assert style == {"display": "block"}
+    assert len(children) == 1
+    items = [n for n in _walk_tree(children[0]) if isinstance(n, html.Li)]
+    assert len(items) == 2
+    assert children[0].color == "warning"
+
+    children, style, blocked = _config_alert([])
+    assert children == []
+    assert style == {"display": "none"}
+    assert blocked is False
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        {"lookback_days": 366},
+        {"lookback_days": 0},
+        {"community_gap_x": 50},
+        {"top_n_edges_per_node": 500},
+        {"w_pr_reviews": -1.0},
+        {"lookback_days": "abc"},
+    ],
+)
+def test_describe_config_error_is_readable(bad):
+    """Every invalid input yields a plain sentence, with nothing internal leaked.
+
+    Catches both traps: a ``loc[-1]``-only implementation renders the useless
+    "weights" label for the negative-weight case, and an unguarded ``errors()``
+    call raises AttributeError for the non-numeric value.
+    """
+    with pytest.raises((ValueError,)) as caught:
+        CollaborationNetworkConfig.from_query_values(bad)
+
+    message = describe_config_error(caught.value)
+    assert message, bad
+    lowered = message.lower()
+    for leaked in ("pydantic", "type=", "http", "pr_reviews", "reporter_assignee"):
+        assert leaked not in lowered, (bad, message)
+
+    if "w_pr_reviews" in bad:
+        # The negative-weight error's ``loc`` is the whole ``weights`` dict, so a
+        # ``loc[-1]``-only implementation would render "Weights ..." here. The
+        # layer must be named by its human label instead.
+        assert LAYER_LABELS["pr_reviews"] in message, message
+        assert "weights" not in lowered, message

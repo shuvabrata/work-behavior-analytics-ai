@@ -25,7 +25,7 @@ from app.analytics.collaboration.ego import (
     DEFAULT_MAX_COLLABORATORS,
 )
 from app.analytics.registry import GRAPH_ANALYTICS
-from app.dash_app.components.common import create_page_header
+from app.dash_app.components.common import create_alert, create_page_header
 from app.dash_app.styles import (
     CARD_CONTAINER_STYLE,
     COLOR_BACKGROUND_LIGHT,
@@ -46,6 +46,7 @@ from app.dash_app.styles import (
     SPACING_XSMALL,
     SPACING_XXSMALL,
 )
+from common.logger import logger
 
 
 @dataclass(frozen=True)
@@ -163,6 +164,25 @@ def _create_analytic_card(analytic: Any) -> dbc.Card:
 
 
 _LAYER_GRID_TEMPLATE = "70px 1fr 110px"
+
+# Bounds for the cards' numeric controls, mirroring the Field constraints on
+# CollaborationNetworkConfig. Clamping here (rather than letting the model raise)
+# is what stops one out-of-range box from discarding every other setting on the
+# card — see _config_from_layer_inputs. The bounds are duplicated deliberately so
+# they are greppable next to the controls they guard;
+# tests/test_analytics_page.py::test_numeric_bounds_match_the_config_model fails
+# if they ever drift from the model.
+#
+# (lower, upper, label) — upper None means unbounded above.
+_NUMERIC_BOUNDS: dict[str, tuple[float | None, float | None, str]] = {
+    "lookback_days": (1, 365, "Lookback Days"),
+    "min_pair_score": (0, None, "Min Pair Score"),
+    "top_n_edges_per_node": (0, 200, "Top-N Edges / Node"),
+    "community_gap_x": (200, 10000, "Community Gap X"),
+    "community_gap_y": (200, 10000, "Community Gap Y"),
+}
+
+WEIGHT_BOUNDS_LABEL = "Layer weight"
 
 
 def _field_label(text: str) -> html.Div:
@@ -494,6 +514,10 @@ def _create_card_controls(spec: _CardControlsSpec) -> html.Div:
                 ],
                 className="g-2 align-items-center",
             ),
+            # Feedback region for invalid control values, deliberately OUTSIDE the
+            # Collapse: the panel defaults to closed, so a warning placed inside it
+            # would be invisible exactly when the user needs it.
+            html.Div(id=f"{prefix}-config-alert", children=[], style={"display": "none"}),
             dbc.Collapse(collapse_children, id=f"{prefix}-controls-collapse", is_open=False),
             html.Div(
                 id=f"{prefix}-url-preview",
@@ -529,6 +553,68 @@ for _card_spec in _CARD_SPECS:
         )
 
 
+def _coerce_number(raw: Any) -> float | None:
+    """Return ``raw`` as a float, or None when it is blank or not a number.
+
+    ``None`` is what a cleared number input sends, and is not an error: the
+    model applies its own default for a missing key, so the caller leaves such a
+    value alone rather than warning about it.
+    """
+    if raw is None or (isinstance(raw, str) and not raw.strip()):
+        return None
+    if isinstance(raw, bool):
+        return float(raw)
+    try:
+        return float(raw)
+    except (TypeError, ValueError):
+        return None
+
+
+@dataclass(frozen=True)
+class _ControlProblem:
+    """One rejected control value, ready to show the user."""
+
+    label: str
+    message: str
+
+
+def _validate_control(key: str, raw: Any, label: str) -> _ControlProblem | None:
+    """Return a problem describing why ``raw`` is not usable, or None if it is.
+
+    ``None`` (a cleared box) is not a problem: the model applies its own default
+    for a missing key. A non-numeric value is a problem, because the user typed
+    something the field cannot hold.
+    """
+    if raw is None or (isinstance(raw, str) and not raw.strip()):
+        return None
+
+    number = _coerce_number(raw)
+    if number is None:
+        return _ControlProblem(label, f"{label} must be a number.")
+
+    lower, upper, _ = _NUMERIC_BOUNDS[key]
+    if lower is not None and number < lower:
+        if upper is not None:
+            return _ControlProblem(label, f"{label} must be between {lower:g} and {upper:g}.")
+        return _ControlProblem(label, f"{label} must be at least {lower:g}.")
+    if upper is not None and number > upper:
+        return _ControlProblem(label, f"{label} must be between {lower:g} and {upper:g}.")
+    return None
+
+
+def _validate_weight(layer: str, raw: Any) -> _ControlProblem | None:
+    """Return a problem describing why this layer weight is unusable, or None."""
+    if raw is None:
+        return None
+    label = f"{LAYER_LABELS.get(layer, layer)} weight"
+    number = _coerce_number(raw)
+    if number is None:
+        return _ControlProblem(label, f"{label} must be a number.")
+    if number < 0:
+        return _ControlProblem(label, f"{label} cannot be negative.")
+    return None
+
+
 def _config_from_layer_inputs(
     layer_enables: list[Any],
     layer_weights: list[Any],
@@ -540,8 +626,13 @@ def _config_from_layer_inputs(
     community_gap_x: Any = None,
     community_gap_y: Any = None,
     ensure_min_connection: Any = None,
-) -> CollaborationNetworkConfig:
-    """Build a validated config from one card's control values.
+) -> tuple[CollaborationNetworkConfig, list[_ControlProblem]]:
+    """Build a config from one card's control values and report what is invalid.
+
+    Values are **never rewritten**: an out-of-range number is returned as a
+    problem for the callback to surface, and the config is built with the value
+    the user actually typed (or the model default when the box is blank). The
+    caller disables the launch button while ``problems`` is non-empty.
 
     The wildcard (``ALL``) layer inputs arrive in layout order, which is the
     order :func:`_layer_row` emits them in — ``LAYER_ORDER``. Zipping the two is
@@ -568,10 +659,56 @@ def _config_from_layer_inputs(
     if ensure_min_connection is not None:
         query_values["ensure_min_connection"] = ensure_min_connection
 
+    problems: list[_ControlProblem] = []
+
+    for key, (_lower, _upper, label) in _NUMERIC_BOUNDS.items():
+        if query_values.get(key) is None:
+            continue
+        problem = _validate_control(key, query_values[key], label)
+        if problem is not None:
+            problems.append(problem)
+
+    for layer, raw_weight in zip(LAYER_ORDER, layer_weights):
+        problem = _validate_weight(layer, raw_weight)
+        if problem is not None:
+            problems.append(problem)
+
     try:
-        return CollaborationNetworkConfig.from_query_values(query_values)
-    except Exception:
-        return CollaborationNetworkConfig()
+        return CollaborationNetworkConfig.from_query_values(query_values), problems
+    except Exception:  # pylint: disable=broad-except
+        logger.warning(
+            f"Analytics card config could not be built; problems so far: {problems}"
+        )
+        return CollaborationNetworkConfig(), problems or [
+            _ControlProblem(
+                "Configuration",
+                "These settings could not be applied. Please check the values.",
+            )
+        ]
+
+
+def _config_alert(
+    problems: list[_ControlProblem],
+) -> tuple[list[Any], dict[str, str], bool]:
+    """Render the card's validation alert.
+
+    Returns ``(children, style, blocked)``. ``blocked`` is True when the launch
+    buttons must be disabled — i.e. when there is at least one problem.
+    """
+    if not problems:
+        return [], {"display": "none"}, False
+    alert = create_alert(
+        [
+            html.Strong("Some values need fixing before you can open this view:"),
+            html.Ul(
+                [html.Li(problem.message) for problem in problems],
+                className="mb-0 ps-3",
+            ),
+        ],
+        color="warning",
+        class_name="mb-2",
+    )
+    return [alert], {"display": "block"}, True
 
 
 def _href_triple(
@@ -598,6 +735,10 @@ def _href_triple(
         Output(f"{COLLABORATION_CARD_SPEC.prefix}-open-btn", "href"),
         Output(f"{COLLABORATION_CARD_SPEC.prefix}-open-btn-bottom", "href"),
         Output(f"{COLLABORATION_CARD_SPEC.prefix}-url-preview", "children"),
+        Output(f"{COLLABORATION_CARD_SPEC.prefix}-config-alert", "children"),
+        Output(f"{COLLABORATION_CARD_SPEC.prefix}-config-alert", "style"),
+        Output(f"{COLLABORATION_CARD_SPEC.prefix}-open-btn", "disabled"),
+        Output(f"{COLLABORATION_CARD_SPEC.prefix}-open-btn-bottom", "disabled"),
     ],
     [
         Input({"type": f"{COLLABORATION_CARD_SPEC.prefix}-layer-enable", "layer": ALL}, "value"),
@@ -621,9 +762,9 @@ def build_collaboration_href(  # pylint: disable=too-many-arguments
     exclude_bots: Any,
     ensure_min_connection: Any,
     layer_weights: list[Any],
-) -> tuple[str, str, str]:
+) -> tuple[str, str, str, list[Any], dict[str, str], bool, bool]:
     """Build the Collaboration Network card's launch URLs from its controls."""
-    config = _config_from_layer_inputs(
+    config, problems = _config_from_layer_inputs(
         layer_enables,
         layer_weights,
         lookback_days=lookback_days,
@@ -634,7 +775,7 @@ def build_collaboration_href(  # pylint: disable=too-many-arguments
         community_gap_y=community_gap_y,
         ensure_min_connection=ensure_min_connection,
     )
-    return _href_triple(
+    href, bottom_href, preview = _href_triple(
         config,
         COLLABORATION_CARD_SPEC.launch_path,
         extra_params={
@@ -644,6 +785,8 @@ def build_collaboration_href(  # pylint: disable=too-many-arguments
             "ensure_min_connection": str(config.ensure_min_connection).lower(),
         },
     )
+    alert_children, alert_style, blocked = _config_alert(problems)
+    return href, bottom_href, preview, alert_children, alert_style, blocked, blocked
 
 
 @callback(
@@ -651,6 +794,10 @@ def build_collaboration_href(  # pylint: disable=too-many-arguments
         Output(f"{PER_PERSON_CARD_SPEC.prefix}-open-btn", "href"),
         Output(f"{PER_PERSON_CARD_SPEC.prefix}-open-btn-bottom", "href"),
         Output(f"{PER_PERSON_CARD_SPEC.prefix}-url-preview", "children"),
+        Output(f"{PER_PERSON_CARD_SPEC.prefix}-config-alert", "children"),
+        Output(f"{PER_PERSON_CARD_SPEC.prefix}-config-alert", "style"),
+        Output(f"{PER_PERSON_CARD_SPEC.prefix}-open-btn", "disabled"),
+        Output(f"{PER_PERSON_CARD_SPEC.prefix}-open-btn-bottom", "disabled"),
     ],
     [
         Input({"type": f"{PER_PERSON_CARD_SPEC.prefix}-layer-enable", "layer": ALL}, "value"),
@@ -668,25 +815,27 @@ def build_per_person_href(
     exclude_bots: Any,
     max_collaborators: Any,
     layer_weights: list[Any],
-) -> tuple[str, str, str]:
+) -> tuple[str, str, str, list[Any], dict[str, str], bool, bool]:
     """Build the Per-Person card's launch URLs from its controls.
 
     Only the settings the per-person view consumes are forwarded: it has no
     communities and no org topology pruning, so those controls are absent here
     by construction rather than silently inert.
     """
-    config = _config_from_layer_inputs(
+    config, problems = _config_from_layer_inputs(
         layer_enables,
         layer_weights,
         lookback_days=lookback_days,
         min_pair_score=min_pair_score,
         exclude_bots=exclude_bots,
     )
-    return _href_triple(
+    href, bottom_href, preview = _href_triple(
         config,
         PER_PERSON_CARD_SPEC.launch_path,
         extra_params={"max_collaborators": max_collaborators},
     )
+    alert_children, alert_style, blocked = _config_alert(problems)
+    return href, bottom_href, preview, alert_children, alert_style, blocked, blocked
 
 
 def _toggle_controls_state(is_open: bool) -> tuple[bool, str, dict[str, str]]:

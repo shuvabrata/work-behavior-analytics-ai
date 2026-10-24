@@ -198,6 +198,8 @@ async def get_collaboration_network(
     min_pair_score: float = Query(default=1.0, ge=0),
     top_n_edges_per_node: int = Query(default=0, ge=0, le=200),
     ensure_min_connection: bool = Query(default=True),
+    community_gap_x: float = Query(default=6000.0, ge=200, le=10000),
+    community_gap_y: float = Query(default=4000.0, ge=200, le=10000),
     exclude_bots: bool = Query(default=True),
     exclude_suffixes: str | None = Query(default=None, description="Comma-separated file suffixes to ignore"),
     w_reporter_assignee: float = Query(default=2.0, ge=0),
@@ -210,11 +212,19 @@ async def get_collaboration_network(
     w_confluence_comment_engagement: float = Query(default=2.0, ge=0),
     w_confluence_co_commenters: float = Query(default=1.0, ge=0),
     w_confluence_mentions: float = Query(default=2.0, ge=0),
+    w_github_pr_comment_engagement: float = Query(default=3.0, ge=0),
+    w_github_pr_co_commenters: float = Query(default=2.0, ge=0),
+    w_github_issue_comment_engagement: float = Query(default=3.0, ge=0),
+    w_github_issue_co_commenters: float = Query(default=2.0, ge=0),
+    w_jira_issue_comment_engagement: float = Query(default=3.0, ge=0),
+    w_jira_issue_co_commenters: float = Query(default=2.0, ge=0),
+    w_jira_epic_initiative_comment_engagement: float = Query(default=2.0, ge=0),
+    w_jira_epic_initiative_co_commenters: float = Query(default=1.0, ge=0),
 ) -> CollaborationNetworkResponse:
     """
     Build and return a collaboration network with Louvain community detection.
 
-    This endpoint runs the 6-scenario collaboration score Cypher query (last 90 days),
+    This endpoint runs the 18-block collaboration score Cypher query (last 90 days),
     feeds the results through NetworkX + python-louvain community detection, and
     returns Cytoscape-ready elements enriched with:
     - **community** (int): Louvain community ID — maps to a colour class in the stylesheet
@@ -240,6 +250,8 @@ async def get_collaboration_network(
                 "min_pair_score": min_pair_score,
                 "top_n_edges_per_node": top_n_edges_per_node,
                 "ensure_min_connection": ensure_min_connection,
+                "community_gap_x": community_gap_x,
+                "community_gap_y": community_gap_y,
                 "exclude_bots": exclude_bots,
                 "exclude_suffixes": exclude_suffixes,
                 "w_reporter_assignee": w_reporter_assignee,
@@ -252,6 +264,14 @@ async def get_collaboration_network(
                 "w_confluence_comment_engagement": w_confluence_comment_engagement,
                 "w_confluence_co_commenters": w_confluence_co_commenters,
                 "w_confluence_mentions": w_confluence_mentions,
+                "w_github_pr_comment_engagement": w_github_pr_comment_engagement,
+                "w_github_pr_co_commenters": w_github_pr_co_commenters,
+                "w_github_issue_comment_engagement": w_github_issue_comment_engagement,
+                "w_github_issue_co_commenters": w_github_issue_co_commenters,
+                "w_jira_issue_comment_engagement": w_jira_issue_comment_engagement,
+                "w_jira_issue_co_commenters": w_jira_issue_co_commenters,
+                "w_jira_epic_initiative_comment_engagement": w_jira_epic_initiative_comment_engagement,
+                "w_jira_epic_initiative_co_commenters": w_jira_epic_initiative_co_commenters,
             }
         )
         response = await asyncio.to_thread(service.get_collaboration_network, config=config)

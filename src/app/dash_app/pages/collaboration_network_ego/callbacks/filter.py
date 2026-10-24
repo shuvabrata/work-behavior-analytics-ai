@@ -4,7 +4,7 @@ from typing import Any
 from urllib.parse import parse_qs
 
 import dash_bootstrap_components as dbc
-from dash import Input, Output, State, callback, clientside_callback, ctx, html, no_update
+from dash import Input, Output, State, callback, clientside_callback, html, no_update
 from dash.exceptions import PreventUpdate
 
 from app.analytics.collaboration.config import CollaborationNetworkConfig, LAYER_ORDER
@@ -76,7 +76,8 @@ def _validate_ego_url_params(params: dict[str, list[str]]) -> list[str]:
     [Input({"type": "catalog-person-value", "name": "ego_focus"}, "data"),
      Input("url", "search"),
      Input("url", "pathname")],
-    [State("ego-top-n-cap", "value")],
+    [State("ego-top-n-cap", "value"),
+     State("ego-elements-store", "data")],
     prevent_initial_call="initial_duplicate",
 )
 def load_ego_network(
@@ -84,6 +85,7 @@ def load_ego_network(
     search: str | None,
     pathname: str | None,
     current_cap: int | None,
+    stored_elements: list[dict[str, Any]] | None,
 ) -> tuple[
     list[dict[str, Any]], dict[str, Any], list[Any], dict[str, Any],
     dict[str, Any], bool, list[dict[str, Any]], Any,
@@ -126,16 +128,18 @@ def load_ego_network(
     cap_options = cap_options_for(max_collaborators)
     cap_choices = {option["value"] for option in cap_options}
 
-    # Adopt the card's cap when the URL triggered this load (first navigation or a
-    # fresh link). Re-applying it on every person pick would silently undo a choice
-    # the user just made in the page's own selector.
+    # Adopt the card's cap on this load only when it is the page's FIRST fetch,
+    # and never afterwards. The elements store is empty until a fetch has
+    # populated it, so it is a reliable "nothing has been loaded yet" test —
+    # unlike ctx.triggered, which arrives NON-empty here: the person picker seeds
+    # its catalog-person-value store as the page mounts, and Dash counts that
+    # transition as an Input change. A trigger-based test therefore never fires on
+    # the first load, and the radio keeps its layout default (25) while the fetch
+    # honours the URL's cap.
     raw_cap = params.get("max_collaborators", [None])[0]
-    url_triggered = any(
-        str(item.get("prop_id", "")).startswith("url.")
-        for item in (ctx.triggered or [])
-    )
+    first_fetch = not stored_elements
     cap_update: Any = no_update
-    if url_triggered and raw_cap not in (None, ""):
+    if first_fetch and raw_cap not in (None, ""):
         cap_update = max_collaborators
     elif current_cap not in cap_choices:
         # The selection is above what this load fetched (or absent): clamp it into
@@ -267,15 +271,47 @@ def update_ego_filter_feedback(
     return summary, chips
 
 
+def _reset_cap(options: list[dict[str, Any]] | None) -> int:
+    """Return the cap to select when the filters are cleared.
+
+    The radio only offers caps the fetched element set can honour, so the static
+    default is not always a legal choice (fetch 10 collaborators and "Top 25" is
+    not on the menu). Selecting a value with no matching option leaves the radio
+    rendered with nothing chosen — a dead control. Fall back to the largest
+    offered cap, which ``cap_options_for`` guarantees is the fetched ceiling.
+
+    Args:
+        options: The radio's current ``options`` prop, or ``None`` before the
+                 first load has populated it.
+
+    Returns:
+        ``DEFAULT_MAX_COLLABORATORS`` when it is offered, else the largest
+        offered value, else the default (when there are no options at all).
+    """
+    offered = [
+        int(option["value"])
+        for option in (options or [])
+        if isinstance(option, dict) and isinstance(option.get("value"), int)
+    ]
+    if DEFAULT_MAX_COLLABORATORS in offered:
+        return DEFAULT_MAX_COLLABORATORS
+    if offered:
+        return max(offered)
+    return DEFAULT_MAX_COLLABORATORS
+
+
 @callback(
     [Output("ego-weight-threshold-slider", "value", allow_duplicate=True),
      Output("ego-top-n-cap",               "value", allow_duplicate=True)],
     Input("ego-clear-filters-btn", "n_clicks"),
+    State("ego-top-n-cap", "options"),
     prevent_initial_call=True,
 )
-def clear_ego_filters(n_clicks: int | None) -> tuple[int, int]:
+def clear_ego_filters(
+    n_clicks: int | None, options: list[dict[str, Any]] | None
+) -> tuple[int, int]:
     """Reset all filter controls to their defaults."""
-    return 0, DEFAULT_MAX_COLLABORATORS
+    return 0, _reset_cap(options)
 
 
 @callback(

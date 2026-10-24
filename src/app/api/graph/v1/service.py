@@ -1,6 +1,5 @@
 """Service layer for Graph API v1 - business logic and data transformation."""
 
-from pathlib import Path as FilePath
 from typing import Any, Dict, List, Set
 from neo4j.graph import Node, Path, Relationship
 
@@ -20,6 +19,7 @@ from app.analytics.collaboration.ego import (
     DEFAULT_MAX_COLLABORATORS,
     build_ego_elements,
 )
+from app.analytics.collaboration.queries_loader import load_collaboration_score_query
 from .model import (
     CollaborationNetworkResponse,
     EgoNetworkResponse,
@@ -376,12 +376,7 @@ def get_collaboration_network(
         f"{'enabled' if params.get('include_github_issue_co_commenters') else 'disabled'}"
     )
 
-    # Load the Cypher query from the analytics module
-    query_path = (
-        FilePath(__file__).resolve().parent.parent.parent.parent
-        / "analytics" / "collaboration" / "queries" / "collaboration_score.cypher"
-    )
-    query = query_path.read_text()
+    query = load_collaboration_score_query()
 
     logger.info("Running collaboration score query...")
     records = execute_cypher_query(
@@ -476,12 +471,7 @@ def get_ego_network(
     config = config or CollaborationNetworkConfig()
     config.focus_id = focus_id
 
-    # Load the Cypher query from the analytics module (same path as the org view).
-    query_path = (
-        FilePath(__file__).resolve().parent.parent.parent.parent
-        / "analytics" / "collaboration" / "queries" / "collaboration_score.cypher"
-    )
-    query = query_path.read_text()
+    query = load_collaboration_score_query()
 
     logger.info(f"Running ego collaboration score query for {focus_id}...")
     records = execute_cypher_query(

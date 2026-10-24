@@ -10,6 +10,12 @@ from dash.exceptions import PreventUpdate
 from app.analytics.collaboration.config import CollaborationNetworkConfig, LAYER_ORDER
 from app.analytics.collaboration.ego import DEFAULT_MAX_COLLABORATORS, cap_options_for
 from app.api.graph.v1.service import get_ego_network
+from app.common.person_network_url import (
+    PERSON_NETWORK_PATH,
+    clamp_max_collaborators,
+    parse_person_network_url,
+    search_with_person,
+)
 from app.dash_app.components.common import describe_config_error, register_loading_overlay_hider
 from app.dash_app.styles import FONT_SIZE_SMALL
 from common.logger import logger
@@ -24,16 +30,11 @@ from ..layout import (
 def _parse_max_collaborators(raw: Any) -> int:
     """Parse the ``max_collaborators`` URL parameter.
 
-    Falls back to the default when the parameter is absent (a direct visit to
-    the page) or unparseable, so the page behaves identically whether it was
-    reached from the Analytics card or by deep link.
+    Delegates to the shared URL contract so the bound here matches the one the
+    link builder and the API use. A value above the API's ceiling is clamped
+    rather than passed through, since the endpoint would reject it with a 400.
     """
-    if raw is None or str(raw).strip() == "":
-        return DEFAULT_MAX_COLLABORATORS
-    try:
-        return max(1, int(str(raw).strip()))
-    except (TypeError, ValueError):
-        return DEFAULT_MAX_COLLABORATORS
+    return clamp_max_collaborators(raw)
 
 
 def _ego_query_dict(params: dict[str, list[str]]) -> dict[str, Any]:
@@ -49,6 +50,15 @@ def _ego_query_dict(params: dict[str, list[str]]) -> dict[str, Any]:
             for layer in LAYER_ORDER
         },
     }
+
+
+def _deep_linked_person(search: str | None) -> str | None:
+    """Return the well-formed Person wba_id named by the URL, if any.
+
+    Uses the shared URL contract so this page and any component that builds a
+    link agree on the parameter name and the id rules.
+    """
+    return parse_person_network_url(search)["person"]
 
 
 def _validate_ego_url_params(params: dict[str, list[str]]) -> list[str]:
@@ -99,7 +109,7 @@ def load_ego_network(
     leaving the page permanently empty.  The pathname guard handles all
     non-ego routes safely.
     """
-    if pathname != "/app/collaboration/person":
+    if pathname != PERSON_NETWORK_PATH:
         raise PreventUpdate
 
     params = parse_qs((search or "").lstrip("?"), keep_blank_values=True)
@@ -118,6 +128,14 @@ def load_ego_network(
         focus_id = str(person_value.get("wba") or "").strip()
     elif isinstance(person_value, str):
         focus_id = person_value.strip()
+
+    if not focus_id:
+        # The picker is empty. A deep link carries the focus person in the URL
+        # (see app.common.person_network_url), so fall back to it — this is what
+        # lets another component link straight to one person's network. The
+        # picker's own value wins whenever it has one, so a user who picks a
+        # different person is never overridden by a stale URL.
+        focus_id = _deep_linked_person(search) or ""
 
     # The card's Collaborator Cap is this load's ceiling. The in-page selector
     # slices the already-fetched store, so it may only be offered choices at or
@@ -195,6 +213,129 @@ def load_ego_network(
             [], _EGO_LAYOUT, [_error_banner("An unexpected error occurred.")],
             show, hide, False, cap_options, cap_update,
         )
+
+
+# ---------------------------------------------------------------------------
+# Deep-link seeding — show the URL's person in the picker
+# ---------------------------------------------------------------------------
+
+@callback(
+    [Output({"type": "catalog-person-chip", "name": "ego_focus"}, "children", allow_duplicate=True),
+     Output({"type": "catalog-person-chip", "name": "ego_focus"}, "style", allow_duplicate=True),
+     Output({"type": "catalog-person-search-area", "name": "ego_focus"}, "style", allow_duplicate=True),
+     Output({"type": "catalog-person-suggestions", "name": "ego_focus"}, "style", allow_duplicate=True),
+     Output({"type": "catalog-person-value", "name": "ego_focus"}, "data", allow_duplicate=True)],
+    [Input("url", "search"),
+     Input("url", "pathname")],
+    State({"type": "catalog-person-value", "name": "ego_focus"}, "data"),
+    prevent_initial_call="initial_duplicate",
+)
+def seed_person_from_url(
+    search: str | None,
+    pathname: str | None,
+    stored_value: str | dict[str, Any] | None,
+) -> tuple[Any, ...]:
+    """Reflect a deep-linked Person in the picker when nothing is selected yet.
+
+    A URL of ``/app/collaboration/person?person=<wba_id>`` focuses the page on
+    that person, but the picker renders from its own store. Without this, a
+    deep link would load the right graph while the picker showed an empty
+    search box — the graph and the control would disagree about who is
+    displayed.
+
+    The store is read as ``State``, never as ``Input``, deliberately. An Input
+    would make this callback fire on every pick and clear, and on a clear it
+    would observe an empty store while the URL still named a person — seeding
+    it straight back and re-loading the network the user just cleared. Reading
+    it as State means only a URL change can seed, so clearing stays cleared.
+    The rewrite callback below is what keeps the URL in step with the store.
+
+    A value already in the store always wins, which keeps a user's manual pick
+    from being overwritten by a stale URL on a later navigation.
+
+    The label falls back to the id segment because a URL carries the canonical
+    key only — there is no display name to be had without a lookup.
+    """
+    if pathname != PERSON_NETWORK_PATH:
+        raise PreventUpdate
+
+    if stored_value:
+        # Something is already selected (user pick, or an earlier navigation).
+        raise PreventUpdate
+
+    person = _deep_linked_person(search)
+    if not person:
+        raise PreventUpdate
+
+    display = person.split("::", 2)[2] or person
+    chip_children = [
+        html.Div(
+            [
+                html.Span(display, className="catalog-person-chip-name"),
+                html.Span(person, className="catalog-person-chip-id"),
+            ],
+            className="catalog-person-chip-info",
+        ),
+        html.Button(
+            "×",
+            id={"type": "catalog-person-chip-clear", "name": "ego_focus"},
+            n_clicks=0,
+            className="catalog-person-chip-clear",
+            title="Clear selection",
+        ),
+    ]
+    return (
+        chip_children,
+        {"display": "flex"},
+        {"display": "none"},
+        {"display": "none"},
+        {"wba": person, "display": display},
+    )
+
+
+# ---------------------------------------------------------------------------
+# URL sync — keep the address bar pointing at the displayed person
+# ---------------------------------------------------------------------------
+
+@callback(
+    Output("url", "search", allow_duplicate=True),
+    Input({"type": "catalog-person-value", "name": "ego_focus"}, "data"),
+    State("url", "search"),
+    State("url", "pathname"),
+    prevent_initial_call=True,
+)
+def sync_person_to_url(
+    person_value: str | dict[str, Any] | None,
+    search: str | None,
+    pathname: str | None,
+) -> Any:
+    """Mirror the picker's person into the URL, so the address always matches.
+
+    Selecting a person makes the URL shareable and reloadable, and clearing the
+    selection removes the parameter rather than leaving a stale focus behind.
+
+    The rendered store may be a plain string (set by the shared picker) or a
+    ``{"wba": ...}`` dict (the form the deep-link seeder and the picker's
+    round-trip use); both are handled, so the two producers cannot disagree.
+
+    Returns ``no_update`` when the URL already says the right thing. That guard
+    matters: without it this callback would fire on its own output, and each
+    pass through would re-trigger the loader for the same person.
+    """
+    if pathname != PERSON_NETWORK_PATH:
+        raise PreventUpdate
+
+    if isinstance(person_value, dict):
+        wba = str(person_value.get("wba") or "").strip()
+    elif isinstance(person_value, str):
+        wba = person_value.strip()
+    else:
+        wba = ""
+
+    updated = search_with_person(search, wba if wba else None)
+    if updated is None:
+        return no_update
+    return updated
 
 
 # ---------------------------------------------------------------------------

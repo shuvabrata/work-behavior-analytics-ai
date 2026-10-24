@@ -11,6 +11,7 @@ from typing import Any
 
 import pytest
 from dash import no_update
+from dash.exceptions import PreventUpdate
 
 from app.analytics.collaboration.ego import DEFAULT_MAX_COLLABORATORS, cap_options_for
 from app.api.graph.v1.model import EgoNetworkResponse
@@ -333,3 +334,128 @@ def test_clearing_filters_redraws_the_plot_with_the_cap_applied():
     assert len(drawn_spokes) == 25, "exactly the top-25 spokes should survive"
     assert drawn_ids == expected
     assert any(n["data"].get("role") == "focus" for n in drawn_nodes), "focus retained"
+
+
+# ---------------------------------------------------------------------------
+# Deep linking: ?person=<wba_id> focuses the page on one Person
+# ---------------------------------------------------------------------------
+
+def _deep_link(wba_id: str, cap: int | None = None) -> str:
+    """Build the documented deep link and return just its query string."""
+    from urllib.parse import urlsplit
+
+    from app.common.person_network_url import build_person_network_url
+
+    return "?" + urlsplit(build_person_network_url(wba_id, cap)).query
+
+
+def test_deep_link_loads_the_named_person_when_the_picker_is_empty(monkeypatch):
+    """A component can link straight to one person's network with no picker use."""
+    captured = _stub_service(monkeypatch)
+
+    ego_filter.load_ego_network(None, _deep_link(PERSON, 50), PAGE, 50, [])
+
+    assert captured["focus_id"] == PERSON
+    assert captured["max_collaborators"] == 50
+
+
+def test_picker_value_wins_over_a_stale_url(monkeypatch):
+    """A user's pick must not be overridden by the person still in the URL."""
+    captured = _stub_service(monkeypatch)
+    picked = "github::Person::picked"
+
+    ego_filter.load_ego_network(
+        {"wba": picked}, _deep_link(PERSON), PAGE, 25, []
+    )
+
+    assert captured["focus_id"] == picked
+
+
+def test_malformed_person_in_url_shows_the_prompt_not_a_query(monkeypatch):
+    """A bad deep link must not query with a bad id."""
+    captured = _stub_service(monkeypatch)
+
+    result = ego_filter.load_ego_network(None, "?person=not-a-wba-id", PAGE, 25, [])
+
+    assert captured == {}, "no service call for an unparseable person"
+    assert result[4]["display"] == "block", "the empty-state prompt is shown"
+
+
+def test_url_without_a_person_still_prompts(monkeypatch):
+    captured = _stub_service(monkeypatch)
+
+    result = ego_filter.load_ego_network(None, "?max_collaborators=50", PAGE, 25, [])
+
+    assert captured == {}
+    assert result[4]["display"] == "block"
+
+
+# ---------------------------------------------------------------------------
+# URL sync: the address bar follows the picker
+# ---------------------------------------------------------------------------
+
+def test_sync_writes_the_picked_person_into_the_url():
+    updated = ego_filter.sync_person_to_url(
+        {"wba": PERSON}, "?lookback_days=30", PAGE
+    )
+
+    assert PERSON.split("::")[-1] in updated
+    assert "lookback_days=30" in updated, "settings must survive the rewrite"
+
+
+def test_sync_accepts_a_plain_string_value():
+    """The shared picker stores a dict, but a bare id must also work."""
+    updated = ego_filter.sync_person_to_url(PERSON, "", PAGE)
+
+    assert updated is not None and updated.startswith("?")
+
+
+def test_sync_removes_the_person_when_the_picker_is_cleared():
+    updated = ego_filter.sync_person_to_url(
+        None, "?person=github%3A%3APerson%3Aold&lookback_days=30", PAGE
+    )
+
+    assert "person" not in updated
+    assert "lookback_days=30" in updated
+
+
+def test_sync_is_a_no_op_when_the_url_already_matches():
+    """Emitting an unchanged URL would re-trigger the loader and re-query."""
+    already = _deep_link(PERSON)
+
+    assert ego_filter.sync_person_to_url({"wba": PERSON}, already, PAGE) is no_update
+
+
+def test_sync_ignores_other_pages():
+    with pytest.raises(PreventUpdate):
+        ego_filter.sync_person_to_url({"wba": PERSON}, "", "/app/graph")
+
+
+# ---------------------------------------------------------------------------
+# Deep-link seeding: the picker reflects the URL on arrival
+# ---------------------------------------------------------------------------
+
+def test_seed_renders_the_chip_for_a_deep_linked_person():
+    result = ego_filter.seed_person_from_url(_deep_link(PERSON), PAGE, None)
+
+    chip_children, chip_style, search_style, suggestions_style, stored = result
+    assert chip_children != []
+    assert chip_style["display"] == "flex"
+    assert search_style["display"] == "none"
+    assert suggestions_style["display"] == "none"
+    assert stored == {"wba": PERSON, "display": PERSON.split("::")[-1]}
+
+
+def test_seed_never_overwrites_an_existing_selection():
+    with pytest.raises(PreventUpdate):
+        ego_filter.seed_person_from_url(_deep_link(PERSON), PAGE, {"wba": "github::Person::picked"})
+
+
+def test_seed_ignores_a_url_with_no_person():
+    with pytest.raises(PreventUpdate):
+        ego_filter.seed_person_from_url("?max_collaborators=50", PAGE, None)
+
+
+def test_seed_ignores_other_pages():
+    with pytest.raises(PreventUpdate):
+        ego_filter.seed_person_from_url(_deep_link(PERSON), "/app/graph", None)

@@ -1,6 +1,5 @@
 """Service layer for Graph API v1 - business logic and data transformation."""
 
-from pathlib import Path as FilePath
 from typing import Any, Dict, List, Set
 from neo4j.graph import Node, Path, Relationship
 
@@ -16,8 +15,12 @@ from app.analytics.collaboration.algorithm import (
         to_cytoscape_elements,
     )
 from app.analytics.collaboration.config import CollaborationNetworkConfig
+from app.analytics.collaboration.ego import build_ego_elements
+from app.analytics.collaboration.queries_loader import load_collaboration_score_query
+from app.common.person_network_url import DEFAULT_MAX_COLLABORATORS
 from .model import (
-    CollaborationNetworkResponse, 
+    CollaborationNetworkResponse,
+    EgoNetworkResponse,
     GraphExecuteRequest,
     GraphNode, GraphRelationship, GraphResponse,
     NodeExpansionResponse, PaginationMeta
@@ -371,12 +374,7 @@ def get_collaboration_network(
         f"{'enabled' if params.get('include_github_issue_co_commenters') else 'disabled'}"
     )
 
-    # Load the Cypher query from the analytics module
-    query_path = (
-        FilePath(__file__).resolve().parent.parent.parent.parent
-        / "analytics" / "collaboration" / "queries" / "collaboration_score.cypher"
-    )
-    query = query_path.read_text()
+    query = load_collaboration_score_query()
 
     logger.info("Running collaboration score query...")
     records = execute_cypher_query(
@@ -436,5 +434,71 @@ def get_collaboration_network(
         num_pairs=g.number_of_edges(),
         num_communities=num_communities,
         modularity=round(modularity, 4),
+        config=config.to_summary(),
+    )
+
+
+def get_ego_network(
+    focus_id: str,
+    config: CollaborationNetworkConfig | None = None,
+    max_collaborators: int | None = DEFAULT_MAX_COLLABORATORS,
+) -> EgoNetworkResponse:
+    """Run the collaboration score query focused on one Person and return a star.
+
+    Unlike :func:`get_collaboration_network`, this deliberately skips the
+    Louvain pipeline: a star has no communities, and hub_score (weighted degree
+    over the whole org graph) is meaningless when every spoke holds one edge.
+
+    Args:
+        focus_id: wba_id of the Person at the centre of the star.
+        config: Collaboration configuration; ``lookback_days``, layer enablement
+                and weights all apply exactly as they do for the org view.
+        max_collaborators: Keep at most this many collaborators (by raw weight).
+                           ``None`` or <= 0 keeps all.
+
+    Returns:
+        EgoNetworkResponse with the focus node, collaborator spokes and edges.
+
+    Raises:
+        ValueError: If ``focus_id`` is blank, or the query returns no rows.
+        RuntimeError: If the Neo4j query execution fails.
+    """
+    if not focus_id or not focus_id.strip():
+        raise ValueError("focus_id must be a non-empty Person wba_id.")
+
+    config = config or CollaborationNetworkConfig()
+    config.focus_id = focus_id
+
+    query = load_collaboration_score_query()
+
+    logger.info(f"Running ego collaboration score query for {focus_id}...")
+    records = execute_cypher_query(
+        query,
+        timeout=runtime_settings.get_int("NEO4J_QUERY_TIMEOUT"),
+        parameters=config.to_cypher_parameters(),
+    )
+    logger.info(f"Ego collaboration query returned {len(records)} pairs for {focus_id}.")
+
+    if not records:
+        raise ValueError(
+            f"No collaborations found for person '{focus_id}'. "
+            "Check the person id and that the lookback window contains activity."
+        )
+
+    elements, total_collaborators, shown_collaborators = build_ego_elements(
+        records,
+        focus_id,
+        max_collaborators=max_collaborators,
+    )
+
+    logger.info(
+        f"Ego network built for {focus_id}: {total_collaborators} collaborators, "
+        f"{shown_collaborators} shown, {len(elements)} elements."
+    )
+
+    return EgoNetworkResponse(
+        elements=elements,
+        total_collaborators=total_collaborators,
+        shown_collaborators=shown_collaborators,
         config=config.to_summary(),
     )

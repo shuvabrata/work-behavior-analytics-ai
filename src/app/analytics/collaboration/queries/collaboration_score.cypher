@@ -245,6 +245,11 @@ CALL () {
 // Sum the scores from all independent systems
 WITH p1, p2, sum(sub_score) AS total_collaboration_score
 WHERE total_collaboration_score >= $min_pair_score
+  // Ego-network support: $focus_id is NULL for the org-wide network (default),
+  // or a Person id to restrict output to pairs incident to that person.
+  // Filtering here is safe because every block above already aggregates per
+  // pair and this WITH only sums them — so per-pair weights are unchanged.
+  AND ($focus_id IS NULL OR p1.id = $focus_id OR p2.id = $focus_id)
   AND (
     NOT $exclude_bots
     OR (

@@ -13,6 +13,7 @@ from dash.exceptions import MissingCallbackContextException, PreventUpdate
 
 from common.logger import logger
 from app.dash_app.components.common import create_alert
+from app.dash_app.components.person_picker import build_person_picker
 from app.dash_app.styles import (
     COLOR_BACKGROUND_WHITE,
     COLOR_CHARCOAL,
@@ -264,114 +265,6 @@ def _build_parameter_help_text(parameter: dict[str, Any]) -> html.Div | None:
     return html.Div(
         help_parts,
         style={"fontSize": "11px", "color": COLOR_TEXT_SECONDARY, "marginTop": "4px"},
-    )
-
-
-def _build_person_picker(parameter: dict[str, Any], current_value: str | dict[str, Any] | None) -> html.Div:
-    """Build a custom combobox for parameters with type='person_id'.
-
-    Uses a plain ``dbc.Input`` so the user types directly without any popup
-    widget.  Suggestions appear in an absolutely-positioned panel below the
-    input.  After a person is selected a chip replaces the search area,
-    showing the canonical ``wba_id`` and a clear button.
-
-    When ``current_value`` is a dict ``{"wba": "...", "display": "..."}``
-    (i.e. a previously-picked person whose value was preserved in the
-    parameter store), the chip is pre-rendered and the hidden
-    ``catalog-person-value`` store is seeded so that the clear button
-    correctly removes the entry from ``catalog-parameters-store``.
-    """
-    parameter_name = parameter.get("name")
-    required = parameter.get("required", False)
-    label_base = _parameter_label(parameter)
-
-    # Determine whether we have a stored person selection
-    stored_wba: str | None = None
-    stored_display: str | None = None
-    if isinstance(current_value, dict):
-        stored_wba = current_value.get("wba")
-        stored_display = current_value.get("display") or stored_wba or "Unknown"
-
-    label_children: list[Any] = [label_base]
-    if required:
-        label_children.append(
-            html.Span(" *", style={"color": "#dc3545", "fontWeight": 700})
-        )
-
-    # --- Chip (rendered when a stored value exists) ---
-    chip_children: list[Any] = []
-    if stored_wba:
-        chip_children = [
-            html.Div(
-                [
-                    html.Span(stored_display, className="catalog-person-chip-name"),
-                    html.Span(stored_wba, className="catalog-person-chip-id"),
-                ],
-                className="catalog-person-chip-info",
-            ),
-            html.Button(
-                "\u00d7",
-                id={"type": "catalog-person-chip-clear", "name": parameter_name},
-                n_clicks=0,
-                className="catalog-person-chip-clear",
-                title="Clear selection",
-            ),
-        ]
-
-    return html.Div(
-        [
-            html.Label(
-                label_children,
-                style={"fontSize": "12px", "fontWeight": 600, "marginBottom": "4px"},
-            ),
-            # --- Chip (visible once a person is selected) ---
-            html.Div(
-                id={"type": "catalog-person-chip", "name": parameter_name},
-                children=chip_children,
-                style={"display": "flex" if stored_wba else "none"},
-                className="catalog-person-chip-area",
-            ),
-            # --- Search area (visible while searching) ---
-            html.Div(
-                [
-                    html.Div(
-                        [
-                            dbc.Input(
-                                id={"type": "catalog-person-input", "name": parameter_name},
-                                placeholder="Search by name or email (min 3 chars)",
-                                type="text",
-                                value="",
-                                autocomplete="off",
-                                size="sm",
-                                style={"fontSize": "12px"},
-                                debounce=False,
-                            ),
-                            html.Div(
-                                id={"type": "catalog-person-suggestions", "name": parameter_name},
-                                children=[],
-                                style={"display": "none"},
-                                className="catalog-person-suggestions",
-                            ),
-                        ],
-                        className="catalog-person-combobox",
-                    ),
-                ],
-                id={"type": "catalog-person-search-area", "name": parameter_name},
-                style={"display": "none" if stored_wba else "block"},
-            ),
-            # --- Hidden stores (self-contained within the picker) ---
-            dcc.Store(
-                id={"type": "catalog-person-debounce", "name": parameter_name},
-                storage_type="memory",
-                data=None,
-            ),
-            dcc.Store(
-                id={"type": "catalog-person-value", "name": parameter_name},
-                storage_type="memory",
-                data=current_value if isinstance(current_value, dict) else None,
-            ),
-        ],
-        className="mb-3",
     )
 
 
@@ -763,7 +656,12 @@ def render_catalog_query_detail(
         if parameter_type == "person_id":
             # Use the interactive autocomplete picker instead of a plain text input
             parameter_children.append(
-                _build_person_picker(parameter, parameter_values.get(parameter_name))
+                build_person_picker(
+                    parameter.get("name", ""),
+                    _parameter_label(parameter),
+                    required=parameter.get("required", False),
+                    current_value=parameter_values.get(parameter_name),
+                )
             )
         else:
             parameter_help = _build_parameter_help_text(parameter)

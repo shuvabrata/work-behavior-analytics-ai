@@ -47,6 +47,22 @@ LAYER_LABELS: Dict[str, str] = {
     "jira_epic_initiative_co_commenters": "Co-commenters (Jira Epic/Initiative)",
 }
 
+# User-facing names for the collaboration settings that can be tuned from a URL or
+# an Analytics card, keyed by the name of the config field they set.
+#
+# Declared here, beside LAYER_LABELS and the model that owns the fields, so the
+# Analytics cards and the deep-link error messages cannot label the same field two
+# different ways. The numeric bounds for these fields are deliberately *not*
+# restated: _bounds_for reads them from the model's schema, and
+# describe_config_error recovers them from the validation error itself.
+SETTING_LABELS: Dict[str, str] = {
+    "lookback_days": "Lookback Days",
+    "min_pair_score": "Min Pair Score",
+    "top_n_edges_per_node": "Top-N Edges / Node",
+    "community_gap_x": "Community Gap X",
+    "community_gap_y": "Community Gap Y",
+}
+
 DEFAULT_LAYER_WEIGHTS: Dict[str, float] = {
     "reporter_assignee": 2.0,
     "pr_reviews": 3.0,
@@ -91,6 +107,11 @@ class CollaborationNetworkConfig(BaseModel):
     ensure_min_connection: bool = Field(default=DEFAULT_ENSURE_MIN_CONNECTION)
     exclude_bots: bool = Field(default=DEFAULT_EXCLUDE_BOTS)
     excluded_file_suffixes: list[str] = Field(default_factory=lambda: list(DEFAULT_EXCLUDED_FILE_SUFFIXES))
+    focus_id: str | None = Field(
+        default=None,
+        description="Restrict output to pairs incident to this Person wba_id. "
+                    "None (default) returns the org-wide network.",
+    )
 
     @field_validator("enabled_layers")
     @classmethod
@@ -127,6 +148,7 @@ class CollaborationNetworkConfig(BaseModel):
             "min_pair_score": self.min_pair_score,
             "exclude_bots": self.exclude_bots,
             "excluded_file_suffixes": self.excluded_file_suffixes,
+            "focus_id": self.focus_id,
         }
 
         enabled = set(self.enabled_layers)

@@ -18,9 +18,11 @@ from collections.abc import Set as AbstractSet
 from typing import Any
 
 import itertools
+import re
 from datetime import datetime
 from dash import html, dcc
 import dash_bootstrap_components as dbc
+from app.analytics.collaboration.config import LAYER_LABELS, SETTING_LABELS
 from app.common.timezone import humanize_duration, to_app_timezone
 from app.settings import settings
 
@@ -150,6 +152,79 @@ def create_alert(
     if duration is not None:
         kwargs["duration"] = duration
     return dbc.Alert(content, **kwargs)
+
+
+_CONFIG_ERROR_GENERIC = (
+    "One of the settings in the link is not a valid value. "
+    "Please check the numbers and try again."
+)
+
+_LAYER_IN_MESSAGE = re.compile(r"layer '([^']+)'")
+
+
+def _format_bound(value: Any) -> str:
+    """Render a pydantic bound readably, without a trailing ``.0`` on floats."""
+    try:
+        return f"{float(value):g}"
+    except (TypeError, ValueError):
+        return str(value)
+
+
+def _describe_one_error(error: dict[str, Any]) -> str | None:
+    """Turn one pydantic error dict into a plain-English sentence, or None."""
+    ctx = error.get("ctx") or {}
+    if error.get("type") == "value_error":
+        # The weights validator reports the whole ``weights`` dict as its loc, so
+        # the offending layer is only named inside the validator's own message.
+        match = _LAYER_IN_MESSAGE.search(str(ctx.get("error", "")))
+        if match is None:
+            return None
+        layer = match.group(1)
+        return f"{LAYER_LABELS.get(layer, layer)} weight cannot be negative."
+
+    loc = error.get("loc") or ()
+    if not loc:
+        return None
+    field = str(loc[-1])
+    label = SETTING_LABELS.get(field, field.replace("_", " ").capitalize())
+
+    lower = ctx.get("ge")
+    upper = ctx.get("le")
+    if lower is not None and upper is not None:
+        return f"{label} must be between {_format_bound(lower)} and {_format_bound(upper)}."
+    if upper is not None:
+        return f"{label} must be at most {_format_bound(upper)}."
+    if lower is not None:
+        return f"{label} must be at least {_format_bound(lower)}."
+    return None
+
+
+def describe_config_error(exc: Exception) -> str:
+    """Turn a CollaborationNetworkConfig ValidationError into a readable sentence.
+
+    Pydantic's own text names the field path and links to its documentation,
+    which is not something to show someone who typed a number into a box. The
+    field bounds live on the model, so the range is recovered from the error
+    itself rather than duplicated here.
+
+    An exception without ``errors()`` (``from_query_values`` raises a plain
+    ``ValueError`` for a non-numeric value) yields a generic sentence, never a
+    traceback and never raw pydantic output.
+    """
+    errors_method = getattr(exc, "errors", None)
+    if not callable(errors_method):
+        return _CONFIG_ERROR_GENERIC
+    try:
+        errors = errors_method()
+    except Exception:  # pylint: disable=broad-except
+        return _CONFIG_ERROR_GENERIC
+
+    messages: list[str] = []
+    for error in errors or []:
+        message = _describe_one_error(error)
+        if message and message not in messages:
+            messages.append(message)
+    return " ".join(messages) if messages else _CONFIG_ERROR_GENERIC
 
 
 def create_feature_card(title: str, description: str) -> html.Div:

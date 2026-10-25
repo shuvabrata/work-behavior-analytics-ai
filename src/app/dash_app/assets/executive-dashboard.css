@@ -624,6 +624,30 @@ input::placeholder {
 }
 
 /* ============================================================
+   Analytics Card Validation Alert (sticky feedback region)
+   ============================================================ */
+
+/* The Analytics cards' controls panel is ~1800px tall, and the page scrolls in
+   `.app-content-col` (the shell is a fixed 100vh column, so the window itself
+   never scrolls). Editing a field near the bottom of the panel — Lookback Days
+   sits below the 18-row layer table — leaves this region rendered but far above
+   the viewport, so the user sees no feedback for the value they just typed.
+
+   `position: sticky` keeps it in flow at the top of the card, and pins it to the
+   top of the scroll container only once it would otherwise scroll out of view.
+   `top: 0` needs no magic number: the scroll container's own top edge already
+   sits below the topbar. `background-color` is required because the region
+   otherwise floats transparently over the controls as they pass beneath it, and
+   the token is theme-aware (white in light, #1f262f in dark). `z-index` lifts it
+   above the layer table's switches and inputs. */
+.card-config-alert {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    background-color: var(--color-background-white);
+}
+
+/* ============================================================
    Inline Result Badge (compact dismissible alert)
    ============================================================ */
 

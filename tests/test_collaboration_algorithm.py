@@ -6,6 +6,7 @@ using small synthetic graphs — no Neo4j connection required.
 Run with: pytest tests/test_collaboration_algorithm.py -v
 """
 
+import networkx as nx
 import pytest
 
 from app.analytics.collaboration.algorithm import (
@@ -16,6 +17,7 @@ from app.analytics.collaboration.algorithm import (
     compute_modularity,
     detect_communities,
     filter_top_edges_per_node,
+    normalize_edge_weights,
     process_collaboration_network,
     to_cytoscape_elements,
 )
@@ -205,6 +207,60 @@ class TestFilterTopEdgesPerNode:
 
 
 # ---------------------------------------------------------------------------
+# normalize_edge_weights
+# ---------------------------------------------------------------------------
+
+class TestNormalizeEdgeWeights:
+    def test_strongest_edge_is_one(self):
+        g = nx.Graph()
+        g.add_edge("a", "b", weight=10.0)
+        g.add_edge("b", "c", weight=5.0)
+        assert max(normalize_edge_weights(g).values()) == pytest.approx(1.0)
+
+    def test_monotonic_in_raw_weight(self):
+        g = nx.Graph()
+        g.add_edge("a", "b", weight=10.0)
+        g.add_edge("b", "c", weight=5.0)
+        g.add_edge("c", "d", weight=1.0)
+        normalized = normalize_edge_weights(g)
+        assert normalized[("a", "b")] > normalized[("b", "c")]
+        assert normalized[("b", "c")] > normalized[("c", "d")]
+
+    def test_empty_graph_returns_empty_dict(self):
+        assert normalize_edge_weights(nx.Graph()) == {}
+
+    def test_all_zero_weights_return_zero_not_raise(self):
+        """The ``or 1.0`` guard: log(0 + 1) == 0 must not divide by zero."""
+        g = nx.Graph()
+        g.add_edge("a", "b", weight=0.0)
+        g.add_edge("b", "c", weight=0.0)
+        normalized = normalize_edge_weights(g)
+        assert len(normalized) == 2
+        assert all(value == 0.0 for value in normalized.values())
+
+    def test_missing_weight_attribute_treated_as_one(self):
+        """Pins ``d.get("weight", 1)`` so a cleanup to ``d["weight"]`` fails loudly."""
+        g = nx.Graph()
+        g.add_edge("a", "b")
+        assert normalize_edge_weights(g) == {("a", "b"): pytest.approx(1.0)}
+
+    def test_keys_are_iterated_endpoints_not_sorted(self):
+        """Callers look up by the iterated ``(source, target)`` pair."""
+        g = nx.Graph()
+        g.add_edge("z", "a", weight=10.0)
+        assert list(normalize_edge_weights(g)) == [("z", "a")]
+
+    def test_descending_endpoint_order_is_fully_normalized(self):
+        """An edge added high-to-low must normalize the same as low-to-high."""
+        g = nx.Graph()
+        g.add_edge("z", "a", weight=10.0)
+        g.add_edge("a", "b", weight=5.0)
+        normalized = normalize_edge_weights(g)
+        assert normalized[("z", "a")] == pytest.approx(1.0)
+        assert normalized[("z", "a")] > normalized[("a", "b")]
+
+
+# ---------------------------------------------------------------------------
 # to_cytoscape_elements
 # ---------------------------------------------------------------------------
 
@@ -299,6 +355,49 @@ class TestToCytoscapeElements:
         data = node["data"]
         # Neo4j properties from person1_props should be surfaced
         assert data.get("name") == "alice"
+
+    def test_descending_endpoint_ids_are_normalized_not_dropped(self):
+        """The Step-2 lookup must use the loop's iterated ``(source, target)``.
+
+        ``SIMPLE_RECORDS`` inserts every edge in ascending id order, so
+        ``(source, target)`` and ``tuple(sorted((source, target)))`` coincide
+        there and the tests above cannot tell the two apart. An edge whose ids
+        iterate descending does: looking the helper up by the *sorted* pair
+        raises ``KeyError`` on roughly half of all real edges.
+        """
+        records = [_rec("zoe", "adam", 10), _rec("adam", "bob", 5)]
+        g = build_graph(records)
+
+        descending = ("github::Person::zoe", "github::Person::adam")
+        assert descending in g.edges  # iterated in this order...
+        assert descending != tuple(sorted(descending))  # ...which the sort would reverse
+
+        elements = to_cytoscape_elements(g, detect_communities(g), compute_hub_scores(g))
+
+        # 2. No edge is silently dropped: the KeyError would abort the whole build.
+        edge_elements = [e for e in elements if "source" in e["data"]]
+        assert len(edge_elements) == g.number_of_edges()
+
+        # 3. Every emitted weight matches the helper, keyed by the iterated pair.
+        normalized = normalize_edge_weights(g)
+        for source, target, _data in g.edges(data=True):
+            canonical_source, canonical_target = sorted((source, target))
+            element = next(
+                e for e in edge_elements
+                if e["data"]["source"] == canonical_source
+                and e["data"]["target"] == canonical_target
+            )
+            assert element["data"]["normalized_weight"] == pytest.approx(
+                round(normalized[(source, target)] * 100, 1)
+            )
+
+        # The descending edge is the heaviest, so it pins the 0–100 top of scale.
+        strongest = next(
+            e for e in edge_elements
+            if e["data"]["id"] == "collab:github::Person::adam:github::Person::zoe"
+        )
+        assert strongest["data"]["normalized_weight"] == 100.0
+        assert strongest["data"]["line_color"] == "#ef4444"
 
 
 # ---------------------------------------------------------------------------

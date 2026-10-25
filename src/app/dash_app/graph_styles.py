@@ -250,6 +250,20 @@ def build_cytoscape_stylesheet(theme_name: str = ACTIVE_THEME, effective: dict[s
             }
             for i, (fill, border) in enumerate(COMMUNITY_COLORS)
         ],
+        # Ego (per-person) network: the focus node is emphasised so it is obvious which
+        # Person the view is about. Spokes keep the uniform nodeType="Person" sizing;
+        # this rule intentionally does NOT set width/height from data (node size stays
+        # constant in this view — see plans/047).
+        #
+        # Only the border is overridden. The label keeps the generic node rule's
+        # centre alignment and font size, so the focus node's label sits inside the
+        # node exactly like every other Person node's.
+        {
+            'selector': 'node.ego-centre',
+            'style': {
+                'border-width': '4px',
+            }
+        },
         # --- C3: Node Spotlight (comes last — highest specificity) ---
         {
             'selector': 'node.spotlight-dim',

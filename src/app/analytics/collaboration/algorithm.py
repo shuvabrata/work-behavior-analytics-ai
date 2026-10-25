@@ -95,6 +95,42 @@ MAX_COMMUNITY_STYLES = 20
 LOUVAIN_RANDOM_STATE = 42
 
 
+def normalize_edge_weights(g: nx.Graph) -> Dict[tuple[str, str], float]:
+    """Return ``{(u, v): normalized_0_1}`` for every edge, log-scaled.
+
+    Raw collaboration scores are heavily skewed (e.g. max=17500, median=5), so
+    linear normalization makes all but the single heaviest edge look near-white.
+    ``log(w + 1)`` compresses the outlier without hiding the relative
+    differences between strong collaborators — the same technique used for hub
+    scores.
+
+    The denominator is the log of the graph's maximum edge weight, computed once
+    over ALL edges. Callers must therefore apply this BEFORE any top-N or
+    threshold filter: filtering must never rescale the graph, so the strongest
+    edge is always 1.0 regardless of what is later hidden. Both the org-wide and
+    the per-person (ego) views share this function so the two can never
+    disagree about which collaboration is strongest.
+
+    Args:
+        g: Undirected NetworkX graph whose edges carry a ``weight`` attribute.
+
+    Returns:
+        Dict keyed by edge endpoints, as iterated from the graph, whose values
+        are log-scaled weights in [0.0, 1.0]. Empty for an edgeless graph.
+        A degenerate graph whose edges all weigh zero yields 0.0 for every edge
+        rather than dividing by zero.
+    """
+    weights = [d.get("weight", 1) for _, _, d in g.edges(data=True)]
+    # ``or 1.0`` (not ``if weights else 1.0``) also covers the non-empty
+    # all-zero case, where log(0 + 1) == 0.0 and the division would raise
+    # ZeroDivisionError. Reachable via min_pair_score=0.
+    max_log = math.log(max(weights, default=1) + 1) or 1.0
+    return {
+        (u, v): math.log(d.get("weight", 1) + 1) / max_log
+        for u, v, d in g.edges(data=True)
+    }
+
+
 def build_graph(records: List[Dict[str, Any]]) -> nx.Graph:
     """Build a weighted, undirected NetworkX graph from collaboration query records.
 
@@ -326,14 +362,13 @@ def to_cytoscape_elements(
     # normalization makes all but the single heaviest edge look near-white.
     # log(w + 1) compresses the outlier without hiding the relative differences
     # between strong collaborators — exactly the same technique used for hub scores.
-    all_edge_weights = [d.get("weight", 1) for _, _, d in g.edges(data=True)]
-    max_log_weight = math.log(max(all_edge_weights, default=1) + 1) or 1  # guard against zero
+    normalized_by_edge = normalize_edge_weights(g)
 
     for source, target, edge_data in g.edges(data=True):
         canonical_source, canonical_target = sorted((source, target))
         edge_id = f"collab:{canonical_source}:{canonical_target}"
         raw_weight = edge_data.get("weight", 1)
-        normalized_0_1 = math.log(raw_weight + 1) / max_log_weight
+        normalized_0_1 = normalized_by_edge[(source, target)]
         elements.append({
             "data": {
                 "id": edge_id,

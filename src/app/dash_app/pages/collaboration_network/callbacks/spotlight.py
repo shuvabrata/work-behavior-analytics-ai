@@ -9,17 +9,18 @@ exactly as before the extraction.
 """
 
 from app.dash_app.components.spotlight import (
-    MIN_QUERY_LENGTH,
-    SEARCH_FIELDS,
     apply_spotlight_classes,
     match_node,
     register_spotlight,
 )
 
-# Private aliases kept for the existing unit tests and any deep importers.
+# Indirections the tests reach for through this module. `tests/test_collab_spotlight.py`
+# imports `_apply_spotlight_classes` from here (not from components.spotlight), and
+# `tests/test_spotlight_wiring.py` asserts both names *are* the shared objects — so
+# they are load-bearing, and repointing the tests would turn that identity check into
+# a tautology. The `MIN_QUERY_LENGTH` / `SEARCH_FIELDS` constants need no alias: no
+# test imports them.
 _apply_spotlight_classes = apply_spotlight_classes
 _match_node = match_node
-_MIN_QUERY_LENGTH = MIN_QUERY_LENGTH
-_SEARCH_FIELDS = SEARCH_FIELDS
 
 register_spotlight("collab")

@@ -265,31 +265,40 @@ def _console_card() -> dbc.Card:
 
 
 def create_right_panel_tab_bar() -> html.Div:
-    """Create the sticky icon-only horizontal tab bar for the right panel workbench.
+    """Create the sticky horizontal tab bar for the right panel workbench.
 
     Returns:
-        html.Div containing 3 icon toggle buttons: Filters, Console, Catalog.
+        html.Div containing 3 icon+label toggle buttons: Filters, Console, Catalog.
     """
     return html.Div(
         id="graph-right-panel-tab-bar",
         className="graph-right-panel-tab-bar",
         children=[
             html.Button(
-                html.I(className="fas fa-sliders fa-fw"),
+                [
+                    html.I(className="fas fa-sliders fa-fw"),
+                    html.Span("Filters", className="graph-right-panel-tab-label"),
+                ],
                 id="right-tab-filters-btn",
                 title="Filters",
                 className="graph-right-panel-tab-icon",
                 n_clicks=0,
             ),
             html.Button(
-                html.I(className="fas fa-terminal fa-fw"),
+                [
+                    html.I(className="fas fa-terminal fa-fw"),
+                    html.Span("Console", className="graph-right-panel-tab-label"),
+                ],
                 id="right-tab-console-btn",
                 title="Console",
                 className="graph-right-panel-tab-icon",
                 n_clicks=0,
             ),
             html.Button(
-                html.I(className="fas fa-book-open fa-fw"),
+                [
+                    html.I(className="fas fa-book-open fa-fw"),
+                    html.Span("Catalog", className="graph-right-panel-tab-label"),
+                ],
                 id="right-tab-catalog-btn",
                 title="Catalog",
                 className="graph-right-panel-tab-icon",

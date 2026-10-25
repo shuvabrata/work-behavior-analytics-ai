@@ -397,7 +397,7 @@ class TestToCytoscapeElements:
             if e["data"]["id"] == "collab:github::Person::adam:github::Person::zoe"
         )
         assert strongest["data"]["normalized_weight"] == 100.0
-        assert strongest["data"]["line_color"] == "#ef4444"
+        assert strongest["data"]["_edge_line_color"] == "#ef4444"
 
 
 # ---------------------------------------------------------------------------

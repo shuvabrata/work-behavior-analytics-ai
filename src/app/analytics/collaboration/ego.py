@@ -264,7 +264,7 @@ def build_ego_elements(
                 "target": canonical_target,
                 "weight": raw_weight,
                 "normalized_weight": round(normalized_0_1 * 100, 1),
-                "line_color": _weight_to_hex(normalized_0_1),
+                "_edge_line_color": _weight_to_hex(normalized_0_1),
                 "relType": "COLLABORATES",
                 "elementType": "edge",
             },

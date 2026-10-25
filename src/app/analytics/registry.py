@@ -29,7 +29,7 @@ class GraphAnalytic:
 
 COLLABORATION_NETWORK_ANALYTIC = GraphAnalytic(
     key="collaboration_network",
-    title="Collaboration Network",
+    title="Org Collaboration Network",
     description=(
         "Discover organic teams and collaboration hubs from GitHub and Jira "
         "interactions over the last 90 days."

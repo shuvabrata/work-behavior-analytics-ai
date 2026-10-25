@@ -568,12 +568,13 @@ def overrides_to_cytoscape_rules(merged_tokens: dict[str, Any]) -> list[dict[str
                 # separately for display and filter logic.
                 "selector": "edge[normalized_weight]",
                 "style": {
-                    # line_color is a pre-computed hex string set server-side via
+                    # _edge_line_color is a pre-computed hex string set server-side via
                     # algorithm._weight_to_hex() using a matplotlib multi-stop colormap
                     # (violet → blue → green → yellow → red, weakest to strongest). Using
                     # data() instead of mapData() bypasses Cytoscape's two-color-only
-                    # interpolation limit.
-                    "line-color": "data(line_color)",
+                    # interpolation limit. The underscore prefix keeps this render-only
+                    # key out of the properties panel (see common._panel_is_visible_key).
+                    "line-color": "data(_edge_line_color)",
                     # Opacity: weak edges are semi-transparent (0.5), strong ones nearly
                     # opaque (0.9). Deliberately narrow — hue carries most of the strength
                     # signal, so this only gently de-clutters without hiding data.

@@ -105,3 +105,62 @@ def test_empty_breadcrumb_renders_description_only() -> None:
     # No breadcrumb segments and no '|' separator.
     separators = [s for s in spans if s.children == " | "]
     assert separators == []
+
+# ===========================================================================
+# Trailing slot — a page-level control embedded in the header row
+# ===========================================================================
+
+
+@pytest.mark.unit
+def test_trailing_component_is_rendered_in_the_header() -> None:
+    """A trailing component appears inside the header, after the description."""
+    marker = html.Button("Pick", id="trailing-marker")
+    header = create_page_header([("Settings", None)], "A description.", trailing=marker)
+
+    nodes = _flatten_children(header)
+    assert marker in nodes
+
+
+@pytest.mark.unit
+def test_trailing_resets_inherited_text_case() -> None:
+    """The trailing wrapper must undo the header's uppercase/letter-spacing.
+
+    ``textTransform`` and ``letterSpacing`` both inherit, so a control dropped
+    into the header renders its text ALL CAPS at 0.8px tracking without this.
+    """
+    header = create_page_header(
+        [("Settings", None)], "A description.", trailing=html.Button("Pick")
+    )
+    wrapper = header.children[-1]
+    assert wrapper.style["textTransform"] == "none"
+    assert wrapper.style["letterSpacing"] == "normal"
+
+
+@pytest.mark.unit
+def test_trailing_enables_wrapping_but_only_when_present() -> None:
+    """The row wraps only when a control is embedded, so other pages are unchanged."""
+    plain = create_page_header([("Settings", None)], "A description.")
+    assert "flexWrap" not in plain.style
+
+    with_trailing = create_page_header(
+        [("Settings", None)], "A description.", trailing=html.Button("Pick")
+    )
+    assert with_trailing.style["flexWrap"] == "wrap"
+
+
+@pytest.mark.unit
+def test_absent_trailing_adds_no_extra_child() -> None:
+    """Omitting trailing leaves the header's children exactly as before."""
+    header = create_page_header([("Settings", None)], "A description.")
+    assert all(not isinstance(c, html.Div) or c.children != [] for c in header.children)
+    # Breadcrumb span, separator span, description span — and nothing else.
+    assert len(header.children) == 3
+
+
+@pytest.mark.unit
+def test_description_is_shrinkable() -> None:
+    """The sentence may shrink so a trailing control keeps its space."""
+    header = create_page_header([("Settings", None)], "A description.")
+    spans = [n for n in _flatten_children(header) if isinstance(n, html.Span)]
+    description = [s for s in spans if s.children == "A description."]
+    assert description[0].style["minWidth"] == 0

@@ -9,6 +9,7 @@ from dash.exceptions import PreventUpdate
 
 from app.analytics.collaboration.config import CollaborationNetworkConfig, LAYER_ORDER
 from app.analytics.collaboration.ego import cap_options_for
+from app.analytics.collaboration.errors import CollaborationDataUnavailable
 from app.api.graph.v1.service import get_ego_network
 from app.common.person_network_url import (
     DEFAULT_MAX_COLLABORATORS,
@@ -18,11 +19,13 @@ from app.common.person_network_url import (
     search_with_person,
 )
 from app.dash_app.components.common import describe_config_error, register_loading_overlay_hider
-from app.dash_app.styles import FONT_SIZE_SMALL
+from app.dash_app.components.person_picker import build_person_chip
 from common.logger import logger
 from ..layout import (
     _EGO_LAYOUT,
+    _EMPTY_STATE_STYLE,
     _compute_ego_filtered,
+    _data_unavailable_banner,
     _error_banner,
     _split_elements,
 )
@@ -124,12 +127,11 @@ def load_ego_network(
     hide = {"display": "none"}
     show = {"display": "block"}
 
-    empty_state_style = {
-        "textAlign": "center",
-        "padding": "80px 16px",
-        "color": "var(--color-text-secondary)",
-        "fontSize": FONT_SIZE_SMALL,
-    }
+    # The prompt's positioning lives with the element in layout.py. This callback
+    # assigns the whole style dict, so the two must be the same object: a copy
+    # here would replace the layout's positioning on the first fire and drop the
+    # prompt back into flow below the canvas, where it causes the scrollbar.
+    empty_state_style = _EMPTY_STATE_STYLE
 
     focus_id = ""
     if isinstance(person_value, dict):
@@ -181,7 +183,7 @@ def load_ego_network(
 
     if not focus_id:
         # No person picked yet — show the empty state, do not call the API.
-        visible_empty_state = {**empty_state_style, "display": "block"}
+        visible_empty_state = {**empty_state_style, "display": "flex"}
         if url_problems:
             banner = [_error_banner(" ".join(url_problems))]
             return [], _EGO_LAYOUT, banner, show, visible_empty_state, False, cap_options, cap_update
@@ -201,7 +203,7 @@ def load_ego_network(
 
         if not elements:
             logger.warning("[EGO-PAGE] No elements returned")
-            return [], _EGO_LAYOUT, [], hide, {**empty_state_style, "display": "block"}, False, cap_options, cap_update
+            return [], _EGO_LAYOUT, [], hide, {**empty_state_style, "display": "flex"}, False, cap_options, cap_update
 
         logger.info(
             f"[EGO-PAGE] SUCCESS — {len(elements)} elements, "
@@ -215,8 +217,24 @@ def load_ego_network(
         # surface (see the except blocks below).
         return elements, _EGO_LAYOUT, [], hide, hide, False, cap_options, cap_update
 
+    except CollaborationDataUnavailable as exc:
+        # A clean query with an empty result: the person exists but has no
+        # collaborators in this window. This is NOT a settings problem, so it
+        # must not go through describe_config_error() — that renders the
+        # "check the numbers" text, which was the old, misleading behaviour.
+        logger.info(f"[EGO-PAGE] No collaborations: {exc}")
+        # banner_style=show so the warning is visible; empty-state stays hidden
+        # because its prompt ("pick a person") would be wrong — one is picked.
+        return (
+            [], _EGO_LAYOUT, [_data_unavailable_banner(focus_id, config)], show, hide,
+            False, cap_options, cap_update,
+        )
+
     except ValueError as exc:
-        logger.warning(f"[EGO-PAGE] No data: {exc}")
+        # Genuinely bad settings or a malformed focus id. Those are reported by
+        # _ego_config_from_params() above; reaching here means a ValueError the
+        # URL check does not cover, so the config sentence is the right one.
+        logger.warning(f"[EGO-PAGE] Invalid input: {exc}")
         return [], _EGO_LAYOUT, [_error_banner(describe_config_error(exc))], show, hide, False, cap_options, cap_update
 
     except Exception as exc:  # pylint: disable=broad-except
@@ -280,24 +298,8 @@ def seed_person_from_url(
         raise PreventUpdate
 
     display = person.split("::", 2)[2] or person
-    chip_children = [
-        html.Div(
-            [
-                html.Span(display, className="catalog-person-chip-name"),
-                html.Span(person, className="catalog-person-chip-id"),
-            ],
-            className="catalog-person-chip-info",
-        ),
-        html.Button(
-            "×",
-            id={"type": "catalog-person-chip-clear", "name": "ego_focus"},
-            n_clicks=0,
-            className="catalog-person-chip-clear",
-            title="Clear selection",
-        ),
-    ]
     return (
-        chip_children,
+        build_person_chip("ego_focus", display, person),
         {"display": "flex"},
         {"display": "none"},
         {"display": "none"},

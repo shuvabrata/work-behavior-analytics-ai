@@ -678,8 +678,13 @@ input::placeholder {
 
 .graph-right-panel-tab-bar {
     display: flex;
-    justify-content: space-evenly;
-    padding: 4px 0 0 0;
+    /* Labels make the row wider than the icon-only bar it replaced; in a narrow
+       window the right panel is ~1/3 of the content area, so let tabs wrap to a
+       second row rather than overflow the (unscrollable) panel edge. */
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 4px;
+    padding: 4px 0 6px 0;
     border-bottom: 1px solid var(--color-border);
     position: sticky;
     top: 0;
@@ -689,28 +694,50 @@ input::placeholder {
 }
 
 .graph-right-panel-tab-icon {
-    background-color: var(--color-background-white);
-    border: none;
-    border-bottom: 2px solid transparent;
-    color: var(--color-gray-medium);
-    padding: 6px 12px;
-    font-size: 14px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    background-color: transparent;
+    border: 1px solid transparent;
+    /* gray-dark, not gray-medium: these are 12px interactive labels and
+       gray-medium only reaches 4.02:1 on white (below AA's 4.5:1). */
+    color: var(--color-gray-dark);
+    font-family: 'Inter', sans-serif;
+    font-size: 12px;
+    font-weight: var(--font-weight-medium);
+    line-height: 1.4;
+    padding: 4px 10px;
     cursor: pointer;
     transition: color 0.15s ease, border-color 0.15s ease, background-color 0.15s ease;
-    margin-bottom: -1px; /* overlap parent border-bottom so active underline is flush */
     outline: none;
-    border-radius: 0;
+    border-radius: 2px;
+}
+
+/* The graph workbench has 3 tabs: let them share the panel width evenly rather
+   than sitting centred and compact. Scoped to the graph bar so the single-tab
+   collab / ego bars keep their compact look. `auto` basis (not 0) plus a
+   fit-content floor means they only give up width when the panel is genuinely
+   too narrow, at which point the bar wraps instead of clipping labels. */
+#graph-right-panel-tab-bar .graph-right-panel-tab-icon {
+    flex: 1 1 auto;
+    min-width: fit-content;
+}
+
+.graph-right-panel-tab-label {
+    white-space: nowrap;
 }
 
 .graph-right-panel-tab-icon:hover {
     color: var(--color-charcoal-medium);
-    background-color: var(--color-background-white);
+    background-color: var(--color-surface-active);
 }
 
-.graph-right-panel-tab-icon.active {
-    color: var(--color-navy);
-    border-bottom: 2px solid var(--color-navy);
-    background-color: var(--color-background-white);
+.graph-right-panel-tab-icon.active,
+.graph-right-panel-tab-icon.active:hover {
+    background-color: var(--color-charcoal-medium);
+    border-color: var(--color-charcoal-medium);
+    color: var(--color-background-white);
 }
 
 .graph-right-panel-tab-icon:focus-visible {
@@ -1527,6 +1554,29 @@ input::placeholder {
     position: relative;
 }
 
+/* Puts the input and its inline required-marker on one line. Without this the
+   marker — a sibling of the combobox — stacks below the input. */
+.catalog-person-input-row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.catalog-person-input-row .catalog-person-combobox {
+    flex: 1;
+    min-width: 0;
+}
+
+/* The required asterisk, shown inline after the box when the visible label is
+   suppressed. The label's own asterisk goes off-screen with the label, so a
+   required host would otherwise show no requiredness at all. */
+.catalog-person-required-marker {
+    color: var(--color-destructive);
+    font-weight: 700;
+    flex-shrink: 0;
+    line-height: 1;
+}
+
 /* Suggestions dropdown panel */
 .catalog-person-suggestions {
     position: absolute;
@@ -1666,6 +1716,79 @@ input::placeholder {
 .theme-executive-dark .catalog-person-chip-area {
     background-color: var(--color-background-light) !important;
     border-color: var(--color-border-light) !important;
+}
+
+/* Keeps a label in the accessibility tree while removing it from the layout.
+   Used where a host supplies the visible label itself (the ego page's header
+   embeds the picker in a sentence). `dbc.Input` 2.0.4 rejects `aria-label`
+   (`_valid_wildcard_attributes` is empty), so a hidden <label> is what gives
+   the input its accessible name. */
+.catalog-person-label-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+/* ---- Header person picker ----
+   The chip keeps the shared stacked form (name above, wba_id below) rather than
+   the inline variant tried first. Inline clipped the wba_id at this width, and
+   the id is the point of showing it — it is what makes the chip unambiguous
+   when two people share a display name. Only padding and type size differ from
+   the shared rules; the stacking, the ellipsis and the clear button all come
+   from .catalog-person-chip-* unchanged. */
+.ego-header-picker {
+    width: 260px;
+    max-width: 100%;
+}
+
+/* This is the page's primary control, so it is deliberately larger than the
+   13px header text around it — at the shared 12px it was the smallest and
+   least emphasised thing in the row.
+
+   `!important` is required: build_person_picker sets fontSize inline
+   (style={"fontSize": "12px"}), and an inline style outranks any selector.
+   Scoped to this host so the Graph page's dense catalog pickers, which share
+   the component, keep their 12px. */
+.ego-header-picker .form-control {
+    font-size: 14px !important;
+    padding: 4px 8px;
+}
+
+/* Tighter than the shared 6px/10px so the two-line chip does not dominate the
+   header row; the vertical padding is what the canvas height budget pays for. */
+.ego-header-picker .catalog-person-chip-area {
+    padding: 3px 6px;
+    margin-bottom: 0;
+}
+
+/* Both raised from the shared 12px/10px so the person just chosen is not the
+   smallest text in the header. */
+.ego-header-picker .catalog-person-chip-name {
+    font-size: 13px;
+}
+
+.ego-header-picker .catalog-person-chip-id {
+    font-size: 11px;
+}
+
+/* The node spotlight is this page's second search affordance and gets the same
+   treatment as the picker. Scoped by the page's root id, because the box is
+   emitted by the shared create_controls_bar and is used by the Graph and org
+   pages too. No !important needed: an id+class selector already outranks the
+   bare .graph-spotlight-input rule, and this input carries no inline style.
+   Height is deliberately left at 30px — it is not the tallest item in the
+   controls bar, so growing it would push the canvas down and invalidate the
+   page's _CANVAS_HEIGHT derivation. */
+#ego-page .graph-spotlight-input,
+#ego-page .graph-spotlight-input.form-control {
+    width: 220px;
+    font-size: 13px;
 }
 
 /* ============================================================

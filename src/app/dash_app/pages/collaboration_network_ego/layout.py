@@ -13,6 +13,7 @@ import dash_bootstrap_components as dbc
 import dash_cytoscape as cyto
 from dash import dcc, html
 
+from app.analytics.collaboration.config import CollaborationNetworkConfig
 from app.analytics.collaboration.ego import COLLABORATOR_CAP_OPTIONS
 from app.common.person_network_url import DEFAULT_MAX_COLLABORATORS
 from app.dash_app.components.common import (
@@ -41,6 +42,10 @@ The clientside render callback calls cy.resize() + cy.fit() explicitly once the
 DOM is stable.
 """
 
+_CANVAS_HEIGHT = "calc(100vh - 148px)"
+"""Canvas height, sized to the chrome the page actually renders above it.
+"""
+
 _LABEL_STYLE = {
     "fontSize": "11px",
     "fontWeight": FONT_WEIGHT_SEMIBOLD,
@@ -53,19 +58,50 @@ _CAP_OPTIONS = [
     {"label": f"Top {cap}", "value": cap} for cap in COLLABORATOR_CAP_OPTIONS
 ]
 
+_EMPTY_STATE_STYLE = {
+    "position": "absolute",
+    "inset": 0,
+    # Below the loading overlay's z-index 5, above the canvas.
+    "zIndex": 1,
+    "display": "flex",
+    "alignItems": "center",
+    "justifyContent": "center",
+    "padding": "16px",
+    "textAlign": "center",
+    "color": "var(--color-text-secondary)",
+    "fontSize": FONT_SIZE_SMALL,
+    # Purely informational: never intercept a click meant for the graph.
+    "pointerEvents": "none",
+}
+"""Pre-input prompt, centered over the plot area.
+
+Absolutely positioned so the prompt occupies the canvas rather than stacking
+below it. In flow it added ~178px under a canvas already sized to
+``calc(100vh - 145px)``, which pushed a scrollbar onto a page that should not
+scroll — and left the text below the fold, where no user would see it.
+
+The callback assigns this whole dict to the element's ``style``, flipping
+``display`` between ``flex`` and ``none``, so the positioning must live here
+rather than in ``get_layout``: a style set only at layout time would be
+replaced wholesale on the callback's first fire.
+"""
+
 
 # ---------------------------------------------------------------------------
 # Layout helpers
 # ---------------------------------------------------------------------------
 
 def _create_right_panel_tab_bar() -> html.Div:
-    """Return the sticky icon-only tab bar for the ego right panel (Filters only)."""
+    """Return the sticky tab bar for the ego right panel (Filters only)."""
     return html.Div(
         id="ego-right-panel-tab-bar",
         className="graph-right-panel-tab-bar",
         children=[
             html.Button(
-                html.I(className="fas fa-sliders fa-fw"),
+                [
+                    html.I(className="fas fa-sliders fa-fw"),
+                    html.Span("Filters", className="graph-right-panel-tab-label"),
+                ],
                 id="ego-right-tab-filters-btn",
                 title="Filters",
                 className="graph-right-panel-tab-icon",
@@ -155,8 +191,15 @@ def get_layout() -> html.Div:
     return html.Div(
         [
             create_page_header(
-                [("Analytics", "/app/analytics"), ("Person Network", None)],
+                [("Analytics", "/app/analytics"), ("Per-Person Collaboration Network", None)],
                 "See who one person works with, and how closely.",
+                trailing=build_person_picker(
+                    "ego_focus",
+                    "Person",
+                    required=True,
+                    show_label=False,
+                    container_class="ego-header-picker",
+                ),
             ),
 
             # Stores
@@ -167,12 +210,6 @@ def get_layout() -> html.Div:
             # clientcallback (see app.dash_app.components.spotlight).
             dcc.Store(id="ego-spotlight-debounced-store", data=""),
 
-            # Person picker
-            html.Div(
-                build_person_picker("ego_focus", "Person", required=True),
-                style={"maxWidth": "420px", "margin": "8px 0 4px 0"},
-            ),
-
             # Live stats banner
             html.Div(id="ego-banner", children=[], style={"display": "none", "flex": "1"}),
 
@@ -180,36 +217,40 @@ def get_layout() -> html.Div:
             dbc.Row([
                 dbc.Col([
                     create_controls_bar("ego", layout_enabled=False),
-                    create_loading_overlay_container(
-                        cyto.Cytoscape(
-                            id="ego-cytoscape",
-                            elements=[],
-                            layout=_EGO_LAYOUT,
-                            style={
-                                "width": "100%",
-                                "height": "calc(100vh - 200px)",
-                                "border": f"1px solid {COLOR_GRAY_LIGHTER}",
-                                "borderRadius": "2px",
-                            },
-                            stylesheet=CYTOSCAPE_STYLESHEET,
-                            userZoomingEnabled=True,
-                            userPanningEnabled=True,
-                            wheelSensitivity=0.3,
-                            minZoom=0.05,
-                            maxZoom=3,
-                        ),
-                        overlay_id="ego-loading-overlay",
-                    ),
+                    # The canvas and the pre-input prompt share one positioned
+                    # ancestor so the prompt can be centered over the plot area.
+                    # The wrapper is deliberately local to this page: the
+                    # overlay helper in components/common.py is shared by the
+                    # graph and org pages, and neither wants this child.
                     html.Div(
-                        id="ego-empty-state",
-                        children="Pick a person above to see their collaboration network.",
-                        style={
-                            "display": "block",
-                            "textAlign": "center",
-                            "padding": "80px 16px",
-                            "color": "var(--color-text-secondary)",
-                            "fontSize": FONT_SIZE_SMALL,
-                        },
+                        style={"position": "relative"},
+                        children=[
+                            create_loading_overlay_container(
+                                cyto.Cytoscape(
+                                    id="ego-cytoscape",
+                                    elements=[],
+                                    layout=_EGO_LAYOUT,
+                                    style={
+                                        "width": "100%",
+                                        "height": _CANVAS_HEIGHT,
+                                        "border": f"1px solid {COLOR_GRAY_LIGHTER}",
+                                        "borderRadius": "2px",
+                                    },
+                                    stylesheet=CYTOSCAPE_STYLESHEET,
+                                    userZoomingEnabled=True,
+                                    userPanningEnabled=True,
+                                    wheelSensitivity=0.3,
+                                    minZoom=0.05,
+                                    maxZoom=3,
+                                ),
+                                overlay_id="ego-loading-overlay",
+                            ),
+                            html.Div(
+                                id="ego-empty-state",
+                                children="Pick a person in the header to see their collaboration network.",
+                                style=_EMPTY_STATE_STYLE,
+                            ),
+                        ],
                     ),
                 ], id="ego-viz-col", width=8, style={"paddingRight": "16px"}),
 
@@ -246,6 +287,37 @@ def get_layout() -> html.Div:
 
 def _error_banner(message: str) -> dbc.Alert:
     return create_alert(message, color="danger", class_name="mb-0")
+
+
+def _data_unavailable_banner(
+    focus_id: str, config: CollaborationNetworkConfig | None
+) -> dbc.Alert:
+    """Warn that the person has no collaborators in the active window.
+
+    A distinct colour from ``_error_banner`` because nothing has failed: the
+    query ran cleanly and the answer is simply empty. ``warning`` is the
+    app's semantic colour for a recoverable state, and the message names the
+    two levers the user actually has — window length and enabled layers.
+
+    Args:
+        focus_id: The focus Person's ``wba_id``, named so the user can confirm
+            which person the empty result belongs to (the chip shows the
+            display name, which may differ).
+        config: The active config, read for its ``lookback_days``. ``None``
+            when the URL's settings failed to parse, in which case the window
+            is unknown and is omitted rather than guessed.
+    """
+    window = (
+        f" in the last {config.lookback_days} days"
+        if config is not None
+        else ""
+    )
+    return create_alert(
+        f"No collaborators found for {focus_id}{window}. "
+        "Try widening the lookback window or enabling more collaboration layers.",
+        color="warning",
+        class_name="mb-0",
+    )
 
 
 def _split_elements(elements: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:

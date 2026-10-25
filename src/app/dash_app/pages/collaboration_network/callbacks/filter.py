@@ -8,6 +8,7 @@ from dash import Input, Output, State, callback, clientside_callback, html
 from dash.exceptions import PreventUpdate
 
 from app.analytics.collaboration.config import CollaborationNetworkConfig, LAYER_ORDER
+from app.analytics.collaboration.errors import CollaborationDataUnavailable
 from app.api.graph.v1.service import get_collaboration_network
 from app.dash_app.components.common import (
     create_alert,
@@ -19,6 +20,7 @@ from common.logger import logger
 from ..layout import (
     _COLLABORATION_LAYOUT,
     _compute_collab_filtered,
+    _data_unavailable_banner,
     _error_banner,
     _get_communities,
     _split_elements,
@@ -97,7 +99,7 @@ def load_collaboration_network(search: str | None, pathname: str | None) -> tupl
 
         banner_content = create_alert(
             [
-                html.Strong("Collaboration Network"),
+                html.Strong("Org Collaboration Network"),
                 html.Span(f"  \u2014  Last {lookback_days} days  "),
                 dbc.Badge(f"{data.num_people} people",                color="primary",   className="me-1"),
                 dbc.Badge(f"{data.num_pairs} pairs",                  color="secondary", className="me-1"),
@@ -118,8 +120,14 @@ def load_collaboration_network(search: str | None, pathname: str | None) -> tupl
 
         return elements, _COLLABORATION_LAYOUT, [banner_content], {**show, "flex": "1"}, hide, False
 
+    except CollaborationDataUnavailable as exc:
+        # Query ran cleanly but there is nothing to draw. Distinct from the
+        # ValueError branch below, which is a genuine settings problem.
+        logger.info(f"[COLLAB-PAGE] No collaborations: {exc}")
+        return [], _COLLABORATION_LAYOUT, [_data_unavailable_banner(config)], show, hide, False
+
     except ValueError as exc:
-        logger.warning(f"[COLLAB-PAGE] No data: {exc}")
+        logger.warning(f"[COLLAB-PAGE] Invalid settings: {exc}")
         return [], _COLLABORATION_LAYOUT, [_error_banner(describe_config_error(exc))], show, hide, False
 
     except Exception as exc:  # pylint: disable=broad-except

@@ -16,6 +16,7 @@ from app.analytics.collaboration.algorithm import (
     )
 from app.analytics.collaboration.config import CollaborationNetworkConfig
 from app.analytics.collaboration.ego import build_ego_elements
+from app.analytics.collaboration.errors import CollaborationDataUnavailable
 from app.analytics.collaboration.queries_loader import load_collaboration_score_query
 from app.common.person_network_url import DEFAULT_MAX_COLLABORATORS
 from .model import (
@@ -385,9 +386,9 @@ def get_collaboration_network(
     logger.info(f"Collaboration query returned {len(records)} pairs.")
 
     if not records:
-        raise ValueError(
-            "Collaboration query returned no data. "
-            "Check Neo4j connectivity and that the 90-day time window contains activity."
+        raise CollaborationDataUnavailable(
+            "Collaboration query returned no data for this window. "
+            "Try widening the lookback window or enabling more layers."
         )
 
     # Run community detection pipeline
@@ -480,9 +481,9 @@ def get_ego_network(
     logger.info(f"Ego collaboration query returned {len(records)} pairs for {focus_id}.")
 
     if not records:
-        raise ValueError(
-            f"No collaborations found for person '{focus_id}'. "
-            "Check the person id and that the lookback window contains activity."
+        raise CollaborationDataUnavailable(
+            f"No collaborations found for person '{focus_id}' in this window. "
+            "Try widening the lookback window or enabling more layers."
         )
 
     elements, total_collaborators, shown_collaborators = build_ego_elements(

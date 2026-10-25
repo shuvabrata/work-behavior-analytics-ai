@@ -11,6 +11,7 @@ import dash_bootstrap_components as dbc
 import dash_cytoscape as cyto
 from dash import dcc, html
 
+from app.analytics.collaboration.config import CollaborationNetworkConfig
 from app.dash_app.components.common import (
     create_alert,
     create_controls_bar,
@@ -50,13 +51,16 @@ _LABEL_STYLE = {
 # ---------------------------------------------------------------------------
 
 def _create_right_panel_tab_bar() -> html.Div:
-    """Return the sticky icon-only tab bar for the collab right panel (Filters only)."""
+    """Return the sticky tab bar for the collab right panel (Filters only)."""
     return html.Div(
         id="collab-right-panel-tab-bar",
         className="graph-right-panel-tab-bar",
         children=[
             html.Button(
-                html.I(className="fas fa-sliders fa-fw"),
+                [
+                    html.I(className="fas fa-sliders fa-fw"),
+                    html.Span("Filters", className="graph-right-panel-tab-label"),
+                ],
                 id="collab-right-tab-filters-btn",
                 title="Filters",
                 className="graph-right-panel-tab-icon",
@@ -163,7 +167,7 @@ def get_layout() -> html.Div:
     return html.Div(
         [
             create_page_header(
-                [("Analytics", "/app/analytics"), ("Collaboration Network", None)],
+                [("Analytics", "/app/analytics"), ("Org Collaboration Network", None)],
                 "Analyze team collaboration and network structure.",
             ),
             # Stores
@@ -246,6 +250,32 @@ def get_layout() -> html.Div:
 
 def _error_banner(message: str) -> dbc.Alert:
     return create_alert(message, color="danger", class_name="mb-0")
+
+
+def _data_unavailable_banner(config: CollaborationNetworkConfig | None) -> dbc.Alert:
+    """Warn that the org graph is empty for the active window.
+
+    A distinct colour from ``_error_banner`` because nothing has failed: the
+    query ran cleanly and simply matched nothing. ``warning`` is the app's
+    semantic colour for a recoverable state, and the message names the levers
+    the user actually has — window length and enabled layers.
+
+    Args:
+        config: The active config, read for its ``lookback_days``. ``None``
+            when the settings failed to parse, in which case the window is
+            unknown and is omitted rather than guessed.
+    """
+    window = (
+        f" in the last {config.lookback_days} days"
+        if config is not None
+        else ""
+    )
+    return create_alert(
+        f"No collaboration activity found{window}. "
+        "Try widening the lookback window or enabling more collaboration layers.",
+        color="warning",
+        class_name="mb-0",
+    )
 
 
 def _split_elements(elements: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:

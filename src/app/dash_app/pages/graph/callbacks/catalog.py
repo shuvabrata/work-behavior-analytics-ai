@@ -13,7 +13,7 @@ from dash.exceptions import MissingCallbackContextException, PreventUpdate
 
 from common.logger import logger
 from app.dash_app.components.common import create_alert
-from app.dash_app.components.person_picker import build_person_picker
+from app.dash_app.components.person_picker import build_person_chip, build_person_picker
 from app.dash_app.styles import (
     COLOR_BACKGROUND_WHITE,
     COLOR_CHARCOAL,
@@ -962,25 +962,8 @@ def handle_person_pick(all_clicks: list[int]) -> tuple[Any, ...]:
     wba: str = triggered.get("wba", "")
     param_name: str = triggered.get("name", "")
 
-    chip_children = [
-        html.Div(
-            [
-                html.Span(display, className="catalog-person-chip-name"),
-                html.Span(wba, className="catalog-person-chip-id"),
-            ],
-            className="catalog-person-chip-info",
-        ),
-        html.Button(
-            "\u00d7",
-            id={"type": "catalog-person-chip-clear", "name": param_name},
-            n_clicks=0,
-            className="catalog-person-chip-clear",
-            title="Clear selection",
-        ),
-    ]
-
     return (
-        chip_children,
+        build_person_chip(param_name, display, wba),
         {"display": "flex"},   # chip visible
         {"display": "none"},   # search area hidden
         {"display": "none"},   # suggestions panel hidden

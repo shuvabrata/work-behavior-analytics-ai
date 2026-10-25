@@ -376,7 +376,7 @@ def to_cytoscape_elements(
                 "target": canonical_target,
                 "weight": raw_weight,                                                             # raw — used by filters and details panel
                 "normalized_weight": round(normalized_0_1 * 100, 1),                             # 0–100 log-scaled — retained for potential future use
-                "line_color": _weight_to_hex(normalized_0_1),                                    # pre-computed hex — read directly by stylesheet via data(line_color)
+                "_edge_line_color": _weight_to_hex(normalized_0_1),                              # pre-computed hex — read by stylesheet via data(_edge_line_color); underscore hides it from the panel
                 "relType": "COLLABORATES",
                 "elementType": "edge",
             },

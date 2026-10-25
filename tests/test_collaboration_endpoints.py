@@ -28,6 +28,7 @@ from app.analytics.collaboration.config import (
     DEFAULT_LAYER_WEIGHTS,
     LAYER_ORDER,
 )
+from app.analytics.collaboration.errors import CollaborationDataUnavailable
 
 pytestmark = pytest.mark.unit
 
@@ -146,3 +147,55 @@ def test_route_declares_every_setting_with_the_expected_default(path: str) -> No
         if declared[name] != expected[name]
     }
     assert wrong == {}, f"{path} declares wrong defaults (declared, expected): {wrong}"
+
+
+# ---------------------------------------------------------------------------
+# Empty result vs. invalid settings
+# ---------------------------------------------------------------------------
+#
+# A clean query that matches nothing is a 404, a malformed setting is a 400.
+# These were once the same ``ValueError``, and the org route told them apart by
+# string-matching the message ("returned no data") — so rewording the exception
+# would silently have flipped the status. They are now distinct types; these
+# tests pin the mapping.
+
+@pytest.mark.parametrize("path", [ORG_PATH, EGO_PATH])
+def test_empty_result_is_404(
+    client: TestClient, captured_config: dict[str, Any], monkeypatch, path: str
+) -> None:
+    """No matching records -> 404, not 400."""
+    def no_data(*_args: Any, **_kwargs: Any) -> Any:
+        raise CollaborationDataUnavailable("No collaborations found in this window.")
+
+    monkeypatch.setattr(graph_service, "get_collaboration_network", no_data)
+    monkeypatch.setattr(graph_service, "get_ego_network", no_data)
+
+    response = client.get(_request_url(path))
+
+    assert response.status_code == 404, response.text
+    assert response.json()["detail"]["error"] == "No collaboration data"
+
+
+@pytest.mark.parametrize("path", [ORG_PATH, EGO_PATH])
+def test_invalid_setting_is_400(client: TestClient, monkeypatch, path: str) -> None:
+    """A real ValueError stays a 400 (bad configuration / bad focus id)."""
+    def bad(*_args: Any, **_kwargs: Any) -> Any:
+        raise ValueError("config is wrong")
+
+    monkeypatch.setattr(graph_service, "get_collaboration_network", bad)
+    monkeypatch.setattr(graph_service, "get_ego_network", bad)
+
+    response = client.get(_request_url(path))
+
+    assert response.status_code == 400, response.text
+
+
+def test_data_unavailable_is_not_a_value_error() -> None:
+    """The split only works while this holds.
+
+    ``CollaborationDataUnavailable`` must not subclass ``ValueError``: the Dash
+    callbacks catch ``ValueError`` for the settings message, so a subclass would
+    be silently swallowed there and the misleading text would return.
+    """
+    assert not issubclass(CollaborationDataUnavailable, ValueError)
+    assert issubclass(CollaborationDataUnavailable, LookupError)

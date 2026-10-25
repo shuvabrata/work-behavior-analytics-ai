@@ -23,6 +23,7 @@ from app.analytics.collaboration.config import (
     DEFAULT_TOP_N_EDGES_PER_NODE,
     LAYER_LABELS,
     LAYER_ORDER,
+    SETTING_LABELS,
 )
 from app.analytics.collaboration.ego import COLLABORATOR_CAP_OPTIONS
 from app.analytics.registry import GRAPH_ANALYTICS
@@ -31,7 +32,6 @@ from app.dash_app.components.common import describe_config_error
 from app.dash_app.pages.analytics import (
     COLLABORATION_CARD_SPEC,
     PER_PERSON_CARD_SPEC,
-    _CONTROL_LABELS,
     _bounds_for,
     _config_alert,
     _config_from_layer_inputs,
@@ -431,7 +431,7 @@ def test_numeric_inputs_carry_no_html_range_constraints():
     )
 
 
-@pytest.mark.parametrize("key", sorted(_CONTROL_LABELS))
+@pytest.mark.parametrize("key", sorted(SETTING_LABELS))
 def test_card_bounds_follow_the_model(key):
     """A Field bound change must reach the card with no edit to analytics.py."""
     schema = CollaborationNetworkConfig.model_json_schema()["properties"][key]
@@ -481,11 +481,11 @@ def test_out_of_range_lookback_is_reported_not_changed():
     assert (config.community_gap_x, config.community_gap_y) == (2000.0, 1500.0)
 
 
-@pytest.mark.parametrize("key", sorted(_CONTROL_LABELS))
+@pytest.mark.parametrize("key", sorted(SETTING_LABELS))
 def test_each_bounded_field_is_rejected_and_named(key):
     """Every bounded field reports a problem at both ends and names itself."""
     lower, upper = _bounds_for(key)
-    label = _CONTROL_LABELS[key]
+    label = SETTING_LABELS[key]
 
     _config, problems = _config_from_layer_inputs(**_config_kwargs(**{key: lower - 1}))
     assert [p.label for p in problems] == [label], key
@@ -529,7 +529,7 @@ def test_whole_number_float_is_not_reported():
         assert problems == [], (key, problems)
 
 
-@pytest.mark.parametrize("key", sorted(_CONTROL_LABELS))
+@pytest.mark.parametrize("key", sorted(SETTING_LABELS))
 def test_float_fields_still_accept_fractions(key):
     """The whole-number rule must not leak onto the float fields."""
     if _is_integer_field(key):

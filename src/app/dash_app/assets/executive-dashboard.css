@@ -696,6 +696,7 @@ input::placeholder {
 .graph-right-panel-tab-icon {
     display: inline-flex;
     align-items: center;
+    justify-content: center;
     gap: 6px;
     background-color: transparent;
     border: 1px solid transparent;
@@ -711,6 +712,16 @@ input::placeholder {
     transition: color 0.15s ease, border-color 0.15s ease, background-color 0.15s ease;
     outline: none;
     border-radius: 2px;
+}
+
+/* The graph workbench has 3 tabs: let them share the panel width evenly rather
+   than sitting centred and compact. Scoped to the graph bar so the single-tab
+   collab / ego bars keep their compact look. `auto` basis (not 0) plus a
+   fit-content floor means they only give up width when the panel is genuinely
+   too narrow, at which point the bar wraps instead of clipping labels. */
+#graph-right-panel-tab-bar .graph-right-panel-tab-icon {
+    flex: 1 1 auto;
+    min-width: fit-content;
 }
 
 .graph-right-panel-tab-label {

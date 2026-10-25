@@ -278,10 +278,6 @@ class EgoNetworkResponse(BaseModel):
         default_factory=list,
         description="Cytoscape element dicts (focus node, collaborator nodes, edges)",
     )
-    focus_person: Dict[str, Any] = Field(
-        default_factory=dict,
-        description="Identity of the focus Person (id, label)",
-    )
     total_collaborators: int = Field(
         ..., description="Collaborators before the cap was applied"
     )

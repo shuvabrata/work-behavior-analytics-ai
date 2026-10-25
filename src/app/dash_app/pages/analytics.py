@@ -205,9 +205,6 @@ def _is_integer_field(key: str) -> bool:
     return CollaborationNetworkConfig.model_fields[key].annotation is int
 
 
-WEIGHT_BOUNDS_LABEL = "Layer weight"
-
-
 def _field_label(text: str) -> html.Div:
     """Small uppercase column label matching Graph Styling."""
     return html.Div(

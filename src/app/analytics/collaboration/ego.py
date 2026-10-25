@@ -251,7 +251,6 @@ def build_ego_elements(
                 ),
                 # NOTE: no _node_size — node size stays constant in this view.
             },
-            "classes": "ego-spoke",
             "position": positions[spoke],
         })
 

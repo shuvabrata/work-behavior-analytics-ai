@@ -491,13 +491,6 @@ def get_ego_network(
         max_collaborators=max_collaborators,
     )
 
-    focus_person: Dict[str, Any] = {"id": focus_id, "label": focus_id}
-    for element in elements:
-        data = element.get("data", {})
-        if data.get("elementType") == "node" and data.get("role") == "focus":
-            focus_person = {"id": focus_id, "label": data.get("label", focus_id)}
-            break
-
     logger.info(
         f"Ego network built for {focus_id}: {total_collaborators} collaborators, "
         f"{shown_collaborators} shown, {len(elements)} elements."
@@ -505,7 +498,6 @@ def get_ego_network(
 
     return EgoNetworkResponse(
         elements=elements,
-        focus_person=focus_person,
         total_collaborators=total_collaborators,
         shown_collaborators=shown_collaborators,
         config=config.to_summary(),

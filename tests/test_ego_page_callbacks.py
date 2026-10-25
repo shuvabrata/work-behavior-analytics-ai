@@ -30,7 +30,6 @@ def _response() -> EgoNetworkResponse:
         elements=[
             {"data": {"id": PERSON, "elementType": "node", "role": "focus", "label": "Focus"}}
         ],
-        focus_person={"id": PERSON, "label": "Focus"},
         total_collaborators=7,
         shown_collaborators=3,
         config={"lookback_days": 90, "enabled_layers": ["reporter_assignee"]},

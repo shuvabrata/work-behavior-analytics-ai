@@ -3,25 +3,10 @@
 from typing import Any
 from dash import Input, Output, callback, clientside_callback
 
-from app.dash_app.components.common import register_fullwidth_callback, toggle_details_panel
+from app.dash_app.components.common import register_fullwidth_callback
 from ..layout import _EGO_LAYOUT
 
 register_fullwidth_callback("ego")
-
-
-def toggle_ego_fullwidth(n_clicks: int, is_fullwidth: bool) -> tuple[Any, ...]:
-    """Toggle fullwidth mode for the ego network page.
-
-    Args:
-        n_clicks: Number of times the button has been clicked.
-        is_fullwidth: Current fullwidth state.
-
-    Returns:
-        (new_state, viz_width, panel_style) tuple.
-    """
-    new_state = not is_fullwidth
-    viz_width, panel_style = toggle_details_panel(new_state)
-    return new_state, viz_width, panel_style
 
 
 # Clientside callback — fit graph to viewport when Fit button is clicked

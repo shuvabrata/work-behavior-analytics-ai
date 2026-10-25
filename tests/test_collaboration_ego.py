@@ -295,11 +295,6 @@ class TestBuildEgoElements:
         assert focus["classes"] == "ego-centre"
         assert focus["position"] == {"x": 0.0, "y": 0.0}
 
-    def test_spoke_element_class(self):
-        elements, _, _ = build_ego_elements(_records(("a", 10.0)), FOCUS)
-        spoke = next(n for n in _nodes(elements) if n["data"]["role"] == "collaborator")
-        assert spoke["classes"] == "ego-spoke"
-
     def test_edge_ids_follow_collab_convention(self):
         elements, _, _ = build_ego_elements(_records(("a", 10.0)), FOCUS)
         edge = _edges(elements)[0]
@@ -399,17 +394,16 @@ class TestCapOptionsFor:
 # ---------------------------------------------------------------------------
 
 class TestEgoNetworkResponseModel:
-    def test_serialises_all_five_fields(self):
+    def test_serialises_all_four_fields(self):
         response = EgoNetworkResponse(
             elements=[{"data": {"id": "x"}}],
-            focus_person={"id": FOCUS, "label": "Focus"},
             total_collaborators=10,
             shown_collaborators=5,
             config={"lookback_days": 90},
         )
         payload = response.model_dump()
         assert set(payload.keys()) == {
-            "elements", "focus_person", "total_collaborators", "shown_collaborators", "config",
+            "elements", "total_collaborators", "shown_collaborators", "config",
         }
         assert payload["total_collaborators"] == 10
         assert payload["shown_collaborators"] == 5
@@ -417,5 +411,4 @@ class TestEgoNetworkResponseModel:
     def test_defaults(self):
         response = EgoNetworkResponse(total_collaborators=0, shown_collaborators=0)
         assert response.elements == []
-        assert response.focus_person == {}
         assert response.config == {}

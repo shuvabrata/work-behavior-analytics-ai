@@ -20,6 +20,7 @@ from app.analytics.collaboration.queries_loader import (
     load_query,
 )
 from app.api.graph.v1 import service
+from app.analytics.collaboration.errors import CollaborationDataUnavailable
 
 pytestmark = pytest.mark.unit
 
@@ -62,7 +63,10 @@ def _capture_query(monkeypatch: pytest.MonkeyPatch, call: Any) -> str:
         return []
 
     monkeypatch.setattr(service, "execute_cypher_query", fake_execute)
-    with pytest.raises(ValueError):  # the service raises once the query returns no rows
+    # The stub returns no rows, so the service stops here. Asserting the exact
+    # type also pins that an empty result is not reported as a ValueError — the
+    # type the UI treats as a settings problem.
+    with pytest.raises(CollaborationDataUnavailable):
         call()
     return captured["query"]
 

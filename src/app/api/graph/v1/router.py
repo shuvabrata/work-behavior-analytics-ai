@@ -6,6 +6,7 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import ValidationError
 
 from app.analytics.collaboration.config import CollaborationNetworkConfig
+from app.analytics.collaboration.errors import CollaborationDataUnavailable
 from app.common.person_network_url import (
     DEFAULT_MAX_COLLABORATORS,
     MAX_MAX_COLLABORATORS,
@@ -296,21 +297,22 @@ async def get_collaboration_network(
             },
         ) from e
 
-    except ValueError as e:
-        if "returned no data" not in str(e):
-            raise HTTPException(
-                status_code=400,
-                detail={
-                    "error": "Invalid collaboration configuration",
-                    "message": str(e),
-                },
-            ) from e
+    except CollaborationDataUnavailable as e:
         raise HTTPException(
             status_code=404,
             detail={
                 "error": "No collaboration data",
                 "message": str(e),
                 "hint": "Check that the 90-day window contains activity in Neo4j.",
+            },
+        ) from e
+
+    except ValueError as e:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "Invalid collaboration configuration",
+                "message": str(e),
             },
         ) from e
 
@@ -437,13 +439,22 @@ async def get_ego_collaboration_network(
             },
         ) from e
 
-    except ValueError as e:
+    except CollaborationDataUnavailable as e:
         raise HTTPException(
             status_code=404,
             detail={
                 "error": "No collaboration data",
                 "message": str(e),
                 "hint": "Check the person id and that the lookback window contains activity.",
+            },
+        ) from e
+
+    except ValueError as e:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "Invalid focus person",
+                "message": str(e),
             },
         ) from e
 

@@ -14,6 +14,7 @@ from dash import no_update
 from dash.exceptions import PreventUpdate
 
 from app.analytics.collaboration.ego import cap_options_for
+from app.analytics.collaboration.errors import CollaborationDataUnavailable
 from app.api.graph.v1.model import EgoNetworkResponse
 from app.common.person_network_url import DEFAULT_MAX_COLLABORATORS
 from app.dash_app.pages.collaboration_network_ego.callbacks import filter as ego_filter
@@ -143,7 +144,7 @@ def test_success_path_renders_no_summary_banner(monkeypatch):
 def test_error_path_still_renders_an_alert(monkeypatch):
     """Removing the summary must not remove the error feedback region."""
     def boom(*_args: Any, **_kwargs: Any) -> EgoNetworkResponse:
-        raise ValueError("No collaborations found for person 'x'.")
+        raise ValueError("some genuinely invalid input")
 
     monkeypatch.setattr(ego_filter, "get_ego_network", boom)
 
@@ -153,6 +154,73 @@ def test_error_path_still_renders_an_alert(monkeypatch):
 
     assert result[2] != [], "an error alert should be rendered"
     assert result[3]["display"] == "block", "the error alert should be visible"
+
+
+def test_no_collaborators_renders_a_warning_not_a_settings_error(monkeypatch):
+    """An empty result is a warning about the person, not a settings problem.
+
+    Regression guard: this case used to surface as a ``ValueError`` and be
+    rendered by ``describe_config_error``, so a person with no collaborators
+    was told "one of the settings in the link is not a valid value". The two
+    outcomes are now distinct exception types.
+    """
+    def no_data(*_args: Any, **_kwargs: Any) -> EgoNetworkResponse:
+        raise CollaborationDataUnavailable(
+            "No collaborations found for person 'x' in this window."
+        )
+
+    monkeypatch.setattr(ego_filter, "get_ego_network", no_data)
+
+    result = ego_filter.load_ego_network(
+        PERSON, "", PAGE, DEFAULT_MAX_COLLABORATORS, []
+    )
+
+    alerts = result[2]
+    assert len(alerts) == 1, "a single warning banner is rendered"
+    assert alerts[0].color == "warning", "an empty result is not a danger/error"
+    assert result[3]["display"] == "block", "the warning must be visible"
+
+    text = str(alerts[0].children)
+    assert "No collaborators found" in text
+    assert PERSON in text, "the message names the person"
+    assert "90 days" in text, "the active window is named"
+    assert "not a valid value" not in text, "the settings text must not appear"
+    assert "Please check the numbers" not in text
+
+
+def test_no_collaborators_keeps_the_picker_prompt_hidden(monkeypatch):
+    """A person *is* selected, so the "pick a person" prompt must stay hidden."""
+    def no_data(*_args: Any, **_kwargs: Any) -> EgoNetworkResponse:
+        raise CollaborationDataUnavailable("none")
+
+    monkeypatch.setattr(ego_filter, "get_ego_network", no_data)
+
+    result = ego_filter.load_ego_network(
+        PERSON, "", PAGE, DEFAULT_MAX_COLLABORATORS, []
+    )
+
+    assert result[4]["display"] == "none", "the empty-state prompt is not shown"
+
+
+def test_settings_error_keeps_the_settings_message(monkeypatch):
+    """The genuine settings path must keep the config sentence, not the warning.
+
+    Pins the other half of the split: a real ValueError still routes through
+    ``describe_config_error``.
+    """
+    def bad_config(*_args: Any, **_kwargs: Any) -> EgoNetworkResponse:
+        raise ValueError("boom")
+
+    monkeypatch.setattr(ego_filter, "get_ego_network", bad_config)
+
+    result = ego_filter.load_ego_network(
+        PERSON, "", PAGE, DEFAULT_MAX_COLLABORATORS, []
+    )
+
+    alerts = result[2]
+    assert len(alerts) == 1
+    assert alerts[0].color == "danger", "a settings problem is an error"
+    assert "not a valid value" in str(alerts[0].children)
 
 
 def test_options_only_offer_what_was_fetched(monkeypatch):

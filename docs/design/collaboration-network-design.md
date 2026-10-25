@@ -430,6 +430,14 @@ This taxonomy is **not on the path a user's browser takes** — the pages valida
 through the same configuration model and handle failures themselves. It is real,
 tested and worth keeping correct; a bug in it is simply invisible in the UI.
 
+Two exception types carry that distinction: `CollaborationDataUnavailable` for an
+empty result and `ValueError` for an invalid configuration. Routes map the type
+to a status and must never infer it from the message text.
+`CollaborationDataUnavailable` is a `LookupError`, never a `ValueError` — the
+pages treat `ValueError` as the settings case, so a subclass would be silently
+misreported. The pages mirror the split, rendering an empty result as a warning
+and a bad setting as an error.
+
 ---
 
 ## 6. UI layer

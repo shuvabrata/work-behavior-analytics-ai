@@ -13,6 +13,7 @@ import dash_bootstrap_components as dbc
 import dash_cytoscape as cyto
 from dash import dcc, html
 
+from app.analytics.collaboration.config import CollaborationNetworkConfig
 from app.analytics.collaboration.ego import COLLABORATOR_CAP_OPTIONS
 from app.common.person_network_url import DEFAULT_MAX_COLLABORATORS
 from app.dash_app.components.common import (
@@ -91,13 +92,16 @@ replaced wholesale on the callback's first fire.
 # ---------------------------------------------------------------------------
 
 def _create_right_panel_tab_bar() -> html.Div:
-    """Return the sticky icon-only tab bar for the ego right panel (Filters only)."""
+    """Return the sticky tab bar for the ego right panel (Filters only)."""
     return html.Div(
         id="ego-right-panel-tab-bar",
         className="graph-right-panel-tab-bar",
         children=[
             html.Button(
-                html.I(className="fas fa-sliders fa-fw"),
+                [
+                    html.I(className="fas fa-sliders fa-fw"),
+                    html.Span("Filters", className="graph-right-panel-tab-label"),
+                ],
                 id="ego-right-tab-filters-btn",
                 title="Filters",
                 className="graph-right-panel-tab-icon",
@@ -283,6 +287,37 @@ def get_layout() -> html.Div:
 
 def _error_banner(message: str) -> dbc.Alert:
     return create_alert(message, color="danger", class_name="mb-0")
+
+
+def _data_unavailable_banner(
+    focus_id: str, config: CollaborationNetworkConfig | None
+) -> dbc.Alert:
+    """Warn that the person has no collaborators in the active window.
+
+    A distinct colour from ``_error_banner`` because nothing has failed: the
+    query ran cleanly and the answer is simply empty. ``warning`` is the
+    app's semantic colour for a recoverable state, and the message names the
+    two levers the user actually has — window length and enabled layers.
+
+    Args:
+        focus_id: The focus Person's ``wba_id``, named so the user can confirm
+            which person the empty result belongs to (the chip shows the
+            display name, which may differ).
+        config: The active config, read for its ``lookback_days``. ``None``
+            when the URL's settings failed to parse, in which case the window
+            is unknown and is omitted rather than guessed.
+    """
+    window = (
+        f" in the last {config.lookback_days} days"
+        if config is not None
+        else ""
+    )
+    return create_alert(
+        f"No collaborators found for {focus_id}{window}. "
+        "Try widening the lookback window or enabling more collaboration layers.",
+        color="warning",
+        class_name="mb-0",
+    )
 
 
 def _split_elements(elements: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:

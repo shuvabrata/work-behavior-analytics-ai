@@ -9,6 +9,7 @@ from dash.exceptions import PreventUpdate
 
 from app.analytics.collaboration.config import CollaborationNetworkConfig, LAYER_ORDER
 from app.analytics.collaboration.ego import cap_options_for
+from app.analytics.collaboration.errors import CollaborationDataUnavailable
 from app.api.graph.v1.service import get_ego_network
 from app.common.person_network_url import (
     DEFAULT_MAX_COLLABORATORS,
@@ -24,6 +25,7 @@ from ..layout import (
     _EGO_LAYOUT,
     _EMPTY_STATE_STYLE,
     _compute_ego_filtered,
+    _data_unavailable_banner,
     _error_banner,
     _split_elements,
 )
@@ -215,8 +217,24 @@ def load_ego_network(
         # surface (see the except blocks below).
         return elements, _EGO_LAYOUT, [], hide, hide, False, cap_options, cap_update
 
+    except CollaborationDataUnavailable as exc:
+        # A clean query with an empty result: the person exists but has no
+        # collaborators in this window. This is NOT a settings problem, so it
+        # must not go through describe_config_error() — that renders the
+        # "check the numbers" text, which was the old, misleading behaviour.
+        logger.info(f"[EGO-PAGE] No collaborations: {exc}")
+        # banner_style=show so the warning is visible; empty-state stays hidden
+        # because its prompt ("pick a person") would be wrong — one is picked.
+        return (
+            [], _EGO_LAYOUT, [_data_unavailable_banner(focus_id, config)], show, hide,
+            False, cap_options, cap_update,
+        )
+
     except ValueError as exc:
-        logger.warning(f"[EGO-PAGE] No data: {exc}")
+        # Genuinely bad settings or a malformed focus id. Those are reported by
+        # _ego_config_from_params() above; reaching here means a ValueError the
+        # URL check does not cover, so the config sentence is the right one.
+        logger.warning(f"[EGO-PAGE] Invalid input: {exc}")
         return [], _EGO_LAYOUT, [_error_banner(describe_config_error(exc))], show, hide, False, cap_options, cap_update
 
     except Exception as exc:  # pylint: disable=broad-except

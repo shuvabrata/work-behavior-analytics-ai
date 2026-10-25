@@ -292,7 +292,7 @@ async def get_collaboration_network(
         ) from e
 
     except ValueError as e:
-        if "No collaboration data" not in str(e) and "returned no data" not in str(e):
+        if "returned no data" not in str(e):
             raise HTTPException(
                 status_code=400,
                 detail={

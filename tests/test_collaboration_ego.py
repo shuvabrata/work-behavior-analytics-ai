@@ -14,6 +14,7 @@ import math
 
 import pytest
 
+from app.analytics.collaboration.algorithm import normalize_edge_weights
 from app.analytics.collaboration.ego import (
     DEFAULT_MAX_COLLABORATORS,
     RADIUS_MAX,
@@ -22,7 +23,6 @@ from app.analytics.collaboration.ego import (
     build_ego_graph,
     cap_options_for,
     compute_radial_positions,
-    normalize_weights,
 )
 from app.api.graph.v1.model import EgoNetworkResponse
 
@@ -113,34 +113,34 @@ class TestBuildEgoGraph:
 
 
 # ---------------------------------------------------------------------------
-# normalize_weights
+# normalize_edge_weights
 # ---------------------------------------------------------------------------
 
 class TestNormalizeWeights:
     def test_strongest_collaborator_is_one(self):
         g = build_ego_graph(_records(("a", 10.0), ("b", 5.0)), FOCUS)
-        normalized = normalize_weights(g)
+        normalized = normalize_edge_weights(g)
         assert max(normalized.values()) == pytest.approx(1.0)
 
     def test_monotonic_in_raw_weight(self):
         g = build_ego_graph(_records(("a", 10.0), ("b", 5.0), ("c", 1.0)), FOCUS)
-        normalized = normalize_weights(g)
+        normalized = normalize_edge_weights(g)
         assert normalized[(FOCUS, "github::Person::a")] > normalized[(FOCUS, "github::Person::b")]
         assert normalized[(FOCUS, "github::Person::b")] > normalized[(FOCUS, "github::Person::c")]
 
     def test_single_collaborator(self):
         g = build_ego_graph(_records(("a", 3.0)), FOCUS)
-        normalized = normalize_weights(g)
+        normalized = normalize_edge_weights(g)
         assert normalized[(FOCUS, "github::Person::a")] == pytest.approx(1.0)
 
     def test_empty_graph_returns_empty_dict(self):
         g = build_ego_graph([], FOCUS)
-        assert normalize_weights(g) == {}
+        assert normalize_edge_weights(g) == {}
 
     def test_all_zero_weights_return_zero_not_raise(self):
         """The ``or 1.0`` guard: log(0 + 1) == 0 must not divide by zero."""
         g = build_ego_graph(_records(("a", 0.0), ("b", 0.0)), FOCUS)
-        normalized = normalize_weights(g)
+        normalized = normalize_edge_weights(g)
         assert len(normalized) == 2
         assert all(v == 0.0 for v in normalized.values())
 
@@ -153,14 +153,14 @@ class TestComputeRadialPositions:
     def test_focus_at_origin(self):
         spokes = [("github::Person::a", 10.0)]
         g = build_ego_graph(_records(("a", 10.0)), FOCUS)
-        positions = compute_radial_positions(FOCUS, spokes, normalize_weights(g))
+        positions = compute_radial_positions(FOCUS, spokes, normalize_edge_weights(g))
         assert positions[FOCUS] == {"x": 0.0, "y": 0.0}
 
     def test_heavier_collaborator_is_closer(self):
         """Core invariant: higher normalized weight ⇒ smaller radius."""
         pairs = [("a", 30.0), ("b", 20.0), ("c", 10.0), ("d", 1.0)]
         g = build_ego_graph(_records(*pairs), FOCUS)
-        normalized = normalize_weights(g)
+        normalized = normalize_edge_weights(g)
         positions = compute_radial_positions(FOCUS, _spokes(*pairs), normalized)
 
         def radius(spoke: str) -> float:
@@ -172,7 +172,7 @@ class TestComputeRadialPositions:
     def test_radii_bounded_by_constants(self):
         pairs = [("a", 30.0), ("b", 10.0)]
         g = build_ego_graph(_records(*pairs), FOCUS)
-        positions = compute_radial_positions(FOCUS, _spokes(*pairs), normalize_weights(g))
+        positions = compute_radial_positions(FOCUS, _spokes(*pairs), normalize_edge_weights(g))
 
         def radius(spoke: str) -> float:
             pos = positions[_wba(spoke)]
@@ -184,14 +184,14 @@ class TestComputeRadialPositions:
     def test_deterministic_across_calls(self):
         pairs = [("a", 30.0), ("b", 20.0), ("c", 10.0)]
         g = build_ego_graph(_records(*pairs), FOCUS)
-        normalized = normalize_weights(g)
+        normalized = normalize_edge_weights(g)
         assert compute_radial_positions(FOCUS, _spokes(*pairs), normalized) == \
                compute_radial_positions(FOCUS, _spokes(*pairs), normalized)
 
     def test_n_spokes_spread_evenly(self):
         pairs = [(f"p{i}", float(i + 1)) for i in range(6)]
         g = build_ego_graph(_records(*pairs), FOCUS)
-        positions = compute_radial_positions(FOCUS, _spokes(*pairs), normalize_weights(g))
+        positions = compute_radial_positions(FOCUS, _spokes(*pairs), normalize_edge_weights(g))
         assert len(positions) == 7  # focus + 6 spokes
         # First spoke starts at angle 0 → x = radius, y = 0 (within float noise).
         first = positions[_wba("p5")]  # heaviest
@@ -207,7 +207,7 @@ class TestComputeRadialPositions:
         """No two spokes may sit closer than a Person node is wide."""
         pairs = [(f"p{i}", float(count - i)) for i in range(count)]
         g = build_ego_graph(_records(*pairs), FOCUS)
-        positions = compute_radial_positions(FOCUS, _spokes(*pairs), normalize_weights(g))
+        positions = compute_radial_positions(FOCUS, _spokes(*pairs), normalize_edge_weights(g))
 
         spoke_ids = [_wba(f"p{i}") for i in range(count)]
 
@@ -230,7 +230,7 @@ class TestComputeRadialPositions:
         """Up to 9 spokes the innermost/outermost rings are the bare constants."""
         pairs = [(f"p{i}", float(count - i)) for i in range(count)]
         g = build_ego_graph(_records(*pairs), FOCUS)
-        positions = compute_radial_positions(FOCUS, _spokes(*pairs), normalize_weights(g))
+        positions = compute_radial_positions(FOCUS, _spokes(*pairs), normalize_edge_weights(g))
 
         def radius(spoke: str) -> float:
             pos = positions[_wba(spoke)]
@@ -244,7 +244,7 @@ class TestComputeRadialPositions:
         """Above the floor the innermost ring is scaled by the spoke count."""
         pairs = [(f"p{i}", float(count - i)) for i in range(count)]
         g = build_ego_graph(_records(*pairs), FOCUS)
-        positions = compute_radial_positions(FOCUS, _spokes(*pairs), normalize_weights(g))
+        positions = compute_radial_positions(FOCUS, _spokes(*pairs), normalize_edge_weights(g))
 
         pos = positions[_wba("p0")]
         radius = (pos["x"] ** 2 + pos["y"] ** 2) ** 0.5

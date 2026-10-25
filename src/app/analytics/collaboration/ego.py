@@ -11,7 +11,11 @@ from typing import Any, Dict, List
 
 import networkx as nx
 
-from app.analytics.collaboration.algorithm import _compact_label, _weight_to_hex
+from app.analytics.collaboration.algorithm import (
+    _compact_label,
+    _weight_to_hex,
+    normalize_edge_weights,
+)
 from app.runtime_settings import runtime_settings
 
 # Radial ring radii in layout units. The closest collaborator sits at R_IN,
@@ -105,31 +109,6 @@ def build_ego_graph(records: List[Dict[str, Any]], focus_id: str) -> nx.Graph:
     return g
 
 
-def normalize_weights(g: nx.Graph) -> Dict[tuple[str, str], float]:
-    """Return ``{(u, v): normalized_0_1}`` scaled over ALL collaborators.
-
-    Computed BEFORE any cap or threshold so that filtering never rescales the
-    graph: the strongest collaborator is always 1.0.
-
-    Args:
-        g: Star graph built by :func:`build_ego_graph`.
-
-    Returns:
-        Dict keyed by edge endpoints (as iterated from the graph) whose values
-        are log-scaled weights in [0.0, 1.0]. Empty for an edgeless graph.
-    """
-    weights = [d["weight"] for _, _, d in g.edges(data=True)]
-    # ``or 1.0`` (not ``if weights else 1.0``) also covers the non-empty
-    # all-zero case, where log(0 + 1) == 0.0 and the division would raise
-    # ZeroDivisionError. Same guard the org pipeline uses at
-    # algorithm.py:336. Reachable via min_pair_score=0.
-    max_log = math.log(max(weights, default=0.0) + 1) or 1.0
-    return {
-        (u, v): math.log(d["weight"] + 1) / max_log
-        for u, v, d in g.edges(data=True)
-    }
-
-
 def _normalized_for(
     focus_id: str,
     spoke: str,
@@ -158,7 +137,7 @@ def compute_radial_positions(
         focus_id: wba_id of the centre node.
         spokes_by_weight: ``(spoke_id, raw_weight)`` pairs; only the spoke ids
                           are used, ordering comes from ``normalized``.
-        normalized: Output of :func:`normalize_weights`.
+        normalized: Output of :func:`normalize_edge_weights`.
 
     Returns:
         Dict mapping node id -> ``{"x": float, "y": float}``. Deterministic for
@@ -219,7 +198,7 @@ def build_ego_elements(
         the focus node first, then the emitted spokes, then the edges.
     """
     g = build_ego_graph(records, focus_id)
-    normalized = normalize_weights(g)
+    normalized = normalize_edge_weights(g)
 
     spokes: List[tuple[str, float]] = [
         (spoke, float(data["weight"]))

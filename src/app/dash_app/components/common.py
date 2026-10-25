@@ -22,7 +22,7 @@ import re
 from datetime import datetime
 from dash import html, dcc
 import dash_bootstrap_components as dbc
-from app.analytics.collaboration.config import LAYER_LABELS
+from app.analytics.collaboration.config import LAYER_LABELS, SETTING_LABELS
 from app.common.timezone import humanize_duration, to_app_timezone
 from app.settings import settings
 
@@ -154,17 +154,6 @@ def create_alert(
     return dbc.Alert(content, **kwargs)
 
 
-# Human labels for the collaboration settings an invalid deep link can carry.
-# Labels only — the numeric bounds are recovered from the error itself, so there
-# is no second copy of the numbers to keep in sync.
-_CONFIG_FIELD_LABELS: dict[str, str] = {
-    "lookback_days": "Lookback Days",
-    "min_pair_score": "Min Pair Score",
-    "top_n_edges_per_node": "Top-N Edges / Node",
-    "community_gap_x": "Community Gap X",
-    "community_gap_y": "Community Gap Y",
-}
-
 _CONFIG_ERROR_GENERIC = (
     "One of the settings in the link is not a valid value. "
     "Please check the numbers and try again."
@@ -197,7 +186,7 @@ def _describe_one_error(error: dict[str, Any]) -> str | None:
     if not loc:
         return None
     field = str(loc[-1])
-    label = _CONFIG_FIELD_LABELS.get(field, field.replace("_", " ").capitalize())
+    label = SETTING_LABELS.get(field, field.replace("_", " ").capitalize())
 
     lower = ctx.get("ge")
     upper = ctx.get("le")

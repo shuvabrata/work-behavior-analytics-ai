@@ -19,6 +19,7 @@ from app.analytics.collaboration.config import (
     DEFAULT_TOP_N_EDGES_PER_NODE,
     LAYER_LABELS,
     LAYER_ORDER,
+    SETTING_LABELS,
 )
 from app.analytics.collaboration.ego import COLLABORATOR_CAP_OPTIONS
 from app.analytics.registry import GRAPH_ANALYTICS
@@ -162,18 +163,6 @@ def _create_analytic_card(analytic: Any) -> dbc.Card:
 
 
 _LAYER_GRID_TEMPLATE = "70px 1fr 110px"
-
-# User-facing names for the cards' bounded numeric controls, keyed by the config
-# field they map to. Labels live here because the model has no notion of what a
-# field is called in the UI; the *bounds* for these same fields are read from the
-# model (see _bounds_for), so a Field change needs no edit here.
-_CONTROL_LABELS: dict[str, str] = {
-    "lookback_days": "Lookback Days",
-    "min_pair_score": "Min Pair Score",
-    "top_n_edges_per_node": "Top-N Edges / Node",
-    "community_gap_x": "Community Gap X",
-    "community_gap_y": "Community Gap Y",
-}
 
 
 def _bounds_for(key: str) -> tuple[float | None, float | None]:
@@ -690,7 +679,7 @@ def _config_from_layer_inputs(
 
     problems: list[_ControlProblem] = []
 
-    for key, label in _CONTROL_LABELS.items():
+    for key, label in SETTING_LABELS.items():
         if query_values.get(key) is None:
             continue
         problem = _validate_control(key, query_values[key], label)

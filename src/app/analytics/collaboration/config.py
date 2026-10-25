@@ -47,6 +47,22 @@ LAYER_LABELS: Dict[str, str] = {
     "jira_epic_initiative_co_commenters": "Co-commenters (Jira Epic/Initiative)",
 }
 
+# User-facing names for the collaboration settings that can be tuned from a URL or
+# an Analytics card, keyed by the name of the config field they set.
+#
+# Declared here, beside LAYER_LABELS and the model that owns the fields, so the
+# Analytics cards and the deep-link error messages cannot label the same field two
+# different ways. The numeric bounds for these fields are deliberately *not*
+# restated: _bounds_for reads them from the model's schema, and
+# describe_config_error recovers them from the validation error itself.
+SETTING_LABELS: Dict[str, str] = {
+    "lookback_days": "Lookback Days",
+    "min_pair_score": "Min Pair Score",
+    "top_n_edges_per_node": "Top-N Edges / Node",
+    "community_gap_x": "Community Gap X",
+    "community_gap_y": "Community Gap Y",
+}
+
 DEFAULT_LAYER_WEIGHTS: Dict[str, float] = {
     "reporter_assignee": 2.0,
     "pr_reviews": 3.0,

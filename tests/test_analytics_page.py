@@ -24,8 +24,9 @@ from app.analytics.collaboration.config import (
     LAYER_LABELS,
     LAYER_ORDER,
 )
-from app.analytics.collaboration.ego import COLLABORATOR_CAP_OPTIONS, DEFAULT_MAX_COLLABORATORS
+from app.analytics.collaboration.ego import COLLABORATOR_CAP_OPTIONS
 from app.analytics.registry import GRAPH_ANALYTICS
+from app.common.person_network_url import DEFAULT_MAX_COLLABORATORS
 from app.dash_app.components.common import describe_config_error
 from app.dash_app.pages.analytics import (
     COLLABORATION_CARD_SPEC,

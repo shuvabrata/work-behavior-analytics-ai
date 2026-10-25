@@ -16,6 +16,7 @@ from app.analytics.collaboration.algorithm import (
     _weight_to_hex,
     normalize_edge_weights,
 )
+from app.common.person_network_url import DEFAULT_MAX_COLLABORATORS
 from app.runtime_settings import runtime_settings
 
 # Radial ring radii in layout units. The closest collaborator sits at R_IN,
@@ -31,7 +32,6 @@ from app.runtime_settings import runtime_settings
 RADIUS_MIN = 120.0
 RADIUS_MAX = 480.0
 TARGET_SPOKE_SEPARATION = 80.0
-DEFAULT_MAX_COLLABORATORS = 25
 
 # Collaborator-cap choices offered by both the Analytics card and the ego page's
 # in-page selector, so the two surfaces cannot offer different sets.

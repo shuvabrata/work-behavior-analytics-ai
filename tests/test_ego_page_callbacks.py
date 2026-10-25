@@ -13,8 +13,9 @@ import pytest
 from dash import no_update
 from dash.exceptions import PreventUpdate
 
-from app.analytics.collaboration.ego import DEFAULT_MAX_COLLABORATORS, cap_options_for
+from app.analytics.collaboration.ego import cap_options_for
 from app.api.graph.v1.model import EgoNetworkResponse
+from app.common.person_network_url import DEFAULT_MAX_COLLABORATORS
 from app.dash_app.pages.collaboration_network_ego.callbacks import filter as ego_filter
 
 

@@ -42,9 +42,11 @@ MIN_MAX_COLLABORATORS = 1
 MAX_MAX_COLLABORATORS = 500
 """Bounds the API accepts for ``max_collaborators``.
 
-Mirrored in the endpoint's own ``Query(ge=..., le=...)`` declaration; a value
-outside this range would be rejected with a 400 by the API, so the UI clamps
-into it before building a link.
+These are the single source of truth: the per-person endpoint builds its
+``Query(ge=..., le=...)`` declaration from them
+(``app/api/graph/v1/router.py``), so changing a value here changes the API's
+accepted range too. ``clamp_max_collaborators`` clamps into this range before
+the UI builds a link, so the UI never sends a value the API would reject.
 """
 
 

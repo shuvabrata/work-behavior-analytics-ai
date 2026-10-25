@@ -15,11 +15,9 @@ from app.analytics.collaboration.algorithm import (
         to_cytoscape_elements,
     )
 from app.analytics.collaboration.config import CollaborationNetworkConfig
-from app.analytics.collaboration.ego import (
-    DEFAULT_MAX_COLLABORATORS,
-    build_ego_elements,
-)
+from app.analytics.collaboration.ego import build_ego_elements
 from app.analytics.collaboration.queries_loader import load_collaboration_score_query
+from app.common.person_network_url import DEFAULT_MAX_COLLABORATORS
 from .model import (
     CollaborationNetworkResponse,
     EgoNetworkResponse,

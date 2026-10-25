@@ -6,6 +6,11 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import ValidationError
 
 from app.analytics.collaboration.config import CollaborationNetworkConfig
+from app.common.person_network_url import (
+    DEFAULT_MAX_COLLABORATORS,
+    MAX_MAX_COLLABORATORS,
+    MIN_MAX_COLLABORATORS,
+)
 from common.logger import logger
 from .model import (
     CollaborationNetworkResponse,
@@ -335,7 +340,11 @@ async def get_collaboration_network(
 async def get_ego_collaboration_network(
     person: str = Query(..., description="Focus Person wba_id"),
     layers: str | None = Query(default=None, description="Comma-separated collaboration layers"),
-    max_collaborators: int | None = Query(default=25, ge=1, le=500),
+    max_collaborators: int | None = Query(
+        default=DEFAULT_MAX_COLLABORATORS,
+        ge=MIN_MAX_COLLABORATORS,
+        le=MAX_MAX_COLLABORATORS,
+    ),
     lookback_days: int = Query(default=90, ge=1, le=365),
     min_pair_score: float = Query(default=1.0, ge=0),
     exclude_bots: bool = Query(default=True),

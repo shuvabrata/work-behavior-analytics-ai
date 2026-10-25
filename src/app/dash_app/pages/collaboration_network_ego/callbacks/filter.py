@@ -8,9 +8,10 @@ from dash import Input, Output, State, callback, clientside_callback, html, no_u
 from dash.exceptions import PreventUpdate
 
 from app.analytics.collaboration.config import CollaborationNetworkConfig, LAYER_ORDER
-from app.analytics.collaboration.ego import DEFAULT_MAX_COLLABORATORS, cap_options_for
+from app.analytics.collaboration.ego import cap_options_for
 from app.api.graph.v1.service import get_ego_network
 from app.common.person_network_url import (
+    DEFAULT_MAX_COLLABORATORS,
     PERSON_NETWORK_PATH,
     clamp_max_collaborators,
     parse_person_network_url,

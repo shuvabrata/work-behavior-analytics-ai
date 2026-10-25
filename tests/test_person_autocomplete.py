@@ -613,3 +613,291 @@ def test_build_suggestion_handles_null_email():
 
     assert suggestion is not None
     assert suggestion.email is None
+
+
+# ===========================================================================
+# build_person_picker — header-host options (show_label / container_class)
+# ===========================================================================
+
+
+def test_picker_hides_label_but_keeps_it_for_screen_readers():
+    """show_label=False must hide the label, not drop it from the DOM.
+
+    dbc.Input (2.0.4) rejects `aria-label`, so a hidden <label> is the only way
+    the input keeps an accessible name in a host that supplies its own label.
+    """
+    picker = build_person_picker("ego_focus", "Person", required=True, show_label=False)
+
+    hidden = [
+        c for c in picker.children
+        if isinstance(c, html.Label)
+        and c.className == "catalog-person-label-hidden"
+    ]
+    assert len(hidden) == 1, "the label must remain in the DOM, hidden"
+    # The required asterisk survives for screen readers.
+    assert any("*" in t for t in _flatten_text(hidden[0]))
+
+
+def test_picker_shows_label_by_default():
+    """The default keeps the visible label, so existing callers are unaffected."""
+    picker = build_person_picker("person1_id", "First person")
+    labels = [c for c in picker.children if isinstance(c, html.Label)]
+    assert len(labels) == 1
+    assert "hidden" not in str(getattr(labels[0], "className", "") or "")
+
+
+def test_picker_container_class_is_overridable():
+    """A header host can drop the stacked-form margin."""
+    assert build_person_picker("p", "P").className == "mb-3"
+    assert build_person_picker("p", "P", container_class="").className == ""
+    assert build_person_picker("p", "P", container_class="ego-header-picker").className == "ego-header-picker"
+
+
+def test_picker_keeps_the_same_id_family_in_a_header_host():
+    """Moving the picker must not rename any id — the callbacks match on these."""
+    picker = build_person_picker("ego_focus", "Person", required=True, show_label=False)
+
+    for id_type in (
+        "catalog-person-input",
+        "catalog-person-chip",
+        "catalog-person-search-area",
+        "catalog-person-suggestions",
+        "catalog-person-debounce",
+        "catalog-person-value",
+    ):
+        found = _find_component_by_id_type(picker, id_type)
+        assert found is not None, f"{id_type} missing"
+        assert found.id == {"type": id_type, "name": "ego_focus"}
+
+
+# ===========================================================================
+# build_person_chip — one definition shared by all three producers
+# ===========================================================================
+
+
+def test_build_person_chip_shape():
+    """The chip is [info block, clear button], keyed to the picker's name."""
+    from app.dash_app.components.person_picker import build_person_chip
+
+    chip = build_person_chip("ego_focus", "Alice Smith", "github::Person::alice")
+
+    assert len(chip) == 2
+    info, clear = chip
+    assert info.className == "catalog-person-chip-info"
+    assert [s.className for s in info.children] == [
+        "catalog-person-chip-name",
+        "catalog-person-chip-id",
+    ]
+    assert [s.children for s in info.children] == ["Alice Smith", "github::Person::alice"]
+    assert clear.id == {"type": "catalog-person-chip-clear", "name": "ego_focus"}
+
+
+def test_pick_handler_and_picker_agree_on_the_chip():
+    """The pick handler must emit the same chip the layout pre-renders.
+
+    Both go through build_person_chip; this fails if either grows its own copy
+    again, which is how a selection made by picking could render differently
+    from one restored by a deep link.
+    """
+    from app.dash_app.components.person_picker import build_person_chip
+
+    pre_rendered = build_person_picker(
+        "ego_focus", "Person", current_value={"wba": "github::Person::alice", "display": "Alice Smith"}
+    )
+    chip_area = _find_component_by_id_type(pre_rendered, "catalog-person-chip")
+
+    assert str(chip_area.children) == str(
+        build_person_chip("ego_focus", "Alice Smith", "github::Person::alice")
+    )
+
+
+# ===========================================================================
+# Required marker when the visible label is suppressed
+# ===========================================================================
+
+
+def _class_names(picker):
+    """Collect every className in the tree, split into individual classes."""
+    names = set()
+
+    def walk(node):
+        if node is None:
+            return
+        for cls in str(getattr(node, "className", "") or "").split():
+            names.add(cls)
+        children = getattr(node, "children", None)
+        if children is None:
+            return
+        if isinstance(children, (list, tuple)):
+            for child in children:
+                walk(child)
+        else:
+            walk(children)
+
+    walk(picker)
+    return names
+
+
+def test_hidden_label_required_gets_an_inline_marker():
+    """With the label hidden, requiredness must still be visible.
+
+    The asterisk lives inside the label, and the hidden label is moved
+    off-screen — so without this the ego page's required picker showed no
+    requiredness at all.
+    """
+    picker = build_person_picker("ego_focus", "Person", required=True, show_label=False)
+    assert "catalog-person-required-marker" in _class_names(picker)
+
+
+def test_shown_label_required_does_not_duplicate_the_marker():
+    """A visible label already carries the asterisk; a second one would double it."""
+    picker = build_person_picker("person1_id", "First person", required=True, show_label=True)
+    assert "catalog-person-required-marker" not in _class_names(picker)
+
+
+def test_optional_picker_has_no_marker():
+    """Optional pickers must not gain an asterisk from either path."""
+    for show_label in (True, False):
+        picker = build_person_picker("p", "Person", required=False, show_label=show_label)
+        assert "catalog-person-required-marker" not in _class_names(picker)
+
+
+def test_marker_sits_beside_the_input_on_one_row():
+    """The marker is a sibling of the combobox inside the flex row.
+
+    If it were placed inside the combobox it would sit under the suggestions
+    panel's positioning context, and outside the row it would stack below the
+    input — which is the two-line layout this replaced.
+    """
+    picker = build_person_picker("ego_focus", "Person", required=True, show_label=False)
+    rows = []
+
+    def walk(node):
+        if getattr(node, "className", None) == "catalog-person-input-row":
+            rows.append(node)
+        children = getattr(node, "children", None)
+        if children is None:
+            return
+        if isinstance(children, (list, tuple)):
+            for child in children:
+                walk(child)
+        else:
+            walk(children)
+
+    walk(picker)
+    assert len(rows) == 1, "expected exactly one input row"
+    child_classes = [getattr(c, "className", "") for c in rows[0].children]
+    assert child_classes == ["catalog-person-combobox", "catalog-person-required-marker"]
+
+
+# ===========================================================================
+# Font-size scoping — the header host grows, the catalog host does not
+# ===========================================================================
+
+
+def _css() -> str:
+    """Return the app stylesheet as text."""
+    from pathlib import Path
+
+    return (
+        Path(__file__).resolve().parents[1]
+        / "src/app/dash_app/assets/executive-dashboard.css"
+    ).read_text()
+
+
+def test_header_picker_enlarges_the_input_over_the_inline_default():
+    """The header picker must override the inline 12px, and only via !important.
+
+    build_person_picker sets fontSize inline, and an inline style outranks any
+    selector — so a rule without !important would silently do nothing.
+    """
+    css = _css()
+    block = css.split(".ego-header-picker .form-control {")[1].split("}")[0]
+    assert "font-size: 14px !important" in block, (
+        "the header input's font-size must be !important to beat the inline style"
+    )
+
+
+def test_the_shared_picker_defaults_are_unchanged():
+    """The base rules the Graph page's catalog pickers rely on must not grow.
+
+    The header host overrides these; if someone edits the base values instead,
+    every person picker in the app grows with it.
+    """
+    css = _css()
+
+    def font_size_of(selector: str) -> str:
+        block = css.split(selector + " {")[1].split("}")[0]
+        for line in block.splitlines():
+            if "font-size" in line:
+                return line.split(":", 1)[1].strip().rstrip(";")
+        raise AssertionError(f"no font-size in {selector}")
+
+    assert font_size_of(".catalog-person-chip-name") == "12px"
+    assert font_size_of(".catalog-person-chip-id") == "10px"
+
+
+def test_the_header_host_raises_the_chip_above_those_defaults():
+    """The header's chip is deliberately larger than the shared default."""
+    css = _css()
+    for selector, expected in (
+        (".ego-header-picker .catalog-person-chip-name", "13px"),
+        (".ego-header-picker .catalog-person-chip-id", "11px"),
+    ):
+        block = css.split(selector + " {")[1].split("}")[0]
+        assert f"font-size: {expected}" in block, f"{selector} should be {expected}"
+
+
+def test_shared_picker_still_emits_the_inline_12px_for_other_hosts():
+    """The component's own default is unchanged; only CSS re-sizes the header."""
+    picker = build_person_picker("person1_id", "First person")
+    text_input = _find_component_by_id_type(picker, "catalog-person-input")
+    assert text_input is not None
+    assert text_input.style["fontSize"] == "12px"
+
+
+def _declarations_for(css: str, selector: str) -> str:
+    """Return the declaration block for *selector*, matched at a line start.
+
+    A plain ``split(selector + " {")`` would also match the same class when it
+    is preceded by a host prefix, so the match is anchored to a line boundary.
+    """
+    marker = "\n" + selector + " {"
+    assert marker in css, f"no rule found for {selector}"
+    return css.split(marker, 1)[1].split("}", 1)[0]
+
+
+def test_header_chip_keeps_the_stacked_form():
+    """The header chip must NOT go back to one line.
+
+    An inline variant was tried and reverted: at the header's width it clipped
+    the wba_id, which is the reason the chip shows the id at all. The header may
+    restyle the chip's type size, but the stacking must keep coming from the
+    shared rules — so no header-scoped rule may redeclare layout.
+    """
+    css = _css()
+
+    for selector in (
+        ".ego-header-picker .catalog-person-chip-info",
+        ".ego-header-picker .catalog-person-chip-name",
+        ".ego-header-picker .catalog-person-chip-id",
+    ):
+        if "\n" + selector + " {" not in css:
+            continue  # rule absent entirely is fine
+        block = _declarations_for(css, selector)
+        for prop in ("display", "align-items", "white-space", "flex"):
+            assert prop not in block, (
+                f"{selector} redeclares '{prop}'; the stacked layout must come "
+                "from the shared rules, not the header host"
+            )
+
+    # And the shared rules still stack the name above the id.
+    for selector in (".catalog-person-chip-name", ".catalog-person-chip-id"):
+        assert "display: block" in _declarations_for(css, selector), (
+            f"{selector} must stay block-level to stack"
+        )
+
+
+def test_header_chip_has_no_inline_separator():
+    """The inline variant's '·' separator must not survive the revert."""
+    assert "catalog-person-chip-id::before" not in _css()

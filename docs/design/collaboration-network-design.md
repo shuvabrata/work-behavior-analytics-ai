@@ -442,7 +442,7 @@ Neither collaboration view has a sidebar entry. Both live behind the
 ```mermaid
 flowchart LR
     SB["Sidebar → Analytics"] --> GAL["/app/analytics<br/>gallery of analysis cards"]
-    GAL -->|"Collaboration Network card"| ORG["/app/collaboration<br/>org-wide"]
+    GAL -->|"Org Collaboration Network card"| ORG["/app/collaboration<br/>org-wide"]
     GAL -->|"Per-Person card"| EGO["/app/collaboration/person<br/>one person's star"]
     ORG -.->|breadcrumb| GAL
     EGO -.->|breadcrumb| GAL
@@ -530,6 +530,54 @@ picture rather than from drilling into one node.
 Same skeleton, different question. It adds a **person picker** (the graph is
 about someone, so someone must be chosen) and replaces the community and
 edge-limit controls with a **collaborator cap** radio.
+
+The picker sits in the **page header**, trailing the breadcrumb sentence, not in
+the content column. It is the page's subject rather than one of its filters, and
+the content column's vertical space belongs to the graph — a standalone picker
+block above the canvas cost roughly 77px of it. Two consequences follow from the
+move and are easy to get wrong:
+
+- The picker is the first consumer of `create_page_header`'s `trailing` slot,
+  which wraps it in a div resetting `textTransform` and `letterSpacing`. Both
+  inherit from `COMPACT_PAGE_HEADER_STYLE`, so without the reset the control's
+  text renders in ALL CAPS at 0.8px tracking.
+- The canvas height is **not** the org page's constant. `_CANVAS_HEIGHT` in the
+  ego layout is derived from the chrome this page renders above the canvas and is
+  documented there; the two pages' constants were equal only while both had the
+  picker in the content column.
+
+The header supplies the picker's label, so the picker renders it visually hidden
+rather than dropping it — `dbc.Input` (2.0.4) rejects `aria-label`, so a hidden
+`<label>` is what keeps the input's accessible name. Because the required
+asterisk lives *inside* that label, a hidden label would take the only visible
+sign of requiredness with it; the picker therefore emits a separate inline `*`
+after the input whenever the label is hidden **and** the picker is required.
+The chip keeps the shared **stacked** form (name above, `wba_id` below) inside
+the header. An inline single-line variant was tried and reverted: at the
+header's width it clipped the `wba_id`, and the id is the reason the chip shows
+it at all — it is what disambiguates two people sharing a display name. The
+header host restyles only the chip's padding and type size; the stacking,
+ellipsis and clear button come from the shared `.catalog-person-chip-*` rules
+unchanged. The cost is that the header row grows to the chip's height (~46px
+against ~24px inline) once a person is selected, which the canvas height budget
+absorbs.
+
+Both of the page's search affordances are sized up to suit a header control —
+the picker to 14px, the node spotlight to 13px and a wider box — since at the
+shared 12px the picker was the smallest text in the header. Three constraints
+govern those overrides, all of them easy to miss:
+
+- The picker's size **must** be `!important`. `build_person_picker` sets
+  `fontSize` inline, and an inline style outranks any selector, so a rule
+  without it silently does nothing. The repo already relies on this behaviour
+  for the form-control radius (see the note on `.form-control` in the stylesheet).
+- The overrides are **scoped**, to the picker's host class and to `#ego-page`
+  respectively. Both controls are shared — the picker with the Graph page's
+  catalog, the spotlight with the Graph and org pages — so an unscoped change
+  would resize every other page's controls too.
+- The spotlight's **height is deliberately not changed**. It is not the tallest
+  item in the controls bar, so growing it would push the canvas down and
+  invalidate `_CANVAS_HEIGHT`.
 
 The cap is the one control that interacts with the fetch. It keeps the **N
 strongest** collaborators by raw weight, and the fetch happens once at the value
@@ -666,8 +714,8 @@ gets a 2px width from the base `edge` rule; nothing maps width to weight. Of the
 two client-side `mapData(normalized_weight, …)` mappings, opacity spans only
 0.5–0.9 and z-index is a stacking tiebreak rather than a visual channel. The
 strength signal therefore rests on **line colour**, a pre-computed hex string
-supplied per edge by the backend (`line_color`) and read via
-`data(line_color)`. That bypasses `mapData()`, which can only interpolate
+supplied per edge by the backend (`_edge_line_color`) and read via
+`data(_edge_line_color)`. That bypasses `mapData()`, which can only interpolate
 between two colours — the seven-stop ramp is computed in Python instead, where a
 full-spectrum colour map is available.
 

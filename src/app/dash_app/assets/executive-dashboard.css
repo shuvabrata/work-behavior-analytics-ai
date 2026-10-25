@@ -1527,6 +1527,29 @@ input::placeholder {
     position: relative;
 }
 
+/* Puts the input and its inline required-marker on one line. Without this the
+   marker — a sibling of the combobox — stacks below the input. */
+.catalog-person-input-row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.catalog-person-input-row .catalog-person-combobox {
+    flex: 1;
+    min-width: 0;
+}
+
+/* The required asterisk, shown inline after the box when the visible label is
+   suppressed. The label's own asterisk goes off-screen with the label, so a
+   required host would otherwise show no requiredness at all. */
+.catalog-person-required-marker {
+    color: var(--color-destructive);
+    font-weight: 700;
+    flex-shrink: 0;
+    line-height: 1;
+}
+
 /* Suggestions dropdown panel */
 .catalog-person-suggestions {
     position: absolute;
@@ -1666,6 +1689,79 @@ input::placeholder {
 .theme-executive-dark .catalog-person-chip-area {
     background-color: var(--color-background-light) !important;
     border-color: var(--color-border-light) !important;
+}
+
+/* Keeps a label in the accessibility tree while removing it from the layout.
+   Used where a host supplies the visible label itself (the ego page's header
+   embeds the picker in a sentence). `dbc.Input` 2.0.4 rejects `aria-label`
+   (`_valid_wildcard_attributes` is empty), so a hidden <label> is what gives
+   the input its accessible name. */
+.catalog-person-label-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+/* ---- Header person picker ----
+   The chip keeps the shared stacked form (name above, wba_id below) rather than
+   the inline variant tried first. Inline clipped the wba_id at this width, and
+   the id is the point of showing it — it is what makes the chip unambiguous
+   when two people share a display name. Only padding and type size differ from
+   the shared rules; the stacking, the ellipsis and the clear button all come
+   from .catalog-person-chip-* unchanged. */
+.ego-header-picker {
+    width: 260px;
+    max-width: 100%;
+}
+
+/* This is the page's primary control, so it is deliberately larger than the
+   13px header text around it — at the shared 12px it was the smallest and
+   least emphasised thing in the row.
+
+   `!important` is required: build_person_picker sets fontSize inline
+   (style={"fontSize": "12px"}), and an inline style outranks any selector.
+   Scoped to this host so the Graph page's dense catalog pickers, which share
+   the component, keep their 12px. */
+.ego-header-picker .form-control {
+    font-size: 14px !important;
+    padding: 4px 8px;
+}
+
+/* Tighter than the shared 6px/10px so the two-line chip does not dominate the
+   header row; the vertical padding is what the canvas height budget pays for. */
+.ego-header-picker .catalog-person-chip-area {
+    padding: 3px 6px;
+    margin-bottom: 0;
+}
+
+/* Both raised from the shared 12px/10px so the person just chosen is not the
+   smallest text in the header. */
+.ego-header-picker .catalog-person-chip-name {
+    font-size: 13px;
+}
+
+.ego-header-picker .catalog-person-chip-id {
+    font-size: 11px;
+}
+
+/* The node spotlight is this page's second search affordance and gets the same
+   treatment as the picker. Scoped by the page's root id, because the box is
+   emitted by the shared create_controls_bar and is used by the Graph and org
+   pages too. No !important needed: an id+class selector already outranks the
+   bare .graph-spotlight-input rule, and this input carries no inline style.
+   Height is deliberately left at 30px — it is not the tallest item in the
+   controls bar, so growing it would push the canvas down and invalidate the
+   page's _CANVAS_HEIGHT derivation. */
+#ego-page .graph-spotlight-input,
+#ego-page .graph-spotlight-input.form-control {
+    width: 220px;
+    font-size: 13px;
 }
 
 /* ============================================================

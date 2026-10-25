@@ -355,6 +355,31 @@ class TestBuildElementPropertiesContent:
         text = self._flatten_text(result)
         assert "weight" in text
 
+    def test_edge_render_only_line_color_hidden(self):
+        """The collaboration edge's ``_edge_line_color`` must not reach the panel.
+
+        It is a render-only hex string read by the stylesheet via
+        ``data(_edge_line_color)``; showing it leaks a meaningless colour code
+        into the user-facing properties table.  The underscore prefix is what
+        hides it, so this pins the contract that renaming it back to a bare
+        ``line_color`` would break.
+        """
+        data = {
+            "id": "collab:n1:n2",
+            "source": "n1",
+            "target": "n2",
+            "relType": "COLLABORATES",
+            "weight": 42,
+            "normalized_weight": 88.3,
+            "_edge_line_color": "#ef4444",
+            "elementType": "edge",
+        }
+        result = build_element_properties_content(data)
+        text = self._flatten_text(result)
+        assert "_edge_line_color" not in text
+        assert "#ef4444" not in text
+        assert "normalized_weight" in text
+
     # --- Metric (i) tooltips ---
 
     def _collect_popovers(self, component):

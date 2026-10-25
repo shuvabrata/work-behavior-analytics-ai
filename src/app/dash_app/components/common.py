@@ -67,6 +67,7 @@ from app.dash_app.styles import (
 def create_page_header(
     breadcrumb: list[tuple[str, str | None]],
     description: str | None = None,
+    trailing: Any = None,
 ) -> html.Div:
     """
     Create a compact single-row page header with Executive Dashboard styling.
@@ -81,6 +82,14 @@ def create_page_header(
         breadcrumb: Ordered list of ``(label, href)`` segments. ``href=None``
             renders the segment as non-clickable current-page text.
         description: Optional description text shown after the ``|`` separator.
+        trailing: Optional component rendered after the description, for a
+            page-level control that belongs in the header rather than in the
+            content column below it (the per-person page's person picker).
+            Wrapped in a div that resets ``textTransform`` and ``letterSpacing``,
+            both of which are inherited from ``COMPACT_PAGE_HEADER_STYLE`` and
+            would otherwise render the control's text in ALL CAPS at 0.8px
+            tracking. Also allowed to shrink and wrap, so a wide control
+            degrades by wrapping rather than overflowing the row.
 
     Returns:
         html.Div: A styled compact page header component.
@@ -122,11 +131,29 @@ def create_page_header(
                     "color": COLOR_GRAY_MEDIUM,
                     "textTransform": "none",
                     "letterSpacing": "normal",
+                    "minWidth": 0,
                 },
             )
         )
 
-    return html.Div(children, style=COMPACT_PAGE_HEADER_STYLE)
+    header_style = dict(COMPACT_PAGE_HEADER_STYLE)
+    if trailing is not None:
+        header_style["flexWrap"] = "wrap"
+        children.append(
+            html.Div(
+                trailing,
+                style={
+                    # Both are inherited from COMPACT_PAGE_HEADER_STYLE; without
+                    # these the control's text renders ALL CAPS with 0.8px tracking.
+                    "textTransform": "none",
+                    "letterSpacing": "normal",
+                    "flex": "0 1 auto",
+                    "minWidth": 0,
+                },
+            )
+        )
+
+    return html.Div(children, style=header_style)
 
 
 def create_alert(

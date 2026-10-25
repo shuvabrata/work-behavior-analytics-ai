@@ -18,10 +18,11 @@ from app.common.person_network_url import (
     search_with_person,
 )
 from app.dash_app.components.common import describe_config_error, register_loading_overlay_hider
-from app.dash_app.styles import FONT_SIZE_SMALL
+from app.dash_app.components.person_picker import build_person_chip
 from common.logger import logger
 from ..layout import (
     _EGO_LAYOUT,
+    _EMPTY_STATE_STYLE,
     _compute_ego_filtered,
     _error_banner,
     _split_elements,
@@ -124,12 +125,11 @@ def load_ego_network(
     hide = {"display": "none"}
     show = {"display": "block"}
 
-    empty_state_style = {
-        "textAlign": "center",
-        "padding": "80px 16px",
-        "color": "var(--color-text-secondary)",
-        "fontSize": FONT_SIZE_SMALL,
-    }
+    # The prompt's positioning lives with the element in layout.py. This callback
+    # assigns the whole style dict, so the two must be the same object: a copy
+    # here would replace the layout's positioning on the first fire and drop the
+    # prompt back into flow below the canvas, where it causes the scrollbar.
+    empty_state_style = _EMPTY_STATE_STYLE
 
     focus_id = ""
     if isinstance(person_value, dict):
@@ -181,7 +181,7 @@ def load_ego_network(
 
     if not focus_id:
         # No person picked yet — show the empty state, do not call the API.
-        visible_empty_state = {**empty_state_style, "display": "block"}
+        visible_empty_state = {**empty_state_style, "display": "flex"}
         if url_problems:
             banner = [_error_banner(" ".join(url_problems))]
             return [], _EGO_LAYOUT, banner, show, visible_empty_state, False, cap_options, cap_update
@@ -201,7 +201,7 @@ def load_ego_network(
 
         if not elements:
             logger.warning("[EGO-PAGE] No elements returned")
-            return [], _EGO_LAYOUT, [], hide, {**empty_state_style, "display": "block"}, False, cap_options, cap_update
+            return [], _EGO_LAYOUT, [], hide, {**empty_state_style, "display": "flex"}, False, cap_options, cap_update
 
         logger.info(
             f"[EGO-PAGE] SUCCESS — {len(elements)} elements, "
@@ -280,24 +280,8 @@ def seed_person_from_url(
         raise PreventUpdate
 
     display = person.split("::", 2)[2] or person
-    chip_children = [
-        html.Div(
-            [
-                html.Span(display, className="catalog-person-chip-name"),
-                html.Span(person, className="catalog-person-chip-id"),
-            ],
-            className="catalog-person-chip-info",
-        ),
-        html.Button(
-            "×",
-            id={"type": "catalog-person-chip-clear", "name": "ego_focus"},
-            n_clicks=0,
-            className="catalog-person-chip-clear",
-            title="Clear selection",
-        ),
-    ]
     return (
-        chip_children,
+        build_person_chip("ego_focus", display, person),
         {"display": "flex"},
         {"display": "none"},
         {"display": "none"},

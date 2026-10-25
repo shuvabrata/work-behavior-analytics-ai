@@ -378,7 +378,7 @@ def test_malformed_person_in_url_shows_the_prompt_not_a_query(monkeypatch):
     result = ego_filter.load_ego_network(None, "?person=not-a-wba-id", PAGE, 25, [])
 
     assert captured == {}, "no service call for an unparseable person"
-    assert result[4]["display"] == "block", "the empty-state prompt is shown"
+    assert result[4]["display"] == "flex", "the empty-state prompt is shown"
 
 
 def test_url_without_a_person_still_prompts(monkeypatch):
@@ -387,7 +387,7 @@ def test_url_without_a_person_still_prompts(monkeypatch):
     result = ego_filter.load_ego_network(None, "?max_collaborators=50", PAGE, 25, [])
 
     assert captured == {}
-    assert result[4]["display"] == "block"
+    assert result[4]["display"] == "flex"
 
 
 # ---------------------------------------------------------------------------
@@ -459,3 +459,190 @@ def test_seed_ignores_a_url_with_no_person():
 def test_seed_ignores_other_pages():
     with pytest.raises(PreventUpdate):
         ego_filter.seed_person_from_url(_deep_link(PERSON), "/app/graph", None)
+
+
+# ---------------------------------------------------------------------------
+# Layout — the person picker lives in the page header, not the content column
+# ---------------------------------------------------------------------------
+
+
+def _walk_layout(node: Any) -> list[Any]:
+    """Recursively collect every Dash component in a layout tree."""
+    seen: list[Any] = []
+
+    def walk(curr: Any) -> None:
+        if curr is None:
+            return
+        seen.append(curr)
+        children = getattr(curr, "children", None)
+        if children is None:
+            return
+        if isinstance(children, (list, tuple)):
+            for child in children:
+                walk(child)
+        else:
+            walk(children)
+
+    walk(node)
+    return seen
+
+
+def _find_by_exact_id(root: Any, component_id: Any) -> Any:
+    """Return the component whose ``id`` equals *component_id* exactly.
+
+    Deliberately not a substring check on ``str(layout)``: Dash renders a dict
+    id with single quotes, so ``id="ego-header-picker"`` never appears literally
+    and a substring assertion would pass vacuously.
+    """
+    for node in _walk_layout(root):
+        if getattr(node, "id", None) == component_id:
+            return node
+    return None
+
+
+def _find_by_class(root: Any, class_name: str) -> Any:
+    """Return the first component carrying *class_name* in its className."""
+    for node in _walk_layout(root):
+        classes = str(getattr(node, "className", "") or "").split()
+        if class_name in classes:
+            return node
+    return None
+
+
+def test_picker_is_rendered_in_the_page_header():
+    """The picker must sit inside the header, which is the point of the change."""
+    from app.dash_app.pages.collaboration_network_ego.layout import get_layout
+
+    layout = get_layout()
+    picker = _find_by_class(layout, "ego-header-picker")
+    assert picker is not None, "the header picker wrapper is missing"
+
+    header = layout.children[0]
+    assert picker in _walk_layout(header), "the picker is not inside the page header"
+
+
+def test_picker_is_no_longer_a_sibling_of_the_canvas():
+    """Regression guard: the old standalone block above the graph must be gone."""
+    from app.dash_app.pages.collaboration_network_ego.layout import get_layout
+
+    layout = get_layout()
+    top_level = list(layout.children)
+    header = top_level[0]
+
+    for node in top_level[1:]:
+        assert _find_by_class(node, "ego-header-picker") is None, (
+            "the picker is still rendered outside the header"
+        )
+    assert _find_by_class(header, "ego-header-picker") is not None
+
+
+def test_header_picker_keeps_every_id_the_callbacks_match_on():
+    """The move must not rename any id — callbacks match on the id family."""
+    from app.dash_app.pages.collaboration_network_ego.layout import get_layout
+
+    layout = get_layout()
+    for id_type in (
+        "catalog-person-input",
+        "catalog-person-chip",
+        "catalog-person-search-area",
+        "catalog-person-suggestions",
+        "catalog-person-debounce",
+        "catalog-person-value",
+    ):
+        assert (
+            _find_by_exact_id(layout, {"type": id_type, "name": "ego_focus"}) is not None
+        ), f"{id_type} for ego_focus is missing after the move"
+
+
+def test_header_picker_label_is_hidden_not_absent():
+    """The header supplies the label; the input keeps an accessible name."""
+    from app.dash_app.pages.collaboration_network_ego.layout import get_layout
+
+    layout = get_layout()
+    labels = [
+        n
+        for n in _walk_layout(layout)
+        if getattr(n, "className", None) == "catalog-person-label-hidden"
+    ]
+    assert labels, "no hidden label — the input would have no accessible name"
+
+
+def test_canvas_height_is_re_derived_for_the_picker_move():
+    """The canvas constant must shrink with the removed block, not stay at 200."""
+    from app.dash_app.pages.collaboration_network_ego.layout import _CANVAS_HEIGHT
+
+    assert "200px" not in _CANVAS_HEIGHT, (
+        "canvas still subtracts the org page's constant, which was sized for a "
+        "picker in the content column"
+    )
+    assert _CANVAS_HEIGHT.startswith("calc(100vh")
+
+
+def test_empty_state_is_positioned_out_of_flow_over_the_canvas():
+    """The prompt must overlay the canvas, not stack below it.
+
+    In flow it added ~178px under a canvas already sized to the viewport, which
+    pushed a scrollbar onto a page that should not scroll and left the text
+    below the fold, where it went unread.
+    """
+    from app.dash_app.pages.collaboration_network_ego.layout import (
+        _EMPTY_STATE_STYLE,
+        get_layout,
+    )
+
+    assert _EMPTY_STATE_STYLE["position"] == "absolute", (
+        "an in-flow prompt adds height to the column and reintroduces the scrollbar"
+    )
+    assert _EMPTY_STATE_STYLE["inset"] == 0, "the prompt must cover the canvas box"
+    assert _EMPTY_STATE_STYLE["display"] == "flex", "flex is what centers the text"
+    assert _EMPTY_STATE_STYLE["pointerEvents"] == "none", (
+        "the prompt must not swallow clicks meant for the graph"
+    )
+
+    # The element must sit in a positioned ancestor, or absolute resolves against
+    # the page and the prompt lands outside the plot area.
+    layout = get_layout()
+    assert _find_by_exact_id(layout, "ego-empty-state") is not None, (
+        "the pre-input prompt is gone entirely"
+    )
+
+    def _ancestor_styles(node_id, tree, chain=()):
+        for child in getattr(tree, "children", []) or []:
+            if not hasattr(child, "children"):
+                continue
+            style = getattr(child, "style", None) or {}
+            found = _ancestor_styles(node_id, child, chain + (style,))
+            if getattr(child, "id", None) == node_id:
+                return chain + (style,)
+            if found:
+                return found
+        return None
+
+    ancestors = _ancestor_styles("ego-empty-state", layout)
+    assert any(a.get("position") == "relative" for a in ancestors), (
+        "no positioned ancestor — the prompt would position against the page"
+    )
+    assert not any("overflowY" in a for a in ancestors), (
+        "the prompt must not sit inside a scrolling ancestor"
+    )
+
+
+def test_callback_keeps_the_positioning_on_its_first_fire():
+    """The callback replaces the whole style dict, so it must carry the position.
+
+    Asserting on filter.py's imported ``_EMPTY_STATE_STYLE`` would be vacuous:
+    ``from ..layout import _EMPTY_STATE_STYLE`` rebinds the same object into that
+    namespace, so the identity holds even when the callback builds its own dict.
+    Only the returned style proves the positioning survives.
+    """
+    from app.dash_app.pages.collaboration_network_ego.callbacks import filter as ego_filter
+
+    result = ego_filter.load_ego_network(None, "?max_collaborators=50", PAGE, 25, [])
+    returned = result[4]
+
+    assert returned["display"] == "flex", "the prompt must be shown"
+    assert returned["position"] == "absolute", (
+        "the callback returned a style without the positioning — the prompt would "
+        "drop into flow below the canvas and the page would scroll again"
+    )
+    assert returned["inset"] == 0, "the centering box must survive the callback"

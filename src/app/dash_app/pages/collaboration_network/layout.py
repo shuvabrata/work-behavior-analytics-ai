@@ -163,7 +163,7 @@ def get_layout() -> html.Div:
     return html.Div(
         [
             create_page_header(
-                [("Analytics", "/app/analytics"), ("Collaboration Network", None)],
+                [("Analytics", "/app/analytics"), ("Org Collaboration Network", None)],
                 "Analyze team collaboration and network structure.",
             ),
             # Stores

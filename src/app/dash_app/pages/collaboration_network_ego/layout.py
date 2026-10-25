@@ -41,6 +41,10 @@ The clientside render callback calls cy.resize() + cy.fit() explicitly once the
 DOM is stable.
 """
 
+_CANVAS_HEIGHT = "calc(100vh - 148px)"
+"""Canvas height, sized to the chrome the page actually renders above it.
+"""
+
 _LABEL_STYLE = {
     "fontSize": "11px",
     "fontWeight": FONT_WEIGHT_SEMIBOLD,
@@ -52,6 +56,34 @@ _LABEL_STYLE = {
 _CAP_OPTIONS = [
     {"label": f"Top {cap}", "value": cap} for cap in COLLABORATOR_CAP_OPTIONS
 ]
+
+_EMPTY_STATE_STYLE = {
+    "position": "absolute",
+    "inset": 0,
+    # Below the loading overlay's z-index 5, above the canvas.
+    "zIndex": 1,
+    "display": "flex",
+    "alignItems": "center",
+    "justifyContent": "center",
+    "padding": "16px",
+    "textAlign": "center",
+    "color": "var(--color-text-secondary)",
+    "fontSize": FONT_SIZE_SMALL,
+    # Purely informational: never intercept a click meant for the graph.
+    "pointerEvents": "none",
+}
+"""Pre-input prompt, centered over the plot area.
+
+Absolutely positioned so the prompt occupies the canvas rather than stacking
+below it. In flow it added ~178px under a canvas already sized to
+``calc(100vh - 145px)``, which pushed a scrollbar onto a page that should not
+scroll — and left the text below the fold, where no user would see it.
+
+The callback assigns this whole dict to the element's ``style``, flipping
+``display`` between ``flex`` and ``none``, so the positioning must live here
+rather than in ``get_layout``: a style set only at layout time would be
+replaced wholesale on the callback's first fire.
+"""
 
 
 # ---------------------------------------------------------------------------
@@ -155,8 +187,15 @@ def get_layout() -> html.Div:
     return html.Div(
         [
             create_page_header(
-                [("Analytics", "/app/analytics"), ("Person Network", None)],
+                [("Analytics", "/app/analytics"), ("Per-Person Collaboration Network", None)],
                 "See who one person works with, and how closely.",
+                trailing=build_person_picker(
+                    "ego_focus",
+                    "Person",
+                    required=True,
+                    show_label=False,
+                    container_class="ego-header-picker",
+                ),
             ),
 
             # Stores
@@ -167,12 +206,6 @@ def get_layout() -> html.Div:
             # clientcallback (see app.dash_app.components.spotlight).
             dcc.Store(id="ego-spotlight-debounced-store", data=""),
 
-            # Person picker
-            html.Div(
-                build_person_picker("ego_focus", "Person", required=True),
-                style={"maxWidth": "420px", "margin": "8px 0 4px 0"},
-            ),
-
             # Live stats banner
             html.Div(id="ego-banner", children=[], style={"display": "none", "flex": "1"}),
 
@@ -180,36 +213,40 @@ def get_layout() -> html.Div:
             dbc.Row([
                 dbc.Col([
                     create_controls_bar("ego", layout_enabled=False),
-                    create_loading_overlay_container(
-                        cyto.Cytoscape(
-                            id="ego-cytoscape",
-                            elements=[],
-                            layout=_EGO_LAYOUT,
-                            style={
-                                "width": "100%",
-                                "height": "calc(100vh - 200px)",
-                                "border": f"1px solid {COLOR_GRAY_LIGHTER}",
-                                "borderRadius": "2px",
-                            },
-                            stylesheet=CYTOSCAPE_STYLESHEET,
-                            userZoomingEnabled=True,
-                            userPanningEnabled=True,
-                            wheelSensitivity=0.3,
-                            minZoom=0.05,
-                            maxZoom=3,
-                        ),
-                        overlay_id="ego-loading-overlay",
-                    ),
+                    # The canvas and the pre-input prompt share one positioned
+                    # ancestor so the prompt can be centered over the plot area.
+                    # The wrapper is deliberately local to this page: the
+                    # overlay helper in components/common.py is shared by the
+                    # graph and org pages, and neither wants this child.
                     html.Div(
-                        id="ego-empty-state",
-                        children="Pick a person above to see their collaboration network.",
-                        style={
-                            "display": "block",
-                            "textAlign": "center",
-                            "padding": "80px 16px",
-                            "color": "var(--color-text-secondary)",
-                            "fontSize": FONT_SIZE_SMALL,
-                        },
+                        style={"position": "relative"},
+                        children=[
+                            create_loading_overlay_container(
+                                cyto.Cytoscape(
+                                    id="ego-cytoscape",
+                                    elements=[],
+                                    layout=_EGO_LAYOUT,
+                                    style={
+                                        "width": "100%",
+                                        "height": _CANVAS_HEIGHT,
+                                        "border": f"1px solid {COLOR_GRAY_LIGHTER}",
+                                        "borderRadius": "2px",
+                                    },
+                                    stylesheet=CYTOSCAPE_STYLESHEET,
+                                    userZoomingEnabled=True,
+                                    userPanningEnabled=True,
+                                    wheelSensitivity=0.3,
+                                    minZoom=0.05,
+                                    maxZoom=3,
+                                ),
+                                overlay_id="ego-loading-overlay",
+                            ),
+                            html.Div(
+                                id="ego-empty-state",
+                                children="Pick a person in the header to see their collaboration network.",
+                                style=_EMPTY_STATE_STYLE,
+                            ),
+                        ],
                     ),
                 ], id="ego-viz-col", width=8, style={"paddingRight": "16px"}),
 

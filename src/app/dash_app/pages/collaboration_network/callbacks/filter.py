@@ -97,7 +97,7 @@ def load_collaboration_network(search: str | None, pathname: str | None) -> tupl
 
         banner_content = create_alert(
             [
-                html.Strong("Collaboration Network"),
+                html.Strong("Org Collaboration Network"),
                 html.Span(f"  \u2014  Last {lookback_days} days  "),
                 dbc.Badge(f"{data.num_people} people",                color="primary",   className="me-1"),
                 dbc.Badge(f"{data.num_pairs} pairs",                  color="secondary", className="me-1"),

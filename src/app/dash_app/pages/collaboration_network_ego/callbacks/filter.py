@@ -62,13 +62,20 @@ def _deep_linked_person(search: str | None) -> str | None:
     return parse_person_network_url(search)["person"]
 
 
-def _validate_ego_url_params(params: dict[str, list[str]]) -> list[str]:
-    """Return human-readable problems with the URL's collaboration settings."""
+def _ego_config_from_params(
+    params: dict[str, list[str]],
+) -> tuple[CollaborationNetworkConfig | None, list[str]]:
+    """Build the collaboration config from URL params, reporting any problems.
+
+    Returns ``(config, problems)``. Exactly one is ever meaningful: a valid set
+    of params yields a config and no problems, an invalid one yields ``None`` and
+    one human-readable problem string. Parsing happens once here so the value the
+    page validates is the same object the page then uses.
+    """
     try:
-        CollaborationNetworkConfig.from_query_values(_ego_query_dict(params))
+        return CollaborationNetworkConfig.from_query_values(_ego_query_dict(params)), []
     except ValueError as exc:
-        return [describe_config_error(exc)]
-    return []
+        return None, [describe_config_error(exc)]
 
 
 # ---------------------------------------------------------------------------
@@ -170,7 +177,7 @@ def load_ego_network(
     # gives no hint the URL is wrong. The card omits org-only params, and the ego
     # card sends none of these, so a malformed value can only come from a
     # hand-edited or stale link.
-    url_problems = _validate_ego_url_params(params)
+    config, url_problems = _ego_config_from_params(params)
 
     if not focus_id:
         # No person picked yet — show the empty state, do not call the API.
@@ -180,11 +187,15 @@ def load_ego_network(
             return [], _EGO_LAYOUT, banner, show, visible_empty_state, False, cap_options, cap_update
         return [], _EGO_LAYOUT, [], hide, visible_empty_state, False, cap_options, cap_update
 
+    if url_problems:
+        # Person is picked but the URL's settings are unusable. Previously this
+        # surfaced by catching the ValueError the second parse raised inside the
+        # try below; now it is a plain check, with the same banner and styles.
+        return [], _EGO_LAYOUT, [_error_banner(" ".join(url_problems))], show, hide, False, cap_options, cap_update
+
     logger.info(f"[EGO-PAGE] Loading ego network person={focus_id} search={search!r}")
 
     try:
-        config = CollaborationNetworkConfig.from_query_values(_ego_query_dict(params))
-
         data = get_ego_network(focus_id, config=config, max_collaborators=max_collaborators)
         elements = data.elements
 

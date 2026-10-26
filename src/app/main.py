@@ -10,7 +10,6 @@ import aio_pika
 from fastapi import FastAPI, Request, Response
 from a2wsgi import WSGIMiddleware
 from app.api import endpoints
-from app.api.projects.v1.router import router as projects_v1_router
 from app.api.chats.v1.router import router as chats_v1_router
 from app.api.graph.v1.router import router as graph_v1_router
 from app.api.connectors.v1.router import router as connectors_v1_router
@@ -181,7 +180,6 @@ async def add_request_context(request: Request, call_next: Callable[[Request], A
         return response
 
 app.include_router(endpoints.router, prefix="/api")
-app.include_router(projects_v1_router, prefix="/api/v1")
 app.include_router(chats_v1_router, prefix="/api/v1")
 app.include_router(graph_v1_router, prefix="/api/v1")
 app.include_router(connectors_v1_router, prefix="/api/v1")

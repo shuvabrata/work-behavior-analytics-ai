@@ -263,7 +263,7 @@ Avoid caching too early unless file loading becomes expensive. A simple in-proce
     - `src/app/api/queries/v1/model.py`
     - `src/app/api/queries/v1/service.py`
     - `src/app/api/queries/v1/router.py`
-  - Follow the existing API package style used by `src/app/api/projects/v1/` and `src/app/api/graph/v1/`.
+  - Follow the existing API package style used by `src/app/api/chats/v1/` and `src/app/api/graph/v1/`.
 
 - [x] **2.2 Add List Endpoint**
   - `GET /api/v1/queries/catalog`
@@ -698,7 +698,7 @@ status: active
 - Graph page layout: `src/app/dash_app/pages/graph/layout.py`
 - Graph query callback: `src/app/dash_app/pages/graph/callbacks/query.py`
 - Graph API: `src/app/api/graph/v1/`
-- Existing API style: `src/app/api/projects/v1/`
+- Existing API style: `src/app/api/chats/v1/`
 
 ---
 

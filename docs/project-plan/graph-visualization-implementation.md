@@ -708,7 +708,7 @@ These are ideas for future iterations, not part of initial implementation:
 - [dash-cytoscape Documentation](https://dash.plotly.com/cytoscape)
 - [Neo4j Cypher Manual](https://neo4j.com/docs/cypher-manual/current/)
 - [FastAPI Async Patterns](https://fastapi.tiangolo.com/async/)
-- Existing API patterns: `app/api/projects/v1/` and `app/api/chats/v1/`
+- Existing API patterns: `app/api/chats/v1/` and `app/api/graph/v1/`
 
 ---
 

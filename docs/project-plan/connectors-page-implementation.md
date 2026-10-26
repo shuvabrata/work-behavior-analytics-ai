@@ -136,7 +136,7 @@ Add a "Connectors" page (after Graph in the sidebar) where users can view and co
 
 ## Phase 3: API Layer
 
-Follows the same layered pattern as `app/api/projects/v1/` (router → service → query).
+Follows the same layered pattern as `app/api/graph/v1/` (router → service → query).
 
 - [x] **9. Create `app/api/connectors/v1/model.py`** — Pydantic models:
    - **Request models**:

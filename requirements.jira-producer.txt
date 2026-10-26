@@ -1,4 +1,4 @@
-atlassian-python-api==4.0.7
+atlassian-python-api==5.0.5
 aio-pika==10.1.1
 asyncpg==0.32.0
 pydantic==2.14.1

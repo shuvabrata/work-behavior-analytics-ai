@@ -181,7 +181,6 @@ Some suites (e.g. connector validation) live in their own `tests/<suite>/` direc
 - Alembic for every schema change; import new models in `src/app/db/models/__init__.py`.
 - `queries_catalog/` (top level) holds the Cypher query catalog by domain; `src/app/query_catalog/` loads it. Neo4j uses a single **undirected** edge per relationship — do not add bidirectional edges (see `docs/design/RELATIONSHIPS_DESIGN.md`).
 - `plans/` holds advisor-generated implementation plans with an index at `plans/README.md`; check it before starting sizable work.
-- **Deployment model: single-user, self-hosted, trusted local environment.** Authentication and multi-tenancy are explicitly out of scope — do not add auth layers or tenant scoping.
 - Commit messages are plain imperative sentences (e.g. "Activity timeline backend (#323)"); dependency bumps use Conventional Commit style from Dependabot.
 
 ## Common tasks

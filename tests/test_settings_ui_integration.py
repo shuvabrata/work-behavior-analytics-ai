@@ -5,7 +5,7 @@ that edit → save → verify and reset flows work end-to-end.
 
 Requires a running app server::
 
-    PYTHONPATH=src uvicorn app.main:app --reload
+    docker compose up -d
 
 Markers: ``integration``, ``server``.
 
@@ -29,7 +29,7 @@ from app.dash_app.pages.settings.runtime import (
 
 pytestmark = [pytest.mark.integration, pytest.mark.server]
 
-BASE_URL = "http://localhost:8000"
+BASE_URL = "https://localhost"
 APP_BASE = f"{BASE_URL}/app"
 
 

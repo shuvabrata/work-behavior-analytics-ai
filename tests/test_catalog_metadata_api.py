@@ -1,9 +1,10 @@
 """Integration tests for the catalog-metadata (favourites) API.
 
 Tests full HTTP round-trips against a running app server at
-``http://localhost:8000``.  Requires the app to be started separately::
+``https://localhost`` (through the nginx TLS proxy).  Requires the Compose
+stack to be running::
 
-    PYTHONPATH=src uvicorn app.main:app --reload
+    docker compose up -d
 
 Markers: ``integration``, ``server``.
 
@@ -28,7 +29,7 @@ from app.settings import settings
 
 pytestmark = [pytest.mark.integration, pytest.mark.server]
 
-BASE_URL = "http://localhost:8000"
+BASE_URL = "https://localhost"
 
 # A real catalog query id (namespace/slug) used for create/update tests.
 VALID_CATALOG_ID = "schema/view_all_node_types"

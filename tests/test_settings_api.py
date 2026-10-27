@@ -1,9 +1,10 @@
 """Integration tests for the settings API.
 
 Tests full HTTP round-trips against a running app server at
-``http://localhost:8000``.  Requires the app to be started separately::
+``https://localhost`` (through the nginx TLS proxy).  Requires the Compose
+stack to be running::
 
-    PYTHONPATH=src uvicorn app.main:app --reload
+    docker compose up -d
 
 Markers: ``integration``, ``server``.
 
@@ -20,7 +21,7 @@ import pytest
 
 pytestmark = [pytest.mark.integration, pytest.mark.server]
 
-BASE_URL = "http://localhost:8000"
+BASE_URL = "https://localhost"
 
 
 # ── Snapshot / restore ────────────────────────────────────────────────

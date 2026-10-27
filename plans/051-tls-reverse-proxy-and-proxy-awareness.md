@@ -37,6 +37,32 @@
 - **Category**: security | dx
 - **Planned at**: commit `6f1eb0e`, 2026-10-26
 
+### Gate 1 record — 2026-10-27
+
+Operator ran Step 1 by hand (the executor cannot: `sudo` requires a password here,
+and the mkcert download-and-execute is blocked by the sandbox classifier).
+
+| Criterion | Observed | Verdict |
+|---|---|---|
+| `deploy/certs/wba.pem` + `wba-key.pem` exist, non-empty | 1489 B / 1704 B | ✅ |
+| No `.pem`/`.key` visible to git | `git status --short` shows only `?? deploy/` | ✅ |
+| Cert subject covers `localhost` | `DNS:localhost, IP Address:127.0.0.1` | ✅ |
+| WSL2: CA imported into the **Windows** store | thumbprint `0131DC9ABB8F4CCBFF22CD43657D76D56FAF3C1D`, `CN=mkcert shuva@DESKTOP-10ONBB4`, `O=mkcert development CA`, in `Cert:\LocalMachine\Root` | ✅ |
+
+Note: `mkcert -CAROOT` is `/home/shuva/.local/share/mkcert`. The Windows import
+initially failed because `$env:WSL_DISTRO_NAME` is unset in Windows PowerShell,
+so `wsl -d` ran with no distro name and its error text was captured as the path;
+importing from the literal UNC path `\\wsl.localhost\Ubuntu\home\shuva\.local\share\mkcert\rootCA.pem` succeeded.
+
+**Remaining Step 1 deliverables, not yet done:** the `.gitignore` certs rule and
+`deploy/certs/.gitkeep`. Until the ignore rule lands, `git status` hides the
+private key only by collapsing the untracked `deploy/` directory — a `git add -A`
+would commit it. Do these first, before Step 2.
+
+**Known limitation:** Firefox does not read the Windows root store. If the
+operator browses with Firefox, Gate 8 check 9 will warn until
+`security.enterprise_roots.enabled` is set in `about:config`.
+
 ### Progress tracker
 
 Mark each cell as you go. `⬜` not started · `🔄` in progress · `✅` passed ·
@@ -44,7 +70,7 @@ Mark each cell as you go. `⬜` not started · `🔄` in progress · `✅` passe
 
 | Step | What it changes | Automated verify | Manual gate | Status |
 |------|-----------------|------------------|-------------|--------|
-| 1  | TLS certificate generated | cert files exist, not git-tracked | Operator confirms cert trusted in browser | ⬜ |
+| 1  | TLS certificate generated | cert files exist, not git-tracked | Operator confirms cert trusted in browser | ✅ |
 | 2  | nginx config written | `nginx -t` passes | Operator reviews config content | ⬜ |
 | 3  | nginx in Compose, port 8000 unpublished | `docker compose config -q` | Operator confirms `:8000` refused, `:443` answers | ⬜ |
 | 4  | uvicorn trusts proxy headers | grep gates | Operator confirms app still healthy | ⬜ |

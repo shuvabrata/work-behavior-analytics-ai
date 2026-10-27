@@ -206,6 +206,8 @@ Loaded from `.env` (see `.env.example`) via `app.settings`. Key variables:
 
 **Infrastructure & UI** — `RABBITMQ_URL`, `CONNECTOR_ENCRYPTION_KEY` (Fernet key for connector secrets, required), `HTTP_REQUEST_TIMEOUT` (default `60`), `TIMEZONE` (IANA name, default `UTC`), `UI_DATETIME_FORMAT` (`%b %d, %Y %I:%M %p`), `UI_DATE_FORMAT` (`%b %d, %Y`), `GRAPH_UI_MAX_NODES_TO_EXPAND` (default `20`), `GRAPH_UI_MAX_NODE_LABEL_CHARS` (default `10`).
 
+**External URL / reverse proxy** — `EXTERNAL_BASE_URL` (default `https://localhost`) is the URL the *browser* uses; `API_BASE_URL` (default `http://localhost:8000`) is the URL the Dash code uses to call the API from *inside* the container. They are deliberately different values and must stay that way — conflating them sends every Dash callback through TLS to the public host and breaks the UI. Anything needing an absolute, browser-facing URL (an OAuth `redirect_uri`, for example) must build it from `EXTERNAL_BASE_URL`, never from the request's own scheme or host. The Compose stack terminates TLS at the `nginx` service; the app publishes no host port.
+
 Note on the two `*_AI_LOOKUP_ENABLED` flags: the augmentation chains read them from the
 `app.settings` singleton (`.env` at startup), not from `runtime_settings`. Editing them in
 the Settings UI persists the value but does not change chain behaviour until the app is

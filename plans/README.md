@@ -15,7 +15,7 @@ dropped. Only the two plans below remain; both are open.
 |------|-------|----------|--------|------------|--------|
 | 005  | [MCP thread join timeout](005-mcp-thread-join-timeout.md) | P2 | S | — | TODO — finding re-verified on `40ef1e5` |
 | 045  | [Graph query validator rejects entity ids containing a write keyword](045-graph-query-validator-rejects-entity-ids.md) | **P1** | — | — | **PROBLEM STATEMENT ONLY** — no solution specified; not executable |
-| 051  | [Serve the app over HTTPS behind nginx, and make it proxy-aware](051-tls-reverse-proxy-and-proxy-awareness.md) | **P1** | M | — | TODO — planned on `6f1eb0e` |
+| 051  | [Serve the app over HTTPS behind nginx, and make it proxy-aware](051-tls-reverse-proxy-and-proxy-awareness.md) | **P1** | M | — | **COMPLETE** — all 11 steps, executed 2026-10-27 from `8cb2390`; see the plan's execution summary |
 
 **No dependency ordering among 005, 045 and 051.** All three are independently
 executable (045 is not executable at all until its design decision is made).

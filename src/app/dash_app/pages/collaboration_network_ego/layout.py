@@ -205,6 +205,8 @@ def get_layout() -> html.Div:
             # Stores
             dcc.Store(id="ego-elements-store", data=[]),
             dcc.Store(id="ego-fullwidth-state", data=False),
+            # Unlike the org page's True: this page fetches only once a person is
+            # picked, so the callback in callbacks/filter.py raises this store.
             dcc.Store(id="ego-loading-state", data=False),
             # Debounced spotlight query, written by the shared spotlight
             # clientcallback (see app.dash_app.components.spotlight).

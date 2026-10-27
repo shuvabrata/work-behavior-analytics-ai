@@ -80,6 +80,31 @@ independently rather than trusting the executor's report.
 
 Scope clean: `git status --short` shows only `?? deploy/nginx/nginx.conf`.
 
+### Gate 3 record — 2026-10-27
+
+`docker-compose.yml` modified: `app`'s `ports: - "8000:8000"` removed entirely (the
+service now has no `ports:` key), and the `nginx` service added after `app`. Nothing
+else changed. Reviewer re-ran every reachability check independently.
+
+| Check | Command | Observed | Verdict |
+|---|---|---|---|
+| Root redirect | `curl -skI https://localhost/` | `HTTP/2 302`, `location: https://localhost/app` | ✅ |
+| Health over TLS | `curl -sk https://localhost/api/health` | `{"status":"healthy"}` | ✅ |
+| Port 8000 closed | `curl -s -m 5 http://localhost:8000/api/health` | refused, `exit=7` | ✅ |
+| `app` healthy after rebuild | `docker compose ps app` | `Up About a minute (healthy)`, `8000/tcp` (exposed, not published) | ✅ |
+| `nginx` running | `docker compose ps nginx` | `Up`, `0.0.0.0:80->80`, `0.0.0.0:443->443` | ✅ |
+| No restart loop | `docker compose ps` at +1 min | both stable | ✅ |
+| Config valid | `docker compose config -q` | `exit=0` | ✅ |
+| Healthcheck unchanged | `grep` on `docker-compose.yml` | line 80 still curls container-internal `localhost:8000` | ✅ |
+
+Only 80 and 443 are listening on the host; nothing holds 8000.
+
+**Plan correction:** this plan's Gate 3 check 1 (and Gate 8 check 1) state the
+expected `Location` header as `location: /app`. nginx's `return 302 /app;` emits an
+**absolute** URL — `location: https://localhost/app` — because the request carries a
+`Host` header. The status code and destination are correct; the plan's wording was
+imprecise. Expect the absolute form at Gate 8.
+
 ### Progress tracker
 
 Mark each cell as you go. `⬜` not started · `🔄` in progress · `✅` passed ·
@@ -89,7 +114,7 @@ Mark each cell as you go. `⬜` not started · `🔄` in progress · `✅` passe
 |------|-----------------|------------------|-------------|--------|
 | 1  | TLS certificate generated | cert files exist, not git-tracked | Operator confirms cert trusted in browser | ✅ |
 | 2  | nginx config written | `nginx -t` passes | Operator reviews config content | ✅ |
-| 3  | nginx in Compose, port 8000 unpublished | `docker compose config -q` | Operator confirms `:8000` refused, `:443` answers | ⬜ |
+| 3  | nginx in Compose, port 8000 unpublished | `docker compose config -q` | Operator confirms `:8000` refused, `:443` answers | ✅ |
 | 4  | uvicorn trusts proxy headers | grep gates | Operator confirms app still healthy | ⬜ |
 | 5  | `EXTERNAL_BASE_URL` / `API_BASE_URL` settings | grep gates, `mypy` | Operator reviews the diff | ⬜ |
 | 6  | proxy-awareness unit test | `pytest` file passes | Operator reviews test asserts real behaviour | ⬜ |

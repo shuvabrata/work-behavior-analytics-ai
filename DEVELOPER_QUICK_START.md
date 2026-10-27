@@ -18,9 +18,10 @@ done
 serves the app over HTTPS through an `nginx` reverse proxy, which needs a
 certificate at `deploy/certs/wba.pem` (+ `wba-key.pem`). Generate it once per
 machine with `mkcert` — without it `docker compose up` fails on the 443 bind or
-the browser shows an untrusted-certificate warning. See the "First-Time Setup"
-section of `USER_GUIDE.md` for the exact `mkcert` commands and the WSL2
-Windows-trust-store import; they are not duplicated here.
+the browser shows an untrusted-certificate warning. See *Generate the TLS
+certificate* and *Trust the certificate in a Windows browser (WSL2 only)* in
+`USER_GUIDE.md` for the exact `mkcert` commands and the WSL2 Windows-trust-store
+import; they are not duplicated here.
 
 ## Environment Configuration
 
@@ -35,8 +36,8 @@ LLM_PROVIDER=openai  # Default
 ### LLM Model Configuration
 Set the model to use with your selected provider:
 ```bash
-LLM_MODEL=gpt5  # For OpenAI: gpt-3.5-turbo, gpt-4, gpt-4-turbo, etc.
-                         # For Custom: your custom model name (e.g., gpt4)
+LLM_MODEL=gpt-5  # For OpenAI: gpt-5, gpt-4, gpt-4-turbo, etc.
+                         # For Custom: your custom model name (e.g., gpt-4)
 MAX_TOKENS=16000  # Maximum conversation history tokens
 ```
 

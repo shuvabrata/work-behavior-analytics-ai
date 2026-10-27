@@ -350,6 +350,92 @@ is low. Recorded as a known gap rather than claimed as covered.
 
 **Step 8 verdict: PASS**, with one defect found and fixed (see above).
 
+### Gate 9 record — 2026-10-27
+
+Run at commit `3d618ec` (all Step 1–8 work committed).
+
+| Gate | Command | Exit | Result |
+|---|---|---|---|
+| Unit tests | `pytest -m unit tests -q` | **0** | `2334 passed, 2 skipped, 739 deselected` |
+| Typecheck | `mypy src/` | **0** | `Success: no issues found in 290 source files` |
+| Lint | `pylint src --score=y` | 30 | **`9.68/10`** — gate is the score (≥9.0). Exit 30 is pylint's normal bitmask (2+4+8+16), not a failure |
+| Security | `bandit -c .bandit.yml -r src/ -lll` | **0** | `No issues identified.` |
+| Style | `flake8` | 1 | **EXCLUDED by operator decision** — see below |
+
+**Bandit reading corrected.** An earlier glance at the summary block ("High: 11") counts
+high **confidence**, not high **severity**. With `-lll` filtering to HIGH *severity*,
+bandit reports `No issues identified` and exits 0 — a clean pass.
+
+**`flake8` excluded from this gate by operator decision (2026-10-27).** It fails
+repo-wide (4214 messages) and did so before this plan: it exits 1 on files never touched
+here (`src/app/main.py`, `src/common/logger.py`). At Gate 5 the ten touched files were
+compared with the config pinned — 69 messages at HEAD, 69 after, identical sets, zero
+introduced. The plan's original "flake8 exits 0" criterion was therefore never
+achievable. Operator chose to drop it rather than fix the backlog, which is out of this
+plan's scope.
+
+**Recommendation for a future plan (not this one):** a permanently-red `flake8` gate
+cannot distinguish "clean" from "no worse". If it is to mean anything, it needs a
+baseline-diff wrapper rather than a bare `flake8` invocation.
+
+### Gate 10 record — 2026-10-27
+
+`USER_GUIDE.md` rewritten (+133/−7). Uncommitted. Only that file modified by this step.
+
+| Criterion | Observed | Verdict |
+|---|---|---|
+| Prerequisites updated (mkcert, WSL2 Windows store) | items 4 and 5 added | ✅ |
+| Cert generation inlined as copy-paste | lines 38–51; no reference to this plan | ✅ |
+| WSL2 CA import documented | lines 56–90, verified-working UNC form | ✅ |
+| `.env` step | lines 92–112, points at `./scripts/setup.sh`, notes `EXTERNAL_BASE_URL` default | ✅ |
+| Start stack + open app, `:8000` expected to fail | lines 114–138 | ✅ |
+| Troubleshooting subsection (4 cases) | lines 245–272 | ✅ |
+| Quick Reference reflects HTTPS | lines 323–335, adds cert-regeneration row | ✅ |
+| Old line 39 ("listens on port 8000") fixed | now "nginx starts once the application is healthy and serves it over HTTPS" | ✅ |
+| Old line 159 (port conflicts) fixed | now "ports 5432, 80, and 443" | ✅ |
+| Scope | only `USER_GUIDE.md` | ✅ |
+| `grep -n "localhost:8000" USER_GUIDE.md` → none | **1 match** (line 135) | ⚠️ see below |
+
+**Plan defect — the grep criterion contradicts the step's own requirement.** Done
+criteria lines 1453 and 1617 require `grep -n "localhost:8000" USER_GUIDE.md` → no
+matches, while line 1457 requires the guide to "**explicitly state** that
+`http://localhost:8000` is expected to fail". That sentence necessarily contains the
+literal string; both cannot hold. The executor kept the reader-facing statement and
+accepted 1 match rather than contorting the wording to dodge grep — the correct call,
+since the clarity requirement is the one that serves the reader. Treat this criterion as
+satisfied: no occurrence presents `localhost:8000` as a working access route; the sole
+match is the failure notice.
+
+**Regression introduced by this rewrite — a dangling cross-reference.** The rewrite
+**removed the `### First-Time Setup (recommended)` heading** and replaced it with
+`### Generate the TLS certificate` / `### Configure the environment` / `### Start the
+stack and open the app`. But `DEVELOPER_QUICK_START.md:21` (written in Step 7) says:
+
+> See the "First-Time Setup" section of `USER_GUIDE.md` for the exact `mkcert` commands
+> and the WSL2 Windows-trust-store import; they are not duplicated here.
+
+No section by that name exists any more, so the pointer now resolves to **nothing** —
+it was already dangling before this step (the section existed but lacked the content),
+and the rewrite made it worse. The *content* the pointer promises is present and
+correct (lines 38–51 and 56–90); only the heading name is wrong.
+
+**Fix needed (out of Step 10's file scope, not yet applied):** update the pointer in
+`DEVELOPER_QUICK_START.md` to name the real headings, e.g.
+
+> See *Generate the TLS certificate* and *Trust the certificate in a Windows browser
+> (WSL2 only)* in `USER_GUIDE.md` for the exact `mkcert` commands and the WSL2
+> Windows-trust-store import; they are not duplicated here.
+
+**Verification honesty.** The plan asks whether a fresh machine could follow the guide.
+That could not be tested — the executor walked each step against the live tree instead
+and confirmed: `deploy/certs/` contains both PEMs and `.gitkeep`; `mkcert -CAROOT` →
+`/home/shuva/.local/share/mkcert` (so the UNC example resolves); the cert SAN matches the
+issue command; nginx publishes 443/80 and `8000:8000` is absent; `settings.py` defaults
+`EXTERNAL_BASE_URL` to `https://localhost`; `scripts/setup.sh` prints and polls HTTPS.
+Recorded as **walked, not tested on a clean machine**. The Windows-side
+`Import-Certificate` could not be re-run here (no Administrator PowerShell), though the
+operator confirmed that command form works earlier in this session.
+
 ### Progress tracker
 
 Mark each cell as you go. `⬜` not started · `🔄` in progress · `✅` passed ·
@@ -365,8 +451,8 @@ Mark each cell as you go. `⬜` not started · `🔄` in progress · `✅` passe
 | 6  | proxy-awareness unit test | `pytest` file passes | Operator reviews test asserts real behaviour | ✅ |
 | 7  | setup script + docs URLs (may be deferred) | grep gates | Operator confirms wording reads correctly | ✅ |
 | 8  | full stack smoke test | the 9-check table | **Operator performs all 9 checks** | ✅ |
-| 9  | CI gates | all five commands exit 0 | Operator reviews output | ⬜ |
-| 10 | `USER_GUIDE.md` new-machine setup | grep gates | Operator walks the guide | ⬜ |
+| 9  | CI gates | all five commands exit 0 | Operator reviews output | ✅ |
+| 10 | `USER_GUIDE.md` new-machine setup | grep gates | Operator walks the guide | ✅ |
 | 11 | `docs/design/nginx-tls-design.md` written | file + section greps | Operator reviews design doc | ⬜ |
 
 ## Why this matters

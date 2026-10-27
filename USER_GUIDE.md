@@ -5,11 +5,91 @@
 1. **Docker and Docker Compose installed** on your system
 2. This project uses databases which are dockerized images in the docker-compose.yml file.
 3. **Python 3** (used by the setup script to generate an encryption key)
+4. **`mkcert`** — issues the local TLS certificate the app is served over. If it
+   is not already installed, the commands in *Generate the TLS certificate* below
+   will install it.
+5. **WSL2 users only: access to the Windows certificate store.** If Docker runs
+   in WSL2 but your browser runs on Windows, you must import `mkcert`'s local
+   certificate authority into Windows once, or the browser will warn about the
+   certificate.
+
+> `openssl` ships with most Linux distributions and can generate a throwaway
+> self-signed certificate if `mkcert` is genuinely unavailable. Treat that as a
+> last resort only — a self-signed certificate is trusted by no browser, so the
+> warning cannot be silenced the way `mkcert` silences it.
+
+The app is served over HTTPS by an nginx container. The application container no
+longer publishes a host port; nginx publishes 443 (HTTPS) and 80 (a redirect to
+HTTPS).
 
 
 ## Starting the Application
 
-### First-Time Setup (recommended)
+### Generate the TLS certificate
+
+nginx terminates HTTPS with a local certificate, so the certificate has to exist
+before the stack starts. `mkcert` creates a local certificate authority (CA),
+installs it into your trust store, and issues a certificate for `localhost` — so
+your browser trusts the app and does not warn.
+
+Run these **from the repository root**, because `deploy/certs/` is created
+relative to your working directory:
+
+```bash
+# Install mkcert (skip this block if `mkcert` is already on your PATH)
+sudo apt install -y libnss3-tools
+curl -JLO "https://dl.filippo.io/mkcert/latest?for=linux/amd64"
+chmod +x mkcert-v*-linux-amd64
+sudo mv mkcert-v*-linux-amd64 /usr/local/bin/mkcert
+
+# Create a local CA and install it into the trust store
+mkcert -install
+
+# Issue a certificate for the app hostname
+mkdir -p deploy/certs
+mkcert -cert-file deploy/certs/wba.pem -key-file deploy/certs/wba-key.pem localhost 127.0.0.1
+```
+
+After this, `ls deploy/certs/` shows `wba.pem` and `wba-key.pem`. Both files are
+gitignored and never committed.
+
+#### Trust the certificate in a Windows browser (WSL2 only)
+
+If Docker runs in WSL2 but the browser runs on Windows, the `mkcert -install`
+above only installed the CA into the **Linux** trust store, which the Windows
+browser does not read — so it will still warn. Import the CA into Windows once
+per machine:
+
+1. Inside WSL, find where `mkcert` keeps its CA:
+
+   ```bash
+   mkcert -CAROOT
+   ```
+
+2. Open **PowerShell as Administrator** and import `rootCA.pem` from that
+   directory. From Windows the path is
+   `\\wsl.localhost\<distro>\<CAROOT with forward slashes replaced by backslashes>`.
+   For a WSL distro named `Ubuntu` and a CAROOT of
+   `/home/<you>/.local/share/mkcert`, that is:
+
+   ```powershell
+   Import-Certificate -FilePath "\\wsl.localhost\Ubuntu\home\<you>\.local\share\mkcert\rootCA.pem" -CertStoreLocation Cert:\LocalMachine\Root
+   ```
+
+   Substitute your own distro name and home path from the `mkcert -CAROOT`
+   output. On some Windows builds the older `\\wsl$\<distro>\...` prefix works
+   instead of `\\wsl.localhost\...`.
+
+This is a one-time manual step per developer machine and cannot be automated
+from the repository. Skipping it is the single most common cause of a scary
+certificate warning that looks like the deployment is broken.
+
+> **Firefox does not read the Windows certificate store.** If you use Firefox,
+> either import the CA into Firefox directly, or open `about:config`, set
+> `security.enterprise_roots.enabled` to `true`, and restart the browser. Chrome
+> and Edge read the Windows store and need no extra step.
+
+### Configure the environment
 
 Run the setup wizard — it interactively configures your database, Neo4j, and
 RabbitMQ credentials (each with a sensible default), generates the connector
@@ -20,12 +100,22 @@ API key:
 ./scripts/setup.sh
 ```
 
-The wizard will offer to start the application for you (`docker compose up -d`).
-
 The script is idempotent — re-running it never overwrites values you've
 already set; each prompt re-offers the current value as the default.
 
-### Start All Services
+The browser-facing URL comes from `EXTERNAL_BASE_URL`, which already defaults to
+`https://localhost`. Leave it alone for a local install — set it only if you
+serve the app under a different hostname, for example:
+
+```bash
+EXTERNAL_BASE_URL=https://wba.example.com
+```
+
+### Start the stack and open the app
+
+The wizard offers to start the application for you. If you declined, start it
+now:
+
 ```bash
 docker compose up -d
 ```
@@ -36,11 +126,16 @@ The `-d` flag runs containers in detached mode (background).
 - PostgreSQL database starts first
 - Application waits for PostgreSQL to be healthy
 - Database migrations run automatically
-- Application starts and listens on port 8000
+- nginx starts once the application is healthy and serves it over HTTPS
 
 **Access the application:**
-- FastAPI API: https://localhost/api/health
 - Dash UI: https://localhost/app
+- FastAPI API: https://localhost/api/health
+
+> **`http://localhost:8000` is expected to fail.** The application container no
+> longer publishes port 8000 — that is deliberate, so all traffic is forced
+> through nginx over HTTPS. A connection error there is the intended behaviour,
+> not a fault to fix. `http://localhost` (port 80) redirects to HTTPS.
 
 
 ## Stopping the Application
@@ -147,6 +242,35 @@ docker compose exec postgres psql -U <your_postgres_user> -d <your_postgres_db>
 
 ## Troubleshooting
 
+### HTTPS and Certificate Problems
+
+- **The browser warns that the certificate is not trusted.**
+  *Cause*: `mkcert`'s CA was not imported into the browser's trust store — on
+  WSL2 this is the Windows-side import, which is easy to skip.
+  *Fix*: run the Windows import in *Trust the certificate in a Windows browser*
+  above. Firefox additionally needs `security.enterprise_roots.enabled` set to
+  `true` in `about:config`.
+
+- **`docker compose up` fails with `bind: address already in use` on port 80 or 443.**
+  *Cause*: another process already holds the port — often a previous stack, or a
+  local web server.
+  *Fix*: stop whatever owns the port (for example `docker compose down`, or find
+  it with `sudo ss -ltnp | grep ':443'`) and start again.
+
+- **`https://localhost/app` returns 502 Bad Gateway.**
+  *Cause*: nginx is up but the application container behind it is not healthy.
+  *Fix*: check the app logs and wait for the healthcheck to pass:
+
+  ```bash
+  docker compose logs app
+  ```
+
+- **`deploy/certs/` is empty.**
+  *Cause*: `mkcert` was never run, or it was run from a different working
+  directory than the repository root.
+  *Fix*: re-run the certificate commands from the repository root — see
+  *Generate the TLS certificate* above.
+
 ### Container Keeps Restarting
 Check the logs:
 ```bash
@@ -156,7 +280,7 @@ docker compose logs app
 Common issues:
 - **Database connection errors**: Ensure `DATABASE_URL` uses `postgres` as hostname (not `localhost`)
 - **Missing environment variables**: Check your `.env` file
-- **Port conflicts**: Ensure ports 5432 and 8000 are not in use
+- **Port conflicts**: Ensure ports 5432, 80, and 443 are not in use
 
 ### View Container Resource Usage
 ```bash
@@ -199,7 +323,9 @@ docker compose restart app
 | Task | Command |
 |------|---------|
 | First-time setup | `./scripts/setup.sh` |
+| Generate TLS certificate | `mkcert -cert-file deploy/certs/wba.pem -key-file deploy/certs/wba-key.pem localhost 127.0.0.1` |
 | Start services | `docker compose up -d` |
+| Open the app | https://localhost/app |
 | Stop services | `docker compose down` |
 | View logs | `docker compose logs -f app` |
 | Check status | `docker compose ps` |

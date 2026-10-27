@@ -31,4 +31,16 @@ cd /app && python app/scripts/create_es_indexes.py
 >&2 echo "Elasticsearch indexes ready - starting application"
 
 # Start the application
-cd /app && uvicorn app.main:app --host 0.0.0.0 --port 8000
+#
+# The trusted-peer flag below tells uvicorn which peers may set
+# X-Forwarded-Proto / X-Forwarded-For. uvicorn's ProxyHeadersMiddleware honours
+# those headers only from trusted hosts, and the default is "127.0.0.1,::1" —
+# which does NOT include nginx's container IP, so the external scheme would be
+# lost.
+#
+# "*" (trust any peer) is safe ONLY because the app publishes no host port
+# (docker-compose.yml removed the 8000:8000 mapping), so the only reachable
+# peers are nginx and the other compose services. Re-publishing a host port
+# would make this a spoofing hole — keep the two in sync.
+cd /app && uvicorn app.main:app --host 0.0.0.0 --port 8000 \
+    --forwarded-allow-ips="*"

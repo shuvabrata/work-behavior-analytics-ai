@@ -359,7 +359,7 @@ if [[ "$START" != "y" && "$START" != "Y" ]]; then
     info "To start later, run:"
     echo "    docker compose up -d"
     echo ""
-    echo "  Then open: http://localhost:8000/app"
+    echo "  Then open: https://localhost/app"
     exit 0
 fi
 
@@ -381,11 +381,11 @@ ELAPSED=0
 INTERVAL=5
 
 while [[ $ELAPSED -lt $MAX_WAIT ]]; do
-    if curl -sf http://localhost:8000/api/health &>/dev/null; then
+    if curl -sf https://localhost/api/health &>/dev/null; then
         echo ""
         success "Application is healthy!"
         echo ""
-        echo "  ${BOLD}Open:${NC}  http://localhost:8000/app"
+        echo "  ${BOLD}Open:${NC}  https://localhost/app"
         echo ""
         exit 0
     fi
@@ -400,5 +400,5 @@ echo ""
 echo "  Check logs:  docker compose logs app"
 echo "  Check status: docker compose ps"
 echo ""
-echo "  Once healthy, open: http://localhost:8000/app"
+echo "  Once healthy, open: https://localhost/app"
 exit 1

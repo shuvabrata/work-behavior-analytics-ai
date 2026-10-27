@@ -7,12 +7,12 @@ convention used by ``pages/search.py``.
 
 from __future__ import annotations
 
-import os
 from typing import Any
 
 import requests
 
 from app.runtime_settings import runtime_settings
+from app.settings import settings
 from app.dash_app.pages.graph.utils import neo4j_to_cytoscape
 from app.dash_app.pages.timeline.helpers import MIN_QUERY_LENGTH
 
@@ -49,7 +49,7 @@ class NodePropertiesError(RuntimeError):
 
 def get_api_base_url() -> str:
     """Return the backend API base URL (falls back to localhost for dev)."""
-    return os.getenv("API_BASE_URL", "http://localhost:8000")
+    return settings.API_BASE_URL
 
 
 def fetch_suggestions(query: str, limit: int = _DEFAULT_LIMIT) -> list[dict[str, Any]]:

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 from datetime import datetime
 import time
 from typing import Any, Dict, List
@@ -14,6 +13,7 @@ from dash.exceptions import PreventUpdate
 
 from app.common.timezone import humanize_duration, to_app_timezone
 from app.runtime_settings import runtime_settings
+from app.settings import settings
 from app.api.connectors.v1.registry import CONNECTOR_REGISTRY
 from app.dash_app.components.common import create_alert
 from app.dash_app.styles import (
@@ -46,7 +46,7 @@ ARRAY_FIELDS = {'include_spaces', 'exclude_spaces', 'branch_name_patterns', 'ext
 
 
 def _get_api_base_url() -> str:
-    return os.getenv("API_BASE_URL", "http://localhost:8000")
+    return settings.API_BASE_URL
 
 
 @callback(

@@ -12,7 +12,6 @@ Data flow:
 from __future__ import annotations
 
 import json
-import os
 from typing import Any
 
 import dash_bootstrap_components as dbc
@@ -33,6 +32,7 @@ from dash import (
 from dash.exceptions import PreventUpdate
 
 from app.dash_app.components.common import create_alert, create_page_header
+from app.settings import settings
 from app.dash_app.styles import (
     CARD_CONTAINER_STYLE,
     COLOR_BACKGROUND_LIGHT,
@@ -57,7 +57,7 @@ from app.dash_app.styles import (
 
 # ── Constants ──────────────────────────────────────────────────────────
 
-API_BASE = os.getenv("API_BASE_URL", "http://localhost:8000")
+API_BASE = settings.API_BASE_URL
 SETTINGS_API = f"{API_BASE}/api/v1/settings/"
 
 CATEGORY_META: dict[str, dict[str, str]] = {
@@ -218,7 +218,7 @@ def _build_setting_row(setting: dict[str, Any]) -> html.Div:
     )
 
 
-def _build_category_section(category: str, settings: list[dict[str, Any]]) -> html.Div:
+def _build_category_section(category: str, category_settings: list[dict[str, Any]]) -> html.Div:
     """Build a collapsible section for a single category."""
     meta = CATEGORY_META.get(
         category, {"label": category, "icon": "fa-solid fa-gear"}
@@ -243,7 +243,7 @@ def _build_category_section(category: str, settings: list[dict[str, Any]]) -> ht
                         },
                     ),
                     html.Span(
-                        f" ({len(settings)})",
+                        f" ({len(category_settings)})",
                         style={
                             "fontFamily": FONT_SANS,
                             "fontSize": FONT_SIZE_XSMALL,
@@ -264,7 +264,7 @@ def _build_category_section(category: str, settings: list[dict[str, Any]]) -> ht
             ),
             dbc.Collapse(
                 html.Div(
-                    list(_build_setting_row(s) for s in settings),
+                    list(_build_setting_row(s) for s in category_settings),
                     style={
                         "padding": f"{SPACING_XSMALL} {SPACING_SMALL}",
                         "backgroundColor": COLOR_BACKGROUND_WHITE,

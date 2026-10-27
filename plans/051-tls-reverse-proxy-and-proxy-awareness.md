@@ -139,6 +139,54 @@ request (`src/app/main.py:168`, `:176` are `path`-only, for logging). Step 4's r
 proof is Step 6's middleware test, not the health check. Do not claim this step
 "proves" proxy-awareness.
 
+### Gate 5 record — 2026-10-27
+
+`src/app/settings.py` + the nine Dash call sites modified (10 files, +31/−18). Change
+left uncommitted; app container not rebuilt (not needed — the value is unchanged).
+
+| Criterion | Observed | Verdict |
+|---|---|---|
+| `grep -rn 'os.getenv("API_BASE_URL"' src/` → none | exit 1, no matches | ✅ |
+| `grep -c "API_BASE_URL" src/app/settings.py` → 1 | `1` | ✅ |
+| `import os` gone from all nine | `grep -rn "import os" src/app/dash_app/` → exit 1; per-file `grep -c '\bos\.'` → 0 | ✅ |
+| `mypy src/` | `Success: no issues found in 290 source files` | ✅ |
+| Settings resolve | `http://localhost:8000 https://localhost` | ✅ |
+| `pytest -m unit tests -q` | `2326 passed, 2 skipped, 739 deselected` | ✅ |
+| Scope | exactly the nine Dash files + `settings.py` | ✅ |
+| `pylint src --score=y` | `9.68/10` (baseline 9.68) | ✅ |
+
+**Env-override semantics preserved (reviewer-verified, not in the plan's gates).**
+The swap changes where the value comes from — `os.getenv` at import time became a
+pydantic-settings field — so the reviewer tested that overrides still work:
+
+| Test | Result |
+|---|---|
+| `API_BASE_URL="http://sentinel:9999"` | `settings.API_BASE_URL` → `http://sentinel:9999` |
+| `EXTERNAL_BASE_URL="https://sentinel.example"` | `settings.EXTERNAL_BASE_URL` → `https://sentinel.example` |
+| Set `API_BASE_URL` only | `EXTERNAL_BASE_URL` stays `https://localhost` (independent) |
+
+pydantic-settings reads env vars matching field names, so `.env`/container-env
+overrides still win. No regression.
+
+**Documented deviation — parameter rename in `runtime.py`.** That file had a
+pre-existing private helper `_build_category_section(category, settings)` whose
+parameter was literally named `settings`. Adding the module-level
+`from app.settings import settings` made pylint emit a new `W0621
+redefined-outer-name`. The executor renamed the parameter to `category_settings`
+(3 lines). Reviewer-verified: every call site is positional — `runtime.py:437`,
+`tests/test_settings_ui.py:62,67,72,77,83` — no keyword call exists, so the rename is
+behaviour-preserving. The adaptation serves the plan's lint-hygiene intent; approved.
+
+**Plan defect — the `flake8` done criterion is unachievable.** The plan's commands
+table (line 309) and done criteria (line 1375) require `flake8` to exit 0, and Step 9
+criterion 5 calls it "clean". It is not, and was not before this plan: `flake8`
+repo-wide emits **4214** messages and exits 1, including on files this plan never
+touches (e.g. `src/app/main.py`). `.flake8` sets only `max-line-length = 120` and
+`extend-exclude = .venv,tests` — it does not suppress the legacy backlog. Step 5
+introduced **zero** new messages: with the config pinned, the ten touched files report
+**69 messages at HEAD and 69 in the working tree**, identical sets. Treat Step 9's
+flake8 criterion as "no *new* flake8 messages", not "exit 0".
+
 ### Progress tracker
 
 Mark each cell as you go. `⬜` not started · `🔄` in progress · `✅` passed ·
@@ -150,7 +198,7 @@ Mark each cell as you go. `⬜` not started · `🔄` in progress · `✅` passe
 | 2  | nginx config written | `nginx -t` passes | Operator reviews config content | ✅ |
 | 3  | nginx in Compose, port 8000 unpublished | `docker compose config -q` | Operator confirms `:8000` refused, `:443` answers | ✅ |
 | 4  | uvicorn trusts proxy headers | grep gates | Operator confirms app still healthy | ✅ |
-| 5  | `EXTERNAL_BASE_URL` / `API_BASE_URL` settings | grep gates, `mypy` | Operator reviews the diff | ⬜ |
+| 5  | `EXTERNAL_BASE_URL` / `API_BASE_URL` settings | grep gates, `mypy` | Operator reviews the diff | ✅ |
 | 6  | proxy-awareness unit test | `pytest` file passes | Operator reviews test asserts real behaviour | ⬜ |
 | 7  | setup script + docs URLs (may be deferred) | grep gates | Operator confirms wording reads correctly | ⬜ |
 | 8  | full stack smoke test | the 9-check table | **Operator performs all 9 checks** | ⬜ |

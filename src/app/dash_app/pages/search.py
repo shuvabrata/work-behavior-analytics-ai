@@ -8,7 +8,6 @@ from __future__ import annotations
 from typing import Any
 
 import math
-import os
 import re
 import requests
 from datetime import datetime
@@ -53,6 +52,7 @@ from app.dash_app.styles import (
 )
 from app.runtime_settings import runtime_settings
 from app.scripts.create_es_indexes import MANAGED_INDEXES
+from app.settings import settings
 from common.logger import logger
 
 
@@ -122,7 +122,7 @@ _PAGE_INDICATOR_STYLE = {
 # API base URL — same pattern as graph page utils
 # ---------------------------------------------------------------------------
 def _get_api_base_url() -> str:
-    return os.getenv("API_BASE_URL", "http://localhost:8000")
+    return settings.API_BASE_URL
 
 
 # ---------------------------------------------------------------------------

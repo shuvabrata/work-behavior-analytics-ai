@@ -12,7 +12,6 @@ actions drive the ``/api/v1/graph-themes/`` REST API.
 
 from __future__ import annotations
 
-import os
 from typing import Any
 
 import dash_bootstrap_components as dbc
@@ -31,6 +30,7 @@ from dash import (
 from dash.exceptions import PreventUpdate
 
 from app.common.graph_theme import effective_semantic_theme
+from app.settings import settings
 from app.dash_app.pages.graph.utils.ui_components import get_shape_css
 from app.dash_app.pages.settings.graph_styling.components import build_editor_body
 from app.dash_app.styles import (
@@ -40,7 +40,7 @@ from app.dash_app.styles import (
     get_theme_tokens,
 )
 
-API_BASE = os.getenv("API_BASE_URL", "http://localhost:8000")
+API_BASE = settings.API_BASE_URL
 THEMES_API = f"{API_BASE}/api/v1/graph-themes/"
 
 # Reference node dimensions (px) used as fallbacks when width/height are unset

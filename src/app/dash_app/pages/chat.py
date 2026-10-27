@@ -1,4 +1,3 @@
-import os
 from datetime import datetime, timezone
 from typing import Any
 
@@ -159,7 +158,7 @@ def get_layout() -> html.Div:
 )
 def initialize_session(current_data: dict[str, Any] | None) -> dict[str, Any]:
     """Initialize a new chat session if one doesn't exist or is invalid"""
-    api_base = os.getenv("API_BASE_URL", "http://localhost:8000")
+    api_base = settings.API_BASE_URL
     
     # If we have existing data, validate the session still exists in backend
     if current_data is not None and current_data.get("session_id"):

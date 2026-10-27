@@ -105,6 +105,40 @@ expected `Location` header as `location: /app`. nginx's `return 302 /app;` emits
 `Host` header. The status code and destination are correct; the plan's wording was
 imprecise. Expect the absolute form at Gate 8.
 
+### Gate 4 record — 2026-10-27
+
+`src/app/entrypoint.sh` modified (+12/−1): `--forwarded-allow-ips="*"` added to the
+uvicorn invocation, with a comment block. `--proxy-headers` deliberately NOT added.
+Change left uncommitted; app container rebuilt and healthy.
+
+| Criterion | Observed | Verdict |
+|---|---|---|
+| `grep -n "forwarded-allow-ips"` → 1 match | `entrypoint.sh:46` — `--forwarded-allow-ips="*"` | ✅ |
+| `grep -c "proxy-headers"` → 0 | `0` | ✅ |
+| App healthy after rebuild | `Up About a minute (healthy)`, `8000/tcp` exposed-not-published | ✅ |
+| No startup error | logs show `Application startup complete`, no traceback | ✅ |
+| Health over TLS | `{"status":"healthy"}` | ✅ |
+| Flag live in the running process | `docker top wba-ai-app` → `uvicorn app.main:app --host 0.0.0.0 --port 8000 --forwarded-allow-ips=*` | ✅ |
+| `bash -n` syntax | exit 0 | ✅ |
+
+Scope clean: only `src/app/entrypoint.sh` modified.
+
+**Plan defect found and worked around.** This plan's Step 4 target block writes the
+comment as `# --forwarded-allow-ips tells uvicorn which peers may set ...`, i.e. the
+prose itself contains the literal flag string. Copied verbatim it yields **two**
+`grep` matches, contradicting this plan's own done criterion of exactly **one**
+(and Gate 4 criterion 1). Verified: the plan's lines 670 and 675 each contain the
+string. The executor reworded the comment to "The trusted-peer flag below tells
+uvicorn…" so the literal appears only on the invocation line. It also added the
+port-coupling sentence the plan's prose demands but its verbatim block omits. Both
+adaptations serve the plan's intent; the deviation is correct.
+
+**Not yet observable.** `--forwarded-allow-ips` only matters once something reads the
+external scheme, and nothing does yet — the app constructs no absolute URL from the
+request (`src/app/main.py:168`, `:176` are `path`-only, for logging). Step 4's real
+proof is Step 6's middleware test, not the health check. Do not claim this step
+"proves" proxy-awareness.
+
 ### Progress tracker
 
 Mark each cell as you go. `⬜` not started · `🔄` in progress · `✅` passed ·
@@ -115,7 +149,7 @@ Mark each cell as you go. `⬜` not started · `🔄` in progress · `✅` passe
 | 1  | TLS certificate generated | cert files exist, not git-tracked | Operator confirms cert trusted in browser | ✅ |
 | 2  | nginx config written | `nginx -t` passes | Operator reviews config content | ✅ |
 | 3  | nginx in Compose, port 8000 unpublished | `docker compose config -q` | Operator confirms `:8000` refused, `:443` answers | ✅ |
-| 4  | uvicorn trusts proxy headers | grep gates | Operator confirms app still healthy | ⬜ |
+| 4  | uvicorn trusts proxy headers | grep gates | Operator confirms app still healthy | ✅ |
 | 5  | `EXTERNAL_BASE_URL` / `API_BASE_URL` settings | grep gates, `mypy` | Operator reviews the diff | ⬜ |
 | 6  | proxy-awareness unit test | `pytest` file passes | Operator reviews test asserts real behaviour | ⬜ |
 | 7  | setup script + docs URLs (may be deferred) | grep gates | Operator confirms wording reads correctly | ⬜ |

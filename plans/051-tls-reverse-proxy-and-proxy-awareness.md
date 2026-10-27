@@ -187,6 +187,46 @@ introduced **zero** new messages: with the config pinned, the ten touched files 
 **69 messages at HEAD and 69 in the working tree**, identical sets. Treat Step 9's
 flake8 criterion as "no *new* flake8 messages", not "exit 0".
 
+### Gate 6 record — 2026-10-27
+
+`tests/test_proxy_awareness.py` created (174 lines, 8 tests, untracked). Reviewer read
+the file and ran three mutations rather than trusting the report.
+
+| Criterion | Observed | Verdict |
+|---|---|---|
+| File's tests pass | `8 passed in 0.21s` | ✅ |
+| No regressions | `2334 passed, 2 skipped` (2326 baseline + 8) | ✅ |
+| `mypy src/` | `Success: no issues found in 290 source files` | ✅ |
+| Import is uvicorn's, not Starlette's | `from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware` (line 31); `starlette.middleware.proxy_headers` appears nowhere | ✅ |
+| Independence assertion present, both directions | `test_external_and_api_base_urls_are_independent` (lines 98–109) | ✅ |
+| Scope | only `?? tests/test_proxy_awareness.py` | ✅ |
+
+**Mutation testing (reviewer-run).**
+
+1. **Remove the middleware wrapper** → the same request yields `scheme == "http"`, so
+   `test_proxy_headers_middleware_honours_forwarded_proto` would fail. Non-vacuous. ✅
+2. **Middleware present, peer outside the trusted set** (`trusted_hosts="10.0.0.5"`) →
+   `http`. The trust boundary is real. ✅
+3. **Change the test's own `trusted_hosts` from `"*"` to uvicorn's default
+   `"127.0.0.1,::1"`** → **the suite still passes (8 passed).** ⚠️
+
+**Finding — the test does not actually pin the `--forwarded-allow-ips` coupling.**
+Mutation 3 shows the test passes with uvicorn's *default* trusted set, because
+`httpx.ASGITransport` presents the client as `127.0.0.1` (already trusted by default).
+So the test proves the middleware promotes `X-Forwarded-Proto` when the peer is
+trusted — true and worth having — but it does **not** fail if
+`--forwarded-allow-ips="*"` were removed from `entrypoint.sh`. In production nginx's
+peer address is a Docker bridge IP outside `127.0.0.1,::1`, which is precisely the
+case the flag exists to fix, and no test in this plan covers it.
+
+The plan's Gate 6 criterion 1 asks "if someone deleted `--forwarded-allow-ips`, would
+this test fail?" The honest answer is **no** — the executor's claim that it would is
+incorrect, though its reasoning about the middleware itself is sound. Closing this
+would need a test that presents a non-loopback client (e.g. an explicit
+`scope["client"]`) with the default trusted set and asserts the scheme is *not*
+promoted. Left as a documented gap rather than silently accepted; it is a test-depth
+limitation, not a defect in the shipped code.
+
 ### Progress tracker
 
 Mark each cell as you go. `⬜` not started · `🔄` in progress · `✅` passed ·
@@ -199,7 +239,7 @@ Mark each cell as you go. `⬜` not started · `🔄` in progress · `✅` passe
 | 3  | nginx in Compose, port 8000 unpublished | `docker compose config -q` | Operator confirms `:8000` refused, `:443` answers | ✅ |
 | 4  | uvicorn trusts proxy headers | grep gates | Operator confirms app still healthy | ✅ |
 | 5  | `EXTERNAL_BASE_URL` / `API_BASE_URL` settings | grep gates, `mypy` | Operator reviews the diff | ✅ |
-| 6  | proxy-awareness unit test | `pytest` file passes | Operator reviews test asserts real behaviour | ⬜ |
+| 6  | proxy-awareness unit test | `pytest` file passes | Operator reviews test asserts real behaviour | ✅ |
 | 7  | setup script + docs URLs (may be deferred) | grep gates | Operator confirms wording reads correctly | ⬜ |
 | 8  | full stack smoke test | the 9-check table | **Operator performs all 9 checks** | ⬜ |
 | 9  | CI gates | all five commands exit 0 | Operator reviews output | ⬜ |

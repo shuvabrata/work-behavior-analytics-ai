@@ -63,27 +63,46 @@ def _resolve_local_ca() -> Path | None:
     return None
 
 
-@pytest.fixture(scope="session", autouse=True)
-def _trust_local_ca() -> None:
-    """Make the local mkcert CA trusted for the test session.
+_LOCAL_CA: Path | None = None
+_LOCAL_CA_RESOLVED = False
 
-    The server-marked integration tests reach the app over HTTPS through nginx,
-    and ``httpx`` verifies against ``certifi`` rather than the system store, so
-    the local CA must be injected. ``SSL_CERT_FILE`` is read by ``httpx`` at
-    request time, so setting it here is sufficient.
 
-    Verification is deliberately left **on** — the point is to prove the
-    certificate chain is valid, not to bypass it.
+def pytest_runtest_setup(item: pytest.Item) -> None:
+    """Trust the local mkcert CA, for ``server``-marked tests only.
 
-    Fails loudly rather than skipping: these are integration tests, and a silent
-    skip would hide a stack that is not actually reachable.
+    Those tests reach the app over HTTPS through the nginx proxy at
+    ``https://localhost``, and ``httpx`` verifies against ``certifi`` rather than
+    the system store, so the local CA must be injected via ``SSL_CERT_FILE``
+    (read by ``httpx`` at request time).
+
+    **Scoped to ``server``-marked tests deliberately.** An autouse session
+    fixture would apply to every test in the run — including the unit tests CI
+    executes — and CI has neither mkcert nor the system trust-store copy, so an
+    unconditional failure would error out the entire suite on a machine that
+    never needs the CA. That regression is why this is a per-test hook rather
+    than a fixture.
+
+    Verification is left **on** — the point is to prove the certificate chain is
+    valid, not to bypass it. A ``server`` test with no resolvable CA is **failed
+    loudly**, not skipped: a silent skip would hide a stack that is not actually
+    reachable.
     """
-    ca = _resolve_local_ca()
-    if ca is None:
+    global _LOCAL_CA, _LOCAL_CA_RESOLVED
+
+    if not item.get_closest_marker("server"):
+        return
+
+    if not _LOCAL_CA_RESOLVED:
+        _LOCAL_CA = _resolve_local_ca()
+        _LOCAL_CA_RESOLVED = True
+
+    if _LOCAL_CA is None:
         pytest.fail(
             "Could not locate the mkcert local CA, so https://localhost cannot be "
-            "verified. Run `mkcert -install` (and generate the certificate per "
-            "USER_GUIDE.md), or ensure the mkcert binary is on PATH."
+            "verified. Run `mkcert -install` and generate the certificate per "
+            "USER_GUIDE.md, or ensure the mkcert binary is on PATH. These tests "
+            "require the Compose stack to be running (docker compose up -d).",
+            pytrace=False,
         )
 
-    os.environ["SSL_CERT_FILE"] = str(ca)
+    os.environ["SSL_CERT_FILE"] = str(_LOCAL_CA)

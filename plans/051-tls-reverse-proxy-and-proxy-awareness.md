@@ -63,6 +63,23 @@ would commit it. Do these first, before Step 2.
 operator browses with Firefox, Gate 8 check 9 will warn until
 `security.enterprise_roots.enabled` is set in `about:config`.
 
+### Gate 2 record — 2026-10-27
+
+`deploy/nginx/nginx.conf` created (87 lines, md5 `2bfdee5b4a704739455f799134c1a8f8`),
+byte-identical to this plan's target block. Reviewer re-ran the `nginx -t` command
+independently rather than trusting the executor's report.
+
+| Criterion | Observed | Verdict |
+|---|---|---|
+| `nginx -t` passes | `exit=0`; `syntax is ok` and `test is successful` both present | ✅ |
+| `events {}` + `http { }` wrappers | line 1 `events {}`, line 3 `http {`, line 87 `}` | ✅ |
+| SSE block unbuffered | lines 33–35: `proxy_buffering off;`, `proxy_cache off;`, `proxy_read_timeout 3600s;` | ✅ |
+| `/app` and `/api` → same upstream, no trailing slash | lines 47 and 60, both `proxy_pass http://wba_app;` | ✅ |
+| `http2 on;` in the 443 block | line 20 | ✅ |
+| No `${...}` placeholders | `grep -Fc '${'` → 0 | ✅ |
+
+Scope clean: `git status --short` shows only `?? deploy/nginx/nginx.conf`.
+
 ### Progress tracker
 
 Mark each cell as you go. `⬜` not started · `🔄` in progress · `✅` passed ·
@@ -71,7 +88,7 @@ Mark each cell as you go. `⬜` not started · `🔄` in progress · `✅` passe
 | Step | What it changes | Automated verify | Manual gate | Status |
 |------|-----------------|------------------|-------------|--------|
 | 1  | TLS certificate generated | cert files exist, not git-tracked | Operator confirms cert trusted in browser | ✅ |
-| 2  | nginx config written | `nginx -t` passes | Operator reviews config content | ⬜ |
+| 2  | nginx config written | `nginx -t` passes | Operator reviews config content | ✅ |
 | 3  | nginx in Compose, port 8000 unpublished | `docker compose config -q` | Operator confirms `:8000` refused, `:443` answers | ⬜ |
 | 4  | uvicorn trusts proxy headers | grep gates | Operator confirms app still healthy | ⬜ |
 | 5  | `EXTERNAL_BASE_URL` / `API_BASE_URL` settings | grep gates, `mypy` | Operator reviews the diff | ⬜ |

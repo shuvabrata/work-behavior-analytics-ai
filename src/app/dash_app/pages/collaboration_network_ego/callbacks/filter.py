@@ -489,6 +489,27 @@ def toggle_ego_filter_panel(n_clicks: int | None, is_open: bool) -> tuple[bool, 
 
 register_loading_overlay_hider("ego-loading-state", "ego-loading-overlay")
 
+# Raise the overlay before the fetch starts — load_ego_network() runs
+# synchronously, so a True it wrote would never paint ahead of the wait. Only a
+# picked person counts, matching the condition it fetches under.
+# "initial_duplicate" (not True) so a deep-linked picker still raises it.
+clientside_callback(
+    """
+    function(personValue) {
+        var wba = "";
+        if (personValue && typeof personValue === "object") {
+            wba = String(personValue.wba || "").trim();
+        } else if (typeof personValue === "string") {
+            wba = personValue.trim();
+        }
+        return wba !== "";
+    }
+    """,
+    Output("ego-loading-state", "data", allow_duplicate=True),
+    Input({"type": "catalog-person-value", "name": "ego_focus"}, "data"),
+    prevent_initial_call="initial_duplicate",
+)
+
 clientside_callback(
     """
     function(storeData) {

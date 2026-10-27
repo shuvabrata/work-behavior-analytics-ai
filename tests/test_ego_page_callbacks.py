@@ -714,3 +714,118 @@ def test_callback_keeps_the_positioning_on_its_first_fire():
         "drop into flow below the canvas and the page would scroll again"
     )
     assert returned["inset"] == 0, "the centering box must survive the callback"
+
+
+# ---------------------------------------------------------------------------
+# Loading overlay — the fetch in flight must be visible
+# ---------------------------------------------------------------------------
+
+def _loading_overlay_state(layout: Any) -> Any:
+    """The initial ``data`` of the overlay's driving store."""
+    store = _find_by_exact_id(layout, "ego-loading-state")
+    assert store is not None, "the ego-loading-state store is missing"
+    return store.data
+
+
+def test_loading_store_starts_false_because_no_fetch_happens_on_arrival():
+    """Starts down: no fetch happens until a person is picked.
+
+    Seeding it truthy would flash the overlay over the "pick a person" prompt.
+    """
+    from app.dash_app.pages.collaboration_network_ego.layout import get_layout
+
+    assert _loading_overlay_state(get_layout()) is False
+
+
+def test_overlay_is_wired_to_the_store_it_reads():
+    """The overlay div and its driving store must both exist and stay in sync."""
+    from app.dash_app.pages.collaboration_network_ego.layout import get_layout
+
+    layout = get_layout()
+    assert _find_by_exact_id(layout, "ego-loading-overlay") is not None, (
+        "the overlay div is missing — nothing would render the spinner"
+    )
+    assert _find_by_exact_id(layout, "ego-loading-state") is not None
+
+
+def test_fetch_callback_clears_the_overlay_when_it_completes(monkeypatch):
+    """Every terminal path must return False, or the overlay would never lift."""
+    _stub_service(monkeypatch)
+
+    success = ego_filter.load_ego_network(PERSON, "", PAGE, DEFAULT_MAX_COLLABORATORS, [])
+    assert success[5] is False, "a completed fetch must clear the overlay"
+
+    none_picked = ego_filter.load_ego_network(None, "", PAGE, DEFAULT_MAX_COLLABORATORS, [])
+    assert none_picked[5] is False, "an empty picker must not leave the overlay up"
+
+
+def test_fetch_callback_clears_the_overlay_on_error(monkeypatch):
+    """An error must lift the overlay too, or it would spin forever."""
+    def boom(*_args: Any, **_kwargs: Any) -> EgoNetworkResponse:
+        raise ValueError("bad settings")
+
+    monkeypatch.setattr(ego_filter, "get_ego_network", boom)
+
+    result = ego_filter.load_ego_network(PERSON, "", PAGE, DEFAULT_MAX_COLLABORATORS, [])
+    assert result[5] is False, "the overlay must clear on a settings error"
+
+
+def _clientside_writers_of(target: str) -> list[dict[str, Any]]:
+    """Registered clientside callbacks that output to *target*.
+
+    Filters on Dash's ``clientside_function`` marker: the server fetch callback
+    writes this store too, and counting it would let a deleted trigger pass.
+    """
+    # Page callbacks register in Dash's global registry, not the app's map.
+    from dash._callback import GLOBAL_CALLBACK_LIST  # pylint: disable=protected-access
+
+    matches: list[dict[str, Any]] = []
+    for entry in GLOBAL_CALLBACK_LIST:
+        if not isinstance(entry, dict) or entry.get("clientside_function") is None:
+            continue
+        output = str(entry.get("output", ""))
+        # Dash suffixes duplicate-output registrations with "@<hash>".
+        if output.split("@", 1)[0] == target:
+            matches.append(entry)
+    return matches
+
+
+def test_a_clientside_callback_raises_the_overlay_before_the_fetch():
+    """A picker-keyed clientside callback must write the store, beside the hider.
+
+    The server fetch callback cannot raise it: it runs synchronously, so a True
+    it wrote would never paint ahead of the wait.
+    """
+    writers = _clientside_writers_of("ego-loading-state.data")
+    assert len(writers) >= 2, (
+        f"expected the hider and a pre-fetch trigger to write ego-loading-state, "
+        f"found {len(writers)} — the overlay would not show on a person switch"
+    )
+
+    ids_per_writer = [
+        {str(inp.get("id")) for inp in writer.get("inputs", [])} for writer in writers
+    ]
+    person_key = '{"name":"ego_focus","type":"catalog-person-value"}'
+    assert any(person_key in ids for ids in ids_per_writer), (
+        "no clientside writer is keyed to the person picker — picking a person "
+        "would start a multi-second fetch with no visible feedback"
+    )
+
+
+def test_prefetch_trigger_is_keyed_only_to_the_picker():
+    """The picker must be the only Input, matching when the fetch happens.
+
+    A URL input would raise the overlay for a navigation that fetches nothing.
+    """
+    writers = _clientside_writers_of("ego-loading-state.data")
+    person_key = '{"name":"ego_focus","type":"catalog-person-value"}'
+
+    triggers = [
+        writer
+        for writer in writers
+        if {str(inp.get("id")) for inp in writer.get("inputs", [])} == {person_key}
+    ]
+    assert triggers, (
+        "no clientside writer is keyed to the picker alone — the overlay could "
+        "be raised without a fetch to clear it, or missed on a person switch"
+    )

@@ -12,7 +12,8 @@ Activate the virtualenv first (`source .venv/bin/activate`). Code lives in `src/
 |---|---|
 | Backing services | `docker compose up -d postgres neo4j rabbitmq` |
 | Migrations | `cd src/app && alembic upgrade head` (Alembic config is `src/app/alembic.ini`) |
-| Run app (API + UI) | `PYTHONPATH=src uvicorn app.main:app --reload` → UI at `http://localhost:8000/app`, health at `/api/health` |
+| Run app (API + UI) | `PYTHONPATH=src uvicorn app.main:app --reload` → UI at `http://127.0.0.1:8000/app`, health at `/api/health` (plain HTTP, no nginx — this is the local-uvicorn workflow) |
+| Compose stack (API + UI) | `docker compose up -d` → UI at `https://localhost/app` via nginx, health at `https://localhost/api/health`. Port `8000` is not published to the host |
 | Unit tests (regression gate) | `pytest -m unit tests -q` |
 | Single test | `pytest tests/test_analytics_page.py::test_layout_contains_layer_table_and_components -q` |
 | Single module | `pytest -m unit tests/test_activity_api_unit.py -q` |
@@ -32,7 +33,8 @@ Shell/git/project commands in this repo are wrapped by the `rtk` token-optimizin
 
 | Service | Purpose | Port(s) |
 |---|---|---|
-| `app` | FastAPI + Dash | 8000 |
+| `app` | FastAPI + Dash (internal only; no published host port) | 8000 |
+| `nginx` | TLS termination + reverse proxy in front of `app` | 443, 80 (301 redirect to HTTPS) |
 | `postgres` | Primary database | 5432 |
 | `neo4j` | Graph database | 7474, 7687 |
 | `rabbitmq` | Message queue for producers/consumer | 5672, 15672 (mgmt UI) |
@@ -140,7 +142,7 @@ Two layers, both important:
 - `app.settings.settings` — pydantic-settings from `.env` (startup config).
 - `app.runtime_settings.runtime_settings` — DB-backed overrides editable at runtime via the Settings UI (`/api/v1/settings`), e.g. `runtime_settings.get_int("HTTP_REQUEST_TIMEOUT")`, `runtime_settings.get("UI_DATETIME_FORMAT")`. Prefer these over hardcoding when a value is user-tunable. Design: `docs/design/runtime-settings-design.md`.
 
-Dash pages call the backend API over HTTP with sync `requests` (e.g. `pages/search.py`), using `os.getenv("API_BASE_URL", "http://localhost:8000")` and `runtime_settings.get_int("HTTP_REQUEST_TIMEOUT")`.
+Dash pages call the backend API over HTTP with sync `requests` (e.g. `pages/search.py`), using `settings.API_BASE_URL` (the container-internal `http://localhost:8000`; distinct from `settings.EXTERNAL_BASE_URL`, the browser-facing `https://localhost`) and `runtime_settings.get_int("HTTP_REQUEST_TIMEOUT")`.
 
 ## Testing
 

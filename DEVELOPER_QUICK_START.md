@@ -14,6 +14,15 @@ done
 
  Make a copy of .env.example to .env and update the values.
 
+**TLS certificate prerequisite (Docker Compose workflow).** The Compose stack
+serves the app over HTTPS through an `nginx` reverse proxy, which needs a
+certificate at `deploy/certs/wba.pem` (+ `wba-key.pem`). Generate it once per
+machine with `mkcert` — without it `docker compose up` fails on the 443 bind or
+the browser shows an untrusted-certificate warning. See *Generate the TLS
+certificate* and *Trust the certificate in a Windows browser (WSL2 only)* in
+`USER_GUIDE.md` for the exact `mkcert` commands and the WSL2 Windows-trust-store
+import; they are not duplicated here.
+
 ## Environment Configuration
 
 ### LLM Provider Selection
@@ -27,8 +36,8 @@ LLM_PROVIDER=openai  # Default
 ### LLM Model Configuration
 Set the model to use with your selected provider:
 ```bash
-LLM_MODEL=gpt5  # For OpenAI: gpt-3.5-turbo, gpt-4, gpt-4-turbo, etc.
-                         # For Custom: your custom model name (e.g., gpt4)
+LLM_MODEL=gpt-5  # For OpenAI: gpt-5, gpt-4, gpt-4-turbo, etc.
+                         # For Custom: your custom model name (e.g., gpt-4)
 MAX_TOKENS=16000  # Maximum conversation history tokens
 ```
 
@@ -66,6 +75,15 @@ This will:
 - Build and start the application
 - Automatically run database migrations
 - Mount .env file and logs directory
+- Start `nginx`, which terminates TLS and proxies to the app
+
+**Access the services (Option 1 — full Compose stack behind nginx):**
+- Dash UI: https://localhost/app
+- FastAPI API: https://localhost/api/health
+
+The stack is reached only through nginx on `https://localhost` (port 443).
+Host port `:8000` is **no longer published** — reaching the app on `:8000` is
+expected to fail in this workflow.
 
 To stop all services:
 ```bash
@@ -88,7 +106,7 @@ Then run the app locally:
 uvicorn app.main:app --reload
 ```
 
-Access the services:
+Access the services (Option 2 — app running locally, plain HTTP):
 - FastAPI API: http://localhost:8000/api/health
 - Dash UI: http://localhost:8000/app
 

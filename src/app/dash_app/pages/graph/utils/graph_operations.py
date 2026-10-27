@@ -5,7 +5,6 @@ keep callback functions focused on UI state updates.
 """
 
 from typing import Any
-import os
 import math
 import time
 from datetime import datetime
@@ -13,6 +12,7 @@ from datetime import datetime
 import requests
 
 from app.runtime_settings import runtime_settings
+from app.settings import settings
 from common.logger import logger
 from .data_transform import neo4j_to_cytoscape
 from .element_types import is_edge_element, is_node_element
@@ -23,7 +23,7 @@ def get_graph_api_base_url() -> str:
 
     Falls back to localhost for local development.
     """
-    return os.getenv("API_BASE_URL", "http://localhost:8000")
+    return settings.API_BASE_URL
 
 
 def fetch_effective_theme(base_theme: str) -> dict[str, Any] | None:

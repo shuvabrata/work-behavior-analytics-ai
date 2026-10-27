@@ -17,6 +17,20 @@ class Settings(BaseSettings):
     # RabbitMQ configuration
     RABBITMQ_URL: str = "amqp://guest:guest@localhost:5672/"
 
+    # ── External URL / reverse proxy ────────────────────────────────────
+    # The URL the BROWSER uses to reach this application. nginx terminates
+    # TLS and forwards plain HTTP to this container, so the app must never
+    # derive its external scheme or host from its own listener. Anything
+    # that needs an absolute, browser-facing URL (e.g. an OAuth redirect_uri
+    # in Plan C) must build it from this value.
+    EXTERNAL_BASE_URL: str = "https://localhost"
+
+    # The URL the Dash code uses to call the API from INSIDE this container.
+    # The Dash callbacks run in this same process and call the API over the
+    # Docker network, so this stays plain HTTP even though the browser
+    # speaks HTTPS. Deliberately NOT the same value as EXTERNAL_BASE_URL.
+    API_BASE_URL: str = "http://localhost:8000"
+
     # Elasticsearch configuration
     ELASTICSEARCH_AI_LOOKUP_ENABLED: bool = True
     ELASTICSEARCH_URL: str = "http://localhost:9200"

@@ -4,7 +4,7 @@ import httpx
 import pytest
 
 
-BASE_URL = "http://localhost:8000"
+BASE_URL = "https://localhost"
 CONNECTOR_TYPE = "github"
 ATLASSIAN_MCP_CONNECTOR_TYPE = "atlassian_mcp"
 

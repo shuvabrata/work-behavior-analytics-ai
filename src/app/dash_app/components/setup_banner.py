@@ -6,18 +6,18 @@ settings (e.g. OpenAI API key, GitHub MCP token) are not yet configured.
 
 from __future__ import annotations
 
-import os
 from typing import Any
 
 import requests
 from dash import Input, Output, State, callback, dcc, html
 
+from app.settings import settings
 from app.dash_app.styles import (
     COLOR_NAVY,
     FONT_WEIGHT_MEDIUM,
 )
 
-SETTINGS_API = os.getenv("API_BASE_URL", "http://localhost:8000") + "/api/v1/settings/"
+SETTINGS_API = settings.API_BASE_URL + "/api/v1/settings/"
 
 
 def get_banner_layout() -> html.Div:

@@ -14,12 +14,13 @@ Validates three behaviours:
 
 3. **End-to-end scan lifecycle** — the full flow: API POST → RabbitMQ →
    daemon child process → status PATCH → ``completed``.  Requires the app
-   server to be running (``uvicorn``) in addition to RabbitMQ.
+   server to be running in addition to RabbitMQ.
 
 Requirements:
     - A running RabbitMQ instance reachable at ``settings.RABBITMQ_URL``.
-    - For end-to-end tests: the app server running at ``http://localhost:8000``
-      and the producer daemon test harness.
+    - For end-to-end tests: the app reachable over HTTPS at ``https://localhost``
+      (through the nginx TLS proxy — ``docker compose up -d``) and the producer
+      daemon test harness.
 
 Run:
     pytest tests/producers/test_daemon_integration.py -v -m "integration and rabbitmq"
@@ -77,25 +78,6 @@ _skip_if_rabbitmq_unavailable = pytest.mark.skipif(
     not _rabbitmq_available or not _AIO_PIKA_AVAILABLE,
     reason="RabbitMQ not reachable or aio-pika not installed",
 )
-
-
-def _app_server_reachable() -> bool:
-    """Return True if the app server is reachable at ``http://localhost:8000``."""
-    try:
-        resp = httpx.get("http://localhost:8000/api/health", timeout=3)
-        return resp.status_code == 200
-    except Exception:  # pylint: disable=broad-except
-        return False
-
-
-_app_available: bool = _app_server_reachable()
-_skip_if_app_unavailable = pytest.mark.skipif(
-    not _app_available,
-    reason="App server not reachable at http://localhost:8000",
-)
-
-
-# ── Topology helper ───────────────────────────────────────────────────────
 
 
 def _delete_control_queues(url: str) -> None:
@@ -568,20 +550,33 @@ class TestDaemonRouting:
 # ═══════════════════════════════════════════════════════════════════════════
 
 
-@_skip_if_app_unavailable
+@pytest.mark.server
 class TestScanEndToEnd:
     """Full flow: API POST → RabbitMQ → daemon → child → status completed.
 
-    Requires the app server to be running at ``http://localhost:8000`` and
-    RabbitMQ to be reachable at ``settings.RABBITMQ_URL``.
+    Requires the app server to be reachable over HTTPS at ``https://localhost``
+    (through the nginx TLS proxy) and RabbitMQ to be reachable at
+    ``settings.RABBITMQ_URL``.
+
+    The ``server`` marker makes ``tests/conftest.py`` trust the local mkcert CA
+    for these tests. If the app is not up, they fail — a reachability pre-check
+    would only hide an unreachable stack behind a skip.
     """
 
-    _API_BASE = "http://localhost:8000/api/v1"
+    _API_BASE = "https://localhost/api/v1"
     _created_command_ids: list[str] = []
 
     @pytest_asyncio.fixture(autouse=True)
-    async def ensure_topology(self, request):
-        """Declare the control topology and purge queues before each test."""
+    async def ensure_topology(self, request, monkeypatch):
+        """Declare the control topology and purge queues before each test.
+
+        Also points the producer daemon's API client at the same HTTPS origin
+        these tests use. ``daemon_common._update_status`` reads ``API_SERVER``
+        from the environment and defaults to ``http://localhost:8000``, which is
+        no longer published — without this the simulated daemon child cannot
+        reach the app and the status assertions fail.
+        """
+        monkeypatch.setenv("API_SERVER", "https://localhost")
         await _declare_control_topology(settings.RABBITMQ_URL)
         await _purge_control_queues()
         await _purge_control_dlq()

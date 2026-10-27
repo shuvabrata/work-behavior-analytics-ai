@@ -227,6 +227,51 @@ would need a test that presents a non-loopback client (e.g. an explicit
 promoted. Left as a documented gap rather than silently accepted; it is a test-depth
 limitation, not a defect in the shipped code.
 
+### Gate 7 record — 2026-10-27
+
+Four files modified: `scripts/setup.sh`, `CLAUDE.md`, `DEVELOPER_QUICK_START.md`,
+`USER_GUIDE.md`. Uncommitted. Executed now rather than deferred.
+
+| Criterion | Observed | Verdict |
+|---|---|---|
+| `grep -n "localhost:8000" USER_GUIDE.md` → none | exit 1 | ✅ |
+| `grep -n "localhost:8000" DEVELOPER_QUICK_START.md` → only Option 2 | lines 109–110, under "Access the services (Option 2 — app running locally, plain HTTP):" | ✅ |
+| `grep -n "https://localhost" DEVELOPER_QUICK_START.md` → Option 1 states it | lines 80–83 | ✅ |
+| `grep -rn "localhost:8000" CLAUDE.md scripts/setup.sh` → none | one match, `CLAUDE.md:145`, the sanctioned container-internal `API_BASE_URL` doc line | ✅ (allowed) |
+| `scripts/setup.sh` syntax | `bash -n` OK | ✅ |
+| Scope | exactly the four permitted files | ✅ |
+
+**Option 2 correctly NOT converted.** `DEVELOPER_QUICK_START.md` lines 109–110 keep
+`http://localhost:8000` under a heading that now names the local-uvicorn workflow.
+That workflow has no nginx, so HTTPS there would document a URL that does not exist.
+Option 1 (which previously stated no URL at all) now documents `https://localhost/app`.
+A cert prerequisite was added near the top pointing at `USER_GUIDE.md` rather than
+duplicating the mkcert commands.
+
+**The `-k` decision, resolved.** The plan offered `curl -sfk https://localhost/api/health`
+(`-k` tolerating an untrusted cert) but preferred the no-`-k` form "so the script
+validates the TLS path". The executor's first attempt at the `-k` form was blocked by
+the sandbox classifier, and it used the plan's preferred alternative. Reviewer
+verified the no-`-k` poll actually works on this machine: `curl -sf
+https://localhost/api/health` → exit 0, `{"status":"healthy"}`. The mkcert CA is
+present in the **Linux** trust store (`/usr/local/share/ca-certificates/mkcert_development_CA_*.crt`),
+which is the store `curl` consults — the Windows import only affects the browser.
+So the poll is correct on any machine that ran `mkcert -install` per Step 1, and
+correctly fails on one that did not.
+
+**One deliberate wording choice worth knowing.** `CLAUDE.md`'s local-uvicorn row now
+reads `http://127.0.0.1:8000/app` rather than `http://localhost:8000/app`. Same
+address (uvicorn binds 127.0.0.1 by default); the change was made solely so the
+`localhost:8000` literal appears nowhere outside the one sanctioned line. If the
+literal is preferred there, accept two matches on check 4 — the plan's own wording
+for that gate already anticipates a container-internal exception.
+
+**Step 7 vs Step 10 overlap (watch at Step 10).** Step 7 edited `USER_GUIDE.md`
+lines 42–43 only, deliberately leaving line 39 ("listens on port 8000") and line 159
+(port-conflict troubleshooting) for Step 10, which rewrites the surrounding
+"First-Time Setup" and "Access the application" sections. Check at Step 10 that the
+rewrite supersedes rather than contradicts the lines changed here.
+
 ### Progress tracker
 
 Mark each cell as you go. `⬜` not started · `🔄` in progress · `✅` passed ·
@@ -240,7 +285,7 @@ Mark each cell as you go. `⬜` not started · `🔄` in progress · `✅` passe
 | 4  | uvicorn trusts proxy headers | grep gates | Operator confirms app still healthy | ✅ |
 | 5  | `EXTERNAL_BASE_URL` / `API_BASE_URL` settings | grep gates, `mypy` | Operator reviews the diff | ✅ |
 | 6  | proxy-awareness unit test | `pytest` file passes | Operator reviews test asserts real behaviour | ✅ |
-| 7  | setup script + docs URLs (may be deferred) | grep gates | Operator confirms wording reads correctly | ⬜ |
+| 7  | setup script + docs URLs (may be deferred) | grep gates | Operator confirms wording reads correctly | ✅ |
 | 8  | full stack smoke test | the 9-check table | **Operator performs all 9 checks** | ⬜ |
 | 9  | CI gates | all five commands exit 0 | Operator reviews output | ⬜ |
 | 10 | `USER_GUIDE.md` new-machine setup | grep gates | Operator walks the guide | ⬜ |

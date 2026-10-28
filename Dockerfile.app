@@ -23,6 +23,9 @@ COPY src/app/ ./app/
 # Copy shared common package (logger, etc.)
 COPY src/common/ ./common/
 
+# Copy domain-specific code
+COPY src/domain/ ./domain/
+
 # Copy shipped query catalog used by the graph query workbench
 COPY queries_catalog/ ./queries_catalog/
 

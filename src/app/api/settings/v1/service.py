@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.settings.v1 import query as qry
 from common.logger import logger
 from common.runtime_settings import RuntimeConfig, RuntimeConfigCache
-from common.runtime_settings.events import publish_settings_changed
+from common.messaging.settings_events import publish_settings_changed
 
 # Module-level cache — initialised by ``src/app/runtime_settings.py`` on
 # startup.  Tests can replace this with a fresh instance.

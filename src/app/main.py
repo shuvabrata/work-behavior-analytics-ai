@@ -26,7 +26,7 @@ from app.db.session import ASYNC_SESSION_LOCAL
 from app.runtime_settings import load_db_overrides_from_session
 from app.api.connectors.v1.service import sync_github_mcp_env_status
 from common.logger import logger, LogContext
-from common.runtime_settings.events import listen_for_settings_changed
+from common.messaging.settings_events import listen_for_settings_changed
 from app.settings import settings
 
 

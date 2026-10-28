@@ -53,7 +53,7 @@ from connectors.consumers.sinks.elasticsearch_sink import (
 from common.logger import logger
 from common.runtime_settings import RuntimeConfigCache
 from common.runtime_settings.client import fetch_runtime_snapshot
-from common.runtime_settings.events import listen_for_settings_changed
+from common.messaging.settings_events import listen_for_settings_changed
 import aio_pika
 
 # ── Module-level runtime settings cache ──────────────────────────────────

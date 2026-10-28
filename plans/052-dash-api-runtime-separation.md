@@ -1911,8 +1911,8 @@ Mark each cell as you go. `⬜` not started · `🔄` in progress · `✅` passe
 |------|-----------------|------------------|-------------|--------|
 | 1  | `src/domain/` created; `graph_theme`/`node_size`/`person_network_url` moved; `theme_tokens.py` extracted **with `NODE_TYPE_BASE_STYLES` and the injection loop**, breaking the API→UI edge | suite green, grep gates, `geometry OK` (loop ran without `styles.py`), `mypy` | Operator confirms nothing else changed, backwards edge gone, **geometry moved with the registry** | ✅ passed — plus `COPY src/domain/` added to `Dockerfile.app` (see Maintenance notes) |
 | 2  | Collaboration metadata → `src/domain/collaboration/` | suite green, `domain` imports nothing from `app.*`, `mypy` | Operator confirms `algorithm.py` did **not** move | ✅ passed |
-| 3  | `analytics/registry.py`, `CONNECTOR_REGISTRY`, `MANAGED_INDEXES` → `src/domain/` | suite green, grep gates, `mypy` | Operator confirms registry contents unchanged | 🔄 automated verify passed — awaiting MANUAL GATE 3 |
-| 4  | `events.py` → `common/messaging/settings_events.py` | suite green, `aio_pika`-leak check, `mypy` | Operator confirms `common.runtime_settings` is now pure | ⬜ |
+| 3  | `analytics/registry.py`, `CONNECTOR_REGISTRY`, `MANAGED_INDEXES` → `src/domain/` | suite green, grep gates, `mypy` | Operator confirms registry contents unchanged | ✅ passed — plus `ENV PYTHONPATH=/app` added to `Dockerfile.app` (see Maintenance notes addendum) |
+| 4  | `events.py` → `common/messaging/settings_events.py` | suite green, `aio_pika`-leak check, `mypy` | Operator confirms `common.runtime_settings` is now pure | ✅ passed — Phase 1 complete; operator confirmed rebuild + full suite + browser eyeball |
 
 **Phase 2 — the structural split**
 
@@ -2050,6 +2050,33 @@ Stop and report back (do not improvise) if:
 - **`gunicorn` cannot be installed or the UI image build fails on it.**
 
 ## Maintenance notes
+
+### Addendum — two packaging defects found during Phase 1 execution
+
+Both broke the Compose stack while every CI gate stayed green, because pytest,
+`mypy`, `pylint`, `bandit` and CI all run on the host with `src` on `sys.path`
+and none of them builds the image. **Step 11 rewrites `Dockerfile.app` and must
+carry both fixes forward.**
+
+1. **`Dockerfile.app` did not copy `src/domain/`.** The plan's Scope lists
+   `Dockerfile.api` for Step 11 but never adds the `COPY` for the new shared
+   package, so as written Step 11 would have shipped an API image whose every
+   entry path fails at import. Fixed in Step 1:
+   `COPY src/domain/ ./domain/`.
+2. **`Dockerfile.app` never set `PYTHONPATH`** — the only one of the five images
+   that didn't (`Dockerfile.{github,jira,confluence}-producer` and
+   `Dockerfile.signal-consumer` all set `ENV PYTHONPATH=/app`). Latent until
+   Step 3 gave `app/scripts/create_es_indexes.py` its first first-party import.
+   `src/app/entrypoint.sh:30` runs `python app/scripts/create_es_indexes.py`,
+   and `python <script>.py` puts the *script's* directory on `sys.path[0]`, not
+   the CWD — so `app`, `common` and `domain` were all unimportable from the
+   entrypoint's one-shot scripts. `uvicorn app.main:app` masked it (uvicorn
+   inserts the CWD). Fixed in Step 3: `ENV PYTHONPATH=/app`.
+
+The generalisable rule for Step 11: **any `python <path>/<script>.py` invocation
+in an entrypoint needs its package root on `PYTHONPATH` or must be run as
+`python -m package.module`.** `alembic.ini` is unaffected — it already sets
+`prepend_sys_path = ..`.
 
 **What future changes interact with this:**
 

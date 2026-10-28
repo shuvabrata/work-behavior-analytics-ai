@@ -17,7 +17,7 @@ Activate the virtualenv first (`source .venv/bin/activate`). Code lives in `src/
 | Unit tests (regression gate) | `pytest -m unit tests -q` |
 | Single test | `pytest tests/test_analytics_page.py::test_layout_contains_layer_table_and_components -q` |
 | Single module | `pytest -m unit tests/test_activity_api_unit.py -q` |
-| Integration tests | `PYTHONPATH=src uvicorn app.main:app --reload` in one terminal, then `pytest -m "integration and server" tests -q` |
+| Integration tests | `docker compose up -d` (the tests reach the app over HTTPS via nginx), then `pytest -m "integration and server" tests -q` |
 | Neo4j tests | `pytest -m neo4j tests -q` |
 | Typecheck | `mypy src/` |
 | Lint | `pylint src --score=y` |
@@ -149,6 +149,8 @@ Dash pages call the backend API over HTTP with sync `requests` (e.g. `pages/sear
 Tests are in `tests/`. Markers (`pytest.ini`): `unit`, `integration`, `server`, `neo4j`, `rabbitmq`, `elasticsearch`.
 
 **Always add the marker decorator** (e.g. `@pytest.mark.unit`) or a module-level `pytestmark = pytest.mark.unit`. Unmarked tests are silently skipped by `pytest -m unit tests`. There is no root `conftest.py`; tests import app code via `PYTHONPATH` from `pytest.ini` (`pythonpath = src . tests`).
+
+**`server`-marked tests run against the Compose stack over HTTPS**, not a local uvicorn. Start it with `docker compose up -d` first; they reach the app at `https://localhost` through the nginx TLS proxy and have no reachability pre-check, so they **fail** (rather than skip) when the stack is down. `tests/conftest.py` points `SSL_CERT_FILE` at the local mkcert CA for these tests only — `httpx` verifies against `certifi` rather than the system store, so without it every request fails with `CERTIFICATE_VERIFY_FAILED`. If no CA can be found they fail with a message naming `mkcert -install`.
 
 ### Dedicated test suites with HTML reports
 

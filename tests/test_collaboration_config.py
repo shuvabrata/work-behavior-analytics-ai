@@ -2,7 +2,7 @@
 
 import pytest
 
-from app.analytics.collaboration.config import (
+from domain.collaboration.config import (
     CollaborationNetworkConfig,
     DEFAULT_COMMUNITY_GAP_X,
     DEFAULT_COMMUNITY_GAP_Y,

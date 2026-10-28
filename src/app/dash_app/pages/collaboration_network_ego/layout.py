@@ -13,8 +13,8 @@ import dash_bootstrap_components as dbc
 import dash_cytoscape as cyto
 from dash import dcc, html
 
-from app.analytics.collaboration.config import CollaborationNetworkConfig
-from app.analytics.collaboration.ego import COLLABORATOR_CAP_OPTIONS
+from domain.collaboration.config import CollaborationNetworkConfig
+from domain.collaboration.ego_metadata import COLLABORATOR_CAP_OPTIONS
 from domain.person_network_url import DEFAULT_MAX_COLLABORATORS
 from app.dash_app.components.common import (
     create_alert,

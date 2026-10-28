@@ -13,8 +13,8 @@ import pytest
 from dash import no_update
 from dash.exceptions import PreventUpdate
 
-from app.analytics.collaboration.ego import cap_options_for
-from app.analytics.collaboration.errors import CollaborationDataUnavailable
+from domain.collaboration.ego_metadata import cap_options_for
+from domain.collaboration.errors import CollaborationDataUnavailable
 from app.api.graph.v1.model import EgoNetworkResponse
 from domain.person_network_url import DEFAULT_MAX_COLLABORATORS
 from app.dash_app.pages.collaboration_network_ego.callbacks import filter as ego_filter

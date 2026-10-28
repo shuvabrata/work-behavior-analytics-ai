@@ -7,7 +7,7 @@ from urllib.parse import urlencode
 from dash import ALL, Input, Output, State, callback, clientside_callback, ctx, html
 import dash_bootstrap_components as dbc
 
-from app.analytics.collaboration.config import (
+from domain.collaboration.config import (
     CollaborationNetworkConfig,
     DEFAULT_EXCLUDE_BOTS,
     DEFAULT_ENSURE_MIN_CONNECTION,
@@ -21,7 +21,7 @@ from app.analytics.collaboration.config import (
     LAYER_ORDER,
     SETTING_LABELS,
 )
-from app.analytics.collaboration.ego import COLLABORATOR_CAP_OPTIONS
+from domain.collaboration.ego_metadata import COLLABORATOR_CAP_OPTIONS
 from app.analytics.registry import GRAPH_ANALYTICS
 from domain.person_network_url import DEFAULT_MAX_COLLABORATORS
 from app.dash_app.components.common import create_alert, create_page_header

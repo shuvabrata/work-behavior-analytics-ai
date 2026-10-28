@@ -5,8 +5,8 @@ import asyncio
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import ValidationError
 
-from app.analytics.collaboration.config import CollaborationNetworkConfig
-from app.analytics.collaboration.errors import CollaborationDataUnavailable
+from domain.collaboration.config import CollaborationNetworkConfig
+from domain.collaboration.errors import CollaborationDataUnavailable
 from domain.person_network_url import (
     DEFAULT_MAX_COLLABORATORS,
     MAX_MAX_COLLABORATORS,

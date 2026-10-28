@@ -14,9 +14,9 @@ from app.analytics.collaboration.algorithm import (
     filter_top_edges_per_node,
         to_cytoscape_elements,
     )
-from app.analytics.collaboration.config import CollaborationNetworkConfig
+from domain.collaboration.config import CollaborationNetworkConfig
 from app.analytics.collaboration.ego import build_ego_elements
-from app.analytics.collaboration.errors import CollaborationDataUnavailable
+from domain.collaboration.errors import CollaborationDataUnavailable
 from app.analytics.collaboration.queries_loader import load_collaboration_score_query
 from domain.person_network_url import DEFAULT_MAX_COLLABORATORS
 from .model import (

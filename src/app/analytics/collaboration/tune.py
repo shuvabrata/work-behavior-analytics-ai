@@ -38,7 +38,7 @@ from app.analytics.collaboration.algorithm import (
     compute_modularity,
     MAX_COMMUNITY_STYLES,
 )
-from app.analytics.collaboration.config import CollaborationNetworkConfig
+from domain.collaboration.config import CollaborationNetworkConfig
 
 # ---------------------------------------------------------------------------
 # Neo4j helpers

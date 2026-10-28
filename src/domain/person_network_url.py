@@ -15,10 +15,10 @@ Two halves, deliberately mirrored:
 The page's own callback uses the parser; components that only link out need the
 builder. Because both live here, a change to the contract is a one-file change.
 
-Kept in ``app.common`` rather than in the page package: importing a page
-package runs its ``__init__`` (which imports layouts and callbacks), so a page
-module cannot be imported by another page without risking a circular import —
-see CLAUDE.md's Dash UI rules.
+Kept in ``domain`` rather than in the page package: importing a page package
+runs its ``__init__`` (which imports layouts and callbacks), so a page module
+cannot be imported by another page without risking a circular import — see
+CLAUDE.md's Dash UI rules.
 """
 
 from __future__ import annotations
@@ -53,7 +53,7 @@ the UI builds a link, so the UI never sends a value the API would reject.
 def is_valid_wba_id(wba_id: str) -> bool:
     """Return whether *wba_id* is a well-formed ``{source}::{type}::{id}`` key.
 
-    Mirrors ``app.api.activity.v1.service.parse_wba_id``. Only the first two
+    Mirrors ``app/api/activity/v1/service.py``'s ``parse_wba_id``. Only the first two
     ``::`` separators split — the id itself may contain ``::``, as in
     ``github::PullRequest::org/repo#1``.
 

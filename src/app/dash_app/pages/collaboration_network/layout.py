@@ -11,7 +11,7 @@ import dash_bootstrap_components as dbc
 import dash_cytoscape as cyto
 from dash import dcc, html
 
-from app.analytics.collaboration.config import CollaborationNetworkConfig
+from domain.collaboration.config import CollaborationNetworkConfig
 from app.dash_app.components.common import (
     create_alert,
     create_controls_bar,

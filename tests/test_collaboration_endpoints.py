@@ -22,13 +22,13 @@ import app.main  # noqa: F401  (importing builds the app with every router regis
 from app.api.graph.v1 import router as graph_router
 from app.api.graph.v1 import service as graph_service
 from app.api.graph.v1.model import CollaborationNetworkResponse, EgoNetworkResponse
-from app.analytics.collaboration.config import (
+from domain.collaboration.config import (
     DEFAULT_COMMUNITY_GAP_X,
     DEFAULT_COMMUNITY_GAP_Y,
     DEFAULT_LAYER_WEIGHTS,
     LAYER_ORDER,
 )
-from app.analytics.collaboration.errors import CollaborationDataUnavailable
+from domain.collaboration.errors import CollaborationDataUnavailable
 
 pytestmark = pytest.mark.unit
 

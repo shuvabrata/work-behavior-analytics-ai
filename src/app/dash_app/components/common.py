@@ -22,7 +22,7 @@ import re
 from datetime import datetime
 from dash import html, dcc
 import dash_bootstrap_components as dbc
-from app.analytics.collaboration.config import LAYER_LABELS, SETTING_LABELS
+from domain.collaboration.config import LAYER_LABELS, SETTING_LABELS
 from app.common.timezone import humanize_duration, to_app_timezone
 from app.settings import settings
 

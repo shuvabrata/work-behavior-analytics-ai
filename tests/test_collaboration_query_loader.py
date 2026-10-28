@@ -20,7 +20,7 @@ from app.analytics.collaboration.queries_loader import (
     load_query,
 )
 from app.api.graph.v1 import service
-from app.analytics.collaboration.errors import CollaborationDataUnavailable
+from domain.collaboration.errors import CollaborationDataUnavailable
 
 pytestmark = pytest.mark.unit
 

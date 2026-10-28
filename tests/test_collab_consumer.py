@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 import pytest
 
-from app.analytics.collaboration.config import (
+from domain.collaboration.config import (
     DEFAULT_LAYER_WEIGHTS,
     LAYER_ORDER,
 )

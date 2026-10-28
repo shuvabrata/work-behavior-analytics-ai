@@ -15,7 +15,7 @@ from dash import dcc, html
 
 from app.analytics.collaboration.config import CollaborationNetworkConfig
 from app.analytics.collaboration.ego import COLLABORATOR_CAP_OPTIONS
-from app.common.person_network_url import DEFAULT_MAX_COLLABORATORS
+from domain.person_network_url import DEFAULT_MAX_COLLABORATORS
 from app.dash_app.components.common import (
     create_alert,
     create_controls_bar,

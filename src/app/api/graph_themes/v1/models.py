@@ -4,7 +4,7 @@ Defines request/response schemas for the ``/api/v1/graph-themes/`` endpoints.
 
 The override document classes (``NodeOverride`` / ``EdgeOverride`` /
 ``GlobalOverride`` / ``ThemeOverrides``) are **not** redefined here — they live
-in :mod:`app.common.graph_theme` as the single source of truth, shared by the
+in :mod:`domain.graph_theme` as the single source of truth, shared by the
 pure merge/translation core and this API layer. This module only adds the
 request/response wrappers around them.
 """
@@ -16,7 +16,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.common.graph_theme import ThemeOverrides
+from domain.graph_theme import ThemeOverrides
 
 # Explicit literal of the valid base modes (Pylance cannot unpack a runtime
 # tuple inside ``Literal``). Kept in sync with ``VALID_BASE_THEMES`` in

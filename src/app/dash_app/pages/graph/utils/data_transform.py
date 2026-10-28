@@ -5,7 +5,7 @@ and parsing error responses from the backend API.
 """
 
 from typing import Any
-from app.common.node_size import apply_node_size 
+from domain.node_size import apply_node_size 
 from app.settings import settings
 
 

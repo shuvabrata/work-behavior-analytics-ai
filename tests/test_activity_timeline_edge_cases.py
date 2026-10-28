@@ -19,7 +19,7 @@ from app.dash_app.pages.timeline.helpers import (
     merge_lane_page,
 )
 from app.dash_app.pages.timeline.layout import build_grid_body
-from app.dash_app.styles import get_theme_tokens
+from domain.theme_tokens import get_theme_tokens
 
 pytestmark = pytest.mark.unit
 

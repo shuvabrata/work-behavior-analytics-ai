@@ -11,7 +11,7 @@ from app.analytics.collaboration.config import CollaborationNetworkConfig, LAYER
 from app.analytics.collaboration.ego import cap_options_for
 from app.analytics.collaboration.errors import CollaborationDataUnavailable
 from app.api.graph.v1.service import get_ego_network
-from app.common.person_network_url import (
+from domain.person_network_url import (
     DEFAULT_MAX_COLLABORATORS,
     PERSON_NETWORK_PATH,
     clamp_max_collaborators,
@@ -141,7 +141,7 @@ def load_ego_network(
 
     if not focus_id:
         # The picker is empty. A deep link carries the focus person in the URL
-        # (see app.common.person_network_url), so fall back to it — this is what
+        # (see domain.person_network_url), so fall back to it — this is what
         # lets another component link straight to one person's network. The
         # picker's own value wins whenever it has one, so a user who picks a
         # different person is never overridden by a stale URL.

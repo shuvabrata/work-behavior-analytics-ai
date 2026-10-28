@@ -13,7 +13,7 @@ by shared code without a circular import.
 import re
 from typing import Any
 
-from app.common.graph_theme import merge_theme_overrides, overrides_to_cytoscape_rules
+from domain.graph_theme import merge_theme_overrides, overrides_to_cytoscape_rules
 from app.dash_app.styles import (
     ACTIVE_THEME,
     get_theme_tokens,
@@ -69,7 +69,7 @@ def build_cytoscape_stylesheet(theme_name: str = ACTIVE_THEME, effective: dict[s
     Node shape/size/colour are driven by the *effective* theme (base tokens ⊕
     overrides) so user-configured graph themes propagate to the stylesheet.
     ``effective`` is an optional pre-merged theme document (the output of
-    :func:`app.common.graph_theme.merge_theme_overrides`); when omitted, the
+    :func:`domain.graph_theme.merge_theme_overrides`); when omitted, the
     base tokens are merged with empty overrides — identical to the previous
     hardcoded output.
     """
@@ -92,7 +92,7 @@ def build_cytoscape_stylesheet(theme_name: str = ACTIVE_THEME, effective: dict[s
     edge_font_size = edges.get("font-size") or FONT_SIZE_XXSMALL
 
     # Theme-derived rules come from the single shared translation layer
-    # (app.common.graph_theme.overrides_to_cytoscape_rules). The generic node,
+    # (domain.graph_theme.overrides_to_cytoscape_rules). The generic node,
     # per-nodeType, edge, and selected rules are all produced there.
     theme_rules = overrides_to_cytoscape_rules(effective)
 

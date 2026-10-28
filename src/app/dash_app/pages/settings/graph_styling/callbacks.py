@@ -29,7 +29,7 @@ from dash import (
 )
 from dash.exceptions import PreventUpdate
 
-from app.common.graph_theme import effective_semantic_theme
+from domain.graph_theme import effective_semantic_theme
 from app.settings import settings
 from app.dash_app.pages.graph.utils.ui_components import get_shape_css
 from app.dash_app.pages.settings.graph_styling.components import build_editor_body

@@ -2,7 +2,7 @@
 
 Stores user-configurable, named graph themes. Each theme carries *deltas* —
 partial overrides that are merged over the hardcoded base tokens
-(``THEME_TOKENS`` in ``app.dash_app.styles``) at render time. The ``is_default``
+(``THEME_TOKENS`` in ``domain.theme_tokens``) at render time. The ``is_default``
 flag is scoped per ``base_theme`` and enforced by a PostgreSQL partial unique
 index so only one default can exist per base mode.
 

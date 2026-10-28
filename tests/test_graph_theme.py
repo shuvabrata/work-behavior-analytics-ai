@@ -10,7 +10,7 @@ Covers:
 
 import pytest
 
-from app.common.graph_theme import (
+from domain.graph_theme import (
     ALLOWED_SHAPES,
     EdgeOverride,
     GlobalOverride,
@@ -283,7 +283,7 @@ def test_stylesheet_uses_shared_translation_layer():
     stylesheet silently gaining a theme selector the shared function doesn't
     emit.
     """
-    from app.dash_app.styles import get_theme_tokens
+    from domain.theme_tokens import get_theme_tokens
 
     theme_name = "executive-light"
     effective = merge_theme_overrides(get_theme_tokens(theme_name), {})
@@ -430,7 +430,7 @@ def _stylesheet_node_colors(theme_name, effective):
 
 def test_node_label_color_override_applies_to_generic_node():
     """A node_label_color override changes the generic node label colour."""
-    from app.dash_app.styles import get_theme_tokens
+    from domain.theme_tokens import get_theme_tokens
 
     merged = merge_theme_overrides(
         get_theme_tokens("executive-light"),
@@ -442,7 +442,7 @@ def test_node_label_color_override_applies_to_generic_node():
 
 def test_node_label_color_override_applies_to_typed_node():
     """A node_label_color override changes the typed node label colour."""
-    from app.dash_app.styles import get_theme_tokens
+    from domain.theme_tokens import get_theme_tokens
 
     merged = merge_theme_overrides(
         get_theme_tokens("executive-light"),
@@ -458,7 +458,7 @@ def test_node_label_color_falls_back_to_base_without_override():
     Light mode: generic node uses text.primary (#1a202c), typed nodes use
     graph.node.label (#f4f7fb). Collapsing these would be a visual regression.
     """
-    from app.dash_app.styles import get_theme_tokens
+    from domain.theme_tokens import get_theme_tokens
 
     merged = merge_theme_overrides(get_theme_tokens("executive-light"), {})
     colors = _stylesheet_node_colors("executive-light", merged)
@@ -511,6 +511,6 @@ def test_effective_semantic_applies_override():
 def test_effective_semantic_includes_all_node_types():
     """The snapshot covers every node type (full immunity)."""
     eff = effective_semantic_theme(BASE_LIGHT, ThemeOverrides())
-    from app.common.graph_theme import NODE_TYPES
+    from domain.graph_theme import NODE_TYPES
 
     assert set(eff["nodes"].keys()) == set(NODE_TYPES)

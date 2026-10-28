@@ -22,9 +22,9 @@ import pytest
 # ---------------------------------------------------------------------------
 # Imports under test
 # ---------------------------------------------------------------------------
-from app.common.graph_theme import NodeOverride, ThemeOverrides, merge_theme_overrides
+from domain.graph_theme import NodeOverride, ThemeOverrides, merge_theme_overrides
 from app.dash_app.graph_styles import build_cytoscape_stylesheet
-from app.dash_app.styles import get_theme_tokens
+from domain.theme_tokens import get_theme_tokens
 import app.dash_app.pages.search as search_module
 
 # ---------------------------------------------------------------------------

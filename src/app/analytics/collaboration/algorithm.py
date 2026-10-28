@@ -16,7 +16,7 @@ import networkx as nx
 import community.community_louvain as community_louvain
 from matplotlib.colors import LinearSegmentedColormap
 
-from app.common.node_size import apply_node_size
+from domain.node_size import apply_node_size
 from app.runtime_settings import runtime_settings
 
 

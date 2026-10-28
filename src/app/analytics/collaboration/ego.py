@@ -16,7 +16,7 @@ from app.analytics.collaboration.algorithm import (
     _weight_to_hex,
     normalize_edge_weights,
 )
-from app.common.person_network_url import DEFAULT_MAX_COLLABORATORS
+from domain.person_network_url import DEFAULT_MAX_COLLABORATORS
 from app.runtime_settings import runtime_settings
 
 # Radial ring radii in layout units. The closest collaborator sits at R_IN,
@@ -24,7 +24,7 @@ from app.runtime_settings import runtime_settings
 #
 # R_IN is a FLOOR, not the actual innermost radius: with a fixed R_IN the arc
 # between angularly-adjacent spokes shrinks as spokes are added, and Person
-# nodes (66x56px, see app/common/node_size.py) end up overlapping (35.3px apart
+# nodes (66x56px, see domain/node_size.py) end up overlapping (35.3px apart
 # at 25 spokes, 17.2px at 50). The innermost radius is therefore scaled so the
 # arc can never fall below TARGET_SPOKE_SEPARATION — see
 # compute_radial_positions. Overlap is scale-invariant (cy.fit() zooms

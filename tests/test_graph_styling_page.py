@@ -95,7 +95,7 @@ def test_layout_has_two_base_mode_tabs() -> None:
 @pytest.mark.unit
 def test_layout_has_node_type_rows_per_section() -> None:
     """The editor body renders a node-type row per type (excluding default)."""
-    from app.common.graph_theme import NODE_TYPES
+    from domain.graph_theme import NODE_TYPES
     from app.dash_app.pages.settings.graph_styling.components import (
         build_editor_body,
     )
@@ -157,7 +157,7 @@ def test_node_row_has_all_six_fields() -> None:
 @pytest.mark.unit
 def test_each_row_has_glyph() -> None:
     """Each node-type row carries an inline preview glyph."""
-    from app.common.graph_theme import NODE_TYPES
+    from domain.graph_theme import NODE_TYPES
     from app.dash_app.pages.settings.graph_styling.components import (
         build_editor_body,
     )
@@ -228,7 +228,7 @@ def test_glyph_style_uses_defaults_when_unset() -> None:
 @pytest.mark.unit
 def test_each_row_has_reset_button() -> None:
     """Each node-type row carries a reset button."""
-    from app.common.graph_theme import NODE_TYPES
+    from domain.graph_theme import NODE_TYPES
     from app.dash_app.pages.settings.graph_styling.components import (
         build_editor_body,
     )

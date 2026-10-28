@@ -14,7 +14,7 @@ import dash_bootstrap_components as dbc
 import dash_cytoscape as cyto
 from dash import dcc, html
 
-from app.common.graph_theme import ALLOWED_SHAPES, NODE_TYPES
+from domain.graph_theme import ALLOWED_SHAPES, NODE_TYPES
 from app.dash_app.styles import (
     COLOR_BACKGROUND_LIGHT,
     COLOR_BORDER,

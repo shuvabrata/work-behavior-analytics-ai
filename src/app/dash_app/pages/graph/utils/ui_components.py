@@ -329,7 +329,7 @@ def get_shape_css(shape: str) -> dict[str, Any]:
     # Keep this map aligned with Cytoscape node shapes used in
     # app.dash_app.graph_styles so legend glyphs match graph nodes.
     #
-    # Covers the full ALLOWED_SHAPES set (24 shapes) from app.common.graph_theme.
+    # Covers the full ALLOWED_SHAPES set (24 shapes) from domain.graph_theme.
     shape_styles = {
         'ellipse': {'borderRadius': '50%'},
         'circle': {'borderRadius': '50%'},

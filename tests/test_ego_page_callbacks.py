@@ -16,7 +16,7 @@ from dash.exceptions import PreventUpdate
 from app.analytics.collaboration.ego import cap_options_for
 from app.analytics.collaboration.errors import CollaborationDataUnavailable
 from app.api.graph.v1.model import EgoNetworkResponse
-from app.common.person_network_url import DEFAULT_MAX_COLLABORATORS
+from domain.person_network_url import DEFAULT_MAX_COLLABORATORS
 from app.dash_app.pages.collaboration_network_ego.callbacks import filter as ego_filter
 
 
@@ -412,7 +412,7 @@ def _deep_link(wba_id: str, cap: int | None = None) -> str:
     """Build the documented deep link and return just its query string."""
     from urllib.parse import urlsplit
 
-    from app.common.person_network_url import build_person_network_url
+    from domain.person_network_url import build_person_network_url
 
     return "?" + urlsplit(build_person_network_url(wba_id, cap)).query
 

@@ -2,7 +2,7 @@
 
 This module is the single source of truth for how user-configurable graph
 theme overrides (stored in the ``graph_themes`` table) are combined with the
-hardcoded base tokens defined in ``app.dash_app.styles`` (``THEME_TOKENS``)
+hardcoded base tokens defined in ``domain.theme_tokens`` (``THEME_TOKENS``)
 and turned into Cytoscape rules.
 
 **Pure by design.** Nothing in this module imports from ``dash_app`` (or any

@@ -4,7 +4,7 @@ from typing import Any
 from dash import dcc, html
 import dash_bootstrap_components as dbc
 
-from app.api.connectors.v1.registry import CONNECTOR_REGISTRY
+from domain.connector_registry import CONNECTOR_REGISTRY
 from app.settings import settings
 from app.dash_app.components.common import create_alert, create_page_header
 from app.dash_app.styles import (

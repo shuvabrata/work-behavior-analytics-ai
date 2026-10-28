@@ -16,7 +16,7 @@ import pytest
 import requests
 from dash import no_update
 
-from app.api.connectors.v1.registry import CONNECTOR_REGISTRY
+from domain.connector_registry import CONNECTOR_REGISTRY
 from app.dash_app.pages.connectors.layout import _render_top_action_bar
 
 

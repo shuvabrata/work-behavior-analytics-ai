@@ -19,7 +19,7 @@ from dash import no_update
 from dash.exceptions import PreventUpdate
 import dash_bootstrap_components as dbc
 
-from app.api.connectors.v1.registry import CONNECTOR_REGISTRY
+from domain.connector_registry import CONNECTOR_REGISTRY
 from app.dash_app.pages.connectors.callbacks import (
     populate_search_filters_store,
     render_search_filters_list,

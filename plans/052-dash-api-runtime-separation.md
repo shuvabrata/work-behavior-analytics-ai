@@ -1910,8 +1910,8 @@ Mark each cell as you go. `⬜` not started · `🔄` in progress · `✅` passe
 | Step | What it changes | Automated verify | Manual gate | Status |
 |------|-----------------|------------------|-------------|--------|
 | 1  | `src/domain/` created; `graph_theme`/`node_size`/`person_network_url` moved; `theme_tokens.py` extracted **with `NODE_TYPE_BASE_STYLES` and the injection loop**, breaking the API→UI edge | suite green, grep gates, `geometry OK` (loop ran without `styles.py`), `mypy` | Operator confirms nothing else changed, backwards edge gone, **geometry moved with the registry** | ✅ passed — plus `COPY src/domain/` added to `Dockerfile.app` (see Maintenance notes) |
-| 2  | Collaboration metadata → `src/domain/collaboration/` | suite green, `domain` imports nothing from `app.*`, `mypy` | Operator confirms `algorithm.py` did **not** move | 🔄 automated verify passed — awaiting MANUAL GATE 2 |
-| 3  | `analytics/registry.py`, `CONNECTOR_REGISTRY`, `MANAGED_INDEXES` → `src/domain/` | suite green, grep gates, `mypy` | Operator confirms registry contents unchanged | ⬜ |
+| 2  | Collaboration metadata → `src/domain/collaboration/` | suite green, `domain` imports nothing from `app.*`, `mypy` | Operator confirms `algorithm.py` did **not** move | ✅ passed |
+| 3  | `analytics/registry.py`, `CONNECTOR_REGISTRY`, `MANAGED_INDEXES` → `src/domain/` | suite green, grep gates, `mypy` | Operator confirms registry contents unchanged | 🔄 automated verify passed — awaiting MANUAL GATE 3 |
 | 4  | `events.py` → `common/messaging/settings_events.py` | suite green, `aio_pika`-leak check, `mypy` | Operator confirms `common.runtime_settings` is now pure | ⬜ |
 
 **Phase 2 — the structural split**

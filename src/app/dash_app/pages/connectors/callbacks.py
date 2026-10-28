@@ -14,7 +14,7 @@ from dash.exceptions import PreventUpdate
 from app.common.timezone import humanize_duration, to_app_timezone
 from app.runtime_settings import runtime_settings
 from app.settings import settings
-from app.api.connectors.v1.registry import CONNECTOR_REGISTRY
+from domain.connector_registry import CONNECTOR_REGISTRY
 from app.dash_app.components.common import create_alert
 from app.dash_app.styles import (
     COLOR_BACKGROUND_LIGHT,

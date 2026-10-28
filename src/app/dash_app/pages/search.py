@@ -51,14 +51,14 @@ from app.dash_app.styles import (
     CARD_CONTAINER_STYLE,
 )
 from app.runtime_settings import runtime_settings
-from app.scripts.create_es_indexes import MANAGED_INDEXES
+from domain.es_indexes import MANAGED_INDEXES
 from app.settings import settings
 from common.logger import logger
 
 
 # ---------------------------------------------------------------------------
 # Dropdown options derived from MANAGED_INDEXES — stays in sync automatically
-# as new (source, entity_type) pairs are registered in create_es_indexes.py.
+# as new (source, entity_type) pairs are registered in domain/es_indexes.py.
 # ---------------------------------------------------------------------------
 _SOURCES = sorted({source for source, _ in MANAGED_INDEXES})
 _ENTITY_TYPES = sorted({entity_type for _, entity_type in MANAGED_INDEXES})

@@ -22,7 +22,7 @@ from domain.collaboration.config import (
     SETTING_LABELS,
 )
 from domain.collaboration.ego_metadata import COLLABORATOR_CAP_OPTIONS
-from app.analytics.registry import GRAPH_ANALYTICS
+from domain.analytics_registry import GRAPH_ANALYTICS
 from domain.person_network_url import DEFAULT_MAX_COLLABORATORS
 from app.dash_app.components.common import create_alert, create_page_header
 from app.dash_app.styles import (

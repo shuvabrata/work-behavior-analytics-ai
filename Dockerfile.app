@@ -7,6 +7,8 @@ RUN apt-get update && apt-get install -y postgresql-client curl && rm -rf /var/l
 # Set work directory
 WORKDIR /app
 
+ENV PYTHONPATH=/app
+
 # Install dependencies
 COPY requirements.app.txt ./requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt

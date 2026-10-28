@@ -497,14 +497,94 @@ Move these, updating **every** importer in `src/` and `tests/` in this same step
 | `src/app/common/node_size.py` | `src/domain/node_size.py` |
 | `src/app/common/person_network_url.py` | `src/domain/person_network_url.py` |
 
-**Also extract the theme tokens.** `get_theme_tokens` and `THEME_TOKENS` move out
-of `src/app/dash_app/styles.py` into `src/domain/theme_tokens.py`:
+**Also extract the theme tokens — and the node-geometry injection loop with them.**
+`ACTIVE_THEME`, `THEME_TOKENS`, `NODE_TYPE_BASE_STYLES`, the injection loop, and
+`get_theme_tokens` move out of `src/app/dash_app/styles.py` into
+`src/domain/theme_tokens.py`.
 
-- `THEME_TOKENS` (`styles.py:49`) and `get_theme_tokens` (`styles.py:288`) move.
-- `styles.py` imports them back and keeps deriving `COLOR_*`, `_token()`,
-  `TOKENS = get_theme_tokens()` (`:296`) exactly as now.
+**Why the loop must move too (this is the load-bearing part of Step 1).**
+`THEME_TOKENS` (`styles.py:49`) does **not** literally contain the node geometry.
+The `graph.node.<type>.shape/.width/.height` keys are **injected at import time**
+by a mutation loop at `styles.py:280-285`, which reads `NODE_TYPE_BASE_STYLES`
+(`styles.py:257`):
+
+```python
+for _mode_tokens in THEME_TOKENS.values():
+    for _suffix, (_shape, _width, _height) in NODE_TYPE_BASE_STYLES.items():
+        _key = f"graph.node.{_suffix}"
+        _mode_tokens[f"{_key}.shape"] = _shape
+        _mode_tokens[f"{_key}.width"] = _width
+        _mode_tokens[f"{_key}.height"] = _height
+```
+
+There are **zero** literal `graph.node.*.shape` keys in the dict body, and
+`NODE_TYPE_BASE_STYLES` has **no consumer other than this loop** (verified:
+`grep -rn "NODE_TYPE_BASE_STYLES" src/ tests/` → `styles.py:257`, `styles.py:281`).
+
+The API depends on the injected keys. `app/common/graph_theme.py:286-288`
+resolves shape/size as `base_tokens.get(f"graph.node.{token_key}.shape", "ellipse")`,
+and its docstring at `:269-270` states the contract explicitly: *"Shape and size
+come from the `graph.node.<key>.shape/.width/.height` tokens so the effective base
+matches the hardcoded stylesheet exactly (no drift)."* The API reaches
+`get_theme_tokens` at `api/graph_themes/v1/service.py:100,123,342` — that is
+`GET /api/v1/graph-themes/effective`, which the UI fetches at
+`pages/graph/utils/graph_operations.py:29-47` and feeds into
+`build_cytoscape_stylesheet` for the Graph, Timeline, and **both** Collaboration
+Network pages.
+
+**Measured consequence of moving the registry without the loop.** Simulating the
+post-split API process (registry copied, injected keys absent):
+
+```
+LIVE   Person -> {'width': '66px', 'height': '56px', 'shape': 'octagon', ...}
+SPLIT  Person -> {'width': '60px', 'height': '50px', 'shape': 'ellipse', ...}
+
+node types whose shape changes: 15
+{'Person': ('octagon','ellipse'), 'Project': ('round-rectangle','ellipse'),
+ 'Issue': ('triangle','ellipse'), 'Epic': ('hexagon','ellipse'), ...}
+```
+
+After the split the API process no longer imports the UI package, so the loop
+never runs there and every typed node renders as an `ellipse` at 60×50. **Step 1
+is a pure refactor, so this is invisible at its own gate** — one process, the
+loop still runs, the suite stays green — and it surfaces only at Step 12/18 as a
+browser-visible styling regression with no failing test pointing at the cause.
+Moving the loop makes the registry self-contained and identical in both
+processes, which is the only form in which the extraction is behaviour-preserving.
+
+Mechanically:
+
+- `ACTIVE_THEME` (`styles.py:44`), `THEME_TOKENS` (`:49`),
+  `NODE_TYPE_BASE_STYLES` (`:257`), the injection loop (`:280-285`), and
+  `get_theme_tokens` (`:288`) all move to `src/domain/theme_tokens.py`.
+- `styles.py` imports them back — `from domain.theme_tokens import ACTIVE_THEME,
+  NODE_TYPE_BASE_STYLES, THEME_TOKENS, get_theme_tokens` — and keeps deriving
+  `COLOR_*`, `_token()`, `TOKENS = get_theme_tokens()` (`:296`) exactly as now.
+  `ACTIVE_THEME` is re-exported rather than redefined, so
+  `graph_styles.py:18`'s `from app.dash_app.styles import ACTIVE_THEME` keeps
+  resolving and there is **one** definition of the active theme, not two.
+- **Declare `__all__` in `styles.py` for the re-exported names.** `mypy.ini` sets
+  `strict = True`, which enables `no_implicit_reexport`: a plain re-export makes
+  `from app.dash_app.styles import ACTIVE_THEME` fail in `graph_styles.py:18`
+  with `Module "app.dash_app.styles" does not explicitly export attribute
+  "ACTIVE_THEME"  [attr-defined]`. Verified in a scratch package. This is the
+  repo convention already recorded for package `__init__.py` files, applied to a
+  module. `get_theme_tokens` is the one name that stays genuinely defined in
+  `styles.py`'s own surface — but **5 files** import it from
+  `app.dash_app.styles` (measured: `api/graph_themes/v1/service.py` — which this
+  step repoints to `domain.theme_tokens` — plus
+  `tests/test_graph_theme.py`, `tests/test_search_node_color_consistency.py`,
+  `tests/test_collab_network_controls.py`,
+  `tests/test_activity_timeline_edge_cases.py`), so list it in `__all__` too if
+  you keep importing it from `domain` rather than redefining it. After the edit,
+  `mypy src/` exiting 0 is the proof the re-export is explicit.
+- The moved `get_theme_tokens` keeps its signature and default
+  (`theme_name: str = ACTIVE_THEME`) and its `ValueError` on an unknown theme.
+  Its behaviour must not change.
 - `src/app/api/graph_themes/v1/service.py:28` changes its import from
   `app.dash_app.styles` to `domain.theme_tokens`.
+- `NODE_TYPE_BASE_STYLES` is **not** UI-only geometry despite living in a UI file:
+  it is the source of the shape/size the API resolves. It belongs in `domain/`.
 
 **This is what breaks the API→UI edge.** Verify it directly:
 
@@ -522,12 +602,31 @@ snapshot route in Step 7, not the pure-move route.
 **Verify**: `pytest -m unit tests -q` → 2340+ passed, 0 failed
 **Verify**: `grep -rn "from app\.common\.\(graph_theme\|node_size\|person_network_url\)" src/ tests/` → no matches
 **Verify**: `grep -rn "app\.dash_app\.styles import get_theme_tokens" src/` → no matches
+**Verify** — the geometry survives the move **without `styles.py` being imported**.
+This is the check that catches the injection-loop omission; run it exactly as
+written, in a fresh interpreter:
+```bash
+PYTHONPATH=src python -c "
+import sys
+from domain.theme_tokens import get_theme_tokens
+leaked = [m for m in sys.modules if m.endswith('.styles') or m == 'styles']
+assert not leaked, f'styles.py was imported ({leaked}) — the check is void'
+t = get_theme_tokens('executive-light')
+assert t.get('graph.node.person.shape') == 'octagon', t.get('graph.node.person.shape')
+assert t.get('graph.node.person.width') == '66px', t.get('graph.node.person.width')
+assert t.get('graph.node.person.height') == '56px', t.get('graph.node.person.height')
+assert sum(1 for k in t if k.endswith('.shape')) == 17, 'geometry not injected for all node types'
+print('geometry OK')
+"
+```
+→ `geometry OK`. A `KeyError`-free but wrong answer (e.g. `ellipse`) is the
+failure this guards against, so the assertions compare **values**, not presence.
 **Verify**: `mypy src/` → exit 0
 
 > ### 🚦 MANUAL GATE 1 — operator check
 >
-> **Report to the operator:** all four verify outputs, `git diff --stat`, and
-> `git status --short`.
+> **Report to the operator:** all five verify outputs (including `geometry OK`),
+> `git diff --stat`, and `git status --short`.
 >
 > **Operator verifies:**
 > 1. `src/domain/` exists with a docstring stating the transport-free contract.
@@ -537,7 +636,21 @@ snapshot route in Step 7, not the pure-move route.
 >    `app.dash_app`. This is the backwards edge; confirm it is genuinely gone.
 > 4. `styles.py` still works — a green suite is the evidence, but check that
 >    `TOKENS = get_theme_tokens()` is still there and still derived.
-> 5. The test count did not drop. A rename that silently skips tests is worse
+> 5. **The node geometry moved with the registry.** Read
+>    `src/domain/theme_tokens.py` and confirm it contains `NODE_TYPE_BASE_STYLES`
+>    *and* the `for _mode_tokens in THEME_TOKENS.values():` injection loop — not
+>    just the `THEME_TOKENS` dict. Then confirm the `geometry OK` verify printed
+>    `geometry OK` **and** that its `styles.py was imported` assertion did not
+>    trip. A registry moved without its loop passes every other check in this
+>    gate and silently flattens all 15 typed node shapes to `ellipse` at 60×50 in
+>    the API's `/graph-themes/effective` response. This is the single most
+>    important check in Gate 1.
+> 6. **`ACTIVE_THEME` is defined once.** Confirm `styles.py` re-exports it from
+>    `domain.theme_tokens` rather than redefining it, so `graph_styles.py:18`'s
+>    `from app.dash_app.styles import ACTIVE_THEME` resolves to the same object.
+>    Confirm `styles.py` declares `__all__` naming the re-exports — without it
+>    `mypy` (strict, `no_implicit_reexport`) rejects that import.
+> 7. The test count did not drop. A rename that silently skips tests is worse
 >    than one that fails.
 >
 > Wait for `PASS` before starting Step 2.
@@ -1796,7 +1909,7 @@ Mark each cell as you go. `⬜` not started · `🔄` in progress · `✅` passe
 
 | Step | What it changes | Automated verify | Manual gate | Status |
 |------|-----------------|------------------|-------------|--------|
-| 1  | `src/domain/` created; `graph_theme`/`node_size`/`person_network_url` moved; `theme_tokens.py` extracted, breaking the API→UI edge | suite green, grep gates, `mypy` | Operator confirms nothing else changed, backwards edge gone | ⬜ |
+| 1  | `src/domain/` created; `graph_theme`/`node_size`/`person_network_url` moved; `theme_tokens.py` extracted **with `NODE_TYPE_BASE_STYLES` and the injection loop**, breaking the API→UI edge | suite green, grep gates, `geometry OK` (loop ran without `styles.py`), `mypy` | Operator confirms nothing else changed, backwards edge gone, **geometry moved with the registry** | ⬜ |
 | 2  | Collaboration metadata → `src/domain/collaboration/` | suite green, `domain` imports nothing from `app.*`, `mypy` | Operator confirms `algorithm.py` did **not** move | ⬜ |
 | 3  | `analytics/registry.py`, `CONNECTOR_REGISTRY`, `MANAGED_INDEXES` → `src/domain/` | suite green, grep gates, `mypy` | Operator confirms registry contents unchanged | ⬜ |
 | 4  | `events.py` → `common/messaging/settings_events.py` | suite green, `aio_pika`-leak check, `mypy` | Operator confirms `common.runtime_settings` is now pure | ⬜ |
@@ -1910,7 +2023,16 @@ Stop and report back (do not improvise) if:
   the param mapping, re-run, and report.
 - **The Step 10 matched-ID sets differ.** Same.
 - **`get_theme_tokens` cannot be extracted without changing `styles.py`'s
-  behaviour** (Step 1). Report rather than restructuring `styles.py`.
+  behaviour** (Step 1). The extraction *does* require moving `NODE_TYPE_BASE_STYLES`
+  and the `THEME_TOKENS` injection loop (`styles.py:257,280-285`) into
+  `domain/theme_tokens.py` — that is a move, not a restructure, and is expected.
+  Restructuring `styles.py`'s remaining derivation of `COLOR_*` / `_token()` /
+  `TOKENS` is what must not happen: if the extraction appears to need that, stop
+  and report instead.
+- **`domain.theme_tokens.get_theme_tokens(...)` returns a node type without a
+  `.shape` / `.width` / `.height` key, or returns `ellipse`/`60px` for a typed
+  node** (Step 1). The injection loop did not move with the registry. Do not
+  patch the values in — move the loop. See Gate 1 check 5.
 - **`common.runtime_settings` still imports `aio_pika` after Step 4.** The eviction
   was incomplete.
 - **A test count drops** at any step, rather than a test failing. A silently
@@ -1957,6 +2079,14 @@ Stop and report back (do not improvise) if:
 
 - **`src/ui_main.py` imports no FastAPI, no `a2wsgi`, no `app.db`, no
   `aio_pika`.** This is the isolation property; reading its imports is the check.
+- **`domain/theme_tokens.py` owns the geometry injection loop, not just the
+  `THEME_TOKENS` dict.** `graph.node.<type>.shape/.width/.height` are computed at
+  import by a loop over `NODE_TYPE_BASE_STYLES` (`styles.py:280-285`), not
+  written literally in the registry. The API resolves node shapes from those
+  keys (`app/common/graph_theme.py:286-288`), and after the split the API process
+  no longer imports `styles.py` — so a registry moved without its loop degrades
+  every typed node to an `ellipse` at 60×50 on Graph, Timeline and both
+  Collaboration Network pages, with a green suite and no failing test.
 - **`routes_pathname_prefix="/app/"`** is present in `create_dash_app()`. Without
   it the split cannot serve the UI, and its absence would fail loudly — but a
   partial value (one prefix set, not both) fails confusingly.

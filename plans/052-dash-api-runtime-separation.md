@@ -165,7 +165,7 @@ without touching `/api/v1`. **Securing the API alone would leave them open.**
 |---|---|---|---|
 | `pages/collaboration_network/callbacks/filter.py:12` | `get_collaboration_network` | Neo4j | `GET /api/v1/graph/collaboration-network` |
 | `pages/collaboration_network_ego/callbacks/filter.py:13` | `get_ego_network` | Neo4j | `GET /api/v1/graph/collaboration-network/ego` |
-| `pages/graph/callbacks/spotlight.py:14` | `search_in_graph` | Elasticsearch | `GET /api/v1/search` — **needs an `ids` param, see Step 7** |
+| `pages/graph/callbacks/spotlight.py:14` | `search_in_graph` | Elasticsearch | `POST /api/v1/search/scoped` — **a new endpoint, see Step 7** |
 
 ### The API imports the UI (a backwards edge)
 
@@ -295,7 +295,8 @@ matters for the concurrency gate (Step 12) — it is why Plan 051's
 **The OpenAPI schema is not reachable over TLS.** `GET https://localhost/openapi.json`
 → **404** (Plan 051's deliberate consequence). It **is** reachable
 container-internally: `docker exec wba-ai-app python -c "...urllib...'http://localhost:8000/openapi.json'"`
-→ 39 paths. The audit step (Step 11) must run inside the API container.
+→ 39 paths at the baseline commit (40 once Step 7b adds `/api/v1/search/scoped`).
+The audit step (Step 11) must run inside the API container.
 
 ### Compose wiring that the rename touches
 
@@ -395,7 +396,7 @@ operator during a structured interview.
 | 9 | UI request logging | Port `add_request_context` to Flask `before_request`/`after_request`, **INFO for everything** |
 | 10 | Service rename | `app` → `api`, with an **`app` network alias** kept for one step, then dropped |
 | 11 | Shared HTTP client | **All 56 sites** through `api_client.py`, as **its own step after the split is verified** |
-| 12 | Collaboration bypasses | Swap cleanly; **before/after baseline script** captured and run in the same step, over a **shared** config→query-param serializer so the re-run exercises the swapped code (a script-private serializer would make the gate vacuous). A permanent round-trip unit test carries the guard after the script is deleted. Spotlight needs an **optional `ids` param** on `/search`, gated on empirical equivalence |
+| 12 | Collaboration bypasses | Swap cleanly; **before/after baseline script** captured and run in the same step, over a **shared** config→query-param serializer so the re-run exercises the swapped code (a script-private serializer would make the gate vacuous). A permanent round-trip unit test carries the guard after the script is deleted. Spotlight needs a **new `POST /search/scoped`** endpoint (**not** an `ids` query param — the 223-id canvas is a 10,438-byte request line and nginx 414s it against the default 8 KB header buffer; measured), gated on empirical equivalence |
 | 13 | Test fallout | **Atomic per-module steps** — code moved, src and test importers rewritten, suite green, no stale path, all in one step. No sweep, no shims |
 | 14 | Local dev | **Two documented commands**, no `dev.sh` (deferred as out of scope) |
 | 15 | Compose graph | `ui: depends_on: api: service_healthy`; `nginx: depends_on: {api, ui}: service_healthy`. UI healthcheck probes its own `/app/`, not the API |
@@ -434,14 +435,19 @@ operator during a structured interview.
 | Full stack | `docker compose up -d` | all services healthy |
 | Health over TLS | `curl -sf https://localhost/api/health` | `{"status":"healthy"}` |
 | UI over TLS | `curl -sf -o /dev/null -w '%{http_code}' https://localhost/app/` | `200` |
-| OpenAPI (container-internal only) | `docker exec wba-ai-api python -c "import json,urllib.request; print(len(json.load(urllib.request.urlopen('http://localhost:8000/openapi.json'))['paths']))"` | `39` |
+| OpenAPI (container-internal only) | `docker exec wba-ai-api python -c "import json,urllib.request; print(len(json.load(urllib.request.urlopen('http://localhost:8000/openapi.json'))['paths']))"` | `39` before Step 7; **`40`** after it (Step 7b adds `/api/v1/search/scoped`) |
 
 **Container names change mid-plan.** The API container is `wba-ai-app` until
-Step 8 renames it to `wba-ai-api`. Commands in Steps 1–7 must use
-`wba-ai-app`; Steps 8–14 use `wba-ai-api`. Where a command appears in this table
-without a step context, use `docker compose exec api …` (service name), which
-resolves correctly on both sides of the rename because Step 8 keeps the `app`
-network alias through Step 9.
+Step 8 renames it to `wba-ai-api`, and the compose **service** is `app` until the
+same step renames it to `api`. So before Step 8 use `docker exec wba-ai-app …`
+(container name — unambiguous, and what Steps 1–7's verifies use); from Step 8 on
+either `docker exec wba-ai-api …` or `docker compose exec api …` works.
+
+**`docker compose exec` takes the service name, not the network alias.** Step 8
+keeps an `app` alias on the `api` service for one step, but that alias only
+affects DNS *between containers* — it does not make `docker compose exec api`
+work before Step 8, nor `docker compose exec app` work after Step 9. If a command
+has no step context, prefer the container name, which is never ambiguous.
 
 **Note on `curl`:** use the **no-`-k`** form. Plan 051 established that the
 mkcert CA is in the Linux trust store, so strict TLS works on any machine that
@@ -460,7 +466,7 @@ Run Python commands with the virtualenv active (`source .venv/bin/activate`) and
 - `src/ui_main.py`, `src/app/api_main.py` (create); `src/app/main.py` (delete in Step 8)
 - `src/common/runtime_settings/events.py` → `src/common/messaging/settings_events.py`
 - `src/app/settings.py` (split into `UISettings` base + `ApiSettings`)
-- `src/app/api/search/v1/` (add the optional `ids` param)
+- `src/app/api/search/v1/` (add `POST /search/scoped` and `ScopedSearchRequest`)
 - **The three bypass callbacks** (§Current state) and any call site whose
   imported path moves
 - `Dockerfile.api`, `Dockerfile.ui`, `requirements.api.txt`, `requirements.ui.txt`
@@ -1673,7 +1679,7 @@ every other field round-trips exactly.
 `config_to_query_params` and confirm the round-trip test **fails**. A test that
 passes both ways is vacuous; do not skip this.
 
-**7b. Add the optional `ids` param to `GET /api/v1/search`.**
+**7b. Add a scoped search endpoint — `POST /api/v1/search/scoped`.**
 
 **This part exists because the obvious swap is wrong.** Verified live:
 
@@ -1687,18 +1693,77 @@ passes both ways is vacuous; do not skip this.
 (`:223`) so every loaded node is a candidate. A literal swap to the unscoped
 endpoint would silently stop highlighting nodes.
 
-Add `ids: str | None = Query(default=None)` to the `GET /api/v1/search` route
-(`api/search/v1/router.py:17`) — **comma-separated**, matching the existing
-`layers` / `exclude_suffixes` convention on the graph router rather than
-repeat-key style. When present, constrain the ES query to documents whose
-`wba_id` is in the list, and set `size = len(ids)` — mirroring `search_in_graph`'s
-scoping **exactly**. When absent, behaviour is unchanged.
+**Why this is a POST and not an `ids` query param — measured, not preferred.**
+The canvas is 223 nodes on the populated stack, and a `wba_id` is
+`{source}::{type}::{id}` — 22–57 characters, and `urlencode` turns each `:` into
+`%3A`, so ~47 bytes per id on the wire. Committing that canvas to a query string
+produces a **10,438-byte request line**.
 
-Keep `search_in_graph` or express it in terms of the new param — but the
-endpoint's scoped path must reproduce its result set. 7c/7e is what proves it
-does; do not assume it.
+nginx rejects it before the request ever reaches the API. Verified against
+nginx 1.30 running this repo's proxy configuration (which sets no header-buffer
+overrides, so the stock limits apply):
+
+| Canvas nodes | Request line | nginx response |
+|---|---|---|
+| 100 | 4,697 B | 502 (reached upstream) |
+| 140 | 6,561 B | 502 (reached upstream) |
+| **180** | **8,425 B** | **414** |
+| **220** | **10,289 B** | **414** |
+
+The cutoff is the default `large_client_header_buffers 4 8k` — the request line
+must fit one 8 KB buffer. Pinned to the byte: **8,115 B passes, 8,195 B → 414.**
+
+So a GET would 414 on the real canvas, `get_json` would raise, and
+`spotlight.py:119-121`'s bare `except Exception` would swallow it into
+`PreventUpdate` — **silent no-highlight**, no error shown, no test failing. A GET
+would also put the canvas in nginx's access log, the API's `[HTTP] request_complete`
+line (`main.py:161-181` logs `path`), and browser history. The canvas is data, not
+a resource identifier; POST is the correct method here, and it is the one that
+does not need a limit raised to work.
+
+**Add the route** to `api/search/v1/router.py`:
+
+```python
+@router.post("/scoped", response_model=SearchResponse)
+async def search_scoped(request: ScopedSearchRequest) -> SearchResponse:
+    """Search scoped to a set of ``wba_id``s — the graph spotlight's query.
+
+    POST rather than a query param: the canvas carries 200+ ids, and a
+    comma-joined ``ids`` query string exceeds nginx's 8 KB request-line limit
+    (measured: 10,438 B for 223 nodes) and returns 414 before reaching the app.
+    """
+```
+
+- Model in `api/search/v1/model.py`: `ScopedSearchRequest` with
+  `q: str | None` and `ids: list[str]` (a real list, no comma-splitting — that
+  was only ever needed for a query string).
+- Service: extract the existing `search_in_graph` body's scoping into
+  `search_scoped(q, ids) -> SearchResponse` — the `terms` filter on `wba_id` and
+  `size = len(ids)` — and have `search_in_graph` delegate to it, so there is
+  **one** implementation and the two cannot drift. `search_in_graph`'s own
+  docstring documents behaviour 7c/7e must preserve.
+- Empty `ids` → the same empty response `search_in_graph` returns today
+  (`SearchResponse(total=0, page=1, page_size=0, results=[])`), not a 422.
+- Absent/unchanged `GET /api/v1/search` — untouched.
+
+**The scoped path must reproduce `search_in_graph`'s result set exactly.** 7c/7e
+is what proves it; do not assume it.
 
 **Verify (7b)**: `curl -s 'https://localhost/api/v1/search?q=review' | python -c "import json,sys; d=json.load(sys.stdin); print(d['total'], len(d['results']))"` → `22 20` (unscoped is unchanged)
+**Verify (7b)**: the scoped route exists and is a POST — `docker exec wba-ai-app python -c "import json,urllib.request; p=json.load(urllib.request.urlopen('http://localhost:8000/openapi.json'))['paths']; print([k for k in p if 'scoped' in k], list(p['/api/v1/search/scoped'].keys()))"` → `['/api/v1/search/scoped'] ['post']`
+**Verify (7b)**: a scoped POST with the full canvas does **not** 414 — it is a body, so it is not subject to the request-line limit. Send the **223-id** canvas and confirm a 200:
+```bash
+docker exec wba-ai-app python -c "
+import json, urllib.request
+ids = ['github::PullRequest::acme/platform-api#%d' % i for i in range(223)]
+req = urllib.request.Request('http://localhost:8000/api/v1/search/scoped',
+    data=json.dumps({'q': 'review', 'ids': ids}).encode(),
+    headers={'Content-Type': 'application/json'})
+print(urllib.request.urlopen(req).status)
+"
+```
+→ `200`. This is the check that would have caught the GET design: the equivalent
+query-string form returns 414 at this size.
 
 **7c. Write and run the temporary baseline script.**
 
@@ -1798,11 +1863,17 @@ def canonical(payload: dict) -> dict:
 
 
 def spotlight_ids(query: str, graph_wba_ids: list[str]) -> dict:
-    """Matched wba_id set for one query, in-process vs HTTP."""
+    """Matched wba_id set for one query, in-process vs HTTP.
+
+    POSTs to the scoped route. A GET with the canvas in the query string would
+    414 at nginx before reaching the app (measured: 10,438-byte request line for
+    223 nodes against an 8 KB header buffer), so the script would be exercising
+    a path the browser cannot use — see 7b.
+    """
     in_proc = search_in_graph(SearchRequest(q=query), graph_wba_ids)
-    http = requests.get(
-        f"{API}/api/v1/search",
-        params={"q": query, "ids": ",".join(graph_wba_ids)},
+    http = requests.post(
+        f"{API}/api/v1/search/scoped",
+        json={"q": query, "ids": graph_wba_ids},
         timeout=300,
     ).json()
     return {
@@ -1954,6 +2025,22 @@ numbers below will be off for a reason unrelated to the swap.
 **Verify (7c)**: `PYTHONPATH=src python scripts/capture_ui_baseline.py` → exit 0
 **Verify (7c)**: `python -c "import json;d=json.load(open('scripts/ui_baseline.json'));p=d['org_0']['in_process']['payload'];print(p['element_count'], p['stats']['num_people'])"` → `5041 223`
 **Verify (7c)**: `python -c "import json;d=json.load(open('scripts/ui_baseline.json'));m=max(len(v['in_process']) for k,v in d.items() if k.startswith('spotlight_'));assert m>20, f'no spotlight query matched >20 canvas nodes (max {m})'"` → exit 0. Without a >20-match query the spotlight leg cannot distinguish scoped from unscoped, so it proves nothing — pick different queries rather than proceeding.
+**Verify (7c)**: **the canvas is large enough to have broken a GET.** This is a separate constraint from the match count above, and it is the one that matters for the transport choice:
+```bash
+python -c "
+import json
+d = json.load(open('scripts/ui_baseline.json'))
+# Re-derive the canvas size the script actually used.
+n = len(d['org_0']['in_process']['payload']['node_ids'])
+assert n >= 223, f'canvas only {n} nodes — too small to distinguish GET from POST'
+print('canvas nodes:', n)
+"
+```
+→ `canvas nodes: 223` or more. At 223 ids the comma-joined query string is
+**10,438 bytes**, comfortably over nginx's 8 KB request line — so a GET leg would
+**414**, not silently pass. A canvas of 20–100 nodes would produce a request line
+that fits, and the leg would pass against a design the browser cannot use. Do not
+shrink the canvas to make the run cheaper.
 **Verify (7c)**: the three failure legs actually exercised the failure path:
 `python -c "import json;d=json.load(open('scripts/ui_baseline.json'));legs={'org_7':'CollaborationDataUnavailable','ego_unknown_person':'CollaborationDataUnavailable','org_invalid':None};[__import__('sys').exit(f'{k}: in_process={d[k][\"in_process\"]}') for k in legs if d[k]['in_process']['kind']!='error']"` → exit 0, and each `http` side reads `{'kind': 'error', 'status': 404}` (org_7, ego_unknown_person) or `400` (org_invalid).
 **Verify (7c)**: the **data** legs agree across the two implementations, and the **error** legs express the same outcome in their own form:
@@ -2042,8 +2129,9 @@ throwaway local helper.** Step 10 grows this same module into the full client
 (other verbs, injectable transport, one exception type). Creating it now resolves
 the ordering tension between Decision 11 and this step: an executor facing both
 "put it in `api_client.py`" and "`api_client.py` is Step 10" would otherwise
-guess. The Step 7 version needs only `get_json(url, params, timeout) -> dict` plus
-the status mapping above. Step 10 extends the surface; it does not replace it.
+guess. The Step 7 version needs `get_json(url, params, timeout) -> dict`,
+`post_json(url, json, timeout) -> dict` (the spotlight swap needs it — see 7b),
+and the status mapping above. Step 10 extends the surface; it does not replace it.
 
 **7d-ii. The three swaps.**
 
@@ -2051,18 +2139,20 @@ the status mapping above. Step 10 extends the surface; it does not replace it.
 |---|---|---|
 | `src/ui/pages/collaboration_network/callbacks/filter.py:88` | `data = get_collaboration_network(config=config)` | `data = api_client.get_json(f"{API_BASE}/api/v1/graph/collaboration-network", params=config_to_query_params(config))` |
 | `src/ui/pages/collaboration_network_ego/callbacks/filter.py:201` | `data = get_ego_network(focus_id, config=config, max_collaborators=max_collaborators)` | `data = api_client.get_json(f"{API_BASE}/api/v1/graph/collaboration-network/ego", params=ego_query_params(config, focus_id, max_collaborators))` |
-| `src/ui/pages/graph/callbacks/spotlight.py:118` | `search_in_graph(SearchRequest(q=q), graph_wba_ids)` | `data = api_client.get_json(f"{API_BASE}/api/v1/search", params={"q": q, "ids": ",".join(graph_wba_ids)})` |
+| `src/ui/pages/graph/callbacks/spotlight.py:118` | `search_in_graph(SearchRequest(q=q), graph_wba_ids)` | `data = api_client.post_json(f"{API_BASE}/api/v1/search/scoped", json={"q": q, "ids": graph_wba_ids})` |
 
 **Do not inline the param dicts at the call sites.** A hand-built dict is a
 second translation and reintroduces exactly the drift 7a exists to prevent.
 
-`get_json` returns the parsed body as a `dict`, so `.json()` is absorbed inside
-the client and each call site destructures it. The collab bodies are the same
-`CollaborationNetworkResponse` / `EgoNetworkResponse` shape, so every consumer of
-`data["elements"]` / `data["num_people"]` / `data["config"]` is otherwise
-unchanged. The spotlight body is the same `SearchResponse` shape, so
+`get_json`/`post_json` return the parsed body as a `dict`, so `.json()` is
+absorbed inside the client and each call site destructures it. The collab bodies
+are the same `CollaborationNetworkResponse` / `EgoNetworkResponse` shape, so
+every consumer of `data["elements"]` / `data["num_people"]` / `data["config"]`
+is otherwise unchanged. The spotlight body is the same `SearchResponse` shape, so
 `spotlight.py:122-131`'s client-side intersection and its
-`"{match_count} of {node_count} nodes match"` text are unchanged.
+`"{match_count} of {node_count} nodes match"` text are unchanged — note the
+`graph_wba_ids` list passes through **whole**, as a JSON array, with no
+comma-joining.
 
 **The spotlight site has no typed-exception contract to preserve** — it already
 wraps its call in a bare `except Exception` (`spotlight.py:119-121`) and raises
@@ -2223,18 +2313,25 @@ src/ui/pages/graph/callbacks/spotlight.py:14               from app.api.search.v
 > 9. **The spotlight leg is not vacuous.** At least one query matched **more than
 >    20** canvas nodes (the 7c verify asserts this). A query set that only ever
 >    matches a handful cannot tell scoped from unscoped, and would pass even if
->    `ids` were ignored entirely.
-> 10. **The `ids` param is genuinely scoped**, not merely accepted and ignored.
+>    the `ids` body field were ignored entirely.
+> 10. **The scoped search is a POST, and the canvas is large enough that a GET
+>     would not have worked.** Confirm the route is `POST /api/v1/search/scoped`
+>     (7b's OpenAPI verify), and that the 7c canvas check printed **223 or more**
+>     nodes. Reason: at 223 ids a comma-joined query string is 10,438 bytes and
+>     nginx answers **414** against its default 8 KB header buffer — a GET design
+>     would fail in the browser while passing in the script. This is why the
+>     transport is POST and not a preference.
+> 11. **The `ids` field is genuinely scoped**, not merely accepted and ignored.
 >     Ask: *if `ids` were dropped from the ES body, would the comparison still
->     pass?* It must not — otherwise the param is decorative. That mutation is
+>     pass?* It must not — otherwise the field is decorative. That mutation is
 >     listed in "Done criteria".
-> 11. Unscoped `/search` is unchanged: still 20 of 22 for `q=review`.
-> 12. **The round-trip unit test exists and is non-vacuous** — the mutation in 7a
+> 12. Unscoped `GET /search` is unchanged: still 20 of 22 for `q=review`.
+> 13. **The round-trip unit test exists and is non-vacuous** — the mutation in 7a
 >     (dropping one `w_*` line) made it fail.
-> 13. The two collaboration pages and the Graph page's spotlight all render and
+> 14. The two collaboration pages and the Graph page's spotlight all render and
 >     work in the browser (see the full sweep in Step 14; a spot check here is
 >     enough).
-> 14. `scripts/capture_ui_baseline.py` and both JSON files are deleted;
+> 15. `scripts/capture_ui_baseline.py` and both JSON files are deleted;
 >     `src/ui/collaboration_params.py`, its test, **and
 >     `tests/test_ui_api_client_status_mapping.py`** are **kept**.
 >
@@ -2450,6 +2547,16 @@ Repoint: `/api/v1/chats/` (`:37`) → `wba_api`; `/api` (`:50`) → `wba_api`;
 **Keep `client_max_body_size 50m`** (`:8`) — Plan 051 added it because the
 collaboration callbacks exceed 1 MiB, and the UI still POSTs those payloads.
 
+**Do not add header-buffer overrides.** The instinct here is to raise
+`large_client_header_buffers` alongside `client_max_body_size`, since Plan 051 was
+bitten by a too-small nginx limit. Do not: Step 7b routes the scoped search over
+**POST** precisely so the 223-id canvas is a request *body* rather than a request
+*line*, and no remaining UI call sends a long URL. Raising the limit without a
+caller that needs it widens the request-line attack surface for nothing, and it
+would mask a future regression back to a query-string form — which is the exact
+failure this design avoids. The `GET /api/v1/search` query string stays short
+(`q` and filters only).
+
 **The `/app` location must have no trailing slash on `proxy_pass`** — that is
 what preserves the `/app` prefix Dash expects.
 
@@ -2603,7 +2710,10 @@ missed site is not yet fatal — Step 9 is what proves they were all caught.
 >     proxy split. Its two call sites went over HTTP in Step 7, so this is also
 >     the end-to-end check for that step against two real processes.
 > 20. **Spotlight still highlights** on the Graph page — Step 7's third swap, and
->     the one whose `ids` param only matters once the UI and API are separate.
+>     the one whose `POST /search/scoped` only matters once the UI and API are
+>     separate. **With a full canvas loaded** (200+ nodes), not a handful: that
+>     is the size at which the GET form would have 414'd in nginx, so a small
+>     canvas would not exercise the transport that was chosen.
 > 21. **Chat streams progressively** — tokens arrive as they are generated, not in
 >     one burst.
 > 22. `docker compose ps` shows no restart loops after 2 minutes.
@@ -2651,10 +2761,10 @@ fails loudly at the DNS layer rather than silently degrading.
 bearer token — which is why the two plans are not merged.
 
 **`api_client.py` already exists — Step 7 created it** (7d-i) with
-`get_json(url, params, timeout) -> dict` and the status→exception mapping that
-keeps the collaboration banners working. This step **extends** that module; it
-does not create it, and it must not replace or re-implement the mapping. Keep
-7d-i's behaviour intact: the status translation is load-bearing for
+`get_json`/`post_json` and the status→exception mapping that keeps the
+collaboration banners working. This step **extends** that module; it does not
+create it, and it must not replace or re-implement the mapping. Keep 7d-i's
+behaviour intact: the status translation is load-bearing for
 `pages/collaboration_network/` and `pages/collaboration_network_ego/`, and
 `tests/test_ui_api_client_status_mapping.py` guards it.
 
@@ -2754,12 +2864,14 @@ print(len(json.load(urllib.request.urlopen('http://localhost:8000/openapi.json')
    is allowed to be broader than Dash); listing them is what demonstrates the API
    is not Dash-shaped.
 
-**Baseline for set A** (24 distinct paths, measured):
+**Baseline for set A** (24 distinct paths, measured at the baseline commit — plus
+`/search/scoped`, which Step 7 adds and which therefore will not appear in a
+pre-split measurement):
 
 ```
 /api/v1/settings/                                    (and /reset, /{key}/reset)
 /api/v1/graph-themes/                                (+ /effective, /{id}, /{id}/set-default)
-/api/v1/search                                       (/search/persons)
+/api/v1/search                                       (/search/persons, /search/scoped POST)
 /api/v1/chats                                        (/chats/{session_id})
 /api/v1/commands/
 /api/v1/connectors/                                  (+ /{type}, /{type}/configs,
@@ -2998,7 +3110,7 @@ Mark each cell as you go. `⬜` not started · `🔄` in progress · `✅` passe
 |------|-----------------|------------------|-------------|--------|
 | 5  | `src/app/dash_app/` → `src/ui/`; `api_main.py` + `ui_main.py` created; Flask request logging ported; `main.py` reduced to a **temporary composition**. `routes_pathname_prefix` stays **unset** — Step 8's edit | suite green, no `app.dash_app` remains, no `a2wsgi` outside `main.py`, `main.py` still imports, no `routes_pathname_prefix`, `/app/` **and** `/app/chat` both `200`, `mypy` | Operator confirms the prefix is **absent** (the mount strips `/app`), `main.py` **not** deleted, `ui_main` imports no FastAPI/DB/transport, and the rebuilt stack still serves `/app` | ⬜ |
 | 6  | 12 import-time constants → function-local reads + regression test; **DB-free `UISettings` / `ui.runtime_settings` / `domain.timezone` so the UI stops importing `app.runtime_settings`, `app.common.timezone` and `app.settings`** (21 files — without this the UI container cannot boot); MCP env table from `GET /api/v1/settings/`; `NEO4J_URI` message fixed | both new tests pass **and fail on mutation**; the three old imports gone from `src/ui/`; grep gates | Operator **runs both mutations**; `test_ui_isolation.py` blocks real package names; `domain/` imports nothing from `app.*`/`ui.*`; `/app/chat` renders (it uses the timezone helpers) | ⬜ |
-| 7  | Collab + ego + spotlight bypasses → HTTP, **one baseline captured before any swap**; optional `ids` param on `/search`; `src/ui/api_client.py` created with the status→exception mapping (7d-i) so the collab empty/invalid banners survive | before/after identities hold, **including the empty-result and invalid-config legs**; status-mapping unit test passes **and fails on mutation**; `ids` proved non-decorative; script deleted, both permanent tests kept | Operator confirms the baseline predates every swap, every data leg matches exactly, every error leg errored on both sides, and the no-data banners still render in the browser | ⬜ |
+| 7  | Collab + ego + spotlight bypasses → HTTP, **one baseline captured before any swap**; new **`POST /search/scoped`** (a GET would 414 on the 223-id canvas — 10,438-byte request line vs an 8 KB header buffer); `src/ui/api_client.py` created with the status→exception mapping (7d-i) so the collab empty/invalid banners survive | before/after identities hold, **including the empty-result and invalid-config legs**; status-mapping unit test passes **and fails on mutation**; scoped route is a POST and returns 200 for a 223-id body; the canvas check printed ≥223 nodes; script deleted, both permanent tests kept | Operator confirms the baseline predates every swap, every data leg matches exactly, every error leg errored on both sides, the no-data banners still render, and spotlight works **with a full 200+ node canvas** in the browser | ⬜ |
 
 **Phase 3 — go live**
 
@@ -3057,7 +3169,8 @@ were silently skipped by a missing marker or a broken import.
    pass silently. Also confirm the finder blocks the **real** package names
    (`sqlalchemy`, `asyncpg`, `neo4j`, `openai`, `aio_pika`) — a finder that
    blocks nothing makes the test pass for the wrong reason.
-3. Step 7 — drop `ids` from the ES body; the comparison must fail.
+3. Step 7 — drop the `terms` clause on `wba_id` from the scoped search's ES
+   body; the comparison must fail.
 4. Step 7 (7d-iii) — remove the 404→`CollaborationDataUnavailable` branch from
    `api_client.get_json`; `tests/test_ui_api_client_status_mapping.py` must fail.
    Without this the mapping — the only thing keeping the collaboration
@@ -3109,6 +3222,8 @@ ALL must hold:
 - [ ] Step 7's baseline script called `src/ui/collaboration_params.py` (not a private param dict), so the re-run exercised the swapped translation
 - [ ] `tests/test_collab_query_param_roundtrip.py` passes **and fails when one `w_*` line is dropped** from `config_to_query_params`
 - [ ] Step 7's matched-ID sets are **identical**, and at least one spotlight query matched **>20** canvas nodes (otherwise the leg cannot tell scoped from unscoped)
+- [ ] Step 7's spotlight leg used a canvas of **≥223 nodes** — the size at which the abandoned GET form produces a 10,438-byte request line and nginx answers **414**. A small canvas would make the leg pass against a transport the browser cannot use.
+- [ ] The scoped search is **`POST /api/v1/search/scoped`**, and a 223-id POST returns **200** (7b's verify). It is not a query param, and no nginx header-buffer override was added to make a GET fit.
 - [ ] Step 7's empty-result and invalid-config legs (`org_7`, `org_invalid`, `ego_unknown_person`) each read `kind == "error"` on **both** sides — the legs are not vacuous
 - [ ] `src/ui/api_client.py` maps status → exception: 404 to `CollaborationDataUnavailable` and 400 to a validation error, so the collab callbacks' existing `except` blocks still fire
 - [ ] `tests/test_ui_api_client_status_mapping.py` passes **and fails when the 404 branch is removed** from `get_json`

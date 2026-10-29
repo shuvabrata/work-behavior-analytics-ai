@@ -231,6 +231,14 @@ registers handlers natively at `/app/_dash-layout`,
 `/app/_dash-update-component`, `/app/`, `/app/<path:path>`, etc. No `a2wsgi`, no
 mount semantics, no `X-Forwarded-Prefix`.
 
+**This fix applies only once the app is *standalone* — it is Step 8's edit, not
+Step 5's.** While the app is still mounted at `/app` via `WSGIMiddleware`
+(Steps 5–7), the mount strips `/app` before Flask sees the request, so the
+handlers must stay registered at `/`. Setting `routes_pathname_prefix='/app/'`
+in that state 404s every UI route. Step 5a records the full reasoning; the short
+version is that **the mount and this prefix are mutually exclusive**, and
+whichever step changes one must change the other.
+
 `display_page` (`layout.py:139-176`) matches **18 hardcoded `/app/...` route
 strings**, and the UI contains **69 hardcoded `/app/` literals**. All keep
 working under a `/app`-rooted standalone Dash served behind an nginx
@@ -837,27 +845,54 @@ what lets Steps 6 and 7 be verified against a working UI.
 
 **5a. Move the package.**
 
-**Set `routes_pathname_prefix`.** In `src/ui/layout.py`, `create_dash_app()`
-(`:23-34`) currently sets only `requests_pathname_prefix="/app/"`. Add:
+**Leave `create_dash_app()`'s prefixes exactly as they are.** In
+`src/ui/layout.py`, `create_dash_app()` (`:23-34`) sets only
+`requests_pathname_prefix="/app/"`, and **it must still set only that after this
+step**. `routes_pathname_prefix` is added in **Step 8**, in the same step that
+removes the mount.
 
-```python
-app = dash.Dash(
-    __name__,
-    requests_pathname_prefix="/app/",
-    routes_pathname_prefix="/app/",
-    ...
-)
+**Why it cannot move here, and this is the trap.** These two are mutually
+exclusive, and the wrong one silently 404s the entire UI:
+
+| Serving mode | `routes_pathname_prefix` | Dash registers at |
+|---|---|---|
+| Mounted (`WSGIMiddleware` at `/app`) — **Steps 5–7** | `"/"` (the default — set nothing) | `/`, `/_dash-layout`, … |
+| Standalone (gunicorn, nginx `location /app`) — **Step 8+** | `"/app/"` | `/app/`, `/app/_dash-layout`, … |
+
+`Starlette`'s `Mount` **strips** the mount path before handing the request to the
+WSGI app, so a browser request for `/app/_dash-update-component` arrives at Flask
+as `/_dash-update-component`. Today's root-registered handlers match it. Add
+`routes_pathname_prefix="/app/"` while the mount is still there and the handlers
+move to `/app/_dash-update-component` — which nothing ever reaches, because the
+mount already ate the `/app`. Every UI route 404s, and only the doubled path
+`/app/app/_dash-layout` answers.
+
+Verified by simulation against this repo's real `create_dash_app()`, mounted
+exactly as 5d specifies:
+
+```
+routes_pathname_prefix="/app/" set, still mounted at /app:
+  /app/                          404
+  /app/chat                      404
+  /app/_dash-layout              404
+  /app/_dash-update-component    404
+
+unchanged (requests_pathname_prefix only), still mounted at /app:
+  /app/                          200
+  /app/chat                      200
+  /app/_dash-layout              200
+  /app/_dash-update-component    200
 ```
 
-**This is load-bearing.** Verified: with both prefixes set to `/app/`, Dash
-registers its Flask handlers natively at `/app/_dash-layout`,
-`/app/_dash-update-component`, `/app/`, `/app/<path:path>`, and no mount,
-`a2wsgi`, or `X-Forwarded-Prefix` handling is required. Without it, Dash
-registers at `/` and the split cannot serve the UI.
+The "verified fix for standalone serving" in "Current state" (`:228-232`) is
+correct — **for Step 8**, where nothing mounts the app and nginx preserves the
+full `/app/...` URI. Applying it at Step 5 breaks the stable-state rule at the
+first structural step, right after the rename and its 204 test-file rewrites.
 
 **Everything else in the UI is unchanged.** In particular `display_page`'s 18
 hardcoded `/app/...` route strings (`layout.py:139-176`) and the 69 hardcoded
-`/app/` literals keep working, because the path Dash sees is the same.
+`/app/` literals keep working in both modes, because the path Dash *sees* is
+`/app/...` either way — via the mount in Steps 5–7, natively from Step 8.
 
 **Rewrite every absolute `app.dash_app.*` reference.** Relative imports *inside*
 the package (`from ..layout import ...`) stay valid across the move and must be
@@ -970,9 +1005,16 @@ app.mount("/app", WSGIMiddleware(server))  # type: ignore[arg-type]
 **Mount `ui_main.server`, not a fresh `create_dash_app()`.** This matters: a fresh
 call would build a *second* Dash/Flask instance, so the `ui_main` request-logging
 hooks written in 5c would be dead code until Step 8 and would first execute in
-production. Mounting `ui_main.server` means the exact object Step 8 will serve is
-the one running traffic from this step onward, so the hooks are exercised by every
+production. Mounting `ui_main.server` means the object running traffic from this
+step onward is the same one Step 8 serves, so the hooks are exercised by every
 page you browse in Steps 5–7.
+
+**One thing *does* change at Step 8**: `ui_main.server`'s Dash instance was built
+by `create_dash_app()`, and 8a-ii edits that function to add
+`routes_pathname_prefix="/app/"`. So Step 8 is not only a packaging change — it is
+also the step where the UI's handler registration moves to `/app`. That is
+deliberate and is why 8a-ii and 8c must land together; nothing else about
+`ui_main.py` changes.
 
 **Why a composition and not a copy.** This module is deliberately *not* a second
 copy of `api_main`'s lifespan and router list. It **is** `api_main`, with the Dash
@@ -1035,7 +1077,9 @@ Step 8 onward is blocked.
 **Verify**: `PYTHONPATH=src python -c "import ui_main; print('ui OK', type(ui_main.server))"`
 **Verify**: `PYTHONPATH=src python -c "import app.main; print('composition OK')"`
 **Verify**: `grep -rn "WSGIMiddleware\|a2wsgi" src/app/api_main.py src/ui/ src/ui_main.py` → no matches
+**Verify**: `grep -n "routes_pathname_prefix" src/ui/layout.py` → **no matches** (the prefix is Step 8's edit, not this step's; see 5a)
 **Verify**: `docker compose up -d --build` → healthy; `curl -sf -o /dev/null -w '%{http_code}' https://localhost/app/` → `200`
+**Verify**: `curl -sf -o /dev/null -w '%{http_code}' https://localhost/app/chat` → `200` (a real Dash route, not just the index — this is what catches a prefix/mount mismatch)
 **Verify**: `mypy src/` → exit 0
 
 > ### 🚦 MANUAL GATE 5 — operator check
@@ -1045,9 +1089,13 @@ Step 8 onward is blocked.
 >
 > **Operator verifies:**
 > 1. `src/ui/` exists and `src/app/dash_app/` does not.
-> 2. `routes_pathname_prefix="/app/"` is present in `create_dash_app()`. Ask
->    directly: *if this were removed, would the UI still serve at `/app`?* The
->    answer must be no — that is what makes it load-bearing rather than decorative.
+> 2. **`routes_pathname_prefix` is ABSENT from `create_dash_app()` in
+>    `src/ui/layout.py`.** This is deliberately the opposite of what an earlier
+>    draft of this plan said, so check it explicitly rather than by expectation.
+>    The UI is still *mounted* at `/app` in this step, and mounting strips the
+>    prefix; a `/app/`-rooted handler registration would therefore 404 every UI
+>    route. The prefix lands in Step 8, where the mount goes away. Confirm the
+>    UI actually serves: `/app/` **and** `/app/chat` both return `200`.
 > 3. Meta-files whose names would move silently, `dash_app/styles.py` → `src/ui/styles.py`,
 >    `pages/**` → `src/ui/pages/**`.
 > 4. `src/app/api_main.py` and `src/ui_main.py` both exist, and `src/app/main.py`
@@ -1730,6 +1778,52 @@ stays:
 `ModuleNotFoundError: No module named 'app.main'` once 8c deletes it, and every
 gate from this step onward is blocked.**
 
+**8a-ii. Make the UI standalone — add `routes_pathname_prefix="/app/"`.**
+
+This is the edit Step 5 deliberately deferred, and this is the step where it
+becomes correct. In `src/ui/layout.py`, `create_dash_app()` (`:23-34`) currently
+sets only `requests_pathname_prefix="/app/"`. Change it to set both:
+
+```python
+app = dash.Dash(
+    __name__,
+    requests_pathname_prefix="/app/",
+    routes_pathname_prefix="/app/",
+    ...
+)
+```
+
+**Why it is correct here and nowhere earlier.** In Steps 5–7 the app was reached
+through `WSGIMiddleware` mounted at `/app`, and a mount *strips* its prefix before
+the WSGI app sees the request — so Dash's handlers had to stay registered at `/`.
+This step removes the mount: gunicorn serves `ui_main.server` directly, and nginx's
+`location /app { proxy_pass http://wba_ui; }` (**no trailing slash** — see 8d)
+forwards the full `/app/...` URI intact. So Dash must now own the `/app` prefix
+itself, and registering it natively at `/app/_dash-layout`,
+`/app/_dash-update-component`, `/app/`, `/app/<path:path>` is what makes the UI
+serve with no mount, no `a2wsgi`, and no `X-Forwarded-Prefix` handling.
+
+Verified against this repo's real `create_dash_app()` with the prefix added and
+the app served standalone (Flask test client, real `/app/...` URLs — the same
+shape nginx produces):
+
+```
+/app/                          200
+/app/chat                      200
+/app/_dash-layout              200
+/app/_dash-update-component    200
+/app/assets/executive-dashboard.css  200
+```
+
+**This edit and 8c's deletion of `src/app/main.py` are one change, not two.**
+With the prefix set, the mount cannot serve the UI; with the mount present, the
+prefix breaks it. They must land in the same commit — which they do, since 8 is
+atomic by construction.
+
+**The `curl https://localhost/app/` → `200` verify at 8e is the check that this
+landed.** If the UI 404s after this step, the prefix is missing; if it 404s *at
+`/app/app/`*, the prefix was added without 8c removing the mount.
+
 **8b. Create the UI entrypoint.** It needs a new, much smaller one:
 
 ```bash
@@ -1876,6 +1970,9 @@ missed site is not yet fatal — Step 9 is what proves they were all caught.
 **Verify (8e)**: `docker compose up -d --build` → all healthy
 **Verify (8e)**: `curl -sf https://localhost/api/health` → `{"status":"healthy"}`
 **Verify (8e)**: `curl -sf -o /dev/null -w '%{http_code}' https://localhost/app/` → `200`
+**Verify (8a-ii)**: `grep -n "routes_pathname_prefix" src/ui/layout.py` → 1 match, value `"/app/"`
+**Verify (8a-ii)**: `curl -sf -o /dev/null -w '%{http_code}' https://localhost/app/chat` → `200` (a real Dash route; the index alone can be served by a fallback and would not catch a registration mismatch)
+**Verify (8a-ii)**: `curl -sf -o /dev/null -w '%{http_code}' https://localhost/app/app/_dash-layout` → `404` (the doubled path the mount produced in Steps 5–7 must be gone — if this is `200`, the mount is still in the path)
 **Verify (8e)**: `docker compose exec api env | grep -c GITHUB_MCP_TOKEN` → `0`
 **Verify (8e)**: `docker compose exec ui env | grep -cE "DATABASE_URL|OPENAI_API_KEY|NEO4J_PASSWORD"` → `0`
 
@@ -1907,7 +2004,16 @@ missed site is not yet fatal — Step 9 is what proves they were all caught.
 > 9. **`src/app/main.py` is gone**, and `grep -rn "app\.main" src/ tests/` finds
 >    nothing. If the composition module survives, the API process still mounts
 >    Dash and the isolation property is not real.
-> 10. **The `--forwarded-allow-ips` comment block (lines 34–44) is intact and
+> 10. **`routes_pathname_prefix="/app/"` is now present in
+>     `src/ui/layout.py`'s `create_dash_app()`** — it was deliberately absent at
+>     Step 5 (see 8a-ii). Two requests prove it landed correctly rather than
+>     being added early or not at all:
+>     `https://localhost/app/chat` → **`200`**, and
+>     `https://localhost/app/app/_dash-layout` → **`404`**. The second is the
+>     one that matters: a non-404 there means the app is still mounted and the
+>     UI is being served through the doubled path, which looks fine on the index
+>     page and breaks every callback.
+> 11. **The `--forwarded-allow-ips` comment block (lines 34–44) is intact and
 >     verbatim.** Compare it against the plan's baseline commit:
 >     `git diff 5210f00 -- src/app/entrypoint.sh`. The only diff must be the
 >     module path on line 45 — one hunk, one changed line. A lost security
@@ -1916,37 +2022,37 @@ missed site is not yet fatal — Step 9 is what proves they were all caught.
 >
 > **Running split (8d–8g):**
 >
-> 11. **Cold start works.** `docker compose down && docker compose up -d`, then
+> 12. **Cold start works.** `docker compose down && docker compose up -d`, then
 >     immediately browse `https://localhost/app`. No 502, no unstyled page. This
 >     is what `depends_on` exists to guarantee — if there is a 502 window, the
 >     dependency graph is wrong.
-> 12. **The UI loads and is styled** — CSS from `/app/assets/` is served by the
+> 13. **The UI loads and is styled** — CSS from `/app/assets/` is served by the
 >     **UI** container, not the API. Confirm in DevTools that `/app/assets/*`
 >     responses come from the `ui` service.
-> 13. **Dash callbacks work.** `/app/_dash-update-component` is served by the UI.
+> 14. **Dash callbacks work.** `/app/_dash-update-component` is served by the UI.
 >     Run a Search, and check the network panel shows the callback POST going to
 >     `/app/...` and an internal API call succeeding.
-> 14. **The API works through the same proxy.** `https://localhost/api/v1/connectors/`
+> 15. **The API works through the same proxy.** `https://localhost/api/v1/connectors/`
 >     → JSON.
-> 15. **The UI container holds no secrets.** `docker compose exec ui env` — no
+> 16. **The UI container holds no secrets.** `docker compose exec ui env` — no
 >     `DATABASE_URL`, `OPENAI_API_KEY`, `NEO4J_PASSWORD`, `GITHUB_MCP_TOKEN`,
 >     `CONNECTOR_ENCRYPTION_KEY`. This is the process-level version of Step 6's
 >     code-level grep, and it is only possible now.
-> 16. **The API container holds no dash.** `docker compose exec api pip list | grep dash`
+> 17. **The API container holds no dash.** `docker compose exec api pip list | grep dash`
 >    → empty.
-> 17. **Producers still fetch the runtime snapshot.** Check the producer logs for
+> 18. **Producers still fetch the runtime snapshot.** Check the producer logs for
 >     `Fetched runtime settings snapshot` — **not** the fallback warning
 >     (`Runtime settings API unreachable`). This is the gate for the rename; the
 >     failure mode is silent degradation, so the log line is the evidence.
-> 18. **Collaboration Network renders** (org and ego) — this is the page Plan 051
+> 19. **Collaboration Network renders** (org and ego) — this is the page Plan 051
 >     broke with `client_max_body_size`, and it is the page most sensitive to the
 >     proxy split. Its two call sites went over HTTP in Step 7, so this is also
 >     the end-to-end check for that step against two real processes.
-> 19. **Spotlight still highlights** on the Graph page — Step 7's third swap, and
+> 20. **Spotlight still highlights** on the Graph page — Step 7's third swap, and
 >     the one whose `ids` param only matters once the UI and API are separate.
-> 20. **Chat streams progressively** — tokens arrive as they are generated, not in
+> 21. **Chat streams progressively** — tokens arrive as they are generated, not in
 >     one burst.
-> 21. `docker compose ps` shows no restart loops after 2 minutes.
+> 22. `docker compose ps` shows no restart loops after 2 minutes.
 >
 > Wait for `PASS` before starting Step 9, or `FAIL` with the check number.
 
@@ -2328,7 +2434,7 @@ Mark each cell as you go. `⬜` not started · `🔄` in progress · `✅` passe
 
 | Step | What it changes | Automated verify | Manual gate | Status |
 |------|-----------------|------------------|-------------|--------|
-| 5  | `src/app/dash_app/` → `src/ui/`; `routes_pathname_prefix="/app/"`; `api_main.py` + `ui_main.py` created; Flask request logging ported; `main.py` reduced to a **temporary composition** | suite green, no `app.dash_app` remains, no `a2wsgi` outside `main.py`, `main.py` still imports, `mypy` | Operator confirms both prefixes set, `main.py` **not** deleted, `ui_main` imports no FastAPI/DB/transport, and the rebuilt stack still serves `/app` | ⬜ |
+| 5  | `src/app/dash_app/` → `src/ui/`; `api_main.py` + `ui_main.py` created; Flask request logging ported; `main.py` reduced to a **temporary composition**. `routes_pathname_prefix` stays **unset** — Step 8's edit | suite green, no `app.dash_app` remains, no `a2wsgi` outside `main.py`, `main.py` still imports, no `routes_pathname_prefix`, `/app/` **and** `/app/chat` both `200`, `mypy` | Operator confirms the prefix is **absent** (the mount strips `/app`), `main.py` **not** deleted, `ui_main` imports no FastAPI/DB/transport, and the rebuilt stack still serves `/app` | ⬜ |
 | 6  | 12 import-time constants → function-local reads + regression test; MCP env table from `GET /api/v1/settings/`; `NEO4J_URI` message fixed | new test passes **and fails on mutation**; grep gates | Operator **runs the mutation**; test must not be vacuous; Connectors page unchanged in the browser | ⬜ |
 | 7  | Collab + ego + spotlight bypasses → HTTP, **one baseline captured before any swap**; optional `ids` param on `/search` | before/after summaries **and** matched-ID sets identical; `ids` proved non-decorative; script deleted | Operator confirms the baseline predates every swap and every set matches exactly | ⬜ |
 
@@ -2383,8 +2489,10 @@ were silently skipped by a missing marker or a broken import.
 
 1. Step 6 — revert one constant to module level; the new test must fail.
 2. Step 7 — drop `ids` from the ES body; the comparison must fail.
-3. Step 5 — remove `routes_pathname_prefix="/app/"`; the UI must stop serving at
-   `/app`.
+3. Step 8 — remove `routes_pathname_prefix="/app/"` from `create_dash_app()`;
+   the UI must stop serving at `/app`. **Not** a Step 5 mutation: at Step 5 the
+   prefix must be *absent*, and adding it there is itself the failure this
+   mutation exists to detect.
 4. Step 8 — remove the `ui` healthcheck; the cold-start check must 502.
 5. Step 5 — delete `src/app/main.py` early; the stack must fail to start. This is
    the mutation that proves the stable-state rule is load-bearing rather than
@@ -2541,9 +2649,12 @@ in an entrypoint needs its package root on `PYTHONPATH` or must be run as
   no longer imports `styles.py` — so a registry moved without its loop degrades
   every typed node to an `ellipse` at 60×50 on Graph, Timeline and both
   Collaboration Network pages, with a green suite and no failing test.
-- **`routes_pathname_prefix="/app/"`** is present in `create_dash_app()`. Without
-  it the split cannot serve the UI, and its absence would fail loudly — but a
-  partial value (one prefix set, not both) fails confusingly.
+- **The prefix and the mount never coexist.** `routes_pathname_prefix` is
+  **absent** through Steps 5–7 (the UI is mounted, and the mount strips `/app`)
+  and **present** from Step 8 (the UI is standalone and owns the prefix). Each
+  state is correct only in its own half: get it wrong at Step 5 and every UI
+  route 404s in the first structural step; get it wrong at Step 8 and every
+  callback 404s while the index page still looks fine.
 - **`requirements.ui.txt` includes `gunicorn` and excludes the data-store/LLM
   packages.** The exclusion list is the enforcement of Decision 1.
 - **`client_max_body_size 50m` survives the nginx edit.** It is a Plan 051 fix and

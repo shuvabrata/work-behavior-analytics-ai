@@ -20,11 +20,11 @@ services:
       timeout: 5s
       retries: 5
 
-  app:
+  api:
     build:
       context: .
-      dockerfile: Dockerfile.app
-    container_name: wba-ai-app
+      dockerfile: Dockerfile.api
+    container_name: wba-ai-api
     restart: unless-stopped
     environment:
       # PostgreSQL connection settings for entrypoint script
@@ -75,7 +75,12 @@ services:
       # baked in the image and is refreshed on every image update.
       - catalog_user_defined:/app/queries_catalog/user_defined
     networks:
-      - wba-ai-network
+      wba-ai-network:
+        # Kept for one step (dropped in Step 9) so the producers/consumer can be
+        # migrated to `api` without a window where their API_SERVER value fails
+        # to resolve. The name `app` is retired afterwards.
+        aliases:
+          - app
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
       interval: 10s
@@ -92,6 +97,47 @@ services:
       rabbitmq:
         condition: service_healthy
       elasticsearch:
+        condition: service_healthy
+
+  ui:
+    build:
+      context: .
+      dockerfile: Dockerfile.ui
+    container_name: wba-ai-ui
+    restart: unless-stopped
+    # Narrowed on purpose: the UI runtime holds no database URL, no data-store
+    # credentials and no LLM provider key (Plan 052, Decision 1). Adding any of
+    # DATABASE_URL / OPENAI_API_KEY / NEO4J_* / ELASTICSEARCH_* / GITHUB_MCP_* /
+    # RABBITMQ_URL / CONNECTOR_ENCRYPTION_KEY here would defeat the split.
+    environment:
+      # The API over the Docker network, plain HTTP. Deliberately NOT the
+      # browser-facing EXTERNAL_BASE_URL.
+      API_BASE_URL: http://api:8000
+      UI_DATE_FORMAT: ${UI_DATE_FORMAT:-%b %d, %Y}
+      UI_DATETIME_FORMAT: ${UI_DATETIME_FORMAT:-%b %d, %Y %I:%M %p}
+      TIMEZONE: ${TIMEZONE:-UTC}
+      LOG_FORMAT: ${LOG_FORMAT}
+      LOG_LEVEL: ${LOG_LEVEL}
+      LOG_DIR: /var/log/ui
+      ENABLE_FILE_LOGGING: "1"
+      GRAPH_UI_MAX_NODES_TO_EXPAND: ${GRAPH_UI_MAX_NODES_TO_EXPAND:-20}
+      GRAPH_UI_MAX_NODE_LABEL_CHARS: ${GRAPH_UI_MAX_NODE_LABEL_CHARS:-10}
+    volumes:
+      # Logs only. Deliberately no .env mount and no catalog volume: the UI must
+      # not be able to read the API's secrets or the query catalog from disk.
+      - ./logs/ui:/var/log/ui
+    networks:
+      - wba-ai-network
+    healthcheck:
+      # Probes the UI's OWN liveness, not the API's — otherwise the UI goes
+      # unhealthy when the API restarts and nginx's depends_on cascade follows.
+      test: ["CMD", "curl", "-f", "http://localhost:8000/app/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    depends_on:
+      api:
         condition: service_healthy
 
   nginx:
@@ -113,7 +159,9 @@ services:
     networks:
       - wba-ai-network
     depends_on:
-      app:
+      api:
+        condition: service_healthy
+      ui:
         condition: service_healthy
 
   github-mcp:
@@ -215,7 +263,7 @@ services:
     env_file:
       - .env
     environment:
-      API_SERVER: http://app:8000/
+      API_SERVER: http://api:8000/
       DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/postgres
       RABBITMQ_URL: amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672/
       PYTHONPATH: /app
@@ -224,7 +272,7 @@ services:
     volumes:
       - ./logs/github-producer:/var/log/github-producer
     depends_on:
-      app:
+      api:
         condition: service_healthy
     restart: unless-stopped
     networks:
@@ -238,7 +286,7 @@ services:
     env_file:
       - .env
     environment:
-      API_SERVER: http://app:8000/
+      API_SERVER: http://api:8000/
       DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/postgres
       RABBITMQ_URL: amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672/
       PYTHONPATH: /app
@@ -247,7 +295,7 @@ services:
     volumes:
       - ./logs/jira-producer:/var/log/jira-producer
     depends_on:
-      app:
+      api:
         condition: service_healthy
     restart: unless-stopped
     networks:
@@ -261,7 +309,7 @@ services:
     env_file:
       - .env
     environment:
-      API_SERVER: http://app:8000/
+      API_SERVER: http://api:8000/
       DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/postgres
       RABBITMQ_URL: amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672/
       PYTHONPATH: /app
@@ -270,7 +318,7 @@ services:
     volumes:
       - ./logs/confluence-producer:/var/log/confluence-producer
     depends_on:
-      app:
+      api:
         condition: service_healthy
     restart: unless-stopped
     networks:
@@ -285,7 +333,7 @@ services:
     env_file:
       - .env
     environment:
-      API_SERVER: http://app:8000/
+      API_SERVER: http://api:8000/
       RABBITMQ_URL: amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672/
       NEO4J_URI: bolt://neo4j:7687
       NEO4J_USERNAME: ${NEO4J_USERNAME:-neo4j}
@@ -301,7 +349,7 @@ services:
     volumes:
       - ./logs/signal-consumer:/var/log/signal-consumer
     depends_on:
-      app:
+      api:
         condition: service_healthy
       postgres:
         condition: service_healthy

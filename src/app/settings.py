@@ -75,7 +75,7 @@ class ApiSettings(UISettings):
     JIRA_ISSUE_TEAM_FIELD: str = "Team"
     JIRA_EPIC_START_DATE_FIELD: str = "created"
     JIRA_EPIC_DUE_DATE_FIELD: str = "duedate"
-    API_SERVER: str = "http://app:8000/"
+    API_SERVER: str = "http://api:8000/"
     CONFIGURATION_SOURCE: str = "SERVER"
 
     # Neo4j query timeout (should be less than HTTP_REQUEST_TIMEOUT to allow overhead)

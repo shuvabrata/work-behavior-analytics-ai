@@ -1,10 +1,12 @@
+# API runtime (Dockerfile.api) — the FastAPI service only.
+#
+# The Dash UI runs in its own image now (requirements.ui.txt, Dockerfile.ui), so
+# no dash package belongs here: the API serves no UI. This is the enforced half
+# of Plan 052's isolation property and what Gate 8's "the API image contains no
+# dash" check reads.
 fastapi==0.161.1
 uvicorn==0.54.0
-dash==4.4.1
 starlette==1.9.0
-dash-bootstrap-components==2.0.4
-dash-cytoscape==1.0.2
-dash-extensions==2.0.6
 alembic==1.20.1
 sqlalchemy[asyncio]==2.1.6
 asyncpg==0.32.0

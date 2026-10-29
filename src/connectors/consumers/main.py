@@ -203,7 +203,7 @@ async def consume_queue(
 async def main() -> None:
     """Parse configuration and launch one consumer task per queue."""
     # Fetch runtime settings snapshot at startup (best-effort).
-    api_base = os.environ.get("API_SERVER", "http://app:8000")
+    api_base = os.environ.get("API_SERVER", "http://api:8000")
     runtime_cache.refresh(fetch_runtime_snapshot(api_base))
 
     # Start background listener for live runtime config changes.

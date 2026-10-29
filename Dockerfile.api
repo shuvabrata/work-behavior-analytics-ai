@@ -10,7 +10,7 @@ WORKDIR /app
 ENV PYTHONPATH=/app
 
 # Install dependencies
-COPY requirements.app.txt ./requirements.txt
+COPY requirements.api.txt ./requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Fail the build loudly if PyYAML was compiled without libyaml (i.e. no
@@ -27,10 +27,6 @@ COPY src/common/ ./common/
 
 # Copy domain-specific code
 COPY src/domain/ ./domain/
-
-# Copy the Dash UI package and its WSGI entrypoint
-COPY src/ui/ ./ui/
-COPY src/ui_main.py ./ui_main.py
 
 # Copy shipped query catalog used by the graph query workbench
 COPY queries_catalog/ ./queries_catalog/

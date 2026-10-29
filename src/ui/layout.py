@@ -25,6 +25,7 @@ def create_dash_app() -> dash.Dash:
     app = dash.Dash(
         __name__,
         requests_pathname_prefix="/app/",
+        routes_pathname_prefix="/app/",
         external_stylesheets=[
             dbc.themes.MATERIA,
             "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css",

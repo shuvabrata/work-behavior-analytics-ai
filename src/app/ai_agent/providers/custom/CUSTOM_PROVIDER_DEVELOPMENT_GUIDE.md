@@ -644,7 +644,7 @@ async def test_stream_raises_on_api_error(provider, httpx_mock):
 
 ```bash
 source .venv/bin/activate
-LLM_PROVIDER=custom CUSTOM_API_TOKEN=sk-... uvicorn app.main:app --reload
+LLM_PROVIDER=custom CUSTOM_API_TOKEN=sk-... uvicorn app.api_main:app --reload
 
 # Non-streaming
 curl -s http://localhost:8000/api/health

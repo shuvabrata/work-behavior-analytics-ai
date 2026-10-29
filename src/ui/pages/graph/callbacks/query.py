@@ -366,7 +366,7 @@ def execute_query(_raw_clicks: Any, _catalog_clicks: Any, store_cypher: Any, que
             "",
             alert_type='danger',
             heading="🔌 Backend API Connection Failed",
-            hint=f"Unable to connect to the backend API at {api_url}. Please ensure the FastAPI server is running using 'uvicorn app.main:app --reload'.",
+            hint=f"Unable to connect to the backend API at {api_url}. Please ensure the API service is running (for example 'docker compose up -d api').",
             doc_link=None
         )
         return error_response(error_display)

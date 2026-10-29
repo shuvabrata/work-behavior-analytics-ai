@@ -431,7 +431,7 @@ operator during a structured interview.
 | Lint (CI gate) | `pylint src --score=y` | score ≥ 9.0 |
 | Security scan (CI gate) | `bandit -c .bandit.yml -r src/ -lll` | exit 0 |
 | Compose config syntax | `docker compose config -q` | exit 0 |
-| Nginx config syntax | `docker run --rm -v "$PWD/deploy/nginx/nginx.conf:/etc/nginx/nginx.conf:ro" -v "$PWD/deploy/certs:/etc/nginx/certs:ro" nginx:1.30-alpine nginx -t` | `syntax is ok`, `test is successful` |
+| Nginx config syntax | `docker run --rm --network work-behavior-analytics-ai_wba-ai-network -v "$PWD/deploy/nginx/nginx.conf:/etc/nginx/nginx.conf:ro" -v "$PWD/deploy/certs:/etc/nginx/certs:ro" nginx:1.30-alpine nginx -t` | `syntax is ok`, `test is successful` |
 | Full stack | `docker compose up -d` | all services healthy |
 | Health over TLS | `curl -sf https://localhost/api/health` | `{"status":"healthy"}` |
 | UI over TLS | `curl -sf -o /dev/null -w '%{http_code}' https://localhost/app/` | `200` |
@@ -2657,6 +2657,19 @@ Pin exact versions (`==`) copied from `requirements.api.txt` where the package
 appears there, and resolve `plotly` explicitly (it is currently a Dash
 transitive dependency — pinning it avoids a silent drift in the graph rendering).
 
+**Also pin `flask` explicitly.** Measured: `src/ui/request_logging.py:15` does
+`from flask import Flask, Response, g, request` — a **direct** import of a package
+that `requirements.api.txt` does not pin at all (it arrives transitively via
+`dash`). Relying on a transitive dependency for a direct import is exactly the
+silent-drift risk `plotly` is being pinned for, and Gate 8 check 4 requires exact
+pins. Take the version from the installed environment or from `dash`'s own
+requirement.
+
+`dash-extensions` is listed above but **imported nowhere** in `src/` (measured:
+`grep -rn "dash_extensions" src/` → no matches). Keeping it is harmless and it
+may be intended for future use; do not add it to the image's critical path by
+importing it, and do not remove it from the list without saying so.
+
 **`Dockerfile.ui` must NOT install:** `neo4j`, `elasticsearch`, `sqlalchemy`,
 `asyncpg`, `openai`, `langchain*`, `mcp[cli]`, `aio-pika`, `a2wsgi`,
 `cryptography`, `networkx`, `python-louvain`, `matplotlib`, `tiktoken`, `alembic`,
@@ -2789,6 +2802,29 @@ developer workstation, not a derived value:
 **`ENTRYPOINT ["app/entrypoint.sh"]`** still resolves — the file keeps its path
 and name, so this line should be unchanged, but confirm rather than assume.
 
+**And DELETE the two UI `COPY` lines — this is a removal, and it is the one thing
+in this step the plan's own "unchanged build" wording gets wrong.** Step 5 added
+them to `Dockerfile.app` (`:32-33`) so the UI could be served in-process:
+
+```
+COPY src/ui/ ./ui/
+COPY src/ui_main.py ./ui_main.py
+```
+
+`Dockerfile.api` must **not** carry them. Leaving them means the API image ships
+the entire UI package plus `ui_main.py`, whose module body imports `ui.layout` and
+builds a whole second Dash app inside the API runtime — the exact coupling this
+step exists to remove, and it would make Gate 8 check 17 (`docker compose exec api
+pip list | grep dash` → empty) unsatisfiable. Delete both, and confirm with:
+
+```bash
+docker run --rm wba-api-test sh -c 'ls /app/ui /app/ui_main.py 2>&1 | head -2'
+```
+
+→ both must report `No such file or directory`. (Also recorded as Addendum 2 in
+the Maintenance notes; this is the same instruction, placed where the edit
+happens.)
+
 **8c. Delete `src/app/main.py`.**
 
 `git rm src/app/main.py`. The composition module from Step 5 has no remaining
@@ -2800,12 +2836,17 @@ runnable. Afterwards there must be no import of `app.main` anywhere in the tree.
 **Verify (8a)**: `docker build -f Dockerfile.ui -t wba-ui-test .` → succeeds
 **Verify (8b)**: `grep -n "app\.main:app" src/app/entrypoint.sh` → **no matches**
 **Verify (8b)**: `grep -n "api_main:app" src/app/entrypoint.sh` → 1 match
-**Verify (8b)**: `grep -c "forwarded-allow-ips" src/app/entrypoint.sh` → 2 (the comment plus the invocation, exactly as before this plan)
+**Verify (8b)**: `grep -c "forwarded-allow-ips" src/app/entrypoint.sh` → **1** (measured; the comment block above the invocation describes the flag in prose — "The trusted-peer flag below" — so the literal appears once, on the invocation line). The plan originally said `2`; that was wrong at the baseline commit too (`git show 5210f00:src/app/entrypoint.sh | grep -c forwarded-allow-ips` → 1). **Do not add the literal to the comment to reach 2** — the comment must stay verbatim (see Gate 8 item 11). The right check is that the count is unchanged from the baseline, and the comment block is byte-identical.
 **Verify (8b)**: `bash -n <the new UI entrypoint>` → exit 0
-**Verify (8a)**: `docker run --rm wba-api-test pip list 2>/dev/null | grep -ci "^dash "` → `0`
-**Verify (8a)**: `docker run --rm wba-ui-test pip list 2>/dev/null | grep -ciE "neo4j|elasticsearch|sqlalchemy|asyncpg|openai|langchain|matplotlib"` → `0`
+**Verify (8a)**: `docker run --rm --entrypoint pip wba-api-test list 2>/dev/null | grep -ci "^dash "` → `0`
+**Verify (8a)**: `docker run --rm --entrypoint pip wba-ui-test list 2>/dev/null | grep -ciE "neo4j|elasticsearch|sqlalchemy|asyncpg|openai|langchain|matplotlib"` → `0`
+
+**`--entrypoint pip` is required, and the plan's original form silently does the wrong thing.** Both images set an `ENTRYPOINT` (`app/entrypoint.sh` / `ui/entrypoint.sh`), which **hijacks the command**: `docker run --rm wba-ui-test pip list` boots gunicorn (or the API's Postgres-wait) instead of listing packages, and the container then hangs until killed. Measured during Step 8 execution. Always pass `--entrypoint pip` (or `--entrypoint python`) for these inspection commands, and if you already ran the bare form, clean up the stray containers it leaves (`docker ps -a | grep -v 'wba-ai'`).
 **Verify (8a)**: `grep -n "requirements.ui.txt" .github/workflows/pr_checks.yml` → 3 matches
-**Verify (8c)**: `grep -rn "app\.main" src/ tests/` → no matches
+**Verify (8c)**: `grep -rn "uvicorn app\.main:app\|import app\.main\|from app\.main" src/ tests/` → no matches. **Use this narrowed form, not a bare `grep -rn "app\.main"`** (the original wording). Two surviving prose references are *correct* and must not be "fixed" to satisfy a bare grep:
+  - `src/ui/pages/graph/callbacks/query.py:369` — a **user-facing** hint that currently reads *"…ensure the FastAPI server is running using `'uvicorn app.main:app --reload'`"*. Update the command it names (the module is deleted, so the instruction is wrong after this step) but keep the sentence: it is the only guidance a user gets when the Graph page cannot reach the API. Change it to name the post-split reality — the UI reaches the API over `API_BASE_URL`, so the accurate hint is to check that the API service is running (`docker compose up -d api`), not to run a uvicorn module that no longer exists.
+  - `tests/test_ui_runtime_setting_reads.py:61` — a docstring describing the Step 6 cache-clobber bug historically ("…whenever `app.main` imported `ui_main`"). It is a correct record of a past state; **leave it alone.** Rewording it to avoid a grep would falsify the history the test documents.
+  A bare `grep -rn "app\.main"` therefore cannot reach zero. That is expected, and this narrowed verify is the correct done criterion.
 
 **8d. Split the nginx upstream.** `deploy/nginx/nginx.conf` currently has one
 upstream (`:11-13`, named `wba_app`) used by four locations. Replace with two:
@@ -2881,21 +2922,46 @@ what preserves the `/app` prefix Dash expects.
 The UI must not go unhealthy when the API restarts — otherwise nginx's
 `depends_on` semantics cascade.
 
-**8f. Handle the `API_SERVER` precedence trap.** `_resolve_source`
-(`api/settings/v1/service.py:108`) is **DB override > env value > code default**,
-and `API_SERVER` is a DB-backed row
-(`alembic/versions/2026_08_10_0800-3f1a2b4c5d6e:109`). So a persisted row saying
-`http://app:8000/` **beats** the env change.
+**8f. Handle the `API_SERVER` precedence trap — and it does NOT bite on the
+current stack. Already checked; do not re-litigate, but do re-confirm cheaply.**
 
-Check for the row and record the answer before deciding:
+`_resolve_source` (`api/settings/v1/service.py:108`) is **DB override > env value
+> code default**, and `API_SERVER` *can* be a DB-backed row
+(`alembic/versions/2026_08_10_0800-3f1a2b4c5d6e:109`), so a persisted row saying
+`http://app:8000/` would **beat** the env change.
+
+**Measured on the live stack (2026-10-29), there is no such row**: the settings API
+reports `API_SERVER` with `source: "env"` and `value: None`, i.e. no persisted
+override. So **the env/code-default edits in 8g do take effect**, and there is
+nothing to migrate.
+
+Confirm it in one read-only call rather than a DB shell (which the harness may
+block):
 
 ```bash
-docker exec wba-ai-postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
-  -c "SELECT key, value FROM application_settings WHERE key = 'API_SERVER';"
+curl -s https://localhost/api/v1/settings/ | python -c "
+import json,sys
+row = next(r for r in json.load(sys.stdin) if r['key'] == 'API_SERVER')
+print(row['source'], repr(row.get('effective_value')))
+"
 ```
 
-If a row exists, set it to `http://api:8000/` **and** remove it (env should be the
-source for an infrastructure address, not a DB row). State which you did and why.
+→ `env '<...>'`. If `source` reads `db` instead, a row has appeared since this plan
+was written: set it to `http://api:8000/` **and** delete it (an infrastructure
+address should come from the environment, not a DB row) — then say so in the
+report.
+
+**Note the app's own `API_SERVER` is inert for the split.** Measured: the `app`
+service is passed no `API_SERVER` env var, so it resolves via `.env` (which is
+gitignored and currently reads `http://localhost:8000/` — the local-uvicorn value)
+rather than the `http://app:8000/` code default. Nothing inside `src/app/`
+consumes `API_SERVER` from the runtime cache; the only real consumers are the
+producers and the consumer, which read it from their **own** environment
+(`os.environ.get("API_SERVER", ...)`) and are given it explicitly by compose.
+So the value that must be correct is the four compose `environment:` entries (8e
+item 6) plus the connector code defaults (8g) — not `.env`. Do **not** "fix"
+`.env`; it is untracked, machine-local, and its `localhost` value is correct for
+the documented host-run workflow.
 
 **8g. Update the code defaults.** `common/runtime_settings/config.py:77`,
 `app/settings.py:85`, `api/settings/v1/models.py:116`, `consumers/main.py:206`
@@ -2904,14 +2970,23 @@ and `.env.example:106` all default to `http://app:8000/` — update to
 missed site is not yet fatal — Step 9 is what proves they were all caught.
 
 **Verify (8e–8g)**: `docker compose config -q` → exit 0
-**Verify (8d)**: `nginx -t` (via the `docker run` form in Commands) → `test is successful`
+**Verify (8d)**: `nginx -t` (via the `docker run` form in Commands) → `test is successful`. **The `--network` flag in that command is required:** the config's upstreams (`api:8000`, `ui:8000`) only resolve on the compose network, so without it `nginx -t` fails with `host not found in upstream`. The baseline config failed identically (`host not found in upstream "app:8000"`), so this is a command-form limitation, not a config regression — do not "fix" the config in response to it.
 **Verify (8e)**: `docker compose up -d --build` → all healthy
 **Verify (8e)**: `curl -sf https://localhost/api/health` → `{"status":"healthy"}`
 **Verify (8e)**: `curl -sf -o /dev/null -w '%{http_code}' https://localhost/app/` → `200`
 **Verify (8a-ii)**: `grep -n "routes_pathname_prefix" src/ui/layout.py` → 1 match, value `"/app/"`
 **Verify (8a-ii)**: `curl -sf -o /dev/null -w '%{http_code}' https://localhost/app/chat` → `200` (a real Dash route; the index alone can be served by a fallback and would not catch a registration mismatch)
-**Verify (8a-ii)**: `curl -sf -o /dev/null -w '%{http_code}' https://localhost/app/app/_dash-layout` → `404` (the doubled path the mount produced in Steps 5–7 must be gone — if this is `200`, the mount is still in the path)
-**Verify (8e)**: `docker compose exec api env | grep -c GITHUB_MCP_TOKEN` → `0`
+**Verify (8a-ii)** — **the mount-is-gone check, corrected.** The plan originally said `curl https://localhost/app/app/_dash-layout` → `404`, reasoning that a doubled path means a surviving mount. **That expectation is wrong for a standalone Dash app, and it was measured wrong at Step 8 execution (it returns `200`).** The doubled path is answered by the UI's own Dash catch-all, not by a mount: with `routes_pathname_prefix="/app/"`, Dash registers `/app/<path:path>` (`ui_main.server.url_map` confirms it), so *any* `/app/<anything>` returns the SPA index — `/app/totally-made-up` → 200 too. A `200` on the doubled path therefore proves nothing either way.
+
+  Test the property directly instead — **ask the API container whether it still serves `/app`**:
+
+  ```bash
+  docker compose exec -T api sh -c 'curl -s -o /dev/null -w "%{http_code}\n" http://localhost:8000/app/'
+  docker compose exec -T api sh -c 'curl -s -o /dev/null -w "%{http_code}\n" http://localhost:8000/app/app/_dash-layout'
+  ```
+
+  → **`404` and `404`.** If either is `200`, the mount survived and the split is not real. (This is the same check Gate 8 item 10's second bullet should be read as; the public URL cannot distinguish the two cases.)
+**Verify (8e)**: `docker compose exec api env | grep -c GITHUB_MCP_TOKEN` → **`1`, and that is correct** — the plan originally said `0`, which was a typo (the neighbouring UI check is the one that must read 0). The **API** service deliberately sets `GITHUB_MCP_TOKEN: ${GITHUB_MCP_TOKEN:-}` because the API's own MCP client needs it (`src/app/api/connectors/v1/service.py:173`); Step 6c's whole point was to stop the *UI* reading it, not the API. **Do not remove the token from the api service to satisfy a 0.** The real check is the UI one below.
 **Verify (8e)**: `docker compose exec ui env | grep -cE "DATABASE_URL|OPENAI_API_KEY|NEO4J_PASSWORD"` → `0`
 **Verify (8e)**: `docker compose exec ui python -c "import ui_main; print('ui imports OK')"` → `ui imports OK`. **This is the boot-time check for Step 6b.** The UI image has no `sqlalchemy` and no `DATABASE_URL`, so if any `src/ui/` module still imports `app.runtime_settings`, `app.common.timezone` or `app.settings`, this fails **here** with `ModuleNotFoundError` instead of surfacing as an unexplained 502.
 
@@ -2940,18 +3015,19 @@ missed site is not yet fatal — Step 9 is what proves they were all caught.
 >    This is the edit Step 5 forward-declared. If it still says `app.main`, the
 >    API container will not start — stop and report rather than proceeding to
 >    "see what happens".
-> 9. **`src/app/main.py` is gone**, and `grep -rn "app\.main" src/ tests/` finds
->    nothing. If the composition module survives, the API process still mounts
->    Dash and the isolation property is not real.
+> 9. **`src/app/main.py` is gone**, and `grep -rn "uvicorn app\.main:app\|import app\.main\|from app\.main" src/ tests/` finds nothing. If the composition module survives, the API process still mounts Dash and the isolation property is not real. **A bare `grep -rn "app\.main"` will still match two prose lines** — the `query.py` user hint (whose command text must be corrected, see 8c) and a Step 6 test docstring recording a past bug. Both are correct; do not reword them just to zero a grep.
 > 10. **`routes_pathname_prefix="/app/"` is now present in
 >     `src/ui/layout.py`'s `create_dash_app()`** — it was deliberately absent at
 >     Step 5 (see 8a-ii). Two requests prove it landed correctly rather than
 >     being added early or not at all:
->     `https://localhost/app/chat` → **`200`**, and
->     `https://localhost/app/app/_dash-layout` → **`404`**. The second is the
->     one that matters: a non-404 there means the app is still mounted and the
->     UI is being served through the doubled path, which looks fine on the index
->     page and breaks every callback.
+>     `https://localhost/app/chat` → **`200`**. For the mount-is-gone check,
+>     **do not use the doubled public path** — `/app/app/_dash-layout` returns
+>     `200` even with the mount correctly removed, because Dash's standalone
+>     `/app/<path:path>` catch-all serves the SPA index for any `/app/<anything>`
+>     (measured: `/app/totally-made-up` → 200 as well). Ask the **API container**
+>     instead: `docker compose exec -T api sh -c 'curl -s -o /dev/null -w
+>     "%{http_code}" http://localhost:8000/app/'` → `404`. A `200` there is the
+>     real signal that the app is still mounted.
 > 11. **The `--forwarded-allow-ips` comment block (lines 34–44) is intact and
 >     verbatim.** Compare it against the plan's baseline commit:
 >     `git diff 5210f00 -- src/app/entrypoint.sh`. The only diff must be the
@@ -2965,6 +3041,16 @@ missed site is not yet fatal — Step 9 is what proves they were all caught.
 >     immediately browse `https://localhost/app`. No 502, no unstyled page. This
 >     is what `depends_on` exists to guarantee — if there is a 502 window, the
 >     dependency graph is wrong.
+>
+>     **Watch for nginx not being recreated.** Measured at Step 8 execution: an
+>     incremental `docker compose up -d --build` did **not** recreate `nginx`,
+>     because a `depends_on`-only change does not trip compose's recreate logic —
+>     so nginx kept running with the *old* `wba_app` upstream and only worked by
+>     accident (the retained `app` alias still resolved to the api container). A
+>     full `down` + `up -d` recreates it correctly. On an incremental deploy after
+>     this step, run `docker compose up -d --force-recreate nginx`. If `/app` or
+>     `/api` 502s while both containers are healthy, this is the first thing to
+>     check.
 > 13. **The UI loads and is styled** — CSS from `/app/assets/` is served by the
 >     **UI** container, not the API. Confirm in DevTools that `/app/assets/*`
 >     responses come from the `ui` service.
@@ -3421,7 +3507,7 @@ Mark each cell as you go. `⬜` not started · `🔄` in progress · `✅` passe
 
 | Step | What it changes | Automated verify | Manual gate | Status |
 |------|-----------------|------------------|-------------|--------|
-| 8  | **The split goes live, atomically:** `Dockerfile.api`/`requirements.api.txt`; new `Dockerfile.ui`/`requirements.ui.txt`; both entrypoints; **`main.py` deleted**; compose `app`→`api` + new `ui`; nginx upstream split; `depends_on`; healthchecks; `API_SERVER` | both images build; UI image free of DB/LLM packages; `compose config`, `nginx -t`, both URLs 200, env checks | **Operator runs every check, including a cold start** | ⬜ |
+| 8  | **The split goes live, atomically:** `Dockerfile.api`/`requirements.api.txt`; new `Dockerfile.ui`/`requirements.ui.txt`; both entrypoints; **`main.py` deleted**; compose `app`→`api` + new `ui`; nginx upstream split; `depends_on`; healthchecks; `API_SERVER` | both images build; UI image free of DB/LLM packages; `compose config`, `nginx -t`, both URLs 200, env checks | **Operator runs every check, including a cold start** | ✅ passed — operator confirmed 2026-10-29. Automated verify green; executor STOPPED on one **false-positive** check which the reviewer adjudicated: the mount IS gone — API container 404s both `/app/` and `/app/app/_dash-layout`; no `a2wsgi`/`WSGIMiddleware` anywhere; `main.py` deleted. The public `/app/app/_dash-layout` → 200 is Dash's standalone `/app/<path:path>` catch-all (`/app/totally-made-up` → 200 too), so the plan's 404 expectation was an unachievable proxy; check corrected in the plan. Reviewer re-ran: 2365 passed / mypy 0 / pylint 9.67 / bandit 0; API image dash=0, UI image banned=0, no `/app/ui` in API image; ui-container secrets=0; ui→api over `http://api:8000` = 200 and 19 snapshot fetches, 0 degraded; producers fetch snapshot (1, 0 unreachable); assets 200 from UI / 404 from API; cold start no 502. Six plan defects fixed (false mount check, `--entrypoint pip`, `nginx -t --network`, MCP-token typo, nginx force-recreate, dash pins). |
 | 9  | Drop the `app` network alias | grep clean; all healthy | Producer **logs** show the snapshot fetch succeeding | ⬜ |
 
 **Phase 4 — client, audit, docs**
@@ -3519,7 +3605,7 @@ ALL must hold:
 - [ ] `grep -rn "runtime_settings.events" src/ tests/` → no matches
 - [ ] `grep -rn "app:8000" docker-compose.yml src/ .env.example` → no matches
 - [ ] `grep -n "app\.main:app" src/app/entrypoint.sh` → **no matches**; it names `app.api_main:app`
-- [ ] `grep -c "forwarded-allow-ips" src/app/entrypoint.sh` → 2 (comment + invocation), and the comment block is byte-identical to `git show 5210f00:src/app/entrypoint.sh`
+- [ ] `grep -c "forwarded-allow-ips" src/app/entrypoint.sh` → **1** (unchanged from `git show 5210f00:src/app/entrypoint.sh`), and the comment block (now lines 34–44) is byte-identical to the baseline
 - [ ] `PYTHONPATH=src python -c "import sys, common.runtime_settings; assert not any(m.startswith('aio_pika') for m in sys.modules)"` → exit 0
 - [ ] `grep -rn "app\.dash_app" src/app/api/ src/app/db/ src/app/common/` → no matches (the backwards edge is gone)
 - [ ] `src/domain/` imports nothing from `app.*`
@@ -3527,7 +3613,7 @@ ALL must hold:
 - [ ] The API image contains no `dash`
 - [ ] `docker compose exec ui env` shows no `DATABASE_URL`/`OPENAI_API_KEY`/`NEO4J_PASSWORD`/`GITHUB_MCP_TOKEN`/`CONNECTOR_ENCRYPTION_KEY`
 - [ ] Producer logs show the snapshot fetch **succeeding** (not the fallback warning)
-- [ ] `grep -rn "app\.main" src/ tests/` → no matches (`main.py` is gone)
+- [ ] `grep -rn "uvicorn app\.main:app\|import app\.main\|from app\.main" src/ tests/` → no matches (`main.py` is gone). Two prose-only `app.main` mentions legitimately remain — see Step 8c's note; do not reword them to zero a bare grep.
 - [ ] Step 7's before/after summaries are **identical** — collab org, ego and spotlight alike
 - [ ] Step 7's baseline script called `src/ui/collaboration_params.py` (not a private param dict), so the re-run exercised the swapped translation
 - [ ] `tests/test_collab_query_param_roundtrip.py` passes **and fails when one `w_*` line is dropped** from `config_to_query_params`

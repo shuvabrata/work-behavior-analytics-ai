@@ -75,12 +75,7 @@ services:
       # baked in the image and is refreshed on every image update.
       - catalog_user_defined:/app/queries_catalog/user_defined
     networks:
-      wba-ai-network:
-        # Kept for one step (dropped in Step 9) so the producers/consumer can be
-        # migrated to `api` without a window where their API_SERVER value fails
-        # to resolve. The name `app` is retired afterwards.
-        aliases:
-          - app
+      - wba-ai-network
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
       interval: 10s

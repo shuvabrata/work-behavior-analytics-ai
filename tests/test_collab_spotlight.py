@@ -5,7 +5,7 @@ Tests the pure class-manipulation logic with no Dash server or ES required.
 
 import pytest
 
-from app.dash_app.pages.collaboration_network.callbacks.spotlight import (
+from ui.pages.collaboration_network.callbacks.spotlight import (
     _apply_spotlight_classes,
 )
 

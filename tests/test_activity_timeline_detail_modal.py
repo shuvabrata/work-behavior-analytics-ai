@@ -15,28 +15,28 @@ from urllib.parse import parse_qs, unquote
 import pytest
 from dash import html, no_update
 
-from app.dash_app.components.common import (
+from ui.components.common import (
     build_element_properties_content,
     render_properties_table,
     render_visible_properties,
 )
-from app.dash_app.pages.graph.utils import neo4j_to_cytoscape
-from app.dash_app.pages.timeline import api as timeline_api
-from app.dash_app.pages.timeline import callbacks
-from app.dash_app.pages.timeline.api import (
+from ui.pages.graph.utils import neo4j_to_cytoscape
+from ui.pages.timeline import api as timeline_api
+from ui.pages.timeline import callbacks
+from ui.pages.timeline.api import (
     _NODE_PROPERTIES_CYPHER,
     NodePropertiesError,
     _mapping_id_for,
     fetch_node_properties,
 )
-from app.dash_app.pages.timeline.helpers import (
+from ui.pages.timeline.helpers import (
     _humanize_event_time,
     _node_pattern,
     detail_payload,
     detail_sentence,
     graph_deep_link,
 )
-from app.dash_app.pages.timeline.layout import build_event_card
+from ui.pages.timeline.layout import build_event_card
 
 pytestmark = pytest.mark.unit
 

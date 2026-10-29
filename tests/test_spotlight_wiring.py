@@ -15,9 +15,9 @@ from __future__ import annotations
 import pytest
 from dash import _callback
 
-import app.main  # noqa: F401  # importing the app registers every page's callbacks
-from app.dash_app.components import spotlight as shared_spotlight
-from app.dash_app.pages.collaboration_network_ego.layout import get_layout as ego_layout
+import app.api_main  # noqa: F401  # importing the app registers every page's callbacks
+from ui.components import spotlight as shared_spotlight
+from ui.pages.collaboration_network_ego.layout import get_layout as ego_layout
 
 
 pytestmark = pytest.mark.unit
@@ -62,7 +62,7 @@ def test_ego_layout_declares_the_debounce_store():
 
 def test_both_pages_share_one_spotlight_implementation():
     """The pages must not carry copies that could drift apart."""
-    from app.dash_app.pages.collaboration_network.callbacks import spotlight as collab_spotlight
+    from ui.pages.collaboration_network.callbacks import spotlight as collab_spotlight
 
     assert collab_spotlight._apply_spotlight_classes is shared_spotlight.apply_spotlight_classes
     assert collab_spotlight._match_node is shared_spotlight.match_node

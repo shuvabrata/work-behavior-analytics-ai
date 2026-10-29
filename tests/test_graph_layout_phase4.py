@@ -2,7 +2,7 @@
 
 import pytest
 
-from app.dash_app.pages.graph.layout import get_layout
+from ui.pages.graph.layout import get_layout
 
 
 pytestmark = pytest.mark.unit

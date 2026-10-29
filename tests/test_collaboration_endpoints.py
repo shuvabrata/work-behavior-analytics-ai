@@ -18,7 +18,7 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
-import app.main  # noqa: F401  (importing builds the app with every router registered)
+import app.api_main  # noqa: F401  (importing builds the app with every router registered)
 from app.api.graph.v1 import router as graph_router
 from app.api.graph.v1 import service as graph_service
 from app.api.graph.v1.model import CollaborationNetworkResponse, EgoNetworkResponse
@@ -87,7 +87,7 @@ def captured_config(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
 @pytest.fixture
 def client() -> TestClient:
     """A TestClient with no lifespan, so no database is contacted."""
-    return TestClient(app.main.app)
+    return TestClient(app.api_main.app)
 
 
 def _request_url(path: str) -> str:

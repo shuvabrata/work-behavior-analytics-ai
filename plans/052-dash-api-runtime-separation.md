@@ -3229,7 +3229,7 @@ Mark each cell as you go. `⬜` not started · `🔄` in progress · `✅` passe
 
 | Step | What it changes | Automated verify | Manual gate | Status |
 |------|-----------------|------------------|-------------|--------|
-| 5  | `src/app/dash_app/` → `src/ui/`; `api_main.py` + `ui_main.py` created; Flask request logging ported; `main.py` reduced to a **temporary composition**. `routes_pathname_prefix` stays **unset** — Step 8's edit | suite green, no `app.dash_app` remains, no `a2wsgi` outside `main.py`, `main.py` still imports, no `routes_pathname_prefix`, `/app/` **and** `/app/chat` both `200`, `mypy` | Operator confirms the prefix is **absent** (the mount strips `/app`), `main.py` **not** deleted, `ui_main` imports no FastAPI/DB/transport, and the rebuilt stack still serves `/app` | ⬜ |
+| 5  | `src/app/dash_app/` → `src/ui/`; `api_main.py` + `ui_main.py` created; Flask request logging ported; `main.py` reduced to a **temporary composition**. `routes_pathname_prefix` stays **unset** — Step 8's edit | suite green, no `app.dash_app` remains, no `a2wsgi` outside `main.py`, `main.py` still imports, no `routes_pathname_prefix`, `/app/` **and** `/app/chat` both `200`, `mypy` | Operator confirms the prefix is **absent** (the mount strips `/app`), `main.py` **not** deleted, `ui_main` imports no FastAPI/DB/transport, and the rebuilt stack still serves `/app` | ✅ passed (automated verify re-run by reviewer; operator manual gate outstanding) — plus `Dockerfile.app` `COPY src/ui/` + `COPY src/ui_main.py` (authorized, same defect class as the Phase 1 addendum), `mypy.ini` `[mypy-app.dash_app.*]` → `[mypy-ui.*]`, and two moved-symbol call sites (`api/settings/v1/service.py`, `scripts/render_activity_cards.py`) |
 | 6  | 12 import-time constants → function-local reads + regression test; **DB-free `UISettings` / `ui.runtime_settings` / `domain.timezone` so the UI stops importing `app.runtime_settings`, `app.common.timezone` and `app.settings`** (21 files — without this the UI container cannot boot); MCP env table from `GET /api/v1/settings/`; `NEO4J_URI` message fixed | both new tests pass **and fail on mutation**; the three old imports gone from `src/ui/`; grep gates | Operator **runs both mutations**; `test_ui_isolation.py` blocks real package names; `domain/` imports nothing from `app.*`/`ui.*`; `/app/chat` renders (it uses the timezone helpers) | ⬜ |
 | 7  | Collab + ego + spotlight bypasses → HTTP, **one baseline captured before any swap**; new **`POST /search/scoped`** (a GET would 414 on the 223-id canvas — 10,438-byte request line vs an 8 KB header buffer); `src/ui/api_client.py` created with the status→exception mapping (7d-i) so the collab empty/invalid banners survive | before/after identities hold, **including the empty-result and invalid-config legs**; status-mapping unit test passes **and fails on mutation**; scoped route is a POST and returns 200 for a 223-id body; the canvas check printed ≥223 nodes; script deleted, both permanent tests kept | Operator confirms the baseline predates every swap, every data leg matches exactly, every error leg errored on both sides, the no-data banners still render, and spotlight works **with a full 200+ node canvas** in the browser | ⬜ |
 
@@ -3436,6 +3436,34 @@ The generalisable rule for Step 8: **any `python <path>/<script>.py` invocation
 in an entrypoint needs its package root on `PYTHONPATH` or must be run as
 `python -m package.module`.** `alembic.ini` is unaffected — it already sets
 `prepend_sys_path = ..`.
+
+### Addendum 2 — Step 5's carry-forward, and it is a *removal*
+
+Step 5 moved `src/app/dash_app/` to `src/ui/` and created `src/ui_main.py`. Both
+were invisible to the image, so Step 5 added two lines to `Dockerfile.app`:
+
+```
+COPY src/ui/ ./ui/
+COPY src/ui_main.py ./ui_main.py
+```
+
+Those lines are correct **only while the UI is still served in-process** (Steps
+5–7). Step 8 splits the images, and its instruction for the API Dockerfile is
+"`Dockerfile.app` → `Dockerfile.api`, **unchanged build**". Taken literally, that
+copies the UI package and its WSGI entrypoint into the API image — the API image
+would then ship the very files the split exists to separate, and (because
+`COPY src/ui_main.py ./ui_main.py` imports `ui.layout` at module scope) a second
+copy of the Dash app inside the API runtime.
+
+**So Step 8 must DELETE both lines when it renames `Dockerfile.app` →
+`Dockerfile.api`**, and move them (as `src/ui/`, `src/domain/`, `src/common/`)
+into the new `Dockerfile.ui`. Step 8 already lists `src/ui/` in "Copy into the UI
+image"; this addendum is the reminder that the API side must *drop* it, not just
+that the UI side must add it. The `src/domain/` and `src/common/` copies are
+different: `Dockerfile.api` keeps them, because the API imports both.
+
+Quick check after Step 8's build: `docker exec wba-ai-api ls /app/ui /app/ui_main.py`
+must fail with "No such file or directory" on both.
 
 **What future changes interact with this:**
 

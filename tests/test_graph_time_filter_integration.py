@@ -7,7 +7,7 @@ maintained correctly.
 
 import pytest
 
-from app.dash_app.pages.graph.callbacks.filtering import (
+from ui.pages.graph.callbacks.filtering import (
     _compute_filtered_graph,
     FilteringDataValidationError,
 )

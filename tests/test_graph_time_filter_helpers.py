@@ -6,7 +6,7 @@ Covers ``_parse_days_since_epoch``, ``_format_day_label``, and
 
 import pytest
 
-from app.dash_app.pages.graph.utils.time_helpers import (
+from ui.pages.graph.utils.time_helpers import (
     _parse_days_since_epoch,
     _format_day_label,
     compute_time_range,

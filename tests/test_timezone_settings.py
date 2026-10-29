@@ -5,8 +5,8 @@ from datetime import datetime, timezone
 import pytest
 
 from app.common.timezone import to_app_timezone
-from app.dash_app.pages.chat import queue_message
-from app.dash_app.pages.connectors.callbacks import render_items_list
+from ui.pages.chat import queue_message
+from ui.pages.connectors.callbacks import render_items_list
 from app.runtime_settings import runtime_settings
 from app.settings import Settings, settings
 from common.runtime_settings import RuntimeConfig
@@ -116,7 +116,7 @@ def test_render_items_list_formats_connector_timestamp_in_app_timezone(monkeypat
 
 def test_queue_message_uses_app_timezone_for_ui_timestamps(monkeypatch):
     fixed_now = datetime(2026, 5, 3, 5, 30, tzinfo=timezone.utc)
-    monkeypatch.setattr("app.dash_app.pages.chat.now_in_app_timezone", lambda: fixed_now)
+    monkeypatch.setattr("ui.pages.chat.now_in_app_timezone", lambda: fixed_now)
 
     _, _, session_data, pending, _, _ = queue_message(
         1,

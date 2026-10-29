@@ -8,7 +8,7 @@ from dataclasses import dataclass
 
 import pytest
 
-from app.dash_app.pages.graph.callbacks import query as query_callbacks
+from ui.pages.graph.callbacks import query as query_callbacks
 
 
 pytestmark = pytest.mark.unit

@@ -1,7 +1,7 @@
 """Unit tests for the catalog editor Quick Test / View Test callbacks.
 
 These exercise ``_run_test`` / ``quick_test`` in
-``app.dash_app.pages.catalog.editor_test_callbacks`` in isolation. The
+``ui.pages.catalog.editor_test_callbacks`` in isolation. The
 integration paths (payload shape, write-Cypher 400, empty query) are covered by
 the migrated E4–E7 tests in ``test_catalog_editor_callbacks.py``.
 """
@@ -9,7 +9,7 @@ the migrated E4–E7 tests in ``test_catalog_editor_callbacks.py``.
 import pytest
 import requests as requests_lib
 
-from app.dash_app.pages.catalog import editor_test_callbacks
+from ui.pages.catalog import editor_test_callbacks
 
 
 pytestmark = pytest.mark.unit

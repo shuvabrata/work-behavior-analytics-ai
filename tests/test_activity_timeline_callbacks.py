@@ -1,7 +1,7 @@
 """Unit tests for the Activity Timeline page's server callbacks.
 
 These call the ``@callback``-decorated functions in
-``app.dash_app.pages.timeline.callbacks`` directly with explicit arguments,
+``ui.pages.timeline.callbacks`` directly with explicit arguments,
 mirroring ``tests/test_collab_network_controls.py``. External collaborators
 (``fetch_suggestions``, ``fetch_timeline``, ``fetch_effective_theme``) and the
 Dash ``callback_context`` are patched **in the callbacks module's namespace**,
@@ -20,12 +20,12 @@ import pytest
 from dash import no_update
 from dash.exceptions import PreventUpdate
 
-from app.dash_app.pages.timeline.api import (
+from ui.pages.timeline.api import (
     SuggestionFetchError,
     TimelineFetchError,
     fetch_suggestions,
 )
-from app.dash_app.pages.timeline.callbacks import (
+from ui.pages.timeline.callbacks import (
     apply_deeplink,
     load_more,
     load_timeline,
@@ -48,8 +48,8 @@ pytestmark = pytest.mark.unit
 # Fixtures / factories (shape mirrors tests/test_activity_timeline_ui_helpers.py)
 # ---------------------------------------------------------------------------
 
-_CB = "app.dash_app.pages.timeline.callbacks"
-_API = "app.dash_app.pages.timeline.api"
+_CB = "ui.pages.timeline.callbacks"
+_API = "ui.pages.timeline.api"
 
 
 def _event(signal_id: str, iso: str, summary: str = "event") -> dict[str, Any]:

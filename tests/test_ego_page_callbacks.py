@@ -17,7 +17,7 @@ from domain.collaboration.ego_metadata import cap_options_for
 from domain.collaboration.errors import CollaborationDataUnavailable
 from app.api.graph.v1.model import EgoNetworkResponse
 from domain.person_network_url import DEFAULT_MAX_COLLABORATORS
-from app.dash_app.pages.collaboration_network_ego.callbacks import filter as ego_filter
+from ui.pages.collaboration_network_ego.callbacks import filter as ego_filter
 
 
 pytestmark = pytest.mark.unit
@@ -579,7 +579,7 @@ def _find_by_class(root: Any, class_name: str) -> Any:
 
 def test_picker_is_rendered_in_the_page_header():
     """The picker must sit inside the header, which is the point of the change."""
-    from app.dash_app.pages.collaboration_network_ego.layout import get_layout
+    from ui.pages.collaboration_network_ego.layout import get_layout
 
     layout = get_layout()
     picker = _find_by_class(layout, "ego-header-picker")
@@ -591,7 +591,7 @@ def test_picker_is_rendered_in_the_page_header():
 
 def test_picker_is_no_longer_a_sibling_of_the_canvas():
     """Regression guard: the old standalone block above the graph must be gone."""
-    from app.dash_app.pages.collaboration_network_ego.layout import get_layout
+    from ui.pages.collaboration_network_ego.layout import get_layout
 
     layout = get_layout()
     top_level = list(layout.children)
@@ -606,7 +606,7 @@ def test_picker_is_no_longer_a_sibling_of_the_canvas():
 
 def test_header_picker_keeps_every_id_the_callbacks_match_on():
     """The move must not rename any id — callbacks match on the id family."""
-    from app.dash_app.pages.collaboration_network_ego.layout import get_layout
+    from ui.pages.collaboration_network_ego.layout import get_layout
 
     layout = get_layout()
     for id_type in (
@@ -624,7 +624,7 @@ def test_header_picker_keeps_every_id_the_callbacks_match_on():
 
 def test_header_picker_label_is_hidden_not_absent():
     """The header supplies the label; the input keeps an accessible name."""
-    from app.dash_app.pages.collaboration_network_ego.layout import get_layout
+    from ui.pages.collaboration_network_ego.layout import get_layout
 
     layout = get_layout()
     labels = [
@@ -637,7 +637,7 @@ def test_header_picker_label_is_hidden_not_absent():
 
 def test_canvas_height_is_re_derived_for_the_picker_move():
     """The canvas constant must shrink with the removed block, not stay at 200."""
-    from app.dash_app.pages.collaboration_network_ego.layout import _CANVAS_HEIGHT
+    from ui.pages.collaboration_network_ego.layout import _CANVAS_HEIGHT
 
     assert "200px" not in _CANVAS_HEIGHT, (
         "canvas still subtracts the org page's constant, which was sized for a "
@@ -653,7 +653,7 @@ def test_empty_state_is_positioned_out_of_flow_over_the_canvas():
     pushed a scrollbar onto a page that should not scroll and left the text
     below the fold, where it went unread.
     """
-    from app.dash_app.pages.collaboration_network_ego.layout import (
+    from ui.pages.collaboration_network_ego.layout import (
         _EMPTY_STATE_STYLE,
         get_layout,
     )
@@ -703,7 +703,7 @@ def test_callback_keeps_the_positioning_on_its_first_fire():
     namespace, so the identity holds even when the callback builds its own dict.
     Only the returned style proves the positioning survives.
     """
-    from app.dash_app.pages.collaboration_network_ego.callbacks import filter as ego_filter
+    from ui.pages.collaboration_network_ego.callbacks import filter as ego_filter
 
     result = ego_filter.load_ego_network(None, "?max_collaborators=50", PAGE, 25, [])
     returned = result[4]
@@ -732,14 +732,14 @@ def test_loading_store_starts_false_because_no_fetch_happens_on_arrival():
 
     Seeding it truthy would flash the overlay over the "pick a person" prompt.
     """
-    from app.dash_app.pages.collaboration_network_ego.layout import get_layout
+    from ui.pages.collaboration_network_ego.layout import get_layout
 
     assert _loading_overlay_state(get_layout()) is False
 
 
 def test_overlay_is_wired_to_the_store_it_reads():
     """The overlay div and its driving store must both exist and stay in sync."""
-    from app.dash_app.pages.collaboration_network_ego.layout import get_layout
+    from ui.pages.collaboration_network_ego.layout import get_layout
 
     layout = get_layout()
     assert _find_by_exact_id(layout, "ego-loading-overlay") is not None, (

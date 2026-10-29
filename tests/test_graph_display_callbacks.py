@@ -1,6 +1,6 @@
 """Unit tests for graph details display helpers."""
 
-from app.dash_app.components.common import (
+from ui.components.common import (
     _panel_build_visible_properties as _build_visible_properties,
     _panel_resolve_endpoint as _resolve_edge_endpoint_id,
 )

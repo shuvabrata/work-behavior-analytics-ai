@@ -29,7 +29,7 @@ from app.api.activity.v1 import service
 from app.api.activity.v1.service import _decode_cursor
 from app.db.models.activity_action import ActivityAction
 from app.db.models.activity_event import ActivityEvent
-from app.main import app
+from app.api_main import app
 from app.settings import settings
 
 pytestmark = [pytest.mark.unit, pytest.mark.asyncio]

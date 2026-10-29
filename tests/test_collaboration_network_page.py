@@ -1,7 +1,7 @@
 """Unit tests for the collaboration network page module.
 
 Tests cover the pure helper functions in
-app/dash_app/pages/collaboration_network.py — no Dash server, no Neo4j
+ui/pages/collaboration_network.py — no Dash server, no Neo4j
 connection required.
 
 Run with: pytest tests/test_collaboration_network_page.py -v
@@ -9,7 +9,7 @@ Run with: pytest tests/test_collaboration_network_page.py -v
 
 import pytest
 
-from app.dash_app.pages.collaboration_network.layout import (
+from ui.pages.collaboration_network.layout import (
     _compute_collab_filtered,
     _get_communities,
     _split_elements,

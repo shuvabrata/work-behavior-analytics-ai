@@ -17,7 +17,7 @@ import requests
 from dash import no_update
 
 from domain.connector_registry import CONNECTOR_REGISTRY
-from app.dash_app.pages.connectors.layout import _render_top_action_bar
+from ui.pages.connectors.layout import _render_top_action_bar
 
 
 pytestmark = pytest.mark.unit
@@ -191,11 +191,11 @@ class TestMcpTestConnectionCallback:
 
     def test_successful_test_shows_green_alert(self):
         """A successful test renders a success alert with the message."""
-        from app.dash_app.pages.connectors.callbacks import handle_mcp_test_connection
+        from ui.pages.connectors.callbacks import handle_mcp_test_connection
 
         with (
-            patch("app.dash_app.pages.connectors.callbacks.callback_context") as mock_ctx,
-            patch("app.dash_app.pages.connectors.callbacks.requests.post") as mock_post,
+            patch("ui.pages.connectors.callbacks.callback_context") as mock_ctx,
+            patch("ui.pages.connectors.callbacks.requests.post") as mock_post,
         ):
             mock_ctx.triggered = [
                 {
@@ -227,11 +227,11 @@ class TestMcpTestConnectionCallback:
 
     def test_failed_test_shows_red_alert(self):
         """A failed test renders a danger alert with the error message."""
-        from app.dash_app.pages.connectors.callbacks import handle_mcp_test_connection
+        from ui.pages.connectors.callbacks import handle_mcp_test_connection
 
         with (
-            patch("app.dash_app.pages.connectors.callbacks.callback_context") as mock_ctx,
-            patch("app.dash_app.pages.connectors.callbacks.requests.post") as mock_post,
+            patch("ui.pages.connectors.callbacks.callback_context") as mock_ctx,
+            patch("ui.pages.connectors.callbacks.requests.post") as mock_post,
         ):
             mock_ctx.triggered = [
                 {
@@ -259,11 +259,11 @@ class TestMcpTestConnectionCallback:
 
     def test_request_exception_shows_danger_alert(self):
         """A network error renders a danger alert."""
-        from app.dash_app.pages.connectors.callbacks import handle_mcp_test_connection
+        from ui.pages.connectors.callbacks import handle_mcp_test_connection
 
         with (
-            patch("app.dash_app.pages.connectors.callbacks.callback_context") as mock_ctx,
-            patch("app.dash_app.pages.connectors.callbacks.requests.post") as mock_post,
+            patch("ui.pages.connectors.callbacks.callback_context") as mock_ctx,
+            patch("ui.pages.connectors.callbacks.requests.post") as mock_post,
         ):
             mock_ctx.triggered = [
                 {
@@ -284,9 +284,9 @@ class TestMcpTestConnectionCallback:
 
     def test_no_trigger_returns_no_update(self):
         """No trigger → returns no_update."""
-        from app.dash_app.pages.connectors.callbacks import handle_mcp_test_connection
+        from ui.pages.connectors.callbacks import handle_mcp_test_connection
 
-        with patch("app.dash_app.pages.connectors.callbacks.callback_context") as mock_ctx:
+        with patch("ui.pages.connectors.callbacks.callback_context") as mock_ctx:
             mock_ctx.triggered = []
             result = handle_mcp_test_connection([None])
 

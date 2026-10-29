@@ -10,7 +10,7 @@ from domain.collaboration.config import (
     DEFAULT_LAYER_WEIGHTS,
     LAYER_ORDER,
 )
-from app.dash_app.pages.collaboration_network.callbacks.filter import (
+from ui.pages.collaboration_network.callbacks.filter import (
     load_collaboration_network,
 )
 
@@ -47,7 +47,7 @@ def test_load_collaboration_network_parses_weights_and_layers():
     fake = _FakeResult(elements=[{"data": {"id": "n1"}}], config={})
 
     with patch(
-        "app.dash_app.pages.collaboration_network.callbacks.filter.get_collaboration_network",
+        "ui.pages.collaboration_network.callbacks.filter.get_collaboration_network",
         return_value=fake,
     ) as mock_fetch:
         outputs = load_collaboration_network(search, "/app/collaboration")
@@ -81,7 +81,7 @@ def test_load_collaboration_network_empty_layers_stays_empty():
     fake = _FakeResult(elements=[{"data": {"id": "n1"}}], config={})
 
     with patch(
-        "app.dash_app.pages.collaboration_network.callbacks.filter.get_collaboration_network",
+        "ui.pages.collaboration_network.callbacks.filter.get_collaboration_network",
         return_value=fake,
     ) as mock_fetch:
         load_collaboration_network(search, "/app/collaboration")

@@ -28,6 +28,10 @@ COPY src/common/ ./common/
 # Copy domain-specific code
 COPY src/domain/ ./domain/
 
+# Copy the Dash UI package and its WSGI entrypoint
+COPY src/ui/ ./ui/
+COPY src/ui_main.py ./ui_main.py
+
 # Copy shipped query catalog used by the graph query workbench
 COPY queries_catalog/ ./queries_catalog/
 

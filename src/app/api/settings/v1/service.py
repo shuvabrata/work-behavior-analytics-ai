@@ -48,9 +48,9 @@ async def _publish_changed(keys: list[str]) -> str | None:
     non-fatal — settings are still saved and applied locally.
     """
     # Lazy import to avoid a circular dependency between this service module
-    # and ``app.main`` (which imports this router's module).
+    # and ``app.api_main`` (which imports this router's module).
     # pylint: disable=import-outside-toplevel
-    from app.main import get_rabbitmq_connection
+    from app.api_main import get_rabbitmq_connection
 
     connection = get_rabbitmq_connection()
     if connection is None:

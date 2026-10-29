@@ -20,12 +20,12 @@ from domain.graph_theme import (
     merge_theme_overrides,
     overrides_to_cytoscape_rules,
 )
-from app.dash_app.graph_styles import build_cytoscape_stylesheet
+from ui.graph_styles import build_cytoscape_stylesheet
 
 pytestmark = pytest.mark.unit
 
 # A minimal but representative base token dict, mirroring the structure of the
-# hardcoded ``THEME_TOKENS`` graph palette (see dash_app/styles.py).
+# hardcoded ``THEME_TOKENS`` graph palette (see ui/styles.py).
 BASE_LIGHT = {
     "graph.node.default": "#B8B8B8",
     "graph.node.default.border": "#9E9E9E",
@@ -80,7 +80,7 @@ def test_legend_glyph_parity_all_shapes():
     with a ``clip-path`` (or a non-ellipse ``borderRadius``), guarding against
     silently regressing when a shape is added without a legend glyph.
     """
-    from app.dash_app.pages.graph.utils.ui_components import get_shape_css
+    from ui.pages.graph.utils.ui_components import get_shape_css
 
     for shape in ALLOWED_SHAPES:
         if shape in ("ellipse", "circle"):

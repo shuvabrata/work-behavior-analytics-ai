@@ -1,6 +1,6 @@
 """Unit tests for the shared graph/table result-pane builders.
 
-Tests cover app.dash_app.components.result_pane:
+Tests cover ui.components.result_pane:
   - create_graph_result_container
   - create_table_result_container
   - create_results_empty_state
@@ -9,7 +9,7 @@ Tests cover app.dash_app.components.result_pane:
 import pytest
 from dash import html
 
-from app.dash_app.components.result_pane import (
+from ui.components.result_pane import (
     create_graph_result_container,
     create_results_empty_state,
     create_table_result_container,

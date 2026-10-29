@@ -16,8 +16,8 @@ import pytest
 from dash import html
 from dash.exceptions import PreventUpdate
 
-from app.dash_app.pages.graph.callbacks import catalog as catalog_cb
-from app.dash_app.pages.graph.callbacks.catalog import (
+from ui.pages.graph.callbacks import catalog as catalog_cb
+from ui.pages.graph.callbacks.catalog import (
     load_query_catalog,
     render_catalog_query_list,
     toggle_catalog_favourite,
@@ -169,10 +169,10 @@ class TestCatalogLoadSorting:
         }
 
         with patch(
-            "app.dash_app.pages.graph.callbacks.catalog.get_graph_api_base_url",
+            "ui.pages.graph.callbacks.catalog.get_graph_api_base_url",
             return_value="http://testserver",
         ), patch(
-            "app.dash_app.pages.graph.callbacks.catalog.requests.get",
+            "ui.pages.graph.callbacks.catalog.requests.get",
             side_effect=[catalog_response, metadata_response],
         ):
             sorted_queries, load_status, metadata = load_query_catalog("/app/graph")
@@ -203,7 +203,7 @@ class TestToggleCallback:
         with self._patch_ctx(
             {"type": "catalog-favourite-toggle", "catalog_id": "schema/a"}
         ), patch(
-            "app.dash_app.pages.graph.callbacks.catalog.requests.put",
+            "ui.pages.graph.callbacks.catalog.requests.put",
             return_value=mock_response,
         ) as mock_put:
             result = toggle_catalog_favourite(
@@ -229,7 +229,7 @@ class TestToggleCallback:
         with self._patch_ctx(
             {"type": "catalog-favourite-toggle", "catalog_id": "schema/a"}
         ), patch(
-            "app.dash_app.pages.graph.callbacks.catalog.requests.put",
+            "ui.pages.graph.callbacks.catalog.requests.put",
             return_value=mock_response,
         ) as mock_put:
             result = toggle_catalog_favourite(
@@ -253,7 +253,7 @@ class TestToggleCallback:
         with self._patch_ctx(
             {"type": "catalog-favourite-toggle", "catalog_id": "schema/a"}
         ), patch(
-            "app.dash_app.pages.graph.callbacks.catalog.requests.put",
+            "ui.pages.graph.callbacks.catalog.requests.put",
             return_value=mock_response,
         ):
             result = toggle_catalog_favourite(
@@ -294,7 +294,7 @@ class TestToggleCallback:
         with self._patch_ctx(
             {"type": "catalog-favourite-toggle", "catalog_id": "schema/a"}
         ), patch(
-            "app.dash_app.pages.graph.callbacks.catalog.requests.put",
+            "ui.pages.graph.callbacks.catalog.requests.put",
             return_value=mock_response,
         ):
             result = toggle_catalog_favourite(
@@ -312,7 +312,7 @@ class TestToggleCallback:
         with self._patch_ctx(
             {"type": "catalog-favourite-toggle", "catalog_id": "schema/a"}
         ), patch(
-            "app.dash_app.pages.graph.callbacks.catalog.requests.put",
+            "ui.pages.graph.callbacks.catalog.requests.put",
         ) as mock_put:
             with pytest.raises(PreventUpdate):
                 toggle_catalog_favourite(
@@ -328,7 +328,7 @@ class TestToggleCallback:
         with self._patch_ctx(
             {"type": "catalog-favourite-toggle", "catalog_id": "schema/a"}
         ), patch(
-            "app.dash_app.pages.graph.callbacks.catalog.requests.put",
+            "ui.pages.graph.callbacks.catalog.requests.put",
         ) as mock_put:
             with pytest.raises(PreventUpdate):
                 toggle_catalog_favourite(

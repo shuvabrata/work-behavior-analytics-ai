@@ -1,16 +1,16 @@
 from typing import Any
 """Node sizing utilities shared between the analytics pipeline and the Dash UI.
 
-Kept in app/common to avoid circular imports: both the collaboration algorithm
-(app/analytics/...) and the Dash data-transform (app/dash_app/...) need these
-helpers, but the analytics layer must not import from the Dash layer.
+Kept in domain to avoid circular imports: both the collaboration algorithm
+(app/analytics/...) and the Dash data-transform (ui/...) need these
+helpers, but the analytics layer must not import from the UI layer.
 """
 
 # Default node dimensions in pixels, keyed by nodeType string.
 # Used as the base for _node_size multiplier calculations so dynamic sizing
 # preserves each type's width:height ratio.
 # Keep in sync with fixed width/height values in
-# app/dash_app/graph_styles.py :: build_cytoscape_stylesheet.
+# ui/graph_styles.py :: build_cytoscape_stylesheet.
 BASE_NODE_DIMENSIONS: dict[str, tuple[float, float]] = {
     "Project": (70.0, 35.0),
     "Person": (66.0, 56.0),

@@ -11,7 +11,7 @@ Two separate concerns live here, both introduced by the TLS reverse-proxy work
    the public host and break it.
 
 2. Forwarded-header trust. uvicorn wraps the app in its own
-   ``ProxyHeadersMiddleware`` only at server startup, so driving ``app.main.app``
+   ``ProxyHeadersMiddleware`` only at server startup, so driving ``app.api_main.app``
    through ``httpx.ASGITransport`` never exercises it. The tests below build a
    throwaway ASGI app and wrap it with the real uvicorn middleware, which is
    what keeps them honest about production behaviour.

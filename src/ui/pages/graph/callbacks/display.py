@@ -1,0 +1,129 @@
+"""Display Callbacks
+
+Callbacks for graph display, layout management, and property details.
+"""
+
+from typing import Any
+from dash import Input, Output, State, callback, callback_context
+
+from ui.components.common import build_element_properties_content, register_edge_hover_dimming_callback, register_fullwidth_callback
+from ui.graph_styles import build_cytoscape_stylesheet
+from ..utils import create_node_legend, fetch_effective_theme, is_node_element
+
+register_fullwidth_callback("graph")
+register_edge_hover_dimming_callback("graph-cytoscape")
+
+
+@callback(
+    Output("graph-details-panel", "children"),
+    [Input("graph-cytoscape", "selectedNodeData"),
+     Input("graph-cytoscape", "selectedEdgeData"),
+     Input("theme-store", "data")],
+    State("graph-cytoscape", "elements"),
+)
+def display_properties(selected_nodes: Any, selected_edges: Any, theme_name: Any, elements: Any) -> Any:
+    """Display detailed properties of selected node or edge"""
+    # Extract unique node types from current graph elements
+    node_types = set()
+    if elements:
+        for element in elements:
+            if is_node_element(element):
+                node_type = element.get('data', {}).get('nodeType')
+                if node_type:
+                    node_types.add(node_type)
+    
+    # Default state: show legend with current node types (or empty state if no graph)
+    active_theme = theme_name or "executive-light"
+    legend_state = create_node_legend(list(node_types) if node_types else None, theme_name=active_theme)
+    
+    # Node was selected (selectedNodeData returns a list)
+    if selected_nodes and len(selected_nodes) > 0:
+        return build_element_properties_content(selected_nodes[0], expand_node_enabled=True)
+
+    # Edge was selected (selectedEdgeData returns a list)
+    if selected_edges and len(selected_edges) > 0:
+        return build_element_properties_content(selected_edges[0], expand_node_enabled=True)
+
+    # Nothing selected - show legend
+    return legend_state
+
+
+@callback(
+    Output("graph-cytoscape", "layout"),
+    [Input("graph-layout-selector", "value"),
+     Input("graph-reset-btn", "n_clicks")],
+    [State("graph-cytoscape", "layout")],
+    prevent_initial_call=True
+)
+def update_layout(layout_name: Any, reset_clicks: Any, current_layout: Any) -> Any:
+    """Update the Cytoscape graph layout algorithm or trigger layout reset"""
+    # Determine which input triggered the callback
+    if not callback_context.triggered:
+        return current_layout
+
+    trigger_id = callback_context.triggered[0]['prop_id'].split('.')[0]
+
+    # Layout selector changed
+    if trigger_id == 'graph-layout-selector':
+        if layout_name == 'preset':
+            return {'name': 'preset', 'fit': False, 'animate': False, 'padding': 30}
+
+        if layout_name == 'cose':
+            return {'name': 'cose', 'animate': True, 'spacingFactor': 1.5}
+
+        return {'name': layout_name, 'animate': True}
+
+    # Reset button clicked - re-run current layout algorithm to reset node positions
+    elif trigger_id == 'graph-reset-btn':
+        # Use current layout name, or default to cose
+        current_name = current_layout.get('name', 'cose') if current_layout else 'cose'
+
+        # Toggle a property to force Cytoscape to re-run layout on each click
+        # Use click count to alternate stop value (doesn't affect visual, just forces re-render)
+        click_count = reset_clicks or 0
+        stop_value = 1000 if click_count % 2 == 0 else 1001
+
+        # Return layout with fit=True to ensure graph fits in viewport
+        if current_name == 'preset':
+            return {
+                'name': 'preset',
+                'fit': False,
+                'animate': False,
+                'padding': 30,
+                'stop': stop_value
+            }
+
+        layout_opts = {
+            'name': current_name,
+            'animate': True,
+            'fit': True,
+            'padding': 30,
+            'stop': stop_value,
+        }
+        if current_name == 'cose':
+            layout_opts['spacingFactor'] = 1.5
+        return layout_opts
+
+    return current_layout
+
+
+@callback(
+    Output("graph-cytoscape", "stylesheet"),
+    Input("theme-store", "data")
+)
+def update_graph_stylesheet(theme_name: str | None) -> list[dict[str, Any]]:
+    """Update graph node/edge palette when the app theme changes.
+
+    Fetches the server-merged effective theme (base tokens ⊕ default-theme
+    overrides) for the active base mode and builds the Cytoscape stylesheet
+    from it. Falls back to the base tokens on any error so the graph still
+    renders with the hardcoded palette.
+    """
+    active_theme = theme_name or "executive-light"
+
+    effective = fetch_effective_theme(active_theme)
+
+    return build_cytoscape_stylesheet(active_theme, effective=effective)
+
+
+

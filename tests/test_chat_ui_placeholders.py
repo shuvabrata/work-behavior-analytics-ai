@@ -47,7 +47,7 @@ def _make_thinking_messages(client_id: str) -> list[dict]:
 class TestThinkingBlockIds:
 
     def test_outer_div_has_think_id(self):
-        from app.dash_app.pages.chat import render_messages
+        from ui.pages.chat import render_messages
 
         client_id = "test-client-001"
         rendered = render_messages(_make_thinking_messages(client_id))
@@ -56,7 +56,7 @@ class TestThinkingBlockIds:
         assert result is not None, f"Expected element with id='think-{client_id}' not found"
 
     def test_inner_text_div_has_think_body_id(self):
-        from app.dash_app.pages.chat import render_messages
+        from ui.pages.chat import render_messages
 
         client_id = "test-client-002"
         rendered = render_messages(_make_thinking_messages(client_id))
@@ -65,7 +65,7 @@ class TestThinkingBlockIds:
         assert result is not None, f"Expected element with id='think-body-{client_id}' not found"
 
     def test_companion_msg_div_is_present(self):
-        from app.dash_app.pages.chat import render_messages
+        from ui.pages.chat import render_messages
 
         client_id = "test-client-003"
         rendered = render_messages(_make_thinking_messages(client_id))
@@ -74,7 +74,7 @@ class TestThinkingBlockIds:
         assert result is not None, f"Expected element with id='msg-{client_id}' not found"
 
     def test_all_three_ids_present_for_same_client_id(self):
-        from app.dash_app.pages.chat import render_messages
+        from ui.pages.chat import render_messages
 
         client_id = "test-client-004"
         rendered = render_messages(_make_thinking_messages(client_id))
@@ -84,7 +84,7 @@ class TestThinkingBlockIds:
 
     def test_ids_use_correct_client_id(self):
         """IDs must embed the exact client_id from the message dict."""
-        from app.dash_app.pages.chat import render_messages
+        from ui.pages.chat import render_messages
 
         client_id = "20260502123456789012-42"
         rendered = render_messages(_make_thinking_messages(client_id))
@@ -99,7 +99,7 @@ class TestThinkingBlockIds:
 
     def test_non_thinking_roles_not_affected(self):
         """user and assistant roles must not produce think-* or msg-* IDs."""
-        from app.dash_app.pages.chat import render_messages
+        from ui.pages.chat import render_messages
 
         messages = [
             {"role": "user", "content": "hello", "timestamp": "12:00 PM", "client_id": "u-1"},
@@ -121,7 +121,7 @@ class TestQueueMessageClientIdUniqueness:
 
     def test_client_id_is_unique_per_call(self):
         """Two consecutive calls to queue_message must produce different client_ids."""
-        from app.dash_app.pages.chat import queue_message
+        from ui.pages.chat import queue_message
 
         session_data = {"session_id": "sess-abc", "messages": []}
 
@@ -137,7 +137,7 @@ class TestQueueMessageClientIdUniqueness:
 
     def test_client_id_injected_into_assistant_thinking_message(self):
         """The assistant_thinking message in session_data must carry the same client_id as pending_send."""
-        from app.dash_app.pages.chat import queue_message
+        from ui.pages.chat import queue_message
 
         _, _, session_data, pending, _, _ = queue_message(1, "hello", {"session_id": "sess-xyz", "messages": []})
 

@@ -1,7 +1,7 @@
 """Unit tests for the Library query editor callbacks.
 
 These tests exercise the callback functions in
-``app.dash_app.pages.catalog.editor_callbacks``. HTTP calls are mocked with a
+``ui.pages.catalog.editor_callbacks``. HTTP calls are mocked with a
 fake ``requests`` layer so no live server or Neo4j is required.
 """
 
@@ -9,8 +9,8 @@ from dataclasses import dataclass
 
 import pytest
 
-from app.dash_app.pages.catalog import editor_callbacks as editor
-from app.dash_app.pages.catalog import editor_test_callbacks
+from ui.pages.catalog import editor_callbacks as editor
+from ui.pages.catalog import editor_test_callbacks
 
 
 pytestmark = pytest.mark.unit
@@ -976,7 +976,7 @@ def test_factory_diff_text_renders_every_diffed_field():
 
 def test_view_changes_button_uses_subtle_action_class():
     """The Compare to Factory button carries the theme-aware subtle-action class."""
-    from app.dash_app.pages.catalog.editor_layout import _render_action_bar
+    from ui.pages.catalog.editor_layout import _render_action_bar
 
     def _walk(component):
         children = getattr(component, "children", None)

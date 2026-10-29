@@ -1,8 +1,8 @@
 """Unit tests for the Library (query catalog) listing page callbacks.
 
 These tests exercise the Python-side callback functions in
-``app.dash_app.pages.catalog.callbacks`` and the static table skeleton in
-``app.dash_app.pages.catalog.layout``. The table body rows are built entirely
+``ui.pages.catalog.callbacks`` and the static table skeleton in
+``ui.pages.catalog.layout``. The table body rows are built entirely
 in JavaScript (a clientside callback), so row-level rendering is not unit
 tested here — the Python tests cover the data flow and the static skeleton.
 HTTP calls are mocked with a fake ``requests`` layer so no live server is
@@ -13,8 +13,8 @@ from dataclasses import dataclass
 
 import pytest
 
-from app.dash_app.pages.catalog import callbacks as catalog_callbacks
-from app.dash_app.pages.catalog.layout import render_catalog_table
+from ui.pages.catalog import callbacks as catalog_callbacks
+from ui.pages.catalog.layout import render_catalog_table
 
 
 pytestmark = pytest.mark.unit

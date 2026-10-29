@@ -12,13 +12,13 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from app.dash_app.pages.timeline.helpers import (
+from ui.pages.timeline.helpers import (
     build_grid,
     has_more,
     humanize_relationship,
     merge_lane_page,
 )
-from app.dash_app.pages.timeline.layout import build_grid_body
+from ui.pages.timeline.layout import build_grid_body
 from domain.theme_tokens import get_theme_tokens
 
 pytestmark = pytest.mark.unit

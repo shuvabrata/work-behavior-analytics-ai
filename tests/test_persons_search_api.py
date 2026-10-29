@@ -20,7 +20,7 @@ from typing import Any, Generator
 import httpx
 import pytest
 
-from app.main import app
+from app.api_main import app
 from app.settings import settings
 from connectors.consumers.sinks.elasticsearch_sink import index_signal
 from common.activity_signal.models import (

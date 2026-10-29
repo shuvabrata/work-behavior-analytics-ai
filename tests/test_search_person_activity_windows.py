@@ -25,8 +25,8 @@ import pytest
 from dash import html
 import dash_bootstrap_components as dbc
 
-import app.dash_app.pages.search as search_module
-from app.dash_app.pages.search import (
+import ui.pages.search as search_module
+from ui.pages.search import (
     _PERSON_ACTIVITY_WINDOWS,
     _build_person_activity_cypher,
 )

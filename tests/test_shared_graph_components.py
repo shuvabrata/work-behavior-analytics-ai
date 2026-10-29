@@ -10,7 +10,7 @@ import pytest
 import dash_bootstrap_components as dbc
 from dash import html
 
-from app.dash_app.components.common import (
+from ui.components.common import (
     build_element_properties_content,
     create_controls_bar,
     toggle_details_panel,
@@ -526,13 +526,13 @@ class TestCreateTimeSliderPair:
 
     def test_returns_html_div(self):
         """T1.1: Verify create_time_slider_pair returns a html.Div."""
-        from app.dash_app.pages.graph.components.sliders import create_time_slider_pair
+        from ui.pages.graph.components.sliders import create_time_slider_pair
         result = create_time_slider_pair("created", "Created At")
         assert isinstance(result, html.Div)
 
     def test_has_four_children(self):
         """T1.1: Verify the div has 4 children: label, coarse, fine, value label."""
-        from app.dash_app.pages.graph.components.sliders import create_time_slider_pair
+        from ui.pages.graph.components.sliders import create_time_slider_pair
         result = create_time_slider_pair("created", "Created At")
         assert result.children is not None
         children = result.children
@@ -541,7 +541,7 @@ class TestCreateTimeSliderPair:
 
     def test_children_types(self):
         """T1.1: Verify the 4 children have the correct types."""
-        from app.dash_app.pages.graph.components.sliders import create_time_slider_pair
+        from ui.pages.graph.components.sliders import create_time_slider_pair
         result = create_time_slider_pair("created", "Created At")
         children = result.children
         assert isinstance(children[0], html.Label)
@@ -553,7 +553,7 @@ class TestCreateTimeSliderPair:
 
     def test_fine_slider_matches_coarse_initially(self):
         """T1.2: Fine slider min/max/value matches coarse slider initially."""
-        from app.dash_app.pages.graph.components.sliders import create_time_slider_pair
+        from ui.pages.graph.components.sliders import create_time_slider_pair
         result = create_time_slider_pair("created", "Created At")
         children = result.children
         coarse = children[1]
@@ -564,7 +564,7 @@ class TestCreateTimeSliderPair:
 
     def test_correct_ids(self):
         """T1.1/T1.2: Verify component IDs based on suffix."""
-        from app.dash_app.pages.graph.components.sliders import create_time_slider_pair
+        from ui.pages.graph.components.sliders import create_time_slider_pair
         result = create_time_slider_pair("seen", "Last Seen")
         ids = self._collect_ids(result)
         assert "time-slider-seen" in ids
@@ -573,7 +573,7 @@ class TestCreateTimeSliderPair:
 
     def test_section_style_matches_details_panel(self):
         """T1.3: Verify the section div uses the same boxed style as the details panel."""
-        from app.dash_app.pages.graph.components.sliders import create_time_slider_pair
+        from ui.pages.graph.components.sliders import create_time_slider_pair
         result = create_time_slider_pair("updated", "Last Updated")
         style = result.style or {}
         assert "var(--color-background-pale)" in str(style.get("backgroundColor", ""))

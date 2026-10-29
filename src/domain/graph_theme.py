@@ -5,7 +5,7 @@ theme overrides (stored in the ``graph_themes`` table) are combined with the
 hardcoded base tokens defined in ``domain.theme_tokens`` (``THEME_TOKENS``)
 and turned into Cytoscape rules.
 
-**Pure by design.** Nothing in this module imports from ``dash_app`` (or any
+**Pure by design.** Nothing in this module imports from ``ui`` (or any
 other UI layer). Base tokens are passed in as arguments so the module can run
 in isolation (unit tests, API layer, connectors) and so the hardcoded base
 palette can evolve independently.
@@ -32,7 +32,7 @@ HEX_COLOR = r"^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$"
 
 # The override-aware nodeType keys mirror the existing nodeType values used by
 # the graph page (see ``build_cytoscape_stylesheet`` in
-# ``app.dash_app.graph_styles``), plus ``default`` for untyped nodes.
+# ``ui.graph_styles``), plus ``default`` for untyped nodes.
 NODE_TYPES: tuple[str, ...] = (
     "Person",
     "Project",

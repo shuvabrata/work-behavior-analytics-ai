@@ -28,8 +28,8 @@ from domain.collaboration.config import (
 from domain.collaboration.ego_metadata import COLLABORATOR_CAP_OPTIONS
 from domain.analytics_registry import GRAPH_ANALYTICS
 from domain.person_network_url import DEFAULT_MAX_COLLABORATORS
-from app.dash_app.components.common import describe_config_error
-from app.dash_app.pages.analytics import (
+from ui.components.common import describe_config_error
+from ui.pages.analytics import (
     COLLABORATION_CARD_SPEC,
     PER_PERSON_CARD_SPEC,
     _bounds_for,
@@ -587,7 +587,7 @@ def test_href_callbacks_surface_the_alert_and_disable_the_buttons():
 
 def test_config_alert_reports_each_problem():
     """One <li> per problem while blocked; an empty, hidden region otherwise."""
-    from app.dash_app.pages.analytics import _ControlProblem
+    from ui.pages.analytics import _ControlProblem
 
     problems = [
         _ControlProblem("Lookback Days", "Lookback Days must be between 1 and 365."),
@@ -615,7 +615,7 @@ def test_config_alert_is_not_dismissable():
     stranding the user with no way forward and no stated cause. The alert clears
     itself when the values become valid, which is the dismissal that is wanted.
     """
-    from app.dash_app.pages.analytics import _ControlProblem
+    from ui.pages.analytics import _ControlProblem
 
     children, _style, _blocked = _config_alert(
         [_ControlProblem("Lookback Days", "Lookback Days must be between 1 and 365.")]

@@ -5,7 +5,7 @@ that have an Elasticsearch index. It lives in ``domain`` because three separate
 places need it:
 
   * ``app/scripts/create_es_indexes.py`` creates one index per entry
-  * ``app/dash_app/pages/search.py`` derives the search dropdowns from it
+  * ``ui/pages/search.py`` derives the search dropdowns from it
   * ``scripts/reconcile_es.py`` and ``scripts/clear_es_data.py`` iterate it
   * the ES-index test suites assert coverage of ``SUPPORTED_ENTITY_TYPES``
 

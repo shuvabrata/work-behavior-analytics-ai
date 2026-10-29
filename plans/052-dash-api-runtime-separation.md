@@ -449,6 +449,10 @@ Run Python commands with the virtualenv active (`source .venv/bin/activate`) and
 - `scripts/capture_ui_baseline.py` (create, **temporary** — deleted in Step 7)
 - `src/ui/collaboration_params.py` + `tests/test_collab_query_param_roundtrip.py`
   (create, **permanent** — Step 7's shared config→query-param serializer)
+- `src/ui/api_client.py` (create in Step 7 with `get_json` + the status→exception
+  mapping; **extended** in Step 10) + `tests/test_ui_api_client_status_mapping.py`
+  (create, **permanent** — guards the mapping that keeps the collaboration
+  empty/invalid banners working)
 - `CLAUDE.md`, `DEVELOPER_QUICK_START.md`, `USER_GUIDE.md`, `.env.example`
 - `docs/design/authn-authz-design.md` — the four sections in Step 13 only
 - `.github/workflows/pr_checks.yml` — the install lines for the three jobs
@@ -1469,7 +1473,21 @@ SEEDED_CONFIGS: list[CollaborationNetworkConfig] = [
     CollaborationNetworkConfig(weights={**_WEIGHTS_ALL_ZERO, "pr_reviews": 7.5}),
     CollaborationNetworkConfig(community_gap_x=200.0, community_gap_y=10000.0),
     CollaborationNetworkConfig(ensure_min_connection=False, top_n_edges_per_node=200),
+    # The EMPTY-RESULT path. Every config above returns data, so without this
+    # one the comparison never exercises the branch the swaps can silently
+    # break (see 7d-i): the API answers 404 here, the in-process call raises
+    # CollaborationDataUnavailable, and both must keep producing the same
+    # *kind* of outcome. lookback_days=1 is the cheapest way to guarantee no
+    # records on a stack whose data is older than a day.
+    CollaborationNetworkConfig(lookback_days=1),
 ]
+
+# The INVALID-CONFIG path: the API answers 400, the in-process call raises
+# ValidationError/ValueError, and the UI renders describe_config_error(). A
+# naive swap turns this into "An unexpected error occurred.". Sent as raw query
+# values, not through the serializer, because from_query_values would reject it
+# before it left the client — and the point is to reach the server with it.
+INVALID_ORG_PARAMS = {"lookback_days": "0", "min_pair_score": "-1"}
 
 # Ego boundaries only. max_collaborators is ge=1/le=500 in the endpoint
 # (router.py:345-349) while the UI has its own cap_options_for — two bound
@@ -1520,34 +1538,82 @@ def spotlight_ids(query: str, graph_wba_ids: list[str]) -> dict:
     }
 
 
+def in_process_outcome(fn, *args, **kwargs) -> dict:
+    """Call an in-process function, summarising a raised exception as data.
+
+    The empty and invalid legs raise rather than return, so capturing the
+    exception *type* is what makes them comparable at all. Recording only the
+    type — never the traceback or message — keeps the summary stable across
+    runs, which the before/after diff requires.
+    """
+    try:
+        return {"kind": "data", "payload": canonical(fn(*args, **kwargs).model_dump())}
+    except Exception as exc:  # pylint: disable=broad-except
+        return {"kind": "error", "exc_type": type(exc).__name__}
+
+
+def http_outcome(url: str, params: dict) -> dict:
+    """GET *url*, summarising the response as data or an error kind."""
+    response = requests.get(url, params=params, timeout=300)
+    if response.ok:
+        return {"kind": "data", "payload": canonical(response.json())}
+    return {"kind": "error", "status": response.status_code}
+
+
 def main() -> int:
     results: dict[str, dict] = {}
 
     for index, config in enumerate(SEEDED_CONFIGS):
-        in_proc = get_collaboration_network(config=config).model_dump()
-        http = requests.get(
-            f"{API}/api/v1/graph/collaboration-network",
-            params=config_to_query_params(config),
-            timeout=300,
-        ).json()
-        results[f"org_{index}"] = {"in_process": canonical(in_proc), "http": canonical(http)}
+        params = config_to_query_params(config)
+        results[f"org_{index}"] = {
+            "in_process": in_process_outcome(get_collaboration_network, config=config),
+            "http": http_outcome(f"{API}/api/v1/graph/collaboration-network", params),
+        }
+
+    # The invalid-config leg. Raw params, not the serializer's output (see
+    # INVALID_ORG_PARAMS). The in-process side is fed the same values through
+    # from_query_values so both legs see identical input.
+    results["org_invalid"] = {
+        "in_process": in_process_outcome(
+            get_collaboration_network,
+            config=CollaborationNetworkConfig.from_query_values(INVALID_ORG_PARAMS),
+        ),
+        "http": http_outcome(f"{API}/api/v1/graph/collaboration-network", INVALID_ORG_PARAMS),
+    }
 
     # A real Person wba_id, and the graph's node set, both derived from the
     # default org run so every run of this script picks the same ones. Hardcoded
     # ids rot; and the spotlight canvas *is* this node set, which is what makes
     # the spotlight leg comparable without a browser.
-    graph_wba_ids = results["org_0"]["in_process"]["node_ids"]
+    graph_wba_ids = results["org_0"]["in_process"]["payload"]["node_ids"]
     focus_id = graph_wba_ids[0]
 
     for cap in EGO_MAX_COLLABORATORS:
         config = CollaborationNetworkConfig()
-        in_proc = get_ego_network(focus_id, config=config, max_collaborators=cap).model_dump()
-        http = requests.get(
-            f"{API}/api/v1/graph/collaboration-network/ego",
-            params=ego_query_params(config, focus_id, cap),
-            timeout=300,
-        ).json()
-        results[f"ego_{cap}"] = {"in_process": canonical(in_proc), "http": canonical(http)}
+        results[f"ego_{cap}"] = {
+            "in_process": in_process_outcome(
+                get_ego_network, focus_id, config=config, max_collaborators=cap
+            ),
+            "http": http_outcome(
+                f"{API}/api/v1/graph/collaboration-network/ego",
+                ego_query_params(config, focus_id, cap),
+            ),
+        }
+
+    # The ego empty path: a well-formed Person id that has no collaborators.
+    # This is the case whose banner the ego callback's own comment says was
+    # once misleading — 7d-i is what keeps it correct after the swap.
+    for name, person in [
+        ("ego_unknown_person", "person:does-not-exist-00000000"),
+    ]:
+        config = CollaborationNetworkConfig()
+        results[name] = {
+            "in_process": in_process_outcome(get_ego_network, person, config=config),
+            "http": http_outcome(
+                f"{API}/api/v1/graph/collaboration-network/ego",
+                ego_query_params(config, person, 25),
+            ),
+        }
 
     for query in SPOTLIGHT_QUERIES:
         results[f"spotlight_{query}"] = spotlight_ids(query, graph_wba_ids)
@@ -1561,11 +1627,40 @@ if __name__ == "__main__":
     sys.exit(main())
 ```
 
+**The failure legs are the point of this revision.** Before the swap,
+`org_7` (empty) and `ego_unknown_person` must read
+`{"kind": "error", "exc_type": "CollaborationDataUnavailable"}` in-process and
+`{"kind": "error", "status": 404}` over HTTP; `org_invalid` must read
+`ValidationError`/`ValueError` in-process and `400` over HTTP. **They are not
+identical in form, and must not be compared as if they were** — the two legs
+legitimately express the same outcome differently (a raised type vs a status
+code).
+
+**What these legs do and do not prove.** They establish the *contract 7d-i
+targets*: that the endpoint really does answer 404 where the in-process function
+raises `CollaborationDataUnavailable`, and 400 where it raises a validation error.
+Without that, the mapping in 7d-i would be guessing at status codes.
+
+They do **not** test the mapping itself. This script calls the in-process
+functions directly for its `in_process` leg — it never goes through
+`api_client.get_json` — so it cannot observe whether the UI's new status→exception
+translation works, and its `before == after` diff is unchanged by 7d-i by
+construction. **The guard for the mapping is the unit test in 7d-iii below**,
+which stubs the transport and asserts the exception type directly.
+
 **Sanity-check the numbers before trusting the file.** On the live stack
-`org_0.in_process` must show `element_count` **5041**, `stats["num_people"]`
-**223**, `stats["num_pairs"]` **4818**. `element_count` is nodes **plus** edges —
-it is *not* `num_people`. If the counts are far off, the script is wrong and the
-comparison would prove nothing.
+`org_0.in_process.payload` must show `element_count` **5041**,
+`stats["num_people"]` **223**, `stats["num_pairs"]` **4818**. `element_count` is
+nodes **plus** edges — it is *not* `num_people`. If the counts are far off, the
+script is wrong and the comparison would prove nothing.
+
+**Sanity-check the failure legs too, or 7d-i's whole reason for existing goes
+unchecked.** `org_7`, `org_invalid` and `ego_unknown_person` must each read
+`kind == "error"` on **both** sides — with `in_process.exc_type` of
+`CollaborationDataUnavailable`, `ValidationError` (or `ValueError`), and
+`CollaborationDataUnavailable` respectively. If any of them reports
+`kind == "data"`, the leg is not exercising the failure path you think it is,
+and the swap's most dangerous change would ship unverified.
 
 Run it **before** any swap and keep the output:
 
@@ -1584,30 +1679,166 @@ Re-run `docker compose ps` and confirm `neo4j` is healthy first, or the sanity
 numbers below will be off for a reason unrelated to the swap.
 
 **Verify (7c)**: `PYTHONPATH=src python scripts/capture_ui_baseline.py` → exit 0
-**Verify (7c)**: `python -c "import json;d=json.load(open('scripts/ui_baseline.json'));print(d['org_0']['in_process']['element_count'], d['org_0']['in_process']['stats']['num_people'])"` → `5041 223`
+**Verify (7c)**: `python -c "import json;d=json.load(open('scripts/ui_baseline.json'));p=d['org_0']['in_process']['payload'];print(p['element_count'], p['stats']['num_people'])"` → `5041 223`
 **Verify (7c)**: `python -c "import json;d=json.load(open('scripts/ui_baseline.json'));m=max(len(v['in_process']) for k,v in d.items() if k.startswith('spotlight_'));assert m>20, f'no spotlight query matched >20 canvas nodes (max {m})'"` → exit 0. Without a >20-match query the spotlight leg cannot distinguish scoped from unscoped, so it proves nothing — pick different queries rather than proceeding.
-**Verify (7c)**: `python -c "import json;d=json.load(open('scripts/ui_baseline.json'));assert all(v['in_process']==v['http'] for v in d.values()), 'in-process and HTTP disagree BEFORE the swap'"` → exit 0. This must **already hold before any swap**: it proves the endpoints and the functions agree, so a later difference is attributable to the swap.
+**Verify (7c)**: the three failure legs actually exercised the failure path:
+`python -c "import json;d=json.load(open('scripts/ui_baseline.json'));legs={'org_7':'CollaborationDataUnavailable','ego_unknown_person':'CollaborationDataUnavailable','org_invalid':None};[__import__('sys').exit(f'{k}: in_process={d[k][\"in_process\"]}') for k in legs if d[k]['in_process']['kind']!='error']"` → exit 0, and each `http` side reads `{'kind': 'error', 'status': 404}` (org_7, ego_unknown_person) or `400` (org_invalid).
+**Verify (7c)**: the **data** legs agree across the two implementations, and the **error** legs express the same outcome in their own form:
+```bash
+python -c "
+import json
+d = json.load(open('scripts/ui_baseline.json'))
+# Data legs: the two implementations must agree exactly.
+for k, v in d.items():
+    if k.startswith('spotlight_'):
+        continue
+    if v['in_process']['kind'] == 'data':
+        assert v['http']['kind'] == 'data', f'{k}: HTTP errored where in-process returned data'
+        assert v['in_process']['payload'] == v['http']['payload'], f'{k}: payloads disagree BEFORE the swap'
+# Error legs: same outcome, different form (raised type vs status code).
+EXPECTED = {'org_7': 404, 'ego_unknown_person': 404, 'org_invalid': 400}
+for k, status in EXPECTED.items():
+    assert d[k]['in_process']['kind'] == 'error', f'{k}: in-process did not error — the leg is vacuous'
+    assert d[k]['http'] == {'kind': 'error', 'status': status}, f'{k}: expected HTTP {status}, got {d[k][\"http\"]}'
+print('outcomes agree')
+"
+```
+→ `outcomes agree`. This must **already hold before any swap**: it proves the endpoints and the in-process functions agree on both paths, so a later difference is attributable to the swap rather than pre-existing.
 
 **7d. Swap the three call sites.**
 
+**The success path is mechanical; the failure path is not, and it is the part
+that breaks silently if you treat this as a rename.** Read 7d-i before editing.
+
+**7d-i. The two collab call sites must map HTTP status back to the exceptions
+they already catch.**
+
+Today both services signal "the query ran cleanly but there is nothing to draw"
+by raising `CollaborationDataUnavailable`
+(`api/graph/v1/service.py:389` and `:484`), and both callbacks catch it **by
+type** to render a specific banner:
+
+```
+src/ui/pages/collaboration_network/callbacks/filter.py:123
+    except CollaborationDataUnavailable as exc:
+        # Query ran cleanly but there is nothing to draw. Distinct from the
+        # ValueError branch below, which is a genuine settings problem.
+        return [], _COLLABORATION_LAYOUT, [_data_unavailable_banner(config)], ...
+
+src/ui/pages/collaboration_network_ego/callbacks/filter.py:221
+    except CollaborationDataUnavailable as exc:
+        # A clean query with an empty result: the person exists but has no
+        # collaborators in this window. This is NOT a settings problem...
+```
+
+A raw `requests.get(...)` **never** raises that. It returns a `Response`. The API
+maps the exception to **404** (`router.py:300-308`, `:442-450`), so a naive swap
+makes those two handlers **dead code**; the next line (`data.elements` on a dict)
+then raises `AttributeError` and falls through to the trailing
+`except Exception`, which renders `"An unexpected error occurred."`
+
+**The user-visible regression: "No collaborations in this window — try widening
+the lookback" becomes "An unexpected error occurred."** The page looks broken
+rather than empty — precisely the misleading behaviour the ego branch's comment
+records having already fixed once. The same class of loss applies to the **400**
+path (`router.py:314`), where a config error currently reaches
+`describe_config_error(...)` and would instead hit the generic handler.
+
+So the swap is **not** `.json()` replacing attribute access on the happy path
+only. Both collab sites must:
+
+1. Read the timeout per call — `runtime_settings.get_int("HTTP_REQUEST_TIMEOUT")`,
+   never a module-level constant (Step 6's bug class).
+2. Inspect `response.status_code` **before** parsing, and translate:
+   - **404 with `detail.error == "No collaboration data"`** →
+     `raise CollaborationDataUnavailable(<the API's `detail.message`>)`. Discriminate
+     on the body, not the bare status: a 404 from a *wrong URL* must not be
+     reported to the user as "you have no collaborations".
+   - **400** → `raise ValueError(<the API's `detail.message`>)`, so the existing
+     `except ValueError` branch still renders `describe_config_error(...)`.
+   - **any other non-2xx** → `raise_for_status()` into the generic handler.
+3. Leave the existing `except` blocks exactly as they are. They are correct; the
+   swap's job is to keep feeding them the exception types they expect.
+
+`CollaborationDataUnavailable` already lives in the **pure**
+`src/domain/collaboration/errors.py` and is already imported by both files
+(`filter.py:11`, `:12`), so this mapping needs no new UI→API import.
+
+**Put this in `src/ui/api_client.py`, created here — minimally — rather than in a
+throwaway local helper.** Step 10 grows this same module into the full client
+(other verbs, injectable transport, one exception type). Creating it now resolves
+the ordering tension between Decision 11 and this step: an executor facing both
+"put it in `api_client.py`" and "`api_client.py` is Step 10" would otherwise
+guess. The Step 7 version needs only `get_json(url, params, timeout) -> dict` plus
+the status mapping above. Step 10 extends the surface; it does not replace it.
+
+**7d-ii. The three swaps.**
+
 | File | Now | Becomes |
 |---|---|---|
-| `src/ui/pages/collaboration_network/callbacks/filter.py:88` | `data = get_collaboration_network(config=config)` | `requests.get(f"{API_BASE}/api/v1/graph/collaboration-network", params=config_to_query_params(config), timeout=…)` |
-| `src/ui/pages/collaboration_network_ego/callbacks/filter.py:201` | `data = get_ego_network(focus_id, config=config, max_collaborators=max_collaborators)` | `requests.get(f"{API_BASE}/api/v1/graph/collaboration-network/ego", params=ego_query_params(config, focus_id, max_collaborators), timeout=…)` |
-| `src/ui/pages/graph/callbacks/spotlight.py:118` | `search_in_graph(SearchRequest(q=q), graph_wba_ids)` | `requests.get(f"{API_BASE}/api/v1/search", params={"q": q, "ids": ",".join(graph_wba_ids)}, timeout=…)` |
+| `src/ui/pages/collaboration_network/callbacks/filter.py:88` | `data = get_collaboration_network(config=config)` | `data = api_client.get_json(f"{API_BASE}/api/v1/graph/collaboration-network", params=config_to_query_params(config))` |
+| `src/ui/pages/collaboration_network_ego/callbacks/filter.py:201` | `data = get_ego_network(focus_id, config=config, max_collaborators=max_collaborators)` | `data = api_client.get_json(f"{API_BASE}/api/v1/graph/collaboration-network/ego", params=ego_query_params(config, focus_id, max_collaborators))` |
+| `src/ui/pages/graph/callbacks/spotlight.py:118` | `search_in_graph(SearchRequest(q=q), graph_wba_ids)` | `data = api_client.get_json(f"{API_BASE}/api/v1/search", params={"q": q, "ids": ",".join(graph_wba_ids)})` |
 
 **Do not inline the param dicts at the call sites.** A hand-built dict is a
 second translation and reintroduces exactly the drift 7a exists to prevent.
 
-Read the timeout **per call** — `runtime_settings.get_int("HTTP_REQUEST_TIMEOUT")`,
-never a module-level constant (Step 6's bug class).
-
-The collab bodies are the same `CollaborationNetworkResponse` /
-`EgoNetworkResponse` shape, so every consumer of `data.elements` /
-`data.num_people` / `data.config` is unchanged apart from `.json()` replacing
-model attribute access. The spotlight body is the same `SearchResponse` shape, so
+`get_json` returns the parsed body as a `dict`, so `.json()` is absorbed inside
+the client and each call site destructures it. The collab bodies are the same
+`CollaborationNetworkResponse` / `EgoNetworkResponse` shape, so every consumer of
+`data["elements"]` / `data["num_people"]` / `data["config"]` is otherwise
+unchanged. The spotlight body is the same `SearchResponse` shape, so
 `spotlight.py:122-131`'s client-side intersection and its
 `"{match_count} of {node_count} nodes match"` text are unchanged.
+
+**The spotlight site has no typed-exception contract to preserve** — it already
+wraps its call in a bare `except Exception` (`spotlight.py:119-121`) and raises
+`PreventUpdate`, so a failed search degrades to "no highlight" either way. Only
+the two collab sites need the mapping in 7d-i.
+
+**7d-iii. Guard the mapping with a unit test.**
+
+The baseline script cannot cover 7d-i (see 7c), so this test is the **only**
+automated guard on the status→exception translation. Add
+`tests/test_ui_api_client_status_mapping.py` with
+`pytestmark = pytest.mark.unit` at module level. It stubs the transport — using
+the injectable one `api_client` exposes — so it needs no server and no Neo4j:
+
+```python
+@pytest.mark.parametrize(
+    ("status", "body", "expected"),
+    [
+        (404, {"detail": {"error": "No collaboration data", "message": "no data"}},
+         CollaborationDataUnavailable),
+        (400, {"detail": {"error": "Invalid collaboration configuration", "message": "bad"}},
+         ValueError),
+        (500, {"detail": {"error": "Internal server error"}}, None),  # generic path
+    ],
+)
+def test_get_json_maps_status_to_exception(status, body, expected):
+    """A non-2xx response raises the type the collab callbacks catch.
+
+    Regression guard: a raw ``requests.get`` returns a Response, so the
+    ``except CollaborationDataUnavailable`` branch went dead and the page
+    rendered "An unexpected error occurred." instead of the real banner.
+    """
+```
+
+Three things this test must get right, or it is vacuous:
+
+1. **It must assert the exception *type*, not merely that something raised.** A
+   bare `pytest.raises(Exception)` passes for `AttributeError` — which is
+   exactly the bug.
+2. **Include a 404 that is *not* the collaboration error** (a wrong URL, or a
+   body whose `detail.error` differs) and assert it does **not** become
+   `CollaborationDataUnavailable`. This is the discrimination 7d-i requires; a
+   mapping keyed on the bare status passes the first case and fails the user.
+3. **Mutation-check it**: delete the 404 branch from `get_json` and confirm the
+   first case fails. Same discipline as 7a's mutation.
+
+**Verify (7d-iii)**: `pytest -m unit tests/test_ui_api_client_status_mapping.py -q` → all pass
+**Verify (7d-iii)**: mutation — remove the 404→`CollaborationDataUnavailable`
+branch; the first parametrised case must **fail**.
 
 **7e. Re-run the baseline script and compare.**
 
@@ -1620,7 +1851,14 @@ diff <(python -m json.tool scripts/ui_baseline.before.json) \
 Two conditions, both **exact**, both STOP conditions:
 
 1. `before == after` — the swaps changed no output, for all three bypasses.
-2. `in_process == http` for every case, in *both* files — every translation is faithful.
+2. For every case, in *both* files, the two legs express the **same outcome**:
+   where `in_process.kind == "data"`, the payloads are byte-identical to the
+   `http` payload; where `in_process.kind == "error"`, the `http` side carries
+   the matching status (`404` for `CollaborationDataUnavailable`, `400` for a
+   validation error). The two legs are **not** compared as whole dicts — a
+   raised exception type and an HTTP status code are different vocabulary for
+   the same fact, and the 7c verify block above is the command that checks this
+   correctly.
 
 A mismatch means a translation is lossy. The fix is to correct
 `collaboration_params.py` (or the `ids` handling, for spotlight), **never** to
@@ -1628,18 +1866,38 @@ relax the comparison. Watch ego's bounds specifically: `max_collaborators` is
 `ge=1 / le=500` in the endpoint (`router.py:345-349`) while the UI has its own
 `cap_options_for` — the boundary cases (`1`, `500`) are what catch a disagreement.
 
+**This comparison constrains 7d-i; it does not verify it.** The script's
+`in_process` leg calls the services directly and never passes through
+`api_client.get_json`, so the `diff` above is identical whether or not 7d-i's
+mapping was implemented — or implemented wrongly. `before == after` holding is
+necessary but nowhere near sufficient here. **7d-iii's unit test is the
+verification for the mapping; run it before accepting this gate.**
+
 **7f. Delete the script, keep the serializer.**
 `git rm scripts/capture_ui_baseline.py scripts/ui_baseline.json
-scripts/ui_baseline.before.json`. Keep `src/ui/collaboration_params.py` and
-`tests/test_collab_query_param_roundtrip.py` — they are permanent, and they are
-what keeps this regression fixed after the plan is done. Also delete the
-now-unused imports of `get_collaboration_network` / `get_ego_network` /
-`search_in_graph` / `CollaborationDataUnavailable` if nothing else in `src/ui/`
-uses them.
+scripts/ui_baseline.before.json`. Keep `src/ui/collaboration_params.py`,
+`tests/test_collab_query_param_roundtrip.py` and
+`tests/test_ui_api_client_status_mapping.py` — they are permanent, and they are
+what keeps these regressions fixed after the plan is done.
+
+Then delete the now-unused imports: `get_collaboration_network`,
+`get_ego_network`, `search_in_graph` and `SearchRequest` are no longer called
+from `src/ui/`, so those four go. **`CollaborationDataUnavailable` stays** — it
+is not an API-service import (it lives in the pure
+`src/domain/collaboration/errors.py`) and 7d-i's status mapping raises it. Every
+one of these four must be gone:
+
+```
+src/ui/pages/collaboration_network/callbacks/filter.py:12   from app.api.graph.v1.service import get_collaboration_network
+src/ui/pages/collaboration_network_ego/callbacks/filter.py:13  from app.api.graph.v1.service import get_ego_network
+src/ui/pages/graph/callbacks/spotlight.py:13               from app.api.search.v1.model import SearchRequest
+src/ui/pages/graph/callbacks/spotlight.py:14               from app.api.search.v1.service import search_in_graph
+```
 
 **Verify (7d–7f)**: `diff` from 7e prints nothing
 **Verify**: `grep -rn "from app\.api\.graph\.v1\.service\|from app\.api\.search\.v1\.service\|from app\.api\.search\.v1\.model" src/ui/` → no matches
-**Verify**: `pytest tests/test_collab_query_param_roundtrip.py -q` → all pass
+**Verify**: `grep -rn "CollaborationDataUnavailable" src/ui/` → **3 matches or more** (both `filter.py` imports plus the `raise` sites 7d-i adds) — if it is absent, the mapping was skipped and the banners are broken
+**Verify**: `pytest tests/test_collab_query_param_roundtrip.py tests/test_ui_api_client_status_mapping.py -q` → all pass
 **Verify**: `pytest -m unit tests -q` → all pass
 **Verify**: `mypy src/` → exit 0
 **Verify**: `docker compose up -d --build` → healthy; `curl -sf -o /dev/null -w '%{http_code}' https://localhost/app/` → `200`
@@ -1659,31 +1917,53 @@ uses them.
 >    Read the script's imports. If it builds its own query string, the re-run
 >    compares two copies of the script and this gate is vacuous — reject it
 >    regardless of how the summaries look.
-> 3. **`in_process == http` held in the *before* file too**, not just after. If it
->    did not, an endpoint and its in-process function already disagreed, and the
->    before/after comparison is meaningless.
+> 3. **The two legs agreed in the *before* file too**, not just after — on the
+>    data legs as identical payloads, and on the error legs as matching
+>    outcome-and-status (see the 7c verify block; do **not** compare whole
+>    dicts, since a raised exception type and a status code are different
+>    vocabulary). If they did not agree before, an endpoint and its in-process
+>    function already disagreed, and the before/after comparison is meaningless.
 > 4. The two summaries are **identical**, not merely "close" — same node ids, same
 >    edge set, same stats, same element count, same matched-ID sets. The sanity
 >    numbers are `5041` elements / `223` people / `4818` pairs for `org_0`.
 > 5. If they differ, the number of differing elements is reported. **Do not accept
 >    "the difference is small"** — a lossy param translation is exactly the bug
 >    this gate exists to catch.
-> 6. **The spotlight leg is not vacuous.** At least one query matched **more than
+> 6. **The failure legs were actually exercised.** `org_7`,
+>    `ego_unknown_person` and `org_invalid` must each read `kind == "error"` on
+>    both sides. A leg that quietly returned `kind == "data"` is not testing the
+>    branch — and that branch is where the swap's most damaging regression lives
+>    (see 7d-i).
+> 7. **The status→exception mapping is verified by its own test, not by this
+>    gate.** Confirm the executor ran
+>    `pytest -m unit tests/test_ui_api_client_status_mapping.py -q` **and** the
+>    7d-iii mutation: removing the 404→`CollaborationDataUnavailable` branch must
+>    make it fail. Reason: this script's `in_process` leg bypasses `api_client`
+>    entirely, so the `before == after` diff is **identical whether or not 7d-i
+>    was implemented**. Do not accept the diff as evidence for the mapping.
+> 8. **The empty-result banner still renders in the browser.** Load the org
+>    Collaboration page with a 1-day lookback (or the epoch window) and the ego
+>    page for a person with no collaborators. Each must show its *specific*
+>    "no data" banner — not "An unexpected error occurred." This is the
+>    user-visible symptom 7d-i exists to prevent, and it is the one check that
+>    observes the whole path end to end.
+> 9. **The spotlight leg is not vacuous.** At least one query matched **more than
 >    20** canvas nodes (the 7c verify asserts this). A query set that only ever
 >    matches a handful cannot tell scoped from unscoped, and would pass even if
 >    `ids` were ignored entirely.
-> 7. **The `ids` param is genuinely scoped**, not merely accepted and ignored.
->    Ask: *if `ids` were dropped from the ES body, would the comparison still
->    pass?* It must not — otherwise the param is decorative. That mutation is
->    listed in "Done criteria".
-> 8. Unscoped `/search` is unchanged: still 20 of 22 for `q=review`.
-> 9. **The round-trip unit test exists and is non-vacuous** — the mutation in 7a
->    (dropping one `w_*` line) made it fail.
-> 10. The two collaboration pages and the Graph page's spotlight all render and
+> 10. **The `ids` param is genuinely scoped**, not merely accepted and ignored.
+>     Ask: *if `ids` were dropped from the ES body, would the comparison still
+>     pass?* It must not — otherwise the param is decorative. That mutation is
+>     listed in "Done criteria".
+> 11. Unscoped `/search` is unchanged: still 20 of 22 for `q=review`.
+> 12. **The round-trip unit test exists and is non-vacuous** — the mutation in 7a
+>     (dropping one `w_*` line) made it fail.
+> 13. The two collaboration pages and the Graph page's spotlight all render and
 >     work in the browser (see the full sweep in Step 14; a spot check here is
 >     enough).
-> 11. `scripts/capture_ui_baseline.py` and both JSON files are deleted;
->     `src/ui/collaboration_params.py` and its test are **kept**.
+> 14. `scripts/capture_ui_baseline.py` and both JSON files are deleted;
+>     `src/ui/collaboration_params.py`, its test, **and
+>     `tests/test_ui_api_client_status_mapping.py`** are **kept**.
 >
 > Wait for `PASS` before starting Step 8.
 
@@ -2091,12 +2371,20 @@ fails loudly at the DNS layer rather than silently degrading.
 
 ---
 
-### Step 10: Introduce `src/ui/api_client.py` and migrate all 56 call sites
+### Step 10: Grow `src/ui/api_client.py` and migrate all 56 call sites
 
 **In this plan the client carries no credentials.** Plan C teaches it to attach a
 bearer token — which is why the two plans are not merged.
 
-**Build the client** as the single chokepoint for UI→API calls:
+**`api_client.py` already exists — Step 7 created it** (7d-i) with
+`get_json(url, params, timeout) -> dict` and the status→exception mapping that
+keeps the collaboration banners working. This step **extends** that module; it
+does not create it, and it must not replace or re-implement the mapping. Keep
+7d-i's behaviour intact: the status translation is load-bearing for
+`pages/collaboration_network/` and `pages/collaboration_network_ego/`, and
+`tests/test_ui_api_client_status_mapping.py` guards it.
+
+**Grow the client** into the single chokepoint for UI→API calls:
 
 - Owns the base URL (from `UISettings.API_BASE_URL`) and the timeout (from the
   runtime-settings cache, read **per call** — see Step 6).
@@ -2436,7 +2724,7 @@ Mark each cell as you go. `⬜` not started · `🔄` in progress · `✅` passe
 |------|-----------------|------------------|-------------|--------|
 | 5  | `src/app/dash_app/` → `src/ui/`; `api_main.py` + `ui_main.py` created; Flask request logging ported; `main.py` reduced to a **temporary composition**. `routes_pathname_prefix` stays **unset** — Step 8's edit | suite green, no `app.dash_app` remains, no `a2wsgi` outside `main.py`, `main.py` still imports, no `routes_pathname_prefix`, `/app/` **and** `/app/chat` both `200`, `mypy` | Operator confirms the prefix is **absent** (the mount strips `/app`), `main.py` **not** deleted, `ui_main` imports no FastAPI/DB/transport, and the rebuilt stack still serves `/app` | ⬜ |
 | 6  | 12 import-time constants → function-local reads + regression test; MCP env table from `GET /api/v1/settings/`; `NEO4J_URI` message fixed | new test passes **and fails on mutation**; grep gates | Operator **runs the mutation**; test must not be vacuous; Connectors page unchanged in the browser | ⬜ |
-| 7  | Collab + ego + spotlight bypasses → HTTP, **one baseline captured before any swap**; optional `ids` param on `/search` | before/after summaries **and** matched-ID sets identical; `ids` proved non-decorative; script deleted | Operator confirms the baseline predates every swap and every set matches exactly | ⬜ |
+| 7  | Collab + ego + spotlight bypasses → HTTP, **one baseline captured before any swap**; optional `ids` param on `/search`; `src/ui/api_client.py` created with the status→exception mapping (7d-i) so the collab empty/invalid banners survive | before/after identities hold, **including the empty-result and invalid-config legs**; status-mapping unit test passes **and fails on mutation**; `ids` proved non-decorative; script deleted, both permanent tests kept | Operator confirms the baseline predates every swap, every data leg matches exactly, every error leg errored on both sides, and the no-data banners still render in the browser | ⬜ |
 
 **Phase 3 — go live**
 
@@ -2489,6 +2777,12 @@ were silently skipped by a missing marker or a broken import.
 
 1. Step 6 — revert one constant to module level; the new test must fail.
 2. Step 7 — drop `ids` from the ES body; the comparison must fail.
+2b. Step 7 (7d-iii) — remove the 404→`CollaborationDataUnavailable` branch from
+   `api_client.get_json`; `tests/test_ui_api_client_status_mapping.py` must fail.
+   Without this the mapping — the only thing keeping the collaboration
+   empty/invalid banners correct — rests on a test nobody proved non-vacuous.
+   Note the baseline script **cannot** detect this mutation (its `in_process`
+   leg bypasses `api_client`), which is exactly why the unit test exists.
 3. Step 8 — remove `routes_pathname_prefix="/app/"` from `create_dash_app()`;
    the UI must stop serving at `/app`. **Not** a Step 5 mutation: at Step 5 the
    prefix must be *absent*, and adding it there is itself the failure this
@@ -2529,6 +2823,12 @@ ALL must hold:
 - [ ] Step 7's baseline script called `src/ui/collaboration_params.py` (not a private param dict), so the re-run exercised the swapped translation
 - [ ] `tests/test_collab_query_param_roundtrip.py` passes **and fails when one `w_*` line is dropped** from `config_to_query_params`
 - [ ] Step 7's matched-ID sets are **identical**, and at least one spotlight query matched **>20** canvas nodes (otherwise the leg cannot tell scoped from unscoped)
+- [ ] Step 7's empty-result and invalid-config legs (`org_7`, `org_invalid`, `ego_unknown_person`) each read `kind == "error"` on **both** sides — the legs are not vacuous
+- [ ] `src/ui/api_client.py` maps status → exception: 404 to `CollaborationDataUnavailable` and 400 to a validation error, so the collab callbacks' existing `except` blocks still fire
+- [ ] `tests/test_ui_api_client_status_mapping.py` passes **and fails when the 404 branch is removed** from `get_json`
+- [ ] A 404 that is *not* the collaboration error does **not** become `CollaborationDataUnavailable` (the mapping discriminates on the body, not the bare status)
+- [ ] Both collaboration pages still show their specific "no data" banner rather than "An unexpected error occurred." (browser check)
+- [ ] `grep -rn "CollaborationDataUnavailable" src/ui/` → present in both `filter.py` files (the mapping was not deleted as "unused")
 - [ ] Step 12's concurrency measurements show overlap
 - [ ] `scripts/capture_ui_baseline.py` and its two JSON files are deleted; `src/ui/collaboration_params.py` is kept
 - [ ] `docs/design/authn-authz-design.md` no longer claims an ASGI-mount mechanism for the UI

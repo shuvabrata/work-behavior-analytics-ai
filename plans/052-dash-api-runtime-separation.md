@@ -134,6 +134,28 @@ measured figures are used here.)
 | `app.api.search.v1.model` | 1 | — |
 | `app.analytics.registry` | 1 | — |
 
+**Three rows above are container-fatal once the images split, and they are the
+first thing Step 6b fixes.** The UI image ships no database driver and gets no
+`DATABASE_URL`, so each of these raises at import time in its own way:
+
+| Module | UI files | Why the UI container cannot import it |
+|---|---|---|
+| `app.runtime_settings` | 13 | its module body imports `sqlalchemy.ext.asyncio.AsyncSession` (`runtime_settings.py:21`) |
+| `app.common.timezone` | 8 | imports `app.runtime_settings` (`timezone.py:11`), inheriting the `sqlalchemy` import |
+| `app.settings` | 15 | `Settings()` requires `DATABASE_URL`, which the UI service is deliberately not given, and the UI image ships no `.env` |
+
+Measured under simulated UI-container conditions (the package absent from the
+path): `import app.common.timezone` → `ModuleNotFoundError: No module named
+'sqlalchemy'`; `from app.settings import Settings` → `ValidationError:
+DATABASE_URL Field required`.
+
+The bare counts understate this. `app.common.timezone` is imported by
+`chat.py` and `search.py` — sidebar pages — so this fails on the **first page
+load**, and `create_dash_app()` pulls the whole `pages/` tree, so `ui_main.py`
+importing cleanly proves nothing about its transitive imports. Step 6b covers the
+fix; Step 6b-v builds the test that catches it locally rather than as a Step 8
+crash.
+
 ### The three in-process bypasses
 
 A request to the unauthenticated `POST /app/_dash-update-component` reaches these
@@ -453,6 +475,14 @@ Run Python commands with the virtualenv active (`source .venv/bin/activate`) and
   mapping; **extended** in Step 10) + `tests/test_ui_api_client_status_mapping.py`
   (create, **permanent** — guards the mapping that keeps the collaboration
   empty/invalid banners working)
+- `src/domain/settings.py` (create in Step 6b — `UISettings`, the credential-free
+  base `ApiSettings` extends), `src/domain/timezone.py` (moved from
+  `src/app/common/timezone.py` in Step 6b)
+- `src/ui/runtime_settings.py`, `src/ui/settings.py` (create in Step 6b — the
+  UI's DB-free replacements) + `tests/test_ui_isolation.py` (create,
+  **permanent** — imports every `src/ui/**` module with the DB/LLM packages
+  blocked, so the boot-time `ModuleNotFoundError` fails locally instead of as a
+  Step 8 502)
 - `CLAUDE.md`, `DEVELOPER_QUICK_START.md`, `USER_GUIDE.md`, `.env.example`
 - `docs/design/authn-authz-design.md` — the four sections in Step 13 only
 - `.github/workflows/pr_checks.yml` — the install lines for the three jobs
@@ -1135,10 +1165,20 @@ Step 8 onward is blocked.
 
 ### Step 6: Stop the UI reading the API's configuration
 
-Two leaks, one step. Both are the same class of defect: the UI holds a copy of
-configuration it should be asking for, and the copy goes stale or leaks a secret.
-Neither needs the split to be real — both are fixable, and verifiable, while the
-UI is still part of the one process.
+Three leaks, one step. All are the same class of defect: the UI holds a copy of
+configuration it should be asking for, and the copy goes stale, leaks a secret,
+or drags a database driver into a container that must not have one. None needs
+the split to be real — all three are fixable, and verifiable, while the UI is
+still part of the one process.
+
+**Order matters: 6a → 6b → 6c.** 6b restructures the UI's access to every
+setting, and 6a's conversions and 6c's fetches both land on top of it. Doing 6c
+before 6b, or 6b after 6c, means redoing work.
+
+**6b is the one that must not be skipped, and it is the one whose absence is
+silent until the split.** It is not a tidiness pass: without it the UI container
+cannot start at all (see below). 6a and 6c are correctness fixes that would be
+worth doing on their own merits.
 
 **6a. Convert the 12 import-time constants to function-local reads.**
 
@@ -1191,7 +1231,205 @@ reading the cache — otherwise it tests the cache, which was never broken.
 **Verify (6a)**: the new test **fails** if you revert one constant to module level (run this mutation; do not skip it)
 **Verify (6a)**: `grep -rn "^[A-Z_]* *= *\(runtime_settings\|settings\)\." src/ui/` → no matches
 
-**6b. Source the MCP env table from the settings API.**
+---
+
+**6b. Give the UI DB-free replacements for `app.runtime_settings`,
+`app.common.timezone` and `app.settings`.**
+
+**This is the step that decides whether the split works at all.** Skip it and the
+UI container crash-loops on boot in Step 8 with `ModuleNotFoundError` — and every
+gate before Step 8's cold-start check passes anyway. Do it here, not at Step 8:
+it is the same class of leak this step exists to close, it needs no container to
+fix or verify, and it is a 21-file import rewrite that must not be bolted onto
+Step 8's packaging change.
+
+**The problem, measured.** Three modules the UI imports reach a dependency the UI
+image does not have. Each was confirmed on the live tree under simulated
+UI-container conditions (the package absent from the path):
+
+| UI imports (files) | Via | Reaches | Fails in the UI image |
+|---|---|---|---|
+| `app.runtime_settings` (13) | — | `sqlalchemy.ext.asyncio.AsyncSession` (`runtime_settings.py:21`) | `ModuleNotFoundError: No module named 'sqlalchemy'` |
+| `app.common.timezone` (8) | `from app.runtime_settings import runtime_settings` (`timezone.py:11`) | the same `sqlalchemy` import | same |
+| `app.settings` (13) | — | `Settings()` needs `DATABASE_URL`, which the UI service deliberately does not get, and `.env` is not shipped to the UI image | `ValidationError: DATABASE_URL Field required` |
+
+`app.common.timezone` is the sharpest of the three because the UI has no
+alternative: `to_app_timezone` / `humanize_duration` are imported by 8 files
+including `chat.py` and `search.py` — sidebar pages, so this fails on the **first
+page load**, not in a corner.
+
+**Why Step 6a does not cover this.** 6a changes *when* the settings are read, not
+*who* is imported. Every one of these `from … import …` statements stays at the top
+of its file, so the module body still executes. 6a's own verify passes with all
+21 files untouched — it greps for module-level *assignments*
+(`^[A-Z_]* *= *…`), never for import statements.
+
+**6b-i. Create the shared, DB-free settings base.**
+
+Create `src/domain/settings.py` holding the fields **both** runtimes need and
+**no** credential field. This is Decision 3, and Step 6 is where it is built —
+without it, `ApiSettings` has nothing to extend and `UISettings` does not exist:
+
+```python
+"""Settings shared by the API runtime and the UI runtime.
+
+Fields here must be safe for the UI container, which holds no database driver,
+no data-store credentials and no LLM provider key. Anything secret or
+DB-adjacent belongs on ``ApiSettings`` in ``src/app/settings.py``, not here.
+"""
+```
+
+- Move the UI-relevant fields (`API_BASE_URL`, `EXTERNAL_BASE_URL`, `TIMEZONE`,
+  `UI_DATE_FORMAT`, `UI_DATETIME_FORMAT`, the `LOG_*` values,
+  `GRAPH_UI_*`, `HTTP_REQUEST_TIMEOUT`, `UI_*`) onto `UISettings`.
+- `UISettings` must carry **no** `DATABASE_URL`, `NEO4J_*`, `ELASTICSEARCH_*`,
+  `OPENAI_API_KEY`, `CUSTOM_API_TOKEN`, `GITHUB_MCP_TOKEN`,
+  `ATLASSIAN_MCP_TOKEN`, `RABBITMQ_URL` or `CONNECTOR_ENCRYPTION_KEY`.
+- In `src/app/settings.py`, `class ApiSettings(UISettings)` adds those back.
+  Keeping `DATABASE_URL` with no default is what makes `ApiSettings`
+  unconstructable in the UI — that is the type-level enforcement Decision 3
+  specifies, and it is only real once `UISettings` exists.
+
+**6b-ii. Create `src/ui/runtime_settings.py` — the UI's cache.**
+
+The UI keeps the **same surface** (`get_int`/`get`/`refresh`) so the 13 call
+sites change only their import line, not their bodies:
+
+```python
+"""The UI runtime's runtime-settings cache.
+
+Same interface as ``app.runtime_settings``, but sourced from the API over HTTP
+instead of from the database — the UI holds no driver and no DB credentials. The
+snapshot endpoint (``GET /api/v1/settings/runtime-snapshot``) is the same one the
+producer daemons and the signal consumer already use.
+"""
+```
+
+- Seed it from `UISettings` at import (env-configured values available
+  immediately, mirroring `app/runtime_settings.py:86-88`).
+- Refresh it with `common.runtime_settings.client.fetch_runtime_snapshot`
+  (**pure** since Step 4 evicted `events.py`, and already used by
+  `connectors/producers/daemon_common.py:137` and
+  `connectors/consumers/main.py:207` — reuse this, do not invent a second
+  snapshot path).
+- Refresh on startup and on each use for a long-lived process, or lazily with a
+  short TTL. `fetch_runtime_snapshot` already degrades to env/defaults on
+  failure (`client.py:55-63`), so an unreachable API degrades rather than
+  crashes — acceptable, but **log at the same level the producers do**, because
+  silent degradation is the failure mode this plan already flags.
+- Do **not** add a RabbitMQ listener here. `common/messaging/settings_events.py`
+  needs `aio_pika`, which the UI image does not carry (that is exactly why
+  Step 4 made `common/runtime_settings` structurally pure). Poll or refresh per
+  request; do not import the events module.
+
+**6b-iii. Move the timezone helpers to `src/domain/timezone.py`.**
+
+`get_app_timezone`, `to_app_timezone`, `now_in_app_timezone`,
+`humanize_duration` move from `src/app/common/timezone.py` to
+`src/domain/timezone.py`. Verified: the **only** importers are the 8 UI files and
+`tests/test_timezone_settings.py:7` — no API, scheduler, connector or consumer
+module imports it, so this is a clean move with no API-side caller to preserve.
+
+The functions are pure `zoneinfo` arithmetic; only the *source* of the timezone
+string was DB-adjacent. Point `get_app_timezone` at the UI's cache:
+
+```python
+from ui.runtime_settings import runtime_settings   # or an injected getter
+```
+
+**One wrinkle to handle, not to gloss over.** `src/domain/` must not import from
+`ui.*` — the package contract from Step 1 forbids it (the API cannot depend on
+the UI). So `domain.timezone` must **not** hard-import `ui.runtime_settings`.
+Two acceptable shapes; pick one and say which in the gate report:
+
+1. `domain.timezone.get_app_timezone()` reads the **shared** cache object, which
+   each runtime populates at startup — the domain module owns the cache, and
+   `app/runtime_settings.py` and `ui/runtime_settings.py` are thin bindings that
+   point at it.
+2. The timezone source is **injected** once at startup, with a module-level
+   default of `UTC`.
+
+Shape 1 keeps every call site's signature unchanged, which is what makes the
+8 UI files a pure import-line edit. Prefer it unless it drags a second cache
+into existence — in which case say so and take shape 2.
+
+**6b-iv. Repoint the importers.**
+
+Update **every** importer in `src/` and `tests/`. The three renames:
+
+| Now | Becomes | UI files | Other importers |
+|---|---|---|---|
+| `from app.runtime_settings import runtime_settings` | `from ui.runtime_settings import runtime_settings` | 13 | — |
+| `from app.settings import settings` | `from ui.settings import UISettings` (or a `ui.settings.settings` singleton) | 13 | API keeps `app.settings` |
+| `from app.common.timezone import …` | `from domain.timezone import …` | 8 | `tests/test_timezone_settings.py` |
+
+The 13 `app.settings` files are the subtle ones: most read only
+`API_BASE_URL`, `UI_*`, `TIMEZONE` or `GRAPH_UI_*` — all on `UISettings`. Check
+each rather than assuming: any file reading a **credential** field is a Step 6c
+case (the MCP table) or a UI→API call that has not been made yet, and is a STOP
+condition to report rather than paper over.
+
+**6b-v. Add the verify that actually catches this.**
+
+Every existing check in this plan is blind to this defect — the suite runs where
+`sqlalchemy` **is** installed, the Dockerfile copies files without importing
+them, and Gate 5 checks the imports of `ui_main.py` alone while `create_dash_app()`
+pulls the entire `pages/` tree transitively. So add a real one: a test that
+imports every `src/ui/**` module in a process where the DB/LLM packages are
+absent. `tests/test_ui_isolation.py`, `pytestmark = pytest.mark.unit`:
+
+```python
+def test_ui_modules_import_without_db_or_llm_packages():
+    """Every src/ui/** module must import with no database driver present.
+
+    Regression guard: 21 UI files imported app.runtime_settings /
+    app.common.timezone / app.settings, each of which pulls sqlalchemy or
+    requires DATABASE_URL. The UI image ships neither, so the container
+    crash-looped at boot with ModuleNotFoundError while every other gate
+    passed.
+    """
+```
+
+Block the packages the way `Dockerfile.ui`'s exclusion list names them
+(`sqlalchemy`, `asyncpg`, `neo4j`, `elasticsearch`, `openai`, `aio_pika`, …) with
+a `sys.meta_path` finder that raises `ModuleNotFoundError`, then import each
+module under `src/ui/` by walking the package. This is the one check that fails
+**fast and locally** instead of as a 502 in Step 8.
+
+**The approach is verified, not assumed — including that it fails on the
+current tree.** Run against today's unfixed code, importing
+`app.dash_app.pages.chat` with those packages blocked produces exactly the
+chain this defect is:
+
+```
+File "src/app/dash_app/pages/chat.py", line 8, in <module>
+    from app.common.timezone import now_in_app_timezone, humanize_duration
+File "src/app/common/timezone.py", line 8, in <module>
+    from app.runtime_settings import runtime_settings
+File "src/app/runtime_settings.py", line 21, in <module>
+    from sqlalchemy.ext.asyncio import AsyncSession
+ModuleNotFoundError: No module named 'sqlalchemy' (UI image)
+```
+
+So the test is non-vacuous by construction: it fails before Step 6b and passes
+after. Two details that make it real rather than decorative — **assert the
+blocker is effective** (import `sqlalchemy` normally first, then confirm it
+raises once the finder is installed), because a finder that matches nothing
+makes the test pass for the wrong reason; and **walk the package with
+`pkgutil.walk_packages`** so a newly added UI module is covered without anyone
+remembering to list it.
+
+**Verify (6b)**: `grep -rn "from app\.runtime_settings import\|from app\.common\.timezone import\|from app\.settings import" src/ui/` → **no matches**
+**Verify (6b)**: `PYTHONPATH=src python -c "import domain.settings, domain.timezone; print('domain OK')"` → `domain OK`, and `grep -rn "app\.\|ui\." src/domain/settings.py src/domain/timezone.py` shows no forbidden import
+**Verify (6b)**: `PYTHONPATH=src python -c "from ui.runtime_settings import runtime_settings; print(runtime_settings.get_int('HTTP_REQUEST_TIMEOUT'))"` → an integer, no traceback
+**Verify (6b)**: `pytest tests/test_ui_isolation.py -q` → all pass, **and it fails when you re-add one `from app.runtime_settings import runtime_settings` to any `src/ui/` module** (run this mutation; a test that passes both ways is vacuous)
+**Verify (6b)**: `pytest -m unit tests -q` → all pass (the 21 repointed files and `tests/test_timezone_settings.py` included)
+**Verify (6b)**: `mypy src/` → exit 0
+**Verify (6b)**: `docker compose up -d --build` → healthy; `curl -sf -o /dev/null -w '%{http_code}' https://localhost/app/` → `200`, and `https://localhost/app/chat` → `200` (Chat imports the timezone helpers — it is the page that proves this landed)
+
+---
+
+**6c. Source the MCP env table from the settings API.**
 
 `src/ui/pages/connectors/layout.py:966-978` reads three settings from the UI
 process's environment. Replace the direct reads with a fetch from
@@ -1216,35 +1454,70 @@ to the browser. Replace with a message that does not name the endpoint.
 token is set without learning the token. This is also why the row survives Plan
 C's admin-only secret rule unchanged.
 
-**Verify (6b)**: `grep -rn "settings\.GITHUB_MCP\|settings\.NEO4J_URI" src/ui/` → no matches
-**Verify (6b)**: `grep -n "GITHUB_MCP" docker-compose.yml` → no `ui` service block matches (the `ui` service does not exist until Step 8; the API keeps them)
-**Verify**: `pytest -m unit tests -q` → all pass
+**Verify (6c)**: `grep -rn "settings\.GITHUB_MCP\|settings\.NEO4J_URI" src/ui/` → no matches
+**Verify (6c)**: `grep -n "GITHUB_MCP" docker-compose.yml` → no `ui` service block matches (the `ui` service does not exist until Step 8; the API keeps them)
+**Verify (6c)**: `pytest -m unit tests -q` → all pass
 **Verify**: `mypy src/` → exit 0
 **Verify**: `docker compose up -d --build` → healthy; `curl -sf -o /dev/null -w '%{http_code}' https://localhost/app/` → `200`
 
 > ### 🚦 MANUAL GATE 6 — operator check
 >
-> **Report to the operator:** the verify outputs and the new test's name.
+> **Report to the operator:** the verify outputs and the two new test names.
 >
-> **Operator verifies:**
+> **6a — the import-time constants:**
+>
 > 1. The new test exists and asserts through the **consuming function**, not
 >    through the cache.
 > 2. **The mutation was run.** Reverting one constant to module level must make
->    the test fail. A test that passes both ways is vacuous — this is the single
->    most important check in this gate.
+>    the test fail. A test that passes both ways is vacuous.
 > 3. All 12 sites are converted; the grep finds none remaining.
 > 4. No `TIMEOUT_SECONDS` is left referenced by a name that no longer exists.
-> 5. The UI **code** reads none of `GITHUB_MCP_ENABLED`, `GITHUB_MCP_SERVER_URL`,
->    `GITHUB_MCP_TOKEN`, or `NEO4J_URI`. Note the wording: the UI is still part of
->    the one process here, so this is a **code-level grep, not a process-level
->    check**. The process-level check (`docker compose exec ui env`) only becomes
->    possible at Step 8, and is run there.
-> 6. The Connectors page's env table still renders all three rows with correct
->    Set/Not-set indicators. **This is a browser check** — the page must look
->    unchanged for the user while the secret stopped being read directly.
-> 7. The Neo4j error message no longer names `settings.NEO4J_URI`.
-> 8. The settings API's masking is what supplies the display value — confirm
->    nothing in the UI computes a mask of its own for the token.
+>
+> **6b — the isolation fix. This is the most important part of this gate, because
+> it is the only thing standing between the UI container and a boot-time crash at
+> Step 8.**
+>
+> 5. **`src/domain/settings.py` exists, `UISettings` is there, and it carries no
+>    credential field.** Read it. Confirm there is no `DATABASE_URL`, no
+>    `NEO4J_*`, no `ELASTICSEARCH_*`, no `OPENAI_API_KEY`, no `GITHUB_MCP_TOKEN`,
+>    no `RABBITMQ_URL`, no `CONNECTOR_ENCRYPTION_KEY`. Then confirm
+>    `ApiSettings(UISettings)` in `src/app/settings.py` adds them back.
+> 6. **The UI imports none of the three old modules.** Run
+>    `grep -rn "from app\.runtime_settings import\|from app\.common\.timezone import\|from app\.settings import" src/ui/`
+>    → no matches. This is the check whose absence let the defect through in the
+>    first place: Step 6a's grep looks only at module-level *assignments*, so all
+>    21 files passed it while still importing `sqlalchemy` transitively.
+> 7. **`tests/test_ui_isolation.py` exists, passes, and is non-vacuous.** Run the
+>    mutation: re-add `from app.runtime_settings import runtime_settings` to any
+>    `src/ui/` module and confirm the test **fails**. Confirm it blocks the real
+>    package names (`sqlalchemy`, `asyncpg`, `neo4j`, `elasticsearch`, `openai`,
+>    `aio_pika`) — a test that blocks nothing passes trivially.
+> 8. **`ui.runtime_settings` reuses the existing snapshot client.** Confirm it
+>    calls `common.runtime_settings.client.fetch_runtime_snapshot` rather than a
+>    second hand-rolled HTTP path, and that it does **not** import
+>    `common.messaging.settings_events` (which needs `aio_pika`). Both are read
+>    from the file.
+> 9. **`domain.timezone` does not import `ui.*`.** It must not — the API cannot
+>    depend on the UI. Confirm the timezone-source shape chosen (shared cache vs
+>    injected) and that `domain/` still imports nothing from `app.*` or `ui.*`.
+> 10. **The server runs and Chat renders.** `https://localhost/app/chat` → `200`
+>     in the browser, with timestamps formatted correctly. Chat imports the
+>     timezone helpers, so it is the page that proves the move worked.
+>
+> **6c — the secret and the topology leak:**
+>
+> 11. The UI **code** reads none of `GITHUB_MCP_ENABLED`, `GITHUB_MCP_SERVER_URL`,
+>     `GITHUB_MCP_TOKEN`, or `NEO4J_URI`. Note the wording: the UI is still part
+>     of the one process here, so this is a **code-level grep, not a
+>     process-level check**. The process-level check
+>     (`docker compose exec ui env`) only becomes possible at Step 8, and is run
+>     there.
+> 12. The Connectors page's env table still renders all three rows with correct
+>     Set/Not-set indicators. **This is a browser check** — the page must look
+>     unchanged for the user while the secret stopped being read directly.
+> 13. The Neo4j error message no longer names `settings.NEO4J_URI`.
+> 14. The settings API's masking is what supplies the display value — confirm
+>     nothing in the UI computes a mask of its own for the token.
 >
 > Wait for `PASS` before starting Step 7.
 
@@ -2255,6 +2528,7 @@ missed site is not yet fatal — Step 9 is what proves they were all caught.
 **Verify (8a-ii)**: `curl -sf -o /dev/null -w '%{http_code}' https://localhost/app/app/_dash-layout` → `404` (the doubled path the mount produced in Steps 5–7 must be gone — if this is `200`, the mount is still in the path)
 **Verify (8e)**: `docker compose exec api env | grep -c GITHUB_MCP_TOKEN` → `0`
 **Verify (8e)**: `docker compose exec ui env | grep -cE "DATABASE_URL|OPENAI_API_KEY|NEO4J_PASSWORD"` → `0`
+**Verify (8e)**: `docker compose exec ui python -c "import ui_main; print('ui imports OK')"` → `ui imports OK`. **This is the boot-time check for Step 6b.** The UI image has no `sqlalchemy` and no `DATABASE_URL`, so if any `src/ui/` module still imports `app.runtime_settings`, `app.common.timezone` or `app.settings`, this fails **here** with `ModuleNotFoundError` instead of surfacing as an unexplained 502.
 
 > ### 🚦 MANUAL GATE 8 — operator check (the largest gate)
 >
@@ -2723,7 +2997,7 @@ Mark each cell as you go. `⬜` not started · `🔄` in progress · `✅` passe
 | Step | What it changes | Automated verify | Manual gate | Status |
 |------|-----------------|------------------|-------------|--------|
 | 5  | `src/app/dash_app/` → `src/ui/`; `api_main.py` + `ui_main.py` created; Flask request logging ported; `main.py` reduced to a **temporary composition**. `routes_pathname_prefix` stays **unset** — Step 8's edit | suite green, no `app.dash_app` remains, no `a2wsgi` outside `main.py`, `main.py` still imports, no `routes_pathname_prefix`, `/app/` **and** `/app/chat` both `200`, `mypy` | Operator confirms the prefix is **absent** (the mount strips `/app`), `main.py` **not** deleted, `ui_main` imports no FastAPI/DB/transport, and the rebuilt stack still serves `/app` | ⬜ |
-| 6  | 12 import-time constants → function-local reads + regression test; MCP env table from `GET /api/v1/settings/`; `NEO4J_URI` message fixed | new test passes **and fails on mutation**; grep gates | Operator **runs the mutation**; test must not be vacuous; Connectors page unchanged in the browser | ⬜ |
+| 6  | 12 import-time constants → function-local reads + regression test; **DB-free `UISettings` / `ui.runtime_settings` / `domain.timezone` so the UI stops importing `app.runtime_settings`, `app.common.timezone` and `app.settings`** (21 files — without this the UI container cannot boot); MCP env table from `GET /api/v1/settings/`; `NEO4J_URI` message fixed | both new tests pass **and fail on mutation**; the three old imports gone from `src/ui/`; grep gates | Operator **runs both mutations**; `test_ui_isolation.py` blocks real package names; `domain/` imports nothing from `app.*`/`ui.*`; `/app/chat` renders (it uses the timezone helpers) | ⬜ |
 | 7  | Collab + ego + spotlight bypasses → HTTP, **one baseline captured before any swap**; optional `ids` param on `/search`; `src/ui/api_client.py` created with the status→exception mapping (7d-i) so the collab empty/invalid banners survive | before/after identities hold, **including the empty-result and invalid-config legs**; status-mapping unit test passes **and fails on mutation**; `ids` proved non-decorative; script deleted, both permanent tests kept | Operator confirms the baseline predates every swap, every data leg matches exactly, every error leg errored on both sides, and the no-data banners still render in the browser | ⬜ |
 
 **Phase 3 — go live**
@@ -2775,20 +3049,27 @@ were silently skipped by a missing marker or a broken import.
 
 **Mutations to run (not optional):**
 
-1. Step 6 — revert one constant to module level; the new test must fail.
-2. Step 7 — drop `ids` from the ES body; the comparison must fail.
-2b. Step 7 (7d-iii) — remove the 404→`CollaborationDataUnavailable` branch from
+1. Step 6 (6a) — revert one constant to module level; the new test must fail.
+2. Step 6 (6b-v) — re-add `from app.runtime_settings import runtime_settings`
+   to any `src/ui/` module; `tests/test_ui_isolation.py` must fail. This is the
+   non-vacuity check for the only test that catches the UI container's boot-time
+   `ModuleNotFoundError`, and it is the one a stub-both-ways implementation would
+   pass silently. Also confirm the finder blocks the **real** package names
+   (`sqlalchemy`, `asyncpg`, `neo4j`, `openai`, `aio_pika`) — a finder that
+   blocks nothing makes the test pass for the wrong reason.
+3. Step 7 — drop `ids` from the ES body; the comparison must fail.
+4. Step 7 (7d-iii) — remove the 404→`CollaborationDataUnavailable` branch from
    `api_client.get_json`; `tests/test_ui_api_client_status_mapping.py` must fail.
    Without this the mapping — the only thing keeping the collaboration
    empty/invalid banners correct — rests on a test nobody proved non-vacuous.
    Note the baseline script **cannot** detect this mutation (its `in_process`
    leg bypasses `api_client`), which is exactly why the unit test exists.
-3. Step 8 — remove `routes_pathname_prefix="/app/"` from `create_dash_app()`;
+5. Step 8 — remove `routes_pathname_prefix="/app/"` from `create_dash_app()`;
    the UI must stop serving at `/app`. **Not** a Step 5 mutation: at Step 5 the
    prefix must be *absent*, and adding it there is itself the failure this
    mutation exists to detect.
-4. Step 8 — remove the `ui` healthcheck; the cold-start check must 502.
-5. Step 5 — delete `src/app/main.py` early; the stack must fail to start. This is
+6. Step 8 — remove the `ui` healthcheck; the cold-start check must 502.
+7. Step 5 — delete `src/app/main.py` early; the stack must fail to start. This is
    the mutation that proves the stable-state rule is load-bearing rather than
    ceremonial.
 
@@ -2807,6 +3088,11 @@ ALL must hold:
 - [ ] `grep -rn "requests\.\(get\|post\|put\|patch\|delete\)" src/ui/` → no matches
 - [ ] `grep -rn "^[A-Z_]* *= *\(runtime_settings\|settings\)\." src/ui/` → no matches
 - [ ] `grep -rn "app\.common\.\(graph_theme\|node_size\|person_network_url\)" src/ tests/` → no matches
+- [ ] `grep -rn "from app\.runtime_settings import\|from app\.common\.timezone import\|from app\.settings import" src/ui/` → no matches (the UI imports only its own DB-free replacements)
+- [ ] `src/domain/settings.py` defines `UISettings` with **no** credential field, and `ApiSettings(UISettings)` adds them back
+- [ ] `src/domain/` imports nothing from `app.*` or `ui.*`
+- [ ] `tests/test_ui_isolation.py` passes **and fails when any `src/ui/` module re-imports `app.runtime_settings`**
+- [ ] `docker compose exec ui python -c "import ui_main"` succeeds — the UI boots with no `sqlalchemy` and no `DATABASE_URL`
 - [ ] `grep -rn "runtime_settings.events" src/ tests/` → no matches
 - [ ] `grep -rn "app:8000" docker-compose.yml src/ .env.example` → no matches
 - [ ] `grep -n "app\.main:app" src/app/entrypoint.sh` → **no matches**; it names `app.api_main:app`

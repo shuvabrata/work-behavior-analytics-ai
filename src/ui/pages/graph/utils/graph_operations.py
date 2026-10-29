@@ -11,8 +11,8 @@ from datetime import datetime
 
 import requests
 
-from app.runtime_settings import runtime_settings
-from app.settings import settings
+from ui.runtime_settings import runtime_settings
+from ui.settings import settings
 from common.logger import logger
 from .data_transform import neo4j_to_cytoscape
 from .element_types import is_edge_element, is_node_element

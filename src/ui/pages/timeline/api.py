@@ -11,8 +11,8 @@ from typing import Any
 
 import requests
 
-from app.runtime_settings import runtime_settings
-from app.settings import settings
+from ui.runtime_settings import runtime_settings
+from ui.settings import settings
 from ui.pages.graph.utils import neo4j_to_cytoscape
 from ui.pages.timeline.helpers import MIN_QUERY_LENGTH
 

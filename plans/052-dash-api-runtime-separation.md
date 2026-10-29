@@ -1248,7 +1248,7 @@ reading the cache — otherwise it tests the cache, which was never broken.
 UI container crash-loops on boot in Step 8 with `ModuleNotFoundError` — and every
 gate before Step 8's cold-start check passes anyway. Do it here, not at Step 8:
 it is the same class of leak this step exists to close, it needs no container to
-fix or verify, and it is a 21-file import rewrite that must not be bolted onto
+fix or verify, and it is a 25-file import rewrite that must not be bolted onto
 Step 8's packaging change.
 
 **The problem, measured.** Three modules the UI imports reach a dependency the UI
@@ -1269,7 +1269,7 @@ page load**, not in a corner.
 **Why Step 6a does not cover this.** 6a changes *when* the settings are read, not
 *who* is imported. Every one of these `from … import …` statements stays at the top
 of its file, so the module body still executes. 6a's own verify passes with all
-21 files untouched — it greps for module-level *assignments*
+25 files untouched — it greps for module-level *assignments*
 (`^[A-Z_]* *= *…`), never for import statements.
 
 **6b-i. Create the shared, DB-free settings base.**
@@ -1290,6 +1290,18 @@ DB-adjacent belongs on ``ApiSettings`` in ``src/app/settings.py``, not here.
 - Move the UI-relevant fields (`API_BASE_URL`, `EXTERNAL_BASE_URL`, `TIMEZONE`,
   `UI_DATE_FORMAT`, `UI_DATETIME_FORMAT`, the `LOG_*` values,
   `GRAPH_UI_*`, `HTTP_REQUEST_TIMEOUT`, `UI_*`) onto `UISettings`.
+- **`CONNECTOR_SCAN_POLL_INTERVAL` must be on `UISettings` too** (measured: no
+  other entry in this list is a boot risk, this one is). `src/ui/pages/connectors/layout.py:254`
+  reads `settings.CONNECTOR_SCAN_POLL_INTERVAL` for the scan-poll `dcc.Interval`.
+  Omitting it makes that module raise `AttributeError` at import — the exact
+  boot crash 6b exists to prevent. It is genuinely runtime-tunable (it is a field
+  on `RuntimeConfig`, `common/runtime_settings/config.py:34`), so it belongs on
+  both `UISettings` and `RuntimeConfig`.
+  **Do this by reading the fields off the code, not by trusting this list.** The
+  measurement that matters is `grep -rhoE "settings\.[A-Z_][A-Z0-9_]*" src/ui/` —
+  every name it prints must resolve on `UISettings`, except the six that 6c
+  removes from the UI entirely (`GITHUB_MCP_ENABLED`, `GITHUB_MCP_SERVER_URL`,
+  `GITHUB_MCP_TOKEN`, `NEO4J_URI`) which must not appear on `UISettings` at all.
 - `UISettings` must carry **no** `DATABASE_URL`, `NEO4J_*`, `ELASTICSEARCH_*`,
   `OPENAI_API_KEY`, `CUSTOM_API_TOKEN`, `GITHUB_MCP_TOKEN`,
   `ATLASSIAN_MCP_TOKEN`, `RABBITMQ_URL` or `CONNECTOR_ENCRYPTION_KEY`.
@@ -1314,7 +1326,23 @@ producer daemons and the signal consumer already use.
 ```
 
 - Seed it from `UISettings` at import (env-configured values available
-  immediately, mirroring `app/runtime_settings.py:86-88`).
+  immediately, mirroring `app/runtime_settings.py:86-88`) — **but the seed must
+  be non-destructive.** `RuntimeConfigCache.refresh` *replaces* the snapshot
+  (`cache.py:79-82`), and Steps 5–7 still run the UI and the API in one process
+  sharing one cache object (`domain.timezone.runtime_settings`). A naive
+  `refresh(RuntimeConfig(**seed_fields))` therefore overwrites the API's whole
+  configuration with the UI's 13-field model plus code defaults, the moment
+  `app.main` imports `ui_main` after `api_main`. **Measured on the real tree: 7
+  fields destroyed** — `LLM_MODEL`, `GITHUB_MCP_ENABLED`, `COMMIT_DAYS_LIMIT`,
+  `PULL_REQUEST_DAYS_LIMIT`, `JIRA_LOOKBACK_DAYS`, `CONFLUENCE_LOOKBACK_DAYS`,
+  `API_SERVER`. Today the startup lifespan's DB load papers over it, but that
+  load is `try/except`-guarded and continues on failure, so with the DB down at
+  boot the API silently runs on the UI's defaults.
+  So: start from `runtime_settings.current()` and fill only the seed fields that
+  still hold their **code default** (fill-only-if-default). Guard it with a test
+  (`test_ui_seed_does_not_clobber_a_populated_shared_cache`). Note the irony in
+  the report: 6a exists to stop an import-time *read* going stale, and this is an
+  import-time *write* going stale in the opposite direction.
 - Refresh it with `common.runtime_settings.client.fetch_runtime_snapshot`
   (**pure** since Step 4 evicted `events.py`, and already used by
   `connectors/producers/daemon_common.py:137` and
@@ -1325,6 +1353,18 @@ producer daemons and the signal consumer already use.
   failure (`client.py:55-63`), so an unreachable API degrades rather than
   crashes — acceptable, but **log at the same level the producers do**, because
   silent degradation is the failure mode this plan already flags.
+- **The refresh must have a real caller in this step, not just a definition.**
+  A `refresh()` that nothing calls leaves the UI on its env seed forever, which
+  reintroduces 6a's bug one layer up: `HTTP_REQUEST_TIMEOUT` and
+  `RECENT_ACTIONS_LIMIT` are *not* in Step 8's UI `environment:` block, so
+  without a live refresh they stay at code defaults (`60`/`5`) permanently and a
+  Settings-UI edit never reaches the UI. Wire it to the Flask `before_request`
+  hook in `ui/request_logging.py` behind a TTL (`refresh_if_stale`,
+  `REFRESH_TTL_SECONDS = 60.0`, `threading.Lock`-guarded) — **bounded**, because
+  36 UI call sites read `HTTP_REQUEST_TIMEOUT`. Verified working: 30 calls
+  inside one TTL → 1 fetch; 5 live page loads inside the TTL → 0 extra fetches.
+  Guard it with a test that asserts the bound *and* that a post-import refresh
+  changes a value the UI actually consumes.
 - Do **not** add a RabbitMQ listener here. `common/messaging/settings_events.py`
   needs `aio_pika`, which the UI image does not carry (that is exactly why
   Step 4 made `common/runtime_settings` structurally pure). Poll or refresh per
@@ -1387,15 +1427,35 @@ imports every `src/ui/**` module in a process where the DB/LLM packages are
 absent. `tests/test_ui_isolation.py`, `pytestmark = pytest.mark.unit`:
 
 ```python
+_PENDING_STEP_7 = {
+    "ui.layout",
+    "ui.pages.collaboration_network",
+    "ui.pages.collaboration_network_ego",
+    "ui.pages.graph",
+    "ui.components.spotlight",
+}  # reach neo4j/ES via the 4 in-process bypasses Step 7 swaps. MUST be empty
+   # after Step 7 — see the plan's Step 7 gate.
+
+
 def test_ui_modules_import_without_db_or_llm_packages():
     """Every src/ui/** module must import with no database driver present.
 
-    Regression guard: 21 UI files imported app.runtime_settings /
+    Regression guard: 25 UI files imported app.runtime_settings /
     app.common.timezone / app.settings, each of which pulls sqlalchemy or
     requires DATABASE_URL. The UI image ships neither, so the container
     crash-looped at boot with ModuleNotFoundError while every other gate
     passed.
+
+    ``_PENDING_STEP_7`` is a *staging* allowance, not a permanent one: the five
+    modules in it reach ``neo4j``/``elasticsearch`` through the four in-process
+    bypasses (collab filter, ego filter, spotlight, and the ``layout`` import
+    that pulls all three page packages) which Step 7 replaces with HTTP calls.
+    Remove the set — and assert it is empty — in Step 7, the step that makes
+    that true.
     """
+    failures = _walk_ui_with_packages_blocked()
+    unexpected = sorted(set(failures) - _PENDING_STEP_7)
+    assert not unexpected, unexpected
 ```
 
 Block the packages the way `Dockerfile.ui`'s exclusion list names them
@@ -1403,6 +1463,31 @@ Block the packages the way `Dockerfile.ui`'s exclusion list names them
 a `sys.meta_path` finder that raises `ModuleNotFoundError`, then import each
 module under `src/ui/` by walking the package. This is the one check that fails
 **fast and locally** instead of as a 502 in Step 8.
+
+**Why the allowlist is necessary, and it is measured, not defensive.** At Step 6b
+the blocked package list cannot include `neo4j`/`elasticsearch` and pass, because
+those are reached *through Step 7's bypasses*, which Step 6 deliberately leaves in
+place. Verified by simulating the post-6b tree (the three import rewrites applied,
+DB-free stand-ins in place) and running the walk with the full blocked set:
+
+```
+5 failures, none of them Step 6's:
+  ui.components.spotlight            -> elasticsearch
+  ui.layout                          -> neo4j
+  ui.pages.collaboration_network     -> neo4j
+  ui.pages.collaboration_network_ego -> elasticsearch
+  ui.pages.graph                     -> elasticsearch
+```
+
+The chain is `ui.layout → pages.collaboration_network → callbacks → filter.py:12
+→ app.api.graph.v1.service → from neo4j.graph import Node, Path, Relationship`.
+And there is no blocked set containing `sqlalchemy` that passes at Step 6 either,
+because `app.api.graph.v1.service` imports `app.runtime_settings` — so blocking
+`sqlalchemy` fails the same bypass path. Hence the allowlist: it keeps the guard
+live and non-vacuous now, and makes the property's completion an explicit Step 7
+obligation rather than a silently weakened assertion. **The `_PENDING_STEP_7`
+set must be empty at the Step 7 gate; a non-empty set there is the STOP condition
+"the Step 7 swaps did not all land".**
 
 **The approach is verified, not assumed — including that it fails on the
 current tree.** Run against today's unfixed code, importing
@@ -1430,8 +1515,9 @@ remembering to list it.
 **Verify (6b)**: `grep -rn "from app\.runtime_settings import\|from app\.common\.timezone import\|from app\.settings import" src/ui/` → **no matches**
 **Verify (6b)**: `PYTHONPATH=src python -c "import domain.settings, domain.timezone; print('domain OK')"` → `domain OK`, and `grep -rn "app\.\|ui\." src/domain/settings.py src/domain/timezone.py` shows no forbidden import
 **Verify (6b)**: `PYTHONPATH=src python -c "from ui.runtime_settings import runtime_settings; print(runtime_settings.get_int('HTTP_REQUEST_TIMEOUT'))"` → an integer, no traceback
-**Verify (6b)**: `pytest tests/test_ui_isolation.py -q` → all pass, **and it fails when you re-add one `from app.runtime_settings import runtime_settings` to any `src/ui/` module** (run this mutation; a test that passes both ways is vacuous)
-**Verify (6b)**: `pytest -m unit tests -q` → all pass (the 21 repointed files and `tests/test_timezone_settings.py` included)
+**Verify (6b)**: `pytest tests/test_ui_isolation.py -q` → all pass **with `_PENDING_STEP_7` naming exactly the five modules listed in those five failure lines above** (a different set means the bypass inventory moved — report it rather than editing the set to match), **and it fails when you re-add one `from app.runtime_settings import runtime_settings` to any `src/ui/` module** (run this mutation; a test that passes both ways is vacuous). Confirming the mutation is what proves the allowlist has not swallowed the whole assertion: re-adding the import to **any** `src/ui/` module outside the five must fail, and re-adding it to one *inside* the five must also fail (those five are already failing, so the mutation there changes nothing — use an outside module for the mutation).
+**Verify (6b)**: `grep -rn "CONNECTOR_SCAN_POLL_INTERVAL" src/domain/settings.py` → a match, and `PYTHONPATH=src python -c "from ui.settings import settings; print(settings.CONNECTOR_SCAN_POLL_INTERVAL)"` → `5000` (or the `.env` value), no `AttributeError`. This is the field whose omission would crash the Connectors page at import.
+**Verify (6b)**: `pytest -m unit tests -q` → all pass (the 25 repointed files and `tests/test_timezone_settings.py` included)
 **Verify (6b)**: `mypy src/` → exit 0
 **Verify (6b)**: `docker compose up -d --build` → healthy; `curl -sf -o /dev/null -w '%{http_code}' https://localhost/app/` → `200`, and `https://localhost/app/chat` → `200` (Chat imports the timezone helpers — it is the page that proves this landed)
 
@@ -1494,12 +1580,23 @@ C's admin-only secret rule unchanged.
 >    `grep -rn "from app\.runtime_settings import\|from app\.common\.timezone import\|from app\.settings import" src/ui/`
 >    → no matches. This is the check whose absence let the defect through in the
 >    first place: Step 6a's grep looks only at module-level *assignments*, so all
->    21 files passed it while still importing `sqlalchemy` transitively.
+>    25 files passed it while still importing `sqlalchemy` transitively.
 > 7. **`tests/test_ui_isolation.py` exists, passes, and is non-vacuous.** Run the
->    mutation: re-add `from app.runtime_settings import runtime_settings` to any
->    `src/ui/` module and confirm the test **fails**. Confirm it blocks the real
->    package names (`sqlalchemy`, `asyncpg`, `neo4j`, `elasticsearch`, `openai`,
->    `aio_pika`) — a test that blocks nothing passes trivially.
+>    mutation: re-add `from app.runtime_settings import runtime_settings` to a
+>    `src/ui/` module **outside `_PENDING_STEP_7`** and confirm the test **fails**.
+>    Confirm it blocks the real package names (`sqlalchemy`, `asyncpg`, `neo4j`,
+>    `elasticsearch`, `openai`, `aio_pika`) — a test that blocks nothing passes
+>    trivially.
+> 7b. **`_PENDING_STEP_7` contains exactly the five documented modules, and this
+>    is a staging allowance with a deadline.** Read the set in the test file and
+>    confirm it names `ui.layout`, `ui.pages.collaboration_network`,
+>    `ui.pages.collaboration_network_ego`, `ui.pages.graph` and
+>    `ui.components.spotlight` — no more, no fewer. Those five reach
+>    `neo4j`/`elasticsearch` through the four in-process bypasses that Step 7
+>    replaces with HTTP calls; the set is empty by the Step 7 gate. **A different
+>    set is a STOP condition**, not something to reconcile: it means the bypass
+>    inventory has changed since this plan was written, and the allowlist would
+>    be hiding a module that is failing for some other reason.
 > 8. **`ui.runtime_settings` reuses the existing snapshot client.** Confirm it
 >    calls `common.runtime_settings.client.fetch_runtime_snapshot` rather than a
 >    second hand-rolled HTTP path, and that it does **not** import
@@ -2352,6 +2449,23 @@ src/ui/pages/graph/callbacks/spotlight.py:14               from app.api.search.v
 
 **Verify (7d–7f)**: `diff` from 7e prints nothing
 **Verify**: `grep -rn "from app\.api\.graph\.v1\.service\|from app\.api\.search\.v1\.service\|from app\.api\.search\.v1\.model" src/ui/` → no matches
+**Verify — drain the Step 6b allowlist. This is the step that makes it true.**
+`tests/test_ui_isolation.py`'s `_PENDING_STEP_7` set must become **empty** and the
+test must assert that, so the full blocked-package walk (including
+`neo4j`/`elasticsearch`) passes with no exemptions:
+
+```bash
+grep -n "_PENDING_STEP_7" tests/test_ui_isolation.py   # must show: set() and an
+                                                       # `assert not _PENDING_STEP_7`
+pytest tests/test_ui_isolation.py -q                    # all pass
+```
+
+Delete the set's five entries, add `assert not _PENDING_STEP_7, _PENDING_STEP_7`,
+and confirm the test still passes — if it does not, a 7d swap is incomplete or
+still imports a service module transitively. **Do not re-add an exemption to make
+it pass**: a non-empty set here is the STOP condition "the Step 7 swaps did not
+all land". Leave the `assert` in place permanently so a future UI module that
+reaches a driver fails this test rather than passing via a stale allowance.
 **Verify**: `grep -rln "CollaborationDataUnavailable" src/ui/` → **exactly these three files**: both `pages/collaboration_network*/callbacks/filter.py` (the `except` blocks) and `src/ui/collaboration_params.py` (the 7d-i `raise`). If `api_client.py` appears here, the mapping was put in the client instead of the call sites — see 7d-i's two reasons.
 **Verify**: `grep -n "CollaborationDataUnavailable" src/ui/api_client.py` → **no matches** (the generic client must not depend on the collaboration domain)
 **Verify**: `pytest tests/test_collab_query_param_roundtrip.py tests/test_ui_api_client_status_mapping.py -q` → all pass
@@ -2425,6 +2539,15 @@ src/ui/pages/graph/callbacks/spotlight.py:14               from app.api.search.v
 > 14. The two collaboration pages and the Graph page's spotlight all render and
 >     work in the browser (see the full sweep in Step 14; a spot check here is
 >     enough).
+> 14b. **`_PENDING_STEP_7` in `tests/test_ui_isolation.py` is now empty, and the
+>     test asserts that.** Read the file: the set is `set()` (or removed) and
+>     `assert not _PENDING_STEP_7, _PENDING_STEP_7` is present, with
+>     `pytest tests/test_ui_isolation.py -q` passing. This is Step 6b's staging
+>     allowance being drained in the step that makes it true — **this plan's
+>     single clearest statement of the stable-state rule applied to a test
+>     assertion.** An exemption still listed here means a 7d swap did not land,
+>     and the isolation property is not yet real; treat it as a STOP condition,
+>     not as a reason to keep the entry.
 > 15. `scripts/capture_ui_baseline.py` and both JSON files are deleted;
 >     `src/ui/collaboration_params.py`, its test, **and
 >     `tests/test_ui_api_client_status_mapping.py`** are **kept**.
@@ -3229,9 +3352,9 @@ Mark each cell as you go. `⬜` not started · `🔄` in progress · `✅` passe
 
 | Step | What it changes | Automated verify | Manual gate | Status |
 |------|-----------------|------------------|-------------|--------|
-| 5  | `src/app/dash_app/` → `src/ui/`; `api_main.py` + `ui_main.py` created; Flask request logging ported; `main.py` reduced to a **temporary composition**. `routes_pathname_prefix` stays **unset** — Step 8's edit | suite green, no `app.dash_app` remains, no `a2wsgi` outside `main.py`, `main.py` still imports, no `routes_pathname_prefix`, `/app/` **and** `/app/chat` both `200`, `mypy` | Operator confirms the prefix is **absent** (the mount strips `/app`), `main.py` **not** deleted, `ui_main` imports no FastAPI/DB/transport, and the rebuilt stack still serves `/app` | ✅ passed (automated verify re-run by reviewer; operator manual gate outstanding) — plus `Dockerfile.app` `COPY src/ui/` + `COPY src/ui_main.py` (authorized, same defect class as the Phase 1 addendum), `mypy.ini` `[mypy-app.dash_app.*]` → `[mypy-ui.*]`, and two moved-symbol call sites (`api/settings/v1/service.py`, `scripts/render_activity_cards.py`) |
-| 6  | 12 import-time constants → function-local reads + regression test; **DB-free `UISettings` / `ui.runtime_settings` / `domain.timezone` so the UI stops importing `app.runtime_settings`, `app.common.timezone` and `app.settings`** (21 files — without this the UI container cannot boot); MCP env table from `GET /api/v1/settings/`; `NEO4J_URI` message fixed | both new tests pass **and fail on mutation**; the three old imports gone from `src/ui/`; grep gates | Operator **runs both mutations**; `test_ui_isolation.py` blocks real package names; `domain/` imports nothing from `app.*`/`ui.*`; `/app/chat` renders (it uses the timezone helpers) | ⬜ |
-| 7  | Collab + ego + spotlight bypasses → HTTP, **one baseline captured before any swap**; new **`POST /search/scoped`** (a GET would 414 on the 223-id canvas — 10,438-byte request line vs an 8 KB header buffer); `src/ui/api_client.py` created with the status→exception mapping (7d-i) so the collab empty/invalid banners survive | before/after identities hold, **including the empty-result and invalid-config legs**; status-mapping unit test passes **and fails on mutation**; scoped route is a POST and returns 200 for a 223-id body; the canvas check printed ≥223 nodes; script deleted, both permanent tests kept | Operator confirms the baseline predates every swap, every data leg matches exactly, every error leg errored on both sides, the no-data banners still render, and spotlight works **with a full 200+ node canvas** in the browser | ⬜ |
+| 5  | `src/app/dash_app/` → `src/ui/`; `api_main.py` + `ui_main.py` created; Flask request logging ported; `main.py` reduced to a **temporary composition**. `routes_pathname_prefix` stays **unset** — Step 8's edit | suite green, no `app.dash_app` remains, no `a2wsgi` outside `main.py`, `main.py` still imports, no `routes_pathname_prefix`, `/app/` **and** `/app/chat` both `200`, `mypy` | Operator confirms the prefix is **absent** (the mount strips `/app`), `main.py` **not** deleted, `ui_main` imports no FastAPI/DB/transport, and the rebuilt stack still serves `/app` | ✅ passed — operator confirmed 2026-10-29 (browser + dual-logging check); reviewer re-ran all automated verify. Carries four extras: `Dockerfile.app` `COPY src/ui/` + `COPY src/ui_main.py` (authorized, same defect class as the Phase 1 addendum), `mypy.ini` `[mypy-app.dash_app.*]` → `[mypy-ui.*]`, and two moved-symbol call sites (`api/settings/v1/service.py`, `scripts/render_activity_cards.py`) |
+| 6  | 12 import-time constants → function-local reads + regression test; **DB-free `UISettings` / `ui.runtime_settings` / `domain.timezone` so the UI stops importing `app.runtime_settings`, `app.common.timezone` and `app.settings`** (25 files — without this the UI container cannot boot); `CONNECTOR_SCAN_POLL_INTERVAL` on `UISettings`; MCP env table from `GET /api/v1/settings/`; `NEO4J_URI` message fixed | both new tests pass **and fail on mutation**; the three old imports gone from `src/ui/`; `_PENDING_STEP_7` names exactly the five bypass-reached modules; grep gates | Operator **runs both mutations**; `test_ui_isolation.py` blocks real package names and its allowlist is exactly the five; `domain/` imports nothing from `app.*`/`ui.*`; `/app/chat` renders (it uses the timezone helpers) | ✅ passed — reviewer re-ran all gates (2344 passed / mypy 0 / pylint 9.67 / bandit 0 / 4 greps clean / isolation test 1 pass / `/app/` + `/app/chat` 200). Two review-round-1 fixes landed: **non-destructive cache seed** (was clobbering 7 API fields with code defaults) and **TTL-bounded `refresh_if_stale`** (was dead code). 4 new guard tests. **Operator manual gate outstanding.** |
+| 7  | Collab + ego + spotlight bypasses → HTTP, **one baseline captured before any swap**; new **`POST /search/scoped`** (a GET would 414 on the 223-id canvas — 10,438-byte request line vs an 8 KB header buffer); `src/ui/api_client.py` created with the status→exception mapping (7d-i) so the collab empty/invalid banners survive; **`_PENDING_STEP_7` drained to empty and asserted** | before/after identities hold, **including the empty-result and invalid-config legs**; status-mapping unit test passes **and fails on mutation**; scoped route is a POST and returns 200 for a 223-id body; the canvas check printed ≥223 nodes; `pytest tests/test_ui_isolation.py -q` passes with an empty `_PENDING_STEP_7`; script deleted, both permanent tests kept | Operator confirms the baseline predates every swap, every data leg matches exactly, every error leg errored on both sides, the no-data banners still render, spotlight works **with a full 200+ node canvas** in the browser, and **`_PENDING_STEP_7` is empty with the assert in place** | ⬜ |
 
 **Phase 3 — go live**
 
@@ -3284,12 +3407,16 @@ were silently skipped by a missing marker or a broken import.
 
 1. Step 6 (6a) — revert one constant to module level; the new test must fail.
 2. Step 6 (6b-v) — re-add `from app.runtime_settings import runtime_settings`
-   to any `src/ui/` module; `tests/test_ui_isolation.py` must fail. This is the
-   non-vacuity check for the only test that catches the UI container's boot-time
-   `ModuleNotFoundError`, and it is the one a stub-both-ways implementation would
-   pass silently. Also confirm the finder blocks the **real** package names
-   (`sqlalchemy`, `asyncpg`, `neo4j`, `openai`, `aio_pika`) — a finder that
-   blocks nothing makes the test pass for the wrong reason.
+   to a `src/ui/` module **outside `_PENDING_STEP_7`**; `tests/test_ui_isolation.py`
+   must fail. This is the non-vacuity check for the only test that catches the UI
+   container's boot-time `ModuleNotFoundError`, and it is the one a
+   stub-both-ways implementation would pass silently. (Use an outside module: the
+   five inside `_PENDING_STEP_7` are already failing for the Step 7 bypass
+   reason, so mutating one of those changes nothing observable.) Also confirm the
+   finder blocks the **real** package names (`sqlalchemy`, `asyncpg`, `neo4j`,
+   `openai`, `aio_pika`) — a finder that blocks nothing makes the test pass for
+   the wrong reason. Then, at Step 7, drain `_PENDING_STEP_7` to empty and confirm
+   the test still passes.
 3. Step 7 — drop the `terms` clause on `wba_id` from the scoped search's ES
    body; the comparison must fail.
 4. Step 7 (7d-iii) — remove the 404→`CollaborationDataUnavailable` branch from
@@ -3326,7 +3453,7 @@ ALL must hold:
 - [ ] `grep -rn "from app\.runtime_settings import\|from app\.common\.timezone import\|from app\.settings import" src/ui/` → no matches (the UI imports only its own DB-free replacements)
 - [ ] `src/domain/settings.py` defines `UISettings` with **no** credential field, and `ApiSettings(UISettings)` adds them back
 - [ ] `src/domain/` imports nothing from `app.*` or `ui.*`
-- [ ] `tests/test_ui_isolation.py` passes **and fails when any `src/ui/` module re-imports `app.runtime_settings`**
+- [ ] `tests/test_ui_isolation.py` passes, **fails when a `src/ui/` module outside `_PENDING_STEP_7` re-imports `app.runtime_settings`**, and (Step 7) has an **empty** `_PENDING_STEP_7` guarded by `assert not _PENDING_STEP_7`
 - [ ] `docker compose exec ui python -c "import ui_main"` succeeds — the UI boots with no `sqlalchemy` and no `DATABASE_URL`
 - [ ] `grep -rn "runtime_settings.events" src/ tests/` → no matches
 - [ ] `grep -rn "app:8000" docker-compose.yml src/ .env.example` → no matches
@@ -3372,6 +3499,12 @@ Stop and report back (do not improvise) if:
   This is the stable-state rule. A step that removes something before its
   replacement exists is a defect in the step, not a reason to run the container
   from a stale image.
+- **`tests/test_ui_isolation.py`'s `_PENDING_STEP_7` names anything other than
+  the five documented modules** (Step 6), **or is still non-empty at the Step 7
+  gate.** The set is a staging allowance for the four in-process bypasses Step 7
+  replaces with HTTP calls, with an expiry of exactly one step. A different set
+  means the bypass inventory changed; a non-empty set after Step 7 means a swap
+  did not land. Neither is reconcilable by editing the set.
 - **More or fewer than 12 module-level constants** exist in `src/ui/` (Step 6).
   The count is load-bearing; report the actual list.
 - **More or fewer than 56 `requests.*` call sites** exist in `src/ui/` (Step 10).

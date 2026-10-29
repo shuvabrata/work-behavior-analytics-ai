@@ -5,7 +5,7 @@ from dash import dcc, html
 import dash_bootstrap_components as dbc
 
 from domain.connector_registry import CONNECTOR_REGISTRY
-from app.settings import settings
+from ui.settings import settings
 from ui.components.common import create_alert, create_page_header
 from ui.styles import (
     CARD_CONTAINER_STYLE,
@@ -783,18 +783,47 @@ def _render_field(field: dict[str, Any], connector_type: str, section: str) -> h
     return html.Div([label, control])
 
 
+def _fetch_env_setting_rows(keys: tuple[str, ...]) -> dict[str, dict[str, Any]]:
+    """Fetch selected setting rows from the API, keyed by setting name.
+
+    The UI must not read these values from its own environment: ``GITHUB_MCP_TOKEN``
+    is a secret and ``GITHUB_MCP_ENABLED`` / ``GITHUB_MCP_SERVER_URL`` are the API
+    runtime's configuration. ``GET /api/v1/settings/`` returns each row with the
+    already-masked ``value``/``effective_value`` and, crucially, ``is_configured``
+    — computed on the *raw* value, so it tells the user whether the secret is set
+    without revealing any part of it.
+
+    An unreachable API degrades to an empty mapping (every row renders "Not set")
+    rather than raising.
+    """
+    import requests  # noqa: PLC0415  (kept local to the fetch, matching setup_banner)
+
+    url = f"{settings.API_BASE_URL}/api/v1/settings/"
+    try:
+        resp = requests.get(url, timeout=10)
+        resp.raise_for_status()
+        rows: list[dict[str, Any]] = resp.json()
+    except (requests.exceptions.RequestException, ValueError):
+        return {}
+    return {row["key"]: row for row in rows if row.get("key") in keys}
+
+
+_MCP_ENV_KEYS = ("GITHUB_MCP_ENABLED", "GITHUB_MCP_SERVER_URL", "GITHUB_MCP_TOKEN")
+
+
 def _get_manual_setup_layout(connector_type: str, connector_meta: dict[str, Any]) -> html.Div:
     """Render a manual setup guidance page for connectors that are env/Docker-managed."""
     display_name = connector_meta.get("display_name", connector_type)
+    env_rows = _fetch_env_setting_rows(_MCP_ENV_KEYS)
 
-    def _mask_secret_ui(value: str) -> str:
-        """Return a fixed redaction string for a secret; never expose any part of it."""
-        return "••••••••" if value else ""
-
-    def _env_row(var: str, description: str, current: str, secret: bool = False) -> html.Tr:
-        """Render an env var row with its current value and a set/not-set indicator."""
-        is_set = bool(current)
-        display_value = _mask_secret_ui(current) if secret else current
+    def _env_row(var: str, description: str) -> html.Tr:
+        """Render an env var row from its API setting row, with a set/not-set indicator."""
+        row = env_rows.get(var, {})
+        is_set = bool(row.get("is_configured", False))
+        # ``effective_value`` is already masked by the API for sensitive rows, so
+        # the UI never has to compute a mask of its own.
+        raw_value = row.get("effective_value")
+        display_value = "" if raw_value is None else str(raw_value)
 
         # Status indicator: green dot + "Set" when present, red dot + "Not set" when absent.
         status_color = COLOR_SUCCESS if is_set else COLOR_ERROR
@@ -965,18 +994,14 @@ def _get_manual_setup_layout(connector_type: str, connector_meta: dict[str, Any]
                                             _env_row(
                                                 "GITHUB_MCP_ENABLED",
                                                 "Set to true to enable the GitHub MCP integration in the AI agent.",
-                                                str(settings.GITHUB_MCP_ENABLED),
                                             ),
                                             _env_row(
                                                 "GITHUB_MCP_SERVER_URL",
                                                 "The URL of the running GitHub MCP sidecar service (e.g., http://github-mcp:8082).",
-                                                settings.GITHUB_MCP_SERVER_URL,
                                             ),
                                             _env_row(
                                                 "GITHUB_MCP_TOKEN",
                                                 "A GitHub personal access token passed to the MCP client manager.",
-                                                settings.GITHUB_MCP_TOKEN,
-                                                secret=True,
                                             ),
                                         ]
                                     )

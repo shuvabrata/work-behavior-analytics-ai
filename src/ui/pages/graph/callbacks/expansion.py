@@ -7,7 +7,7 @@ from typing import Any
 import requests
 from dash import Input, Output, State, callback, no_update
 
-from app.runtime_settings import runtime_settings
+from ui.runtime_settings import runtime_settings
 from common.logger import logger
 from ..utils import (
     execute_expansion_and_merge,
@@ -17,8 +17,6 @@ from ..utils import (
     create_performance_metrics,
     is_edge_element,
 )
-
-TIMEOUT_SECONDS = runtime_settings.get_int("HTTP_REQUEST_TIMEOUT")
 
 
 @callback(
@@ -44,6 +42,7 @@ TIMEOUT_SECONDS = runtime_settings.get_int("HTTP_REQUEST_TIMEOUT")
 )
 def execute_doubleclick_expansion(dblclick_data: Any, current_elements: Any, current_unfiltered: Any, loaded_node_ids: Any, expanded_nodes: Any, debounce_store: Any, current_node_positions: Any, current_layout: Any) -> Any:
     """Execute immediate expansion on double-click with default parameters"""
+    timeout_seconds = runtime_settings.get_int("HTTP_REQUEST_TIMEOUT")
     show_style = {"display": "block"}
     hide_style = {"display": "none"}
     
@@ -92,7 +91,7 @@ def execute_doubleclick_expansion(dblclick_data: Any, current_elements: Any, cur
             # and cause nodes hidden by a filter to disappear permanently.
             current_elements=current_unfiltered,
             current_node_positions=current_node_positions,
-            timeout_seconds=TIMEOUT_SECONDS,
+            timeout_seconds=timeout_seconds,
         )
 
         if not result["ok"]:
@@ -140,7 +139,7 @@ def execute_doubleclick_expansion(dblclick_data: Any, current_elements: Any, cur
     except requests.exceptions.Timeout:
         logger.error(
             "[GRAPH-DEBUG][expand.doubleclick] timeout "
-            f"node_id={node_id} timeout_seconds={TIMEOUT_SECONDS}"
+            f"node_id={node_id} timeout_seconds={timeout_seconds}"
         )
         error_alert = create_expansion_error_alert("Expansion timed out", error_type="timeout")
         return (no_update, no_update, expanded_nodes, loaded_node_ids, updated_debounce,
@@ -149,7 +148,7 @@ def execute_doubleclick_expansion(dblclick_data: Any, current_elements: Any, cur
     except requests.exceptions.ConnectionError:
         logger.error(
             "[GRAPH-DEBUG][expand.doubleclick] connection_error "
-            f"node_id={node_id} timeout_seconds={TIMEOUT_SECONDS}"
+            f"node_id={node_id} timeout_seconds={timeout_seconds}"
         )
         error_alert = create_expansion_error_alert(
             "Could not connect to server. Please check your connection.",
@@ -221,6 +220,7 @@ def close_expansion_modal(n_clicks: int | None) -> bool:
 )
 def execute_node_expansion(n_clicks: Any, node_id: Any, direction: Any, limit: Any, auto_fit: Any, current_elements: Any, current_unfiltered: Any, loaded_node_ids: Any, expanded_nodes: Any, current_node_positions: Any, current_layout: Any, current_fit_count: Any) -> Any:
     """Execute node expansion by calling backend API and merging results"""
+    timeout_seconds = runtime_settings.get_int("HTTP_REQUEST_TIMEOUT")
     show_style = {"display": "block"}
     hide_style = {"display": "none"}
     fit_count = current_fit_count or 0
@@ -244,7 +244,7 @@ def execute_node_expansion(n_clicks: Any, node_id: Any, direction: Any, limit: A
             # Merge against the full unfiltered baseline, not the filtered view.
             current_elements=current_unfiltered,
             current_node_positions=current_node_positions,
-            timeout_seconds=TIMEOUT_SECONDS,
+            timeout_seconds=timeout_seconds,
         )
 
         if not result["ok"]:
@@ -289,7 +289,7 @@ def execute_node_expansion(n_clicks: Any, node_id: Any, direction: Any, limit: A
         logger.error(
             "[GRAPH-DEBUG][expand.modal] timeout "
             f"node_id={node_id} direction={direction} limit={limit} "
-            f"timeout_seconds={TIMEOUT_SECONDS}"
+            f"timeout_seconds={timeout_seconds}"
         )
         error_alert = create_expansion_error_alert(
             "Request timed out. The expansion took too long.",
@@ -301,7 +301,7 @@ def execute_node_expansion(n_clicks: Any, node_id: Any, direction: Any, limit: A
         logger.error(
             "[GRAPH-DEBUG][expand.modal] connection_error "
             f"node_id={node_id} direction={direction} limit={limit} "
-            f"timeout_seconds={TIMEOUT_SECONDS}"
+            f"timeout_seconds={timeout_seconds}"
         )
         error_alert = create_expansion_error_alert(
             "Could not connect to server. Please check your connection.",

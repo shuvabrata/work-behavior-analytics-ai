@@ -11,8 +11,8 @@ from datetime import datetime
 from dash import html
 import dash_bootstrap_components as dbc
 
-from app.common.timezone import humanize_duration, to_app_timezone
-from app.settings import settings
+from domain.timezone import humanize_duration, to_app_timezone
+from ui.settings import settings
 from ui.styles import (
     COLOR_BORDER,
     COLOR_ERROR,

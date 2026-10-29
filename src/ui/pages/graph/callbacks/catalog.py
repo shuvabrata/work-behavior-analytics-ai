@@ -22,13 +22,12 @@ from ui.styles import (
     COLOR_TEXT_SECONDARY,
     COLOR_GRAY_MEDIUM,
 )
-from app.runtime_settings import runtime_settings
+from ui.runtime_settings import runtime_settings
 
 from ..utils import create_error_alert, get_graph_api_base_url
 from ..utils.cypher_substitution import substitute_catalog_query_parameters
 
 
-TIMEOUT_SECONDS = runtime_settings.get_int("HTTP_REQUEST_TIMEOUT")
 ALL_NAMESPACES = "__all__"
 ALL_VIEWS = "__all__"
 
@@ -166,7 +165,6 @@ def determine_catalog_view(
     return None
 
 
-
 def _extract_param_value(value: str | dict[str, Any] | None) -> str | None:
     """Normalize a catalog parameter value to its raw runtime form.
 
@@ -276,6 +274,7 @@ def _build_parameter_help_text(parameter: dict[str, Any]) -> html.Div | None:
 )
 def load_query_catalog(pathname: str | None) -> tuple[list[dict[str, Any]], html.Div | None, dict[str, Any]]:
     """Fetch catalog metadata when the Graph page is opened."""
+    timeout_seconds = runtime_settings.get_int("HTTP_REQUEST_TIMEOUT")
     if pathname != "/app/graph":
         return no_update, no_update, no_update
 
@@ -283,7 +282,7 @@ def load_query_catalog(pathname: str | None) -> tuple[list[dict[str, Any]], html
     try:
         response = requests.get(
             f"{api_base}/api/v1/queries/catalog",
-            timeout=TIMEOUT_SECONDS,
+            timeout=timeout_seconds,
         )
         response.raise_for_status()
         payload = response.json()
@@ -311,10 +310,11 @@ def _fetch_catalog_metadata(api_base: str) -> dict[str, Any]:
     Returns an empty dict on any error so the UI degrades gracefully (stars
     simply render as unfilled).
     """
+    timeout_seconds = runtime_settings.get_int("HTTP_REQUEST_TIMEOUT")
     try:
         response = requests.get(
             f"{api_base}/api/v1/queries/catalog-metadata",
-            timeout=TIMEOUT_SECONDS,
+            timeout=timeout_seconds,
         )
         response.raise_for_status()
         payload = response.json()
@@ -492,6 +492,7 @@ def toggle_catalog_favourite(
     (Option B) — the star flips in place; re-sort happens on the next
     namespace change/reload.
     """
+    timeout_seconds = runtime_settings.get_int("HTTP_REQUEST_TIMEOUT")
     triggered = ctx.triggered_id
     if not isinstance(triggered, dict):
         raise PreventUpdate
@@ -520,7 +521,7 @@ def toggle_catalog_favourite(
         response = requests.put(
             f"{api_base}/api/v1/queries/catalog-metadata/{catalog_id}",
             json={"is_favourite": new_value},
-            timeout=TIMEOUT_SECONDS,
+            timeout=timeout_seconds,
         )
         response.raise_for_status()
         body = response.json()
@@ -635,7 +636,6 @@ def render_catalog_query_detail(
                 className="mt-2",
             )
         )
-
 
 
     parameter_children = []
@@ -847,6 +847,7 @@ def sync_person_suggestions(
     Only the suggestions panel (a sibling of the input) is updated, so the
     input itself is never re-mounted and retains keyboard focus.
     """
+    timeout_seconds = runtime_settings.get_int("HTTP_REQUEST_TIMEOUT")
     api_base = get_graph_api_base_url()
     _hidden = {"display": "none"}
     _visible: dict[str, Any] = {
@@ -873,7 +874,7 @@ def sync_person_suggestions(
             response = requests.get(
                 f"{api_base}/api/v1/search/persons",
                 params={"q": query_text.strip(), "page_size": 10},  # type: ignore[arg-type]
-                timeout=TIMEOUT_SECONDS,
+                timeout=timeout_seconds,
             )
             response.raise_for_status()
             data = response.json()

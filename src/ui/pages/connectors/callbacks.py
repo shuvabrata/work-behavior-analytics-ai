@@ -11,9 +11,9 @@ import dash_bootstrap_components as dbc
 from dash import ALL, MATCH, Input, Output, State, callback, callback_context, clientside_callback, html, no_update
 from dash.exceptions import PreventUpdate
 
-from app.common.timezone import humanize_duration, to_app_timezone
-from app.runtime_settings import runtime_settings
-from app.settings import settings
+from domain.timezone import humanize_duration, to_app_timezone
+from ui.runtime_settings import runtime_settings
+from ui.settings import settings
 from domain.connector_registry import CONNECTOR_REGISTRY
 from ui.components.common import create_alert
 from ui.styles import (
@@ -39,8 +39,6 @@ from .components.config_forms import (
 from .components.scan_status import render_scan_item
 
 
-TIMEOUT_SECONDS = runtime_settings.get_int("HTTP_REQUEST_TIMEOUT")
-
 # Fields that should be parsed from comma-separated strings to lists
 ARRAY_FIELDS = {'include_spaces', 'exclude_spaces', 'branch_name_patterns', 'extraction_sources'}
 
@@ -54,12 +52,13 @@ def _get_api_base_url() -> str:
     Input("url", "pathname"),
 )
 def load_connectors(pathname: str) -> dict[str, Any] | Any:
+    timeout_seconds = runtime_settings.get_int("HTTP_REQUEST_TIMEOUT")
     if pathname not in ("/app/connectors", "/app/connectors/"):
         return no_update
 
     api_base = _get_api_base_url()
     try:
-        response = requests.get(f"{api_base}/api/v1/connectors/", timeout=TIMEOUT_SECONDS)
+        response = requests.get(f"{api_base}/api/v1/connectors/", timeout=timeout_seconds)
         response.raise_for_status()
         return {"status": "ok", "data": response.json()}
     except requests.exceptions.RequestException as exc:
@@ -203,6 +202,7 @@ def handle_card_click(_timestamps: List[int | None]) -> str | Any:
     prevent_initial_call="initial_duplicate",
 )
 def load_connector_detail(pathname: str) -> tuple[dict[str, Any] | Any, dict[str, Any] | Any, None, None]:
+    timeout_seconds = runtime_settings.get_int("HTTP_REQUEST_TIMEOUT")
     if not pathname or not pathname.startswith("/app/connectors/"):
         return no_update, no_update, no_update, no_update
 
@@ -218,12 +218,12 @@ def load_connector_detail(pathname: str) -> tuple[dict[str, Any] | Any, dict[str
     supports_items = CONNECTOR_REGISTRY.get(connector_type, {}).get("supports_items", True)
     try:
         detail_resp = requests.get(
-            f"{api_base}/api/v1/connectors/{connector_type}", timeout=TIMEOUT_SECONDS
+            f"{api_base}/api/v1/connectors/{connector_type}", timeout=timeout_seconds
         )
         detail_resp.raise_for_status()
         if supports_items:
             items_resp = requests.get(
-                f"{api_base}/api/v1/connectors/{connector_type}/configs", timeout=TIMEOUT_SECONDS
+                f"{api_base}/api/v1/connectors/{connector_type}/configs", timeout=timeout_seconds
             )
             items_resp.raise_for_status()
             items_data = items_resp.json()
@@ -798,6 +798,7 @@ def handle_item_save(
     search_filter_store_ids: List[Dict[str, Any]],
     search_filter_store_data: List[Dict[str, str] | None],
 ) -> tuple[Dict[str, Any] | Any, Dict[str, Any] | Any, dbc.Alert | Any, bool | Any]:
+    timeout_seconds = runtime_settings.get_int("HTTP_REQUEST_TIMEOUT")
     triggered = callback_context.triggered_id
     if not isinstance(triggered, dict):
         return no_update, no_update, no_update, no_update
@@ -822,18 +823,18 @@ def handle_item_save(
             response = requests.put(
                 f"{api_base}/api/v1/connectors/{connector_type}/configs/{item_id}",
                 json=payload,
-                timeout=TIMEOUT_SECONDS,
+                timeout=timeout_seconds,
             )
         else:
             response = requests.post(
                 f"{api_base}/api/v1/connectors/{connector_type}/configs",
                 json=payload,
-                timeout=TIMEOUT_SECONDS,
+                timeout=timeout_seconds,
             )
         response.raise_for_status()
 
         items_resp = requests.get(
-            f"{api_base}/api/v1/connectors/{connector_type}/configs", timeout=TIMEOUT_SECONDS
+            f"{api_base}/api/v1/connectors/{connector_type}/configs", timeout=timeout_seconds
         )
         items_resp.raise_for_status()
         updated_store = {
@@ -888,6 +889,7 @@ def handle_item_delete(
     submit_clicks: int | None,
     target: Dict[str, Any] | None,
 ) -> tuple[Dict[str, Any] | Any, Dict[str, Any] | Any, dbc.Alert | Any, bool]:
+    timeout_seconds = runtime_settings.get_int("HTTP_REQUEST_TIMEOUT")
     if not submit_clicks:
         raise PreventUpdate
 
@@ -904,12 +906,12 @@ def handle_item_delete(
     try:
         response = requests.delete(
             f"{api_base}/api/v1/connectors/{connector_type}/configs/{item_id}",
-            timeout=TIMEOUT_SECONDS,
+            timeout=timeout_seconds,
         )
         response.raise_for_status()
 
         items_resp = requests.get(
-            f"{api_base}/api/v1/connectors/{connector_type}/configs", timeout=TIMEOUT_SECONDS
+            f"{api_base}/api/v1/connectors/{connector_type}/configs", timeout=timeout_seconds
         )
         items_resp.raise_for_status()
         updated_store = {
@@ -966,6 +968,7 @@ def handle_item_test_connection(_clicks: List[int | None]) -> tuple[dbc.Alert | 
     runs the actual connectivity check and reports the result in the
     Recent Actions section.
     """
+    timeout_seconds = runtime_settings.get_int("HTTP_REQUEST_TIMEOUT")
     if not callback_context.triggered:
         return no_update, no_update
     triggered_value = callback_context.triggered[0].get("value")
@@ -1000,7 +1003,7 @@ def handle_item_test_connection(_clicks: List[int | None]) -> tuple[dbc.Alert | 
                 "target": container_name,  # type: ignore[dict-item]
                 "parameters": {"item_id": item_id},
             },
-            timeout=TIMEOUT_SECONDS,
+            timeout=timeout_seconds,
         )
         response.raise_for_status()
         data = response.json()
@@ -1037,6 +1040,7 @@ def handle_mcp_test_connection(_clicks: List[int | None]) -> dbc.Alert | Any:
     app container, so the result is returned synchronously and rendered directly
     in the feedback area — no RabbitMQ command or polling is involved.
     """
+    timeout_seconds = runtime_settings.get_int("HTTP_REQUEST_TIMEOUT")
     if not callback_context.triggered:
         return no_update
     triggered_value = callback_context.triggered[0].get("value")
@@ -1054,7 +1058,7 @@ def handle_mcp_test_connection(_clicks: List[int | None]) -> dbc.Alert | Any:
     try:
         response = requests.post(
             f"{api_base}/api/v1/connectors/{connector_type}/test",
-            timeout=TIMEOUT_SECONDS,
+            timeout=timeout_seconds,
         )
         response.raise_for_status()
         data = response.json()
@@ -1077,6 +1081,7 @@ def handle_mcp_test_connection(_clicks: List[int | None]) -> dbc.Alert | Any:
 )
 def handle_cancel_scan(n_clicks: List[int | None], pathname: str | None) -> dbc.Alert | Any:
     """Cancel a running scan by sending a cancel command via the API."""
+    timeout_seconds = runtime_settings.get_int("HTTP_REQUEST_TIMEOUT")
     if not callback_context.triggered:
         return no_update
     triggered_value = callback_context.triggered[0].get("value")
@@ -1113,7 +1118,7 @@ def handle_cancel_scan(n_clicks: List[int | None], pathname: str | None) -> dbc.
                 "target": container_name,  # type: ignore[dict-item]
                 "parameters": {"cancel_command_id": scan_command_id},
             },
-            timeout=TIMEOUT_SECONDS,
+            timeout=timeout_seconds,
         )
         response.raise_for_status()
         return create_alert(
@@ -1148,6 +1153,7 @@ def handle_connector_save(
     field_values: List[Any],
     scan_interval_values: List[Any],
 ) -> tuple[Dict[str, Any] | Any, dbc.Alert | Any]:
+    timeout_seconds = runtime_settings.get_int("HTTP_REQUEST_TIMEOUT")
     triggered = callback_context.triggered_id
     if not isinstance(triggered, dict):
         return no_update, no_update
@@ -1172,7 +1178,7 @@ def handle_connector_save(
         response = requests.patch(
             f"{api_base}/api/v1/connectors/{connector_type}",
             json=payload,
-            timeout=TIMEOUT_SECONDS,
+            timeout=timeout_seconds,
         )
         response.raise_for_status()
         updated = response.json()
@@ -1219,6 +1225,7 @@ def handle_connector_delete(
     submit_clicks: int | None,
     target: Dict[str, Any] | None,
 ) -> tuple[Dict[str, Any] | Any, Dict[str, Any] | Any, dbc.Alert | Any, str | Any, bool]:
+    timeout_seconds = runtime_settings.get_int("HTTP_REQUEST_TIMEOUT")
     if not submit_clicks:
         raise PreventUpdate
 
@@ -1233,7 +1240,7 @@ def handle_connector_delete(
     api_base = _get_api_base_url()
     try:
         response = requests.delete(
-            f"{api_base}/api/v1/connectors/{connector_type}", timeout=TIMEOUT_SECONDS
+            f"{api_base}/api/v1/connectors/{connector_type}", timeout=timeout_seconds
         )
         response.raise_for_status()
         return (
@@ -1413,6 +1420,7 @@ def handle_inline_toggle(
     new_enabled_state: bool,
     store: Dict[str, Any] | None,
 ) -> tuple[dbc.Alert | Any, bool | Any, str, Dict[str, Any] | Any]:
+    timeout_seconds = runtime_settings.get_int("HTTP_REQUEST_TIMEOUT")
     ctx = callback_context
     if not ctx.triggered:
         return no_update, no_update, no_update, no_update
@@ -1438,7 +1446,7 @@ def handle_inline_toggle(
         response = requests.patch(
             f"{api_base}/api/v1/connectors/{connector_type}/configs/{config_id}/status",
             json={"enabled": new_enabled_state},
-            timeout=TIMEOUT_SECONDS,
+            timeout=timeout_seconds,
         )
         response.raise_for_status()
         
@@ -1475,6 +1483,7 @@ def handle_run_scan(n_clicks: List[int | None]) -> tuple[dbc.Alert | Any, bool |
     polling is derived from collapse state) and immediately loads the updated
     scan list so the new row appears without waiting for the first poll tick.
     """
+    timeout_seconds = runtime_settings.get_int("HTTP_REQUEST_TIMEOUT")
     _ = n_clicks  # used by Dash as trigger
     if not callback_context.triggered:
         return no_update, no_update, no_update
@@ -1505,7 +1514,7 @@ def handle_run_scan(n_clicks: List[int | None]) -> tuple[dbc.Alert | Any, bool |
                 "target": container_name,  # type: ignore[dict-item]
                 "parameters": {},
             },
-            timeout=TIMEOUT_SECONDS,
+            timeout=timeout_seconds,
         )
         response.raise_for_status()
         data = response.json()
@@ -1516,7 +1525,7 @@ def handle_run_scan(n_clicks: List[int | None]) -> tuple[dbc.Alert | Any, bool |
         scans_response = requests.get(
             f"{api_base}/api/v1/commands/",
             params={"target": container_name or "", "limit": runtime_settings.get_int("RECENT_ACTIONS_LIMIT")},  # type: ignore[arg-type]
-            timeout=TIMEOUT_SECONDS,
+            timeout=timeout_seconds,
         )
         scans_response.raise_for_status()
         scans_data = scans_response.json()
@@ -1571,6 +1580,7 @@ def load_recent_scans(
     Also decides whether to expand that section, but only on load or
     navigation — never on a poll tick.
     """
+    timeout_seconds = runtime_settings.get_int("HTTP_REQUEST_TIMEOUT")
     _ = n_intervals  # used by Dash as trigger
     if not pathname or not pathname.startswith("/app/connectors/"):
         return no_update, no_update
@@ -1588,7 +1598,7 @@ def load_recent_scans(
         response = requests.get(
             f"{api_base}/api/v1/commands/",
             params={"target": container_name or "", "limit": runtime_settings.get_int("RECENT_ACTIONS_LIMIT")},  # type: ignore[arg-type]
-            timeout=TIMEOUT_SECONDS,
+            timeout=timeout_seconds,
         )
         response.raise_for_status()
         data = response.json()

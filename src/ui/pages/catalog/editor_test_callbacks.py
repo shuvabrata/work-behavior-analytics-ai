@@ -25,10 +25,8 @@ from ui.pages.graph.utils import (
     neo4j_to_cytoscape,
     parse_error_response,
 )
-from app.runtime_settings import runtime_settings
+from ui.runtime_settings import runtime_settings
 from ._utils import get_api_base_url
-
-TIMEOUT_SECONDS = runtime_settings.get_int("HTTP_REQUEST_TIMEOUT")
 
 
 def _run_test(query_text: str | None) -> dict[str, Any]:
@@ -48,6 +46,7 @@ def _run_test(query_text: str | None) -> dict[str, Any]:
     the classified fields produced by ``parse_error_response`` for the View Test
     modal and may be ``None``.
     """
+    timeout_seconds = runtime_settings.get_int("HTTP_REQUEST_TIMEOUT")
     if not query_text or not query_text.strip():
         return {"ok": False, "data": None,
                 "error": "Enter a query before testing.",
@@ -58,7 +57,7 @@ def _run_test(query_text: str | None) -> dict[str, Any]:
     try:
         resp = requests.post(
             f"{api_base}/api/v1/graph/execute",
-            json=payload, timeout=TIMEOUT_SECONDS,
+            json=payload, timeout=timeout_seconds,
         )
         if resp.status_code != 200:
             try:

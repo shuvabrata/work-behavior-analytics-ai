@@ -23,8 +23,8 @@ from datetime import datetime
 from dash import html, dcc
 import dash_bootstrap_components as dbc
 from domain.collaboration.config import LAYER_LABELS, SETTING_LABELS
-from app.common.timezone import humanize_duration, to_app_timezone
-from app.settings import settings
+from domain.timezone import humanize_duration, to_app_timezone
+from ui.settings import settings
 
 from ui.styles import (
     # Style patterns

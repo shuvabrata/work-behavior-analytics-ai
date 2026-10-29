@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from app.common.timezone import to_app_timezone
+from domain.timezone import to_app_timezone
 from ui.pages.chat import queue_message
 from ui.pages.connectors.callbacks import render_items_list
 from app.runtime_settings import runtime_settings

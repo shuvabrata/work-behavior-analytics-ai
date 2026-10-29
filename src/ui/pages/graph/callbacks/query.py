@@ -10,7 +10,7 @@ import dash_bootstrap_components as dbc
 from dash import ctx, html, Input, Output, State, callback, no_update
 from dash.exceptions import MissingCallbackContextException, PreventUpdate
 
-from app.runtime_settings import runtime_settings
+from ui.runtime_settings import runtime_settings
 from common.logger import logger
 from ui.components.common import create_alert
 from ui.styles import (
@@ -27,8 +27,6 @@ from ..utils import (
     create_performance_metrics,
     get_graph_api_base_url,
 )
-
-TIMEOUT_SECONDS = runtime_settings.get_int("HTTP_REQUEST_TIMEOUT")
 
 
 def _normalize_catalog_parameters(raw_params: dict[str, Any] | None) -> dict[str, Any]:
@@ -124,6 +122,7 @@ def validate_query(query_text: str | None) -> dbc.Alert | None:
 )
 def execute_query(_raw_clicks: Any, _catalog_clicks: Any, store_cypher: Any, query_text: Any, selected_catalog_query: Any, catalog_parameters: Any, catalog_view: Any, ) -> Any:
     """Execute raw console queries and catalog queries via the unified API."""
+    timeout_seconds = runtime_settings.get_int("HTTP_REQUEST_TIMEOUT")
     # Default empty states
     empty_elements: list[Any] = []
     hide_style = {"display": "none"}
@@ -244,7 +243,7 @@ def execute_query(_raw_clicks: Any, _catalog_clicks: Any, store_cypher: Any, que
         response = requests.post(
             f"{api_base}/api/v1/graph/execute",
             json=payload,
-            timeout=TIMEOUT_SECONDS
+            timeout=timeout_seconds
         )
         
         # Calculate execution time in milliseconds
@@ -346,13 +345,13 @@ def execute_query(_raw_clicks: Any, _catalog_clicks: Any, store_cypher: Any, que
     except requests.exceptions.Timeout:
         logger.error(
             "[GRAPH-DEBUG][query.execute] timeout "
-            f"timeout_seconds={TIMEOUT_SECONDS} api_base={api_base}"
+            f"timeout_seconds={timeout_seconds} api_base={api_base}"
         )
         error_display = create_error_alert(
             "",
             alert_type='warning',
-            heading=f"⏱️ Request Timeout ({TIMEOUT_SECONDS}s)",
-            hint=f"The request to the backend API took longer than {TIMEOUT_SECONDS} seconds. Your query might be too complex or the database is slow. Try adding LIMIT 100 to reduce the result set.",
+            heading=f"⏱️ Request Timeout ({timeout_seconds}s)",
+            hint=f"The request to the backend API took longer than {timeout_seconds} seconds. Your query might be too complex or the database is slow. Try adding LIMIT 100 to reduce the result set.",
             doc_link="https://neo4j.com/docs/cypher-manual/current/clauses/limit/"
         )
         return error_response(error_display)

@@ -15,7 +15,7 @@ from typing import Any
 import dash_bootstrap_components as dbc
 from dash import dcc, html
 
-from app.common.timezone import to_app_timezone
+from domain.timezone import to_app_timezone
 from ui.components.common import (
     create_loading_overlay_container,
     create_page_header,
@@ -35,7 +35,7 @@ from ui.pages.timeline.helpers import (
     idle_run_period_labels,
     popup_fields,
 )
-from app.runtime_settings import runtime_settings
+from ui.runtime_settings import runtime_settings
 from ui.styles import (
     COLOR_BACKGROUND_WHITE,
     COLOR_BORDER,

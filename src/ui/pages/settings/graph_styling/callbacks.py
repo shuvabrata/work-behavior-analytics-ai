@@ -30,7 +30,7 @@ from dash import (
 from dash.exceptions import PreventUpdate
 
 from domain.graph_theme import effective_semantic_theme
-from app.settings import settings
+from ui.settings import settings
 from ui.pages.graph.utils.ui_components import get_shape_css
 from ui.pages.settings.graph_styling.components import build_editor_body
 from ui.styles import (
@@ -39,9 +39,6 @@ from ui.styles import (
     FONT_SIZE_XTINY,
     get_theme_tokens,
 )
-
-API_BASE = settings.API_BASE_URL
-THEMES_API = f"{API_BASE}/api/v1/graph-themes/"
 
 # Reference node dimensions (px) used as fallbacks when width/height are unset
 # (matches the default node width/height in the base theme tokens: 60x50).
@@ -347,7 +344,8 @@ def update_edge_glyph(
 
 def _list_themes(base_theme: str) -> list[dict[str, Any]]:
     """Fetch all themes for a base mode from the API."""
-    resp = requests.get(THEMES_API, timeout=10)
+    themes_api = f"{settings.API_BASE_URL}/api/v1/graph-themes/"
+    resp = requests.get(themes_api, timeout=10)
     resp.raise_for_status()
     themes = resp.json()
     return [t for t in themes if t.get("base_theme") == base_theme]
@@ -529,8 +527,6 @@ def _refresh_after_action(base_theme: str) -> tuple[Any, Any]:
     return options, by_id
 
 
-
-
 @callback(
     Output("gs-page-feedback", "children", allow_duplicate=True),
     Output({"type": "gs-theme-store", "base_theme": MATCH}, "data", allow_duplicate=True),
@@ -560,6 +556,7 @@ def save_theme(
     Use Save As\u2026 to create a renamed copy. The backend returns 409 for
     builtin themes, which surfaces as a danger alert.
     """
+    themes_api = f"{settings.API_BASE_URL}/api/v1/graph-themes/"
     base_theme = callback_context.triggered_id["base_theme"]
     if not n_clicks or theme_id is None:
         raise PreventUpdate
@@ -570,7 +567,7 @@ def save_theme(
     payload: dict[str, Any] = {"overrides": overrides}
 
     try:
-        resp = requests.patch(f"{THEMES_API}{theme_id}", json=payload, timeout=10)
+        resp = requests.patch(f"{themes_api}{theme_id}", json=payload, timeout=10)
         if resp.status_code == 409:
             detail = resp.json().get("detail", "Builtin themes are immutable.")
             return _feedback_alert(f"Save failed: {detail}", "danger"), no_update
@@ -633,6 +630,7 @@ def save_as_theme(
     the API. Inline validation feedback is shown for empty names and API errors;
     the modal stays open on failure and closes only on success.
     """
+    themes_api = f"{settings.API_BASE_URL}/api/v1/graph-themes/"
     base_theme = callback_context.triggered_id["base_theme"]
     if not n_clicks:
         raise PreventUpdate
@@ -646,7 +644,7 @@ def save_as_theme(
 
     try:
         resp = requests.post(
-            THEMES_API,
+            themes_api,
             json={"name": name.strip(), "base_theme": base_theme, "overrides": overrides},
             timeout=10,
         )
@@ -727,6 +725,7 @@ def execute_set_default(
     pending: dict[str, Any] | None,
 ) -> tuple[Any, ...]:
     """Set the pending theme as default for its base mode."""
+    themes_api = f"{settings.API_BASE_URL}/api/v1/graph-themes/"
     if not submit_n_clicks or not pending:
         raise PreventUpdate
 
@@ -736,7 +735,7 @@ def execute_set_default(
 
     try:
         resp = requests.post(
-            f"{THEMES_API}{theme_id}/set-default",
+            f"{themes_api}{theme_id}/set-default",
             timeout=10,
         )
         resp.raise_for_status()
@@ -805,6 +804,7 @@ def execute_delete(
     pending: dict[str, Any] | None,
 ) -> tuple[Any, ...]:
     """Delete the pending theme."""
+    themes_api = f"{settings.API_BASE_URL}/api/v1/graph-themes/"
     if not submit_n_clicks or not pending:
         raise PreventUpdate
 
@@ -813,7 +813,7 @@ def execute_delete(
         raise PreventUpdate
 
     try:
-        resp = requests.delete(f"{THEMES_API}{theme_id}", timeout=10)
+        resp = requests.delete(f"{themes_api}{theme_id}", timeout=10)
         if resp.status_code == 409:
             detail = resp.json().get("detail", "Builtin themes cannot be deleted.")
             return (

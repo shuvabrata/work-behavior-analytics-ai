@@ -32,7 +32,7 @@ from dash import (
 from dash.exceptions import PreventUpdate
 
 from ui.components.common import create_alert, create_page_header
-from app.settings import settings
+from ui.settings import settings
 from ui.styles import (
     CARD_CONTAINER_STYLE,
     COLOR_BACKGROUND_LIGHT,
@@ -56,9 +56,6 @@ from ui.styles import (
 )
 
 # ── Constants ──────────────────────────────────────────────────────────
-
-API_BASE = settings.API_BASE_URL
-SETTINGS_API = f"{API_BASE}/api/v1/settings/"
 
 CATEGORY_META: dict[str, dict[str, str]] = {
     "network": {"label": "Network", "icon": "fa-solid fa-globe"},
@@ -358,11 +355,12 @@ def get_runtime_layout() -> html.Div:
 )
 def load_settings(pathname: str) -> Any:
     """Fetch settings from the API when the settings page is visited."""
+    settings_api = f"{settings.API_BASE_URL}/api/v1/settings/"
     if pathname not in ("/app/settings/runtime", "/app/settings/runtime/"):
         return no_update
 
     try:
-        resp = requests.get(SETTINGS_API, timeout=10)
+        resp = requests.get(settings_api, timeout=10)
         resp.raise_for_status()
         return resp.json()
     except requests.exceptions.RequestException as exc:
@@ -466,6 +464,7 @@ def save_all_settings(
     input_ids: list[dict[str, str]],
 ) -> tuple[Any, Any]:
     """Save all changed settings via bulk PATCH."""
+    settings_api = f"{settings.API_BASE_URL}/api/v1/settings/"
     if not n_clicks or not initial_data or not input_ids:
         raise PreventUpdate
 
@@ -504,7 +503,7 @@ def save_all_settings(
 
     try:
         resp = requests.patch(
-            SETTINGS_API,
+            settings_api,
             json={
                 "updates": updates,
                 "expected_updated_at": expected_updated_at,
@@ -531,7 +530,7 @@ def save_all_settings(
         warning = result.get("propagation_warning")
 
         # Reload to refresh the UI.
-        reload_resp = requests.get(SETTINGS_API, timeout=10)
+        reload_resp = requests.get(settings_api, timeout=10)
         reload_resp.raise_for_status()
         new_data = reload_resp.json()
 
@@ -560,6 +559,7 @@ def reset_single_setting(
     initial_data: dict[str, dict[str, Any]] | None,
 ) -> tuple[Any, Any]:
     """Reset a single setting when its reset button is clicked."""
+    settings_api = f"{settings.API_BASE_URL}/api/v1/settings/"
     ctx = callback_context
     if not ctx.triggered:
         raise PreventUpdate
@@ -586,7 +586,7 @@ def reset_single_setting(
 
     try:
         resp = requests.post(
-            f"{SETTINGS_API}{key}/reset",
+            f"{settings_api}{key}/reset",
             json={"expected_updated_at": expected_updated_at},
             timeout=10,
         )
@@ -603,7 +603,7 @@ def reset_single_setting(
             )
         resp.raise_for_status()
 
-        reload_resp = requests.get(SETTINGS_API, timeout=10)
+        reload_resp = requests.get(settings_api, timeout=10)
         reload_resp.raise_for_status()
         new_data = reload_resp.json()
 
@@ -643,6 +643,7 @@ def reset_all_settings(
     initial_data: dict[str, dict[str, Any]] | None,
 ) -> tuple[Any, Any]:
     """Reset all settings to their env/default values."""
+    settings_api = f"{settings.API_BASE_URL}/api/v1/settings/"
     if not n_clicks:
         raise PreventUpdate
 
@@ -657,7 +658,7 @@ def reset_all_settings(
 
     try:
         resp = requests.post(
-            f"{SETTINGS_API}reset",
+            f"{settings_api}reset",
             json={"expected_updated_at": expected_updated_at},
             timeout=10,
         )
@@ -669,7 +670,7 @@ def reset_all_settings(
             )
         resp.raise_for_status()
 
-        reload_resp = requests.get(SETTINGS_API, timeout=10)
+        reload_resp = requests.get(settings_api, timeout=10)
         reload_resp.raise_for_status()
         new_data = reload_resp.json()
 

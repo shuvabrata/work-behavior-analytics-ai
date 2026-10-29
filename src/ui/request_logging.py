@@ -15,6 +15,7 @@ from uuid import uuid4
 from flask import Flask, Response, g, request
 
 from common.logger import LogContext, logger
+from ui.runtime_settings import refresh_if_stale
 
 
 def _request_id() -> str:
@@ -31,6 +32,13 @@ def register_request_logging(server: Flask) -> None:
 
     @server.before_request
     def _before_request() -> None:
+        # Drive the UI's runtime-settings refresh from a real request, bounded by
+        # a TTL so a page load with many callbacks still costs at most one API
+        # fetch per REFRESH_TTL_SECONDS. Without this trigger the UI's cache
+        # would only ever hold its import-time env seed, and a runtime setting
+        # edited in the Settings UI would never reach the UI.
+        refresh_if_stale()
+
         request_id = _request_id()
         g.request_id = request_id
         g.request_start = time.perf_counter()

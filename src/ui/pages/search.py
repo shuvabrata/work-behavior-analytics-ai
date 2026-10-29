@@ -18,7 +18,7 @@ from dash.exceptions import PreventUpdate
 from urllib.parse import parse_qs, unquote
 import dash_bootstrap_components as dbc
 
-from app.common.timezone import humanize_duration, to_app_timezone
+from domain.timezone import humanize_duration, to_app_timezone
 from ui.components.common import create_alert, create_page_header
 from ui.pages.graph.utils import fetch_effective_theme
 from ui.styles import (
@@ -50,9 +50,9 @@ from ui.styles import (
     PLACEHOLDER_MESSAGE_STYLE,
     CARD_CONTAINER_STYLE,
 )
-from app.runtime_settings import runtime_settings
+from ui.runtime_settings import runtime_settings
 from domain.es_indexes import MANAGED_INDEXES
-from app.settings import settings
+from ui.settings import settings
 from common.logger import logger
 
 

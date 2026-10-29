@@ -6,7 +6,7 @@ and parsing error responses from the backend API.
 
 from typing import Any
 from domain.node_size import apply_node_size 
-from app.settings import settings
+from ui.settings import settings
 
 
 def _compact_node_label(label_value: Any) -> str:
@@ -173,7 +173,8 @@ def parse_error_response(error_data: dict[str, Any], status_code: int) -> tuple[
         if "unable to connect" in error_message.lower() or "connection" in error_message.lower():
             return (
                 "🔌 Unable to Connect to Neo4j",
-                f"Cannot establish connection to Neo4j database. Please ensure Neo4j is running at {settings.NEO4J_URI} and the credentials are correct.",
+                "Cannot establish connection to the Neo4j database. "
+                "Please ensure the backend has a reachable Neo4j instance and the credentials are correct.",
                 "https://neo4j.com/docs/operations-manual/current/installation/",
                 "danger"
             )

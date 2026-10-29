@@ -9,7 +9,7 @@ from urllib.parse import quote
 
 from ui.pages import analytics, chat, collaboration_network, collaboration_network_ego, connectors, graph, search, settings, timeline, catalog
 from ui.components.setup_banner import get_banner_layout
-from app.settings import settings as app_settings
+from ui.settings import settings as app_settings
 from .styles import (
     SIDEBAR_STYLE,
     NAVBAR_BRAND_STYLE,

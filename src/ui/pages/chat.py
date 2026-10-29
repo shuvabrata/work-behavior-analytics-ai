@@ -5,9 +5,9 @@ import dash_bootstrap_components as dbc
 from dash import html, dcc, Input, Output, State, callback, clientside_callback, ClientsideFunction, no_update
 import requests
 
-from app.common.timezone import now_in_app_timezone, humanize_duration
-from app.runtime_settings import runtime_settings
-from app.settings import settings
+from domain.timezone import now_in_app_timezone, humanize_duration
+from ui.runtime_settings import runtime_settings
+from ui.settings import settings
 from ui.components.common import create_diamond_icon, create_page_header
 from ui.styles import (
     FONT_SANS,
@@ -33,8 +33,6 @@ from ui.styles import (
     SPACING_MEDIUM,
     SPACING_LARGE,
 )
-
-TIMEOUT_SECONDS = runtime_settings.get_int("HTTP_REQUEST_TIMEOUT")
 
 
 def _ui_timestamp() -> str:
@@ -158,6 +156,7 @@ def get_layout() -> html.Div:
 )
 def initialize_session(current_data: dict[str, Any] | None) -> dict[str, Any]:
     """Initialize a new chat session if one doesn't exist or is invalid"""
+    timeout_seconds = runtime_settings.get_int("HTTP_REQUEST_TIMEOUT")
     api_base = settings.API_BASE_URL
     
     # If we have existing data, validate the session still exists in backend
@@ -167,7 +166,7 @@ def initialize_session(current_data: dict[str, Any] | None) -> dict[str, Any]:
             # Use GET endpoint to check if session exists (doesn't send messages)
             response = requests.get(
                 f"{api_base}/api/v1/chats/{session_id}",
-                timeout=TIMEOUT_SECONDS
+                timeout=timeout_seconds
             )
             response.raise_for_status()
             data = response.json()
@@ -190,7 +189,7 @@ def initialize_session(current_data: dict[str, Any] | None) -> dict[str, Any]:
             response = requests.post(
                 f"{api_base}/api/v1/chats",
                 json={"system_prompt": "You are a helpful AI technical assistant."},
-                timeout=TIMEOUT_SECONDS
+                timeout=timeout_seconds
             )
             response.raise_for_status()
             data = response.json()

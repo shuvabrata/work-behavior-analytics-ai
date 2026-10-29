@@ -60,7 +60,7 @@ sys.path.insert(0, str(REPO_ROOT / "src"))
 import psycopg2  # noqa: E402
 from psycopg2.extras import RealDictCursor  # noqa: E402
 
-from app.common.timezone import get_app_timezone  # noqa: E402
+from domain.timezone import get_app_timezone  # noqa: E402
 from ui.pages.timeline import layout as _timeline_layout  # noqa: E402
 from ui.pages.timeline.helpers import (  # noqa: E402
     card_primary as _card_primary,

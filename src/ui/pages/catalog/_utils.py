@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from app.settings import settings
+from ui.settings import settings
 
 
 def get_api_base_url() -> str:

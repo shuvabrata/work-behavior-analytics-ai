@@ -14,10 +14,8 @@ from dash import (
 )
 from dash.exceptions import PreventUpdate
 
-from app.runtime_settings import runtime_settings
+from ui.runtime_settings import runtime_settings
 from ._utils import get_api_base_url
-
-TIMEOUT_SECONDS = runtime_settings.get_int("HTTP_REQUEST_TIMEOUT")
 
 
 @callback(
@@ -27,17 +25,18 @@ TIMEOUT_SECONDS = runtime_settings.get_int("HTTP_REQUEST_TIMEOUT")
 )
 def load_library(pathname: str | None) -> tuple[Any, Any]:
     """Load the catalog and namespaces when the page mounts."""
+    timeout_seconds = runtime_settings.get_int("HTTP_REQUEST_TIMEOUT")
     if pathname not in ("/app/catalog", "/app/catalog/", "/app/library", "/app/library/"):
         return no_update, no_update
 
     api_base = get_api_base_url()
     try:
         catalog_resp = requests.get(
-            f"{api_base}/api/v1/queries/catalog", timeout=TIMEOUT_SECONDS
+            f"{api_base}/api/v1/queries/catalog", timeout=timeout_seconds
         )
         catalog_resp.raise_for_status()
         ns_resp = requests.get(
-            f"{api_base}/api/v1/queries/catalog/namespaces", timeout=TIMEOUT_SECONDS
+            f"{api_base}/api/v1/queries/catalog/namespaces", timeout=timeout_seconds
         )
         ns_resp.raise_for_status()
         return (

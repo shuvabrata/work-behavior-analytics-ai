@@ -11,13 +11,11 @@ from typing import Any
 import requests
 from dash import Input, Output, State, callback, dcc, html
 
-from app.settings import settings
+from ui.settings import settings
 from ui.styles import (
     COLOR_NAVY,
     FONT_WEIGHT_MEDIUM,
 )
-
-SETTINGS_API = settings.API_BASE_URL + "/api/v1/settings/"
 
 
 def get_banner_layout() -> html.Div:
@@ -35,12 +33,13 @@ def get_banner_layout() -> html.Div:
 )
 def render_setup_banner(pathname: str, dismissed: bool) -> Any:
     """Fetch settings and render a banner for unconfigured recommended settings."""
+    settings_api = settings.API_BASE_URL + "/api/v1/settings/"
     _ = pathname  # triggers on navigation; content depends only on settings
     if dismissed:
         return None
 
     try:
-        resp = requests.get(SETTINGS_API, timeout=10)
+        resp = requests.get(settings_api, timeout=10)
         resp.raise_for_status()
         settings_list: list[dict[str, Any]] = resp.json()
     except requests.exceptions.RequestException:

@@ -24,7 +24,7 @@ from dash import (
 )
 from dash.exceptions import PreventUpdate
 
-from app.common.timezone import get_app_timezone
+from domain.timezone import get_app_timezone
 from ui.components.common import (
     create_alert,
     register_loading_overlay_hider,

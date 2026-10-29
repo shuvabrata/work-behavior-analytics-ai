@@ -22,12 +22,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.settings import settings as app_settings
 from common.logger import logger
-from common.runtime_settings import RuntimeConfig, RuntimeConfigCache
+from common.runtime_settings import RuntimeConfig
+from domain.timezone import runtime_settings as _runtime_settings
 
-# Module-level cache — seeded from the Settings singleton (which reads env
-# vars) so that env-configured values are available immediately.  DB
-# overrides will be loaded on top during startup.
-_runtime_settings: RuntimeConfigCache = RuntimeConfigCache()
+# The cache is the shared object owned by ``domain.timezone``, so both runtimes
+# refresh the same store and ``get_app_timezone`` sees the API's DB overrides.
+# It is seeded from the Settings singleton (which reads env vars) so that
+# env-configured values are available immediately; DB overrides are loaded on
+# top during startup.
 
 
 def _build_initial_config() -> RuntimeConfig:

@@ -19,13 +19,12 @@ from dash import (
 )
 from dash.exceptions import PreventUpdate
 
-from app.runtime_settings import runtime_settings
+from ui.runtime_settings import runtime_settings
 from ui.components.common import create_alert
 from ui.styles import COLOR_GRAY_MEDIUM
 from ._utils import get_api_base_url
 from .editor_layout import render_factory_diff_lines, render_parameter_row
 
-TIMEOUT_SECONDS = runtime_settings.get_int("HTTP_REQUEST_TIMEOUT")
 
 # Sentinel tuple for the 13 no_update outputs shared by destructive_action's
 # error/early-return paths. Using a named constant avoids repeating no_update
@@ -147,11 +146,12 @@ def _collect_parameters(
 )
 def init_editor(pathname: str | None) -> tuple[str, Any]:
     """Record the route mode and load namespaces on mount."""
+    timeout_seconds = runtime_settings.get_int("HTTP_REQUEST_TIMEOUT")
     mode, _, _ = _parse_route(pathname)
     api_base = get_api_base_url()
     try:
         ns_resp = requests.get(
-            f"{api_base}/api/v1/queries/catalog/namespaces", timeout=TIMEOUT_SECONDS
+            f"{api_base}/api/v1/queries/catalog/namespaces", timeout=timeout_seconds
         )
         ns_resp.raise_for_status()
         namespaces = ns_resp.json().get("items", [])
@@ -216,6 +216,7 @@ def load_query(
     For the ``new`` route the form is left blank with editable slug and
     namespace. For an edit route the existing query is fetched and loaded.
     """
+    timeout_seconds = runtime_settings.get_int("HTTP_REQUEST_TIMEOUT")
     if mode == "new":
         return (
             {"mode": "new"},
@@ -257,7 +258,7 @@ def load_query(
     try:
         resp = requests.get(
             f"{api_base}/api/v1/queries/catalog/{namespace}/{slug}",
-            timeout=TIMEOUT_SECONDS,
+            timeout=timeout_seconds,
         )
         if resp.status_code != 200:
             detail = resp.json().get("detail", "Unknown error")
@@ -428,6 +429,7 @@ def save_query(
     field_ids: list[dict[str, str]],
 ) -> Any:
     """Save the query via PUT to the current namespace/slug."""
+    timeout_seconds = runtime_settings.get_int("HTTP_REQUEST_TIMEOUT")
     if not n_clicks:
         raise PreventUpdate
 
@@ -456,7 +458,7 @@ def save_query(
         resp = requests.put(
             f"{api_base}/api/v1/queries/catalog/{namespace}/{slug}",
             json=payload,
-            timeout=TIMEOUT_SECONDS,
+            timeout=timeout_seconds,
         )
         if resp.status_code not in (200, 201):
             detail = resp.json().get("detail", "Unknown error")
@@ -569,6 +571,7 @@ def render_factory_diff(
     for them. The override replaces the built-in at load time, so the factory
     text is only reachable via ``include_overrides=false``.
     """
+    timeout_seconds = runtime_settings.get_int("HTTP_REQUEST_TIMEOUT")
     if not is_open:
         return no_update
 
@@ -586,7 +589,7 @@ def render_factory_diff(
         # Fetch current first, then factory: the diff below is
         # ``unified_diff(factory, current)``, so this order decides which side
         # is ``-``/red and which is ``+``/green.
-        current_resp = requests.get(url, timeout=TIMEOUT_SECONDS)
+        current_resp = requests.get(url, timeout=timeout_seconds)
         if current_resp.status_code != 200:
             detail = current_resp.json().get("detail", "Unknown error")
             return create_alert(
@@ -596,7 +599,7 @@ def render_factory_diff(
         current = current_resp.json()
 
         factory_resp = requests.get(
-            url, timeout=TIMEOUT_SECONDS, params={"include_overrides": "false"}
+            url, timeout=timeout_seconds, params={"include_overrides": "false"}
         )
         if factory_resp.status_code != 200:
             detail = factory_resp.json().get("detail", "Unknown error")
@@ -664,6 +667,7 @@ def save_as_query(
     field_ids: list[dict[str, str]],
 ) -> tuple[Any, bool]:
     """Save the query to a new namespace/slug via PUT."""
+    timeout_seconds = runtime_settings.get_int("HTTP_REQUEST_TIMEOUT")
     if not n_clicks:
         raise PreventUpdate
 
@@ -700,7 +704,7 @@ def save_as_query(
         resp = requests.put(
             f"{api_base}/api/v1/queries/catalog/{namespace}/{slug}",
             json=payload,
-            timeout=TIMEOUT_SECONDS,
+            timeout=timeout_seconds,
         )
         if resp.status_code not in (200, 201):
             detail = resp.json().get("detail", "Unknown error")
@@ -866,6 +870,7 @@ def destructive_action(
     the system data. For a brand-new custom query there is no factory version,
     so the editor navigates back to the Library.
     """
+    timeout_seconds = runtime_settings.get_int("HTTP_REQUEST_TIMEOUT")
     if not n_clicks:
         raise PreventUpdate
 
@@ -885,7 +890,7 @@ def destructive_action(
     try:
         resp = requests.delete(
             f"{api_base}/api/v1/queries/catalog/{namespace}/{slug}",
-            timeout=TIMEOUT_SECONDS,
+            timeout=timeout_seconds,
         )
         if resp.status_code not in (200, 204):
             detail = resp.json().get("detail", "Unknown error")
@@ -913,7 +918,7 @@ def destructive_action(
     try:
         get_resp = requests.get(
             f"{api_base}/api/v1/queries/catalog/{namespace}/{slug}",
-            timeout=TIMEOUT_SECONDS,
+            timeout=timeout_seconds,
         )
         if get_resp.status_code != 200:
             return (

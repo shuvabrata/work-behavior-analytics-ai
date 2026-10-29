@@ -8,7 +8,7 @@ Modal dialogs for graph interactions:
 import dash_bootstrap_components as dbc
 from dash import html
 
-from app.settings import settings
+from ui.settings import settings
 
 
 def create_expansion_modal() -> dbc.Modal:

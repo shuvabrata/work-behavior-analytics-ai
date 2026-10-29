@@ -8,7 +8,7 @@ import requests
 from dash import html, Input, Output, State, callback, clientside_callback, callback_context, no_update
 from dash.exceptions import PreventUpdate
 
-from app.runtime_settings import runtime_settings
+from ui.runtime_settings import runtime_settings
 from common.logger import logger
 from ui.components.common import create_alert
 from ui.styles import CONTEXT_MENU_CONTAINER_STYLE
@@ -20,8 +20,6 @@ from ..utils import (
     create_performance_metrics,
     is_edge_element,
 )
-
-TIMEOUT_SECONDS = runtime_settings.get_int("HTTP_REQUEST_TIMEOUT")
 
 
 @callback(
@@ -107,6 +105,7 @@ def context_menu_quick_expand(_n_clicks_incoming: Any, _n_clicks_outgoing: Any, 
                               current_node_positions: Any,
                               menu_style: Any, current_layout: Any) -> Any:
     """Handle quick expansion from context menu"""
+    timeout_seconds = runtime_settings.get_int("HTTP_REQUEST_TIMEOUT")
     show_style = {"display": "block"}
     hide_style = {"display": "none"}
     
@@ -153,7 +152,7 @@ def context_menu_quick_expand(_n_clicks_incoming: Any, _n_clicks_outgoing: Any, 
             # Merge against the full unfiltered baseline, not the filtered view.
             current_elements=current_unfiltered,
             current_node_positions=current_node_positions,
-            timeout_seconds=TIMEOUT_SECONDS,
+            timeout_seconds=timeout_seconds,
         )
 
         if not result["ok"]:
@@ -194,7 +193,7 @@ def context_menu_quick_expand(_n_clicks_incoming: Any, _n_clicks_outgoing: Any, 
     except requests.exceptions.Timeout:
         logger.error(
             "[GRAPH-DEBUG][context.expand] timeout "
-            f"node_id={node_id} direction={direction} timeout_seconds={TIMEOUT_SECONDS}"
+            f"node_id={node_id} direction={direction} timeout_seconds={timeout_seconds}"
         )
         error_alert = create_expansion_error_alert("Expansion timed out", error_type="timeout")
         return (no_update, no_update, expanded_nodes, loaded_node_ids, updated_menu_style,
@@ -203,7 +202,7 @@ def context_menu_quick_expand(_n_clicks_incoming: Any, _n_clicks_outgoing: Any, 
     except requests.exceptions.ConnectionError:
         logger.error(
             "[GRAPH-DEBUG][context.expand] connection_error "
-            f"node_id={node_id} direction={direction} timeout_seconds={TIMEOUT_SECONDS}"
+            f"node_id={node_id} direction={direction} timeout_seconds={timeout_seconds}"
         )
         error_alert = create_expansion_error_alert(
             "Could not connect to server. Please check your connection.",

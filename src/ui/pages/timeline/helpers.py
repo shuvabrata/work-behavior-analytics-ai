@@ -14,7 +14,7 @@ from typing import Any
 from urllib.parse import parse_qs, quote
 from zoneinfo import ZoneInfo
 
-from app.common.timezone import get_app_timezone, humanize_duration, to_app_timezone
+from domain.timezone import get_app_timezone, humanize_duration, to_app_timezone
 
 # Soft cap on the number of lanes (design decision #4).
 MAX_LANES = 5

@@ -395,7 +395,7 @@ operator during a structured interview.
 | 8 | Import-time constants | **All 12 become function-local reads**, with a test that a post-import cache refresh changes behaviour |
 | 9 | UI request logging | Port `add_request_context` to Flask `before_request`/`after_request`, **INFO for everything** |
 | 10 | Service rename | `app` → `api`, with an **`app` network alias** kept for one step, then dropped |
-| 11 | Shared HTTP client | **All 56 sites** through `api_client.py`, as **its own step after the split is verified** |
+| 11 | Shared HTTP client | **All 59 sites** through `api_client.py` — 3 migrated in Step 7 (7d-i creates the module there, because the collab swaps need it), the remaining 56 in Step 10 |
 | 12 | Collaboration bypasses | Swap cleanly; **before/after baseline script** captured and run in the same step, over a **shared** config→query-param serializer so the re-run exercises the swapped code (a script-private serializer would make the gate vacuous). A permanent round-trip unit test carries the guard after the script is deleted. Spotlight needs a **new `POST /search/scoped`** endpoint (**not** an `ids` query param — the 223-id canvas is a 10,438-byte request line and nginx 414s it against the default 8 KB header buffer; measured), gated on empirical equivalence |
 | 13 | Test fallout | **Atomic per-module steps** — code moved, src and test importers rewritten, suite green, no stale path, all in one step. No sweep, no shims |
 | 14 | Local dev | **Two documented commands**, no `dev.sh` (deferred as out of scope) |
@@ -476,8 +476,10 @@ Run Python commands with the virtualenv active (`source .venv/bin/activate`) and
 - `scripts/setup.sh` — health poll and failure-message service name only
 - `scripts/capture_ui_baseline.py` (create, **temporary** — deleted in Step 7)
 - `src/ui/collaboration_params.py` + `tests/test_collab_query_param_roundtrip.py`
-  (create, **permanent** — Step 7's shared config→query-param serializer)
-- `src/ui/api_client.py` (create in Step 7 with `get_json` + the status→exception
+  (create, **permanent** — Step 7's shared config→query-param serializer, plus
+  7d-i's `translate_api_error` collaboration-error mapping)
+- `src/ui/api_client.py` (create in Step 7 with `get_json`/`post_json`, the base
+  URL, the per-call timeout and the single `ApiError` type — **no** collaboration
   mapping; **extended** in Step 10) + `tests/test_ui_api_client_status_mapping.py`
   (create, **permanent** — guards the mapping that keeps the collaboration
   empty/invalid banners working)
@@ -2105,41 +2107,100 @@ path (`router.py:314`), where a config error currently reaches
 `describe_config_error(...)` and would instead hit the generic handler.
 
 So the swap is **not** `.json()` replacing attribute access on the happy path
-only. Both collab sites must:
+only. Both collab sites must keep feeding those two handlers the exception types
+they expect.
 
-1. Read the timeout per call — `runtime_settings.get_int("HTTP_REQUEST_TIMEOUT")`,
-   never a module-level constant (Step 6's bug class).
-2. Inspect `response.status_code` **before** parsing, and translate:
-   - **404 with `detail.error == "No collaboration data"`** →
-     `raise CollaborationDataUnavailable(<the API's `detail.message`>)`. Discriminate
-     on the body, not the bare status: a 404 from a *wrong URL* must not be
-     reported to the user as "you have no collaborations".
-   - **400** → `raise ValueError(<the API's `detail.message`>)`, so the existing
-     `except ValueError` branch still renders `describe_config_error(...)`.
-   - **any other non-2xx** → `raise_for_status()` into the generic handler.
-3. Leave the existing `except` blocks exactly as they are. They are correct; the
-   swap's job is to keep feeding them the exception types they expect.
+**Where the translation lives — and why it is not in the client.** The obvious
+placement is to teach `api_client` to raise `CollaborationDataUnavailable` on
+that 404. **Do not.** Two reasons, and the second is structural:
 
-`CollaborationDataUnavailable` already lives in the **pure**
-`src/domain/collaboration/errors.py` and is already imported by both files
-(`filter.py:11`, `:12`), so this mapping needs no new UI→API import.
+1. **It contradicts Step 10.** That step's deliverable, and its Gate 10 check 3,
+   is *one exception type carrying `status_code`* — the single type Plan C's
+   401-redirect / 403-banner split is built on. A client that ALSO raises
+   `ValueError` and a collaboration-domain exception cannot satisfy that, and an
+   executor reconciles the two by picking one — after which the collab `except`
+   blocks go dead again and the regression this section exists to prevent returns
+   three steps later.
+2. **It inverts a dependency.** `api_client` is used by all 56 UI→API call sites
+   across connectors, catalog, timeline and settings. `CollaborationDataUnavailable`
+   lives in `domain/collaboration/errors.py` — a *collaboration* concept. A
+   generic HTTP client importing it means every caller in the UI inherits a
+   taxonomy from one page's domain.
 
-**Put this in `src/ui/api_client.py`, created here — minimally — rather than in a
-throwaway local helper.** Step 10 grows this same module into the full client
-(other verbs, injectable transport, one exception type). Creating it now resolves
-the ordering tension between Decision 11 and this step: an executor facing both
-"put it in `api_client.py`" and "`api_client.py` is Step 10" would otherwise
-guess. The Step 7 version needs `get_json(url, params, timeout) -> dict`,
-`post_json(url, json, timeout) -> dict` (the spotlight swap needs it — see 7b),
-and the status mapping above. Step 10 extends the surface; it does not replace it.
+So the split is: **the client raises one transport-level error; the collaboration
+call sites translate it into the domain errors their `except` blocks catch.**
+
+**`src/ui/api_client.py` (created here, minimally):**
+
+- **Owns the base URL** (`UISettings.API_BASE_URL`) and **the timeout** (read
+  per call from `ui.runtime_settings`, never at import — Step 6a's bug class).
+  Call sites pass a **path**, not a URL, and no timeout. This matches Step 10's
+  "owns the base URL … and the timeout" exactly, which is what makes that step an
+  *extension* rather than a rewrite of these three call sites.
+- `get_json(path, params=None) -> dict` and `post_json(path, json=None) -> dict`
+  (the spotlight swap needs the latter — see 7b).
+- On any non-2xx: raise **one** exception type, `ApiError`, carrying
+  `status_code` and the response's parsed `detail` (so `.detail_error` and
+  `.message` are available to a caller that wants to discriminate). This is the
+  same single type Step 10 codifies — Step 7 just introduces it earlier.
+
+**A shared collaboration translation helper.** Both collab pages need the
+identical mapping, so put it in **`src/ui/collaboration_params.py`** — the module
+7a already creates and which is already imported by exactly these two page
+packages (a module inside one page package cannot be imported by the other; see
+7a's note). Add:
+
+```python
+def translate_api_error(exc: ApiError) -> None:
+    """Re-raise an ``ApiError`` as the domain error the callbacks catch.
+
+    404 + detail.error == "No collaboration data" -> CollaborationDataUnavailable
+    400                                          -> ValueError
+    anything else                                -> re-raised unchanged
+    """
+```
+
+- **Discriminate on `detail.error`, not the bare status.** A 404 from a *wrong
+  URL* must not be reported to the user as "you have no collaborations" — that
+  is a bug-report generator, not a banner.
+- The 400 → `ValueError` mapping is what keeps `describe_config_error(...)`
+  working: those handlers read `.errors()` off a pydantic `ValidationError`, and
+  the API's `detail.message` carries that text. Where the UI pre-validates the
+  config (both pages parse the URL before calling), this branch is rarely
+  reached — map it anyway, so the reachable-by-construction path is correct.
+- `CollaborationDataUnavailable` is in the **pure**
+  `src/domain/collaboration/errors.py` and is already imported by both
+  `filter.py` files, so no new UI→API import is introduced.
+
+**At each of the two collab call sites**, wrap the call so the translation runs
+**inside the callback's own `try`** — that is what makes the raised domain error
+land in the existing `except` blocks:
+
+```python
+try:
+    data = api_client.get_json("/api/v1/graph/collaboration-network",
+                               params=config_to_query_params(config))
+except ApiError as exc:
+    translate_api_error(exc)   # raises CollaborationDataUnavailable / ValueError
+    raise
+```
+
+**Leave the existing `except` blocks exactly as they are.** They are correct; the
+swap's job is to keep feeding them the exception types they expect.
 
 **7d-ii. The three swaps.**
 
+Paths only — the client owns the base URL and the timeout (7d-i), so **none of
+these three modules may reference `API_BASE`, `settings.API_BASE_URL` or a
+timeout value.** Verified: all three are in-process callers today and import
+neither `settings` nor `runtime_settings`, so there is no existing constant to
+reuse; the client is the only source.
+
 | File | Now | Becomes |
 |---|---|---|
-| `src/ui/pages/collaboration_network/callbacks/filter.py:88` | `data = get_collaboration_network(config=config)` | `data = api_client.get_json(f"{API_BASE}/api/v1/graph/collaboration-network", params=config_to_query_params(config))` |
-| `src/ui/pages/collaboration_network_ego/callbacks/filter.py:201` | `data = get_ego_network(focus_id, config=config, max_collaborators=max_collaborators)` | `data = api_client.get_json(f"{API_BASE}/api/v1/graph/collaboration-network/ego", params=ego_query_params(config, focus_id, max_collaborators))` |
-| `src/ui/pages/graph/callbacks/spotlight.py:118` | `search_in_graph(SearchRequest(q=q), graph_wba_ids)` | `data = api_client.post_json(f"{API_BASE}/api/v1/search/scoped", json={"q": q, "ids": graph_wba_ids})` |
+| `src/ui/pages/collaboration_network/callbacks/filter.py:88` | `data = get_collaboration_network(config=config)` | `data = api_client.get_json("/api/v1/graph/collaboration-network", params=config_to_query_params(config))`, wrapped in the 7d-i `try`/`except ApiError` → `translate_api_error(exc)` |
+| `src/ui/pages/collaboration_network_ego/callbacks/filter.py:201` | `data = get_ego_network(focus_id, config=config, max_collaborators=max_collaborators)` | `data = api_client.get_json("/api/v1/graph/collaboration-network/ego", params=ego_query_params(config, focus_id, max_collaborators))`, same wrapper |
+| `src/ui/pages/graph/callbacks/spotlight.py:118` | `search_in_graph(SearchRequest(q=q), graph_wba_ids)` | `data = api_client.post_json("/api/v1/search/scoped", json={"q": q, "ids": graph_wba_ids})` — **no** translation wrapper; see below |
 
 **Do not inline the param dicts at the call sites.** A hand-built dict is a
 second translation and reintroduces exactly the drift 7a exists to prevent.
@@ -2156,52 +2217,84 @@ comma-joining.
 
 **The spotlight site has no typed-exception contract to preserve** — it already
 wraps its call in a bare `except Exception` (`spotlight.py:119-121`) and raises
-`PreventUpdate`, so a failed search degrades to "no highlight" either way. Only
-the two collab sites need the mapping in 7d-i.
+`PreventUpdate`, so a failed search degrades to "no highlight" either way.
+`ApiError` is an `Exception`, so it is caught by that existing handler with no
+change; **do not** add a `translate_api_error` wrapper here. Only the two collab
+sites need the mapping in 7d-i.
+
+**One consequence to accept deliberately, not to "fix" here:** a spotlight
+failure stays silent, so a misconfigured scoped route would show up as
+"highlighting does nothing" rather than an error. The 7b verifies cover the
+route's existence and its 200 for a 223-id body; the browser check in Step 8's
+gate (item 20, with a full canvas) is what covers the wiring end to end. Do not
+convert this handler into a user-facing error as part of this plan — that would
+be a behaviour change outside Step 7's scope.
 
 **7d-iii. Guard the mapping with a unit test.**
 
 The baseline script cannot cover 7d-i (see 7c), so this test is the **only**
-automated guard on the status→exception translation. Add
+automated guard on the translation. Add
 `tests/test_ui_api_client_status_mapping.py` with
-`pytestmark = pytest.mark.unit` at module level. It stubs the transport — using
-the injectable one `api_client` exposes — so it needs no server and no Neo4j:
+`pytestmark = pytest.mark.unit` at module level. It covers **both halves** of
+7d-i's split, and stubs the transport — using the injectable one `api_client`
+exposes — so it needs no server and no Neo4j.
+
+**Half 1 — the client turns a status into `ApiError`:**
+
+```python
+@pytest.mark.parametrize("status", [400, 404, 500])
+def test_non_2xx_raises_api_error(status, stub_transport):
+    """Every non-2xx becomes the one transport-level type, carrying the status."""
+    with pytest.raises(ApiError) as excinfo:
+        api_client.get_json("/api/v1/anything")
+    assert excinfo.value.status_code == status
+```
+
+**Half 2 — the collaboration helper turns `ApiError` into the domain errors the
+callbacks catch:**
 
 ```python
 @pytest.mark.parametrize(
-    ("status", "body", "expected"),
+    ("exc", "expected"),
     [
-        (404, {"detail": {"error": "No collaboration data", "message": "no data"}},
+        (ApiError(404, detail_error="No collaboration data", message="no data"),
          CollaborationDataUnavailable),
-        (400, {"detail": {"error": "Invalid collaboration configuration", "message": "bad"}},
+        (ApiError(400, detail_error="Invalid collaboration configuration", message="bad"),
          ValueError),
-        (500, {"detail": {"error": "Internal server error"}}, None),  # generic path
     ],
 )
-def test_get_json_maps_status_to_exception(status, body, expected):
-    """A non-2xx response raises the type the collab callbacks catch.
+def test_translate_api_error_maps_to_domain_type(exc, expected):
+    """The collab call sites must keep receiving the types their except blocks catch.
 
     Regression guard: a raw ``requests.get`` returns a Response, so the
     ``except CollaborationDataUnavailable`` branch went dead and the page
     rendered "An unexpected error occurred." instead of the real banner.
     """
+    with pytest.raises(expected):
+        translate_api_error(exc)
 ```
 
-Three things this test must get right, or it is vacuous:
+Four things these must get right, or they are vacuous:
 
-1. **It must assert the exception *type*, not merely that something raised.** A
-   bare `pytest.raises(Exception)` passes for `AttributeError` — which is
-   exactly the bug.
+1. **Assert the exception *type*, not merely that something raised.** A bare
+   `pytest.raises(Exception)` passes for `AttributeError` — which is exactly the
+   bug.
 2. **Include a 404 that is *not* the collaboration error** (a wrong URL, or a
-   body whose `detail.error` differs) and assert it does **not** become
-   `CollaborationDataUnavailable`. This is the discrimination 7d-i requires; a
-   mapping keyed on the bare status passes the first case and fails the user.
-3. **Mutation-check it**: delete the 404 branch from `get_json` and confirm the
-   first case fails. Same discipline as 7a's mutation.
+   body whose `detail.error` differs) and assert `translate_api_error` **re-raises
+   it unchanged** rather than turning it into `CollaborationDataUnavailable`.
+   This is the discrimination 7d-i requires; a mapping keyed on the bare status
+   passes the first case and fails the real user.
+3. **Assert the client raises `ApiError` and *only* `ApiError`** — it must not
+   raise `CollaborationDataUnavailable` or `ValueError`, or Step 10's single-type
+   contract (Gate 10 check 3) is unsatisfiable. A test that passes with the
+   client raising domain types is testing the wrong design.
+4. **Mutation-check it**: delete the 404 branch from `translate_api_error` and
+   confirm the first case in half 2 fails. Same discipline as 7a's mutation.
 
 **Verify (7d-iii)**: `pytest -m unit tests/test_ui_api_client_status_mapping.py -q` → all pass
 **Verify (7d-iii)**: mutation — remove the 404→`CollaborationDataUnavailable`
-branch; the first parametrised case must **fail**.
+branch from `translate_api_error`; the first case in half 2 must **fail**.
+**Verify (7d-iii)**: `grep -n "CollaborationDataUnavailable" src/ui/api_client.py` → **no matches** — the generic client must not import a collaboration-domain type (7d-i's reason 2).
 
 **7e. Re-run the baseline script and compare.**
 
@@ -2259,7 +2352,8 @@ src/ui/pages/graph/callbacks/spotlight.py:14               from app.api.search.v
 
 **Verify (7d–7f)**: `diff` from 7e prints nothing
 **Verify**: `grep -rn "from app\.api\.graph\.v1\.service\|from app\.api\.search\.v1\.service\|from app\.api\.search\.v1\.model" src/ui/` → no matches
-**Verify**: `grep -rn "CollaborationDataUnavailable" src/ui/` → **3 matches or more** (both `filter.py` imports plus the `raise` sites 7d-i adds) — if it is absent, the mapping was skipped and the banners are broken
+**Verify**: `grep -rln "CollaborationDataUnavailable" src/ui/` → **exactly these three files**: both `pages/collaboration_network*/callbacks/filter.py` (the `except` blocks) and `src/ui/collaboration_params.py` (the 7d-i `raise`). If `api_client.py` appears here, the mapping was put in the client instead of the call sites — see 7d-i's two reasons.
+**Verify**: `grep -n "CollaborationDataUnavailable" src/ui/api_client.py` → **no matches** (the generic client must not depend on the collaboration domain)
 **Verify**: `pytest tests/test_collab_query_param_roundtrip.py tests/test_ui_api_client_status_mapping.py -q` → all pass
 **Verify**: `pytest -m unit tests -q` → all pass
 **Verify**: `mypy src/` → exit 0
@@ -2760,26 +2854,45 @@ fails loudly at the DNS layer rather than silently degrading.
 **In this plan the client carries no credentials.** Plan C teaches it to attach a
 bearer token — which is why the two plans are not merged.
 
-**`api_client.py` already exists — Step 7 created it** (7d-i) with
-`get_json`/`post_json` and the status→exception mapping that keeps the
-collaboration banners working. This step **extends** that module; it does not
-create it, and it must not replace or re-implement the mapping. Keep 7d-i's
-behaviour intact: the status translation is load-bearing for
-`pages/collaboration_network/` and `pages/collaboration_network_ego/`, and
-`tests/test_ui_api_client_status_mapping.py` guards it.
+**`api_client.py` already exists — Step 7 created it** (7d-i), and this step
+**extends** it. Two things it established that this step must **not** change:
+
+- **`ApiError`, the single transport-level type**, raised on every non-2xx and
+  carrying `status_code`. Step 7 introduced it; this step's Gate 10 check 3 is
+  the same requirement, not a new one.
+- **The base URL and the timeout already live in the client**, so call sites pass
+  a *path*, not a URL, and no timeout. Step 7's three call sites are already in
+  that form — that is what makes this step additive rather than a rewrite.
+
+**Do not move the collaboration translation into the client.** 7d-i deliberately
+put the `404 + detail.error == "No collaboration data"` →
+`CollaborationDataUnavailable` mapping in
+`src/ui/collaboration_params.py:translate_api_error`, not in `api_client`, for
+two reasons that still hold here: the client's single-type contract would break,
+and the generic client must not depend on a collaboration-domain error
+(`domain/collaboration/errors.py`). Keep `translate_api_error` where it is, and
+keep `tests/test_ui_api_client_status_mapping.py` passing — it guards both halves
+of that split. Adding a *second*, client-level mapping would re-break the collab
+banners by making the call sites' `except ApiError` wrapper unreachable.
 
 **Grow the client** into the single chokepoint for UI→API calls:
 
-- Owns the base URL (from `UISettings.API_BASE_URL`) and the timeout (from the
-  runtime-settings cache, read **per call** — see Step 6).
-- Exposes `get`/`post`/`put`/`patch`/`delete` with a consistent signature.
-- Defines **one exception type** carrying `status_code`, so Plan C's
-  401-redirect / 403-banner split becomes a property of this module.
+- Owns the base URL (from `UISettings.API_BASE_URL`) and the timeout (from
+  `ui.runtime_settings`, read **per call** — see Step 6a).
+- Exposes `get`/`post`/`put`/`patch`/`delete` with a consistent signature,
+  keeping 7d-i's `get_json`/`post_json` working (they are already used by three
+  call sites — do not rename them out from under those).
+- **One exception type** carrying `status_code` — `ApiError`, as established.
 - **Accepts an injectable transport** (a `requests.Session` or a callable) so
   tests can stub the API without monkeypatching `requests` globally. With 43 test
-  files touching the UI, that matters.
+  files touching the UI, that matters. 7d-iii's test already relies on this being
+  injectable, so the seam exists from Step 7.
 
-**Migrate all 56 sites across 13 files.** Head-weighted:
+**Migrate the remaining 56 sites across these 13 files.** Head-weighted:
+
+Step 7 already migrated **3** sites (the two collab callbacks and the spotlight)
+in 3 other files; those are not in this list and must not be touched again. The
+end state is **59** UI→API sites, all through `api_client`.
 
 | File | Sites |
 |---|---|
@@ -2802,7 +2915,7 @@ must preserve whatever those were suppressing (a missing timeout), by always
 passing one.
 
 **Verify**: `grep -rn "requests\.\(get\|post\|put\|patch\|delete\)" src/ui/` → no matches
-**Verify**: `grep -rln "api_client" src/ui/ | wc -l` → 13 or more
+**Verify**: `grep -rln "api_client" src/ui/ | wc -l` → **16 or more** (this step's 13 files plus Step 7's three)
 **Verify**: `pytest -m unit tests -q` → all pass
 **Verify**: `mypy src/` → exit 0
 **Verify**: `pylint src --score=y` → ≥ 9.0
@@ -2816,11 +2929,19 @@ passing one.
 > 2. The client carries **no** credentials — no `Authorization` header, no token
 >    parameter, no `KEYCLOAK_*`/`AUTH_*` reference. Confirm this explicitly; it is
 >    the boundary between this plan and Plan C.
-> 3. One exception type carrying `status_code`, not per-call `raise_for_status`.
-> 4. The transport is injectable, so tests do not monkeypatch the `requests`
+> 3. One exception type carrying `status_code`, not per-call `raise_for_status` —
+>    `ApiError`, as Step 7 introduced it. Confirm the count is still **one**:
+>    `grep -rn "raise_for_status" src/ui/` → no matches outside `api_client.py`.
+> 4. **The collaboration mapping is still at the call sites, not in the client.**
+>    `grep -n "CollaborationDataUnavailable" src/ui/api_client.py` → no matches,
+>    and `translate_api_error` still exists in `src/ui/collaboration_params.py`.
+>    A client-level mapping would satisfy check 3 on paper while making the collab
+>    `except ApiError` wrappers unreachable — reintroducing the "An unexpected
+>    error occurred." banner that Step 7d-i exists to prevent.
+> 5. The transport is injectable, so tests do not monkeypatch the `requests`
 >    module globally.
-> 5. Timeouts are read **per call**, not captured at import (Step 6's bug class).
-> 6. **A browser sweep of every page**: Chat, Search, Graph, Timeline, Analytics,
+> 6. Timeouts are read **per call**, not captured at import (Step 6a's bug class).
+> 7. **A browser sweep of every page**: Chat, Search, Graph, Timeline, Analytics,
 >    Catalog, Connectors, Settings, Collaboration Network (org + ego). A missed
 >    call site is a runtime error on a rarely-exercised page — this is the check
 >    that finds it.
@@ -3172,11 +3293,12 @@ were silently skipped by a missing marker or a broken import.
 3. Step 7 — drop the `terms` clause on `wba_id` from the scoped search's ES
    body; the comparison must fail.
 4. Step 7 (7d-iii) — remove the 404→`CollaborationDataUnavailable` branch from
-   `api_client.get_json`; `tests/test_ui_api_client_status_mapping.py` must fail.
-   Without this the mapping — the only thing keeping the collaboration
+   `translate_api_error` (in `src/ui/collaboration_params.py`); the half-2 case in
+   `tests/test_ui_api_client_status_mapping.py` must fail.
+   Without this the mapper — the only thing keeping the collaboration
    empty/invalid banners correct — rests on a test nobody proved non-vacuous.
    Note the baseline script **cannot** detect this mutation (its `in_process`
-   leg bypasses `api_client`), which is exactly why the unit test exists.
+   leg bypasses the HTTP path entirely), which is exactly why the unit test exists.
 5. Step 8 — remove `routes_pathname_prefix="/app/"` from `create_dash_app()`;
    the UI must stop serving at `/app`. **Not** a Step 5 mutation: at Step 5 the
    prefix must be *absent*, and adding it there is itself the failure this
@@ -3229,7 +3351,8 @@ ALL must hold:
 - [ ] `tests/test_ui_api_client_status_mapping.py` passes **and fails when the 404 branch is removed** from `get_json`
 - [ ] A 404 that is *not* the collaboration error does **not** become `CollaborationDataUnavailable` (the mapping discriminates on the body, not the bare status)
 - [ ] Both collaboration pages still show their specific "no data" banner rather than "An unexpected error occurred." (browser check)
-- [ ] `grep -rn "CollaborationDataUnavailable" src/ui/` → present in both `filter.py` files (the mapping was not deleted as "unused")
+- [ ] `grep -rln "CollaborationDataUnavailable" src/ui/` → the two `filter.py` files and `collaboration_params.py`, and **not** `api_client.py` (the mapping lives at the call sites, and the generic client does not depend on the collaboration domain)
+- [ ] `src/ui/api_client.py` raises exactly one type, `ApiError`; no `raise_for_status` outside it, and no domain exception inside it
 - [ ] Step 12's concurrency measurements show overlap
 - [ ] `scripts/capture_ui_baseline.py` and its two JSON files are deleted; `src/ui/collaboration_params.py` is kept
 - [ ] `docs/design/authn-authz-design.md` no longer claims an ASGI-mount mechanism for the UI

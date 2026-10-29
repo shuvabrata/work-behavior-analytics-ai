@@ -9,6 +9,7 @@ import pytest
 from domain.collaboration.config import (
     DEFAULT_LAYER_WEIGHTS,
     LAYER_ORDER,
+    CollaborationNetworkConfig,
 )
 from ui.pages.collaboration_network.callbacks.filter import (
     load_collaboration_network,
@@ -18,16 +19,26 @@ from ui.pages.collaboration_network.callbacks.filter import (
 pytestmark = pytest.mark.unit
 
 
-class _FakeResult:
-    """Minimal stand-in for the get_collaboration_network return value."""
+def _fake_response() -> dict:
+    """Minimal stand-in for the collaboration endpoint's JSON body.
 
-    def __init__(self, elements, config):
-        self.elements = elements
-        self.config = config or {}
-        self.num_people = 2
-        self.num_pairs = 1
-        self.num_communities = 1
-        self.modularity = 0.5
+    Step 7 of plan 052 swapped the in-process ``get_collaboration_network`` call
+    for ``api_client.get_json``, so the callback now consumes a parsed dict
+    rather than a response model.
+    """
+    return {
+        "elements": [{"data": {"id": "n1"}}],
+        "config": {},
+        "num_people": 2,
+        "num_pairs": 1,
+        "num_communities": 1,
+        "modularity": 0.5,
+    }
+
+
+def _config_from(params: dict) -> CollaborationNetworkConfig:
+    """Rebuild the config the callback would have sent, from its query params."""
+    return CollaborationNetworkConfig.from_query_values(params)
 
 
 def _make_search(**params) -> str:
@@ -44,16 +55,16 @@ def test_load_collaboration_network_parses_weights_and_layers():
         w_epic_overlap="2.0",
         lookback_days="60",
     )
-    fake = _FakeResult(elements=[{"data": {"id": "n1"}}], config={})
 
     with patch(
-        "ui.pages.collaboration_network.callbacks.filter.get_collaboration_network",
-        return_value=fake,
+        "ui.pages.collaboration_network.callbacks.filter.api_client.get_json",
+        return_value=_fake_response(),
     ) as mock_fetch:
         outputs = load_collaboration_network(search, "/app/collaboration")
 
-    # The mock was called with a config carrying the parsed values.
-    config = mock_fetch.call_args.kwargs["config"]
+    # The query params the callback sent carry the parsed values; round-tripping
+    # them through the config model is what the endpoint itself does.
+    config = _config_from(mock_fetch.call_args.kwargs["params"])
     assert config.enabled_layers == ["pr_reviews", "epic_overlap"]
     assert config.weights["pr_reviews"] == 4.5
     assert config.weights["epic_overlap"] == 2.0
@@ -78,13 +89,12 @@ def test_load_collaboration_network_ignores_other_pathnames():
 def test_load_collaboration_network_empty_layers_stays_empty():
     """An explicit empty layers param produces an empty enabled set (post-021)."""
     search = _make_search(layers="")
-    fake = _FakeResult(elements=[{"data": {"id": "n1"}}], config={})
 
     with patch(
-        "ui.pages.collaboration_network.callbacks.filter.get_collaboration_network",
-        return_value=fake,
+        "ui.pages.collaboration_network.callbacks.filter.api_client.get_json",
+        return_value=_fake_response(),
     ) as mock_fetch:
         load_collaboration_network(search, "/app/collaboration")
 
-    config = mock_fetch.call_args.kwargs["config"]
+    config = _config_from(mock_fetch.call_args.kwargs["params"])
     assert config.enabled_layers == []

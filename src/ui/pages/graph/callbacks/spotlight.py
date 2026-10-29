@@ -1,17 +1,21 @@
 """Graph Node Spotlight Callbacks (C3)
 
-Live spotlight search: debounce the input (400 ms, min 3 chars), call the
-ES search API via the service layer, intersect results with the loaded graph
-nodes via wba_id, then apply spotlight-match / spotlight-dim
-CSS classes to all Cytoscape elements.
+Live spotlight search: debounce the input (400 ms, min 3 chars), call the API's
+scoped search endpoint, intersect results with the loaded graph nodes via
+wba_id, then apply spotlight-match / spotlight-dim CSS classes to all Cytoscape
+elements.
+
+The scoped search is a POST (``/api/v1/search/scoped``), not a query param: the
+canvas carries 200+ ids and a comma-joined ``ids`` query string exceeds nginx's
+8 KB request-line limit (measured: 10,438 bytes for 223 nodes) and would 414.
+The ``ids`` list passes through whole as a JSON array.
 """
 
 from typing import Any
 from dash import Input, Output, State, callback, clientside_callback
 from dash.exceptions import PreventUpdate
 
-from app.api.search.v1.model import SearchRequest
-from app.api.search.v1.service import search_in_graph
+from ui import api_client
 from common.logger import logger
 from ..utils import is_node_data
 
@@ -115,12 +119,18 @@ def update_spotlight(query: str | None, elements: list[dict[str, Any]] | None) -
     ]
 
     try:
-        response = search_in_graph(SearchRequest(q=q), graph_wba_ids)
+        # POST, not GET: the canvas is 200+ ids and would exceed nginx's 8 KB
+        # request-line limit as a query string (see the module docstring). No
+        # translate_api_error wrapper here — a failed search already degrades to
+        # "no highlight" via the except below.
+        response = api_client.post_json(
+            "/api/v1/search/scoped", json={"q": q, "ids": graph_wba_ids}
+        )
     except Exception as exc:
         logger.warning(f"[Spotlight] Search failed for query {q!r}: {exc}")
         raise PreventUpdate
 
-    match_wba_ids = {r.wba_id for r in response.results}
+    match_wba_ids = {r["wba_id"] for r in response["results"]}
 
     node_count = sum(1 for elem in elements if is_node_data(elem.get("data", {})))
     match_count = sum(

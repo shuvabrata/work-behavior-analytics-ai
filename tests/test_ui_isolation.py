@@ -25,14 +25,13 @@ import pytest
 
 pytestmark = pytest.mark.unit
 
-_PENDING_STEP_7 = {
-    "ui.layout",
-    "ui.pages.collaboration_network",
-    "ui.pages.collaboration_network_ego",
-    "ui.pages.graph",
-    "ui.components.spotlight",
-}  # reach neo4j/ES via the 4 in-process bypasses Step 7 swaps. MUST be empty
-# after Step 7 — see the plan's Step 7 gate.
+_PENDING_STEP_7: set[str] = set()
+# Drained in Step 7: the five modules that used to reach ``neo4j``/``elasticsearch``
+# through the in-process bypasses (collab filter, ego filter, spotlight, and the
+# ``layout`` import pulling all three page packages) now go over HTTP through
+# ``ui.api_client``. The set stays as an empty, asserted sentinel so a future UI
+# module that reaches a driver fails this test rather than passing via a stale
+# allowance.
 
 # The worker runs in a fresh interpreter so ``sys.modules`` holds no copy of the
 # blocked packages: a finder that only intercepts *new* imports would otherwise
@@ -119,13 +118,14 @@ def test_ui_modules_import_without_db_or_llm_packages() -> None:
     crash-looped at boot with ModuleNotFoundError while every other gate
     passed.
 
-    ``_PENDING_STEP_7`` is a *staging* allowance, not a permanent one: the five
-    modules in it reach ``neo4j``/``elasticsearch`` through the four in-process
+    ``_PENDING_STEP_7`` is now empty: Step 7 replaced the four in-process
     bypasses (collab filter, ego filter, spotlight, and the ``layout`` import
-    that pulls all three page packages) which Step 7 replaces with HTTP calls.
-    Remove the set — and assert it is empty — in Step 7, the step that makes
-    that true.
+    that pulled all three page packages) with HTTP calls, so the full blocked
+    walk — including ``neo4j``/``elasticsearch`` — must pass with no exemptions.
+    The set is kept and asserted empty so a future UI module that reaches a
+    driver fails here rather than passing via a stale allowance.
     """
     failures = _walk_ui_with_packages_blocked()
     unexpected = sorted(set(failures) - _PENDING_STEP_7)
     assert not unexpected, unexpected
+    assert not _PENDING_STEP_7, _PENDING_STEP_7

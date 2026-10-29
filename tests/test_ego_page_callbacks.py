@@ -14,7 +14,6 @@ from dash import no_update
 from dash.exceptions import PreventUpdate
 
 from domain.collaboration.ego_metadata import cap_options_for
-from domain.collaboration.errors import CollaborationDataUnavailable
 from app.api.graph.v1.model import EgoNetworkResponse
 from domain.person_network_url import DEFAULT_MAX_COLLABORATORS
 from ui.pages.collaboration_network_ego.callbacks import filter as ego_filter
@@ -67,16 +66,33 @@ def _star_elements(spokes: int) -> list[dict[str, Any]]:
 
 
 def _stub_service(monkeypatch) -> dict[str, Any]:
-    """Replace the Neo4j-backed service with a recording stub."""
+    """Replace the HTTP client's transport with a recording stub.
+
+    Step 7 of plan 052 swapped the in-process ``get_ego_network`` call for
+    ``api_client.get_json``, so the seam to patch moved from the service to the
+    client. The captured values are read back out of the query params the call
+    site builds — ``person`` and ``max_collaborators`` — which is the same
+    information the old stub recorded, now on the wire.
+    """
     captured: dict[str, Any] = {}
 
-    def fake_get(focus_id: str, config: Any = None, max_collaborators: Any = None) -> EgoNetworkResponse:
-        captured["focus_id"] = focus_id
-        captured["max_collaborators"] = max_collaborators
-        return _response()
+    def fake_get(path: str, params: Any = None) -> dict[str, Any]:
+        captured["path"] = path
+        captured["params"] = params or {}
+        captured["focus_id"] = (params or {}).get("person")
+        captured["max_collaborators"] = int((params or {})["max_collaborators"])
+        return _response().model_dump()
 
-    monkeypatch.setattr(ego_filter, "get_ego_network", fake_get)
+    monkeypatch.setattr(ego_filter.api_client, "get_json", fake_get)
     return captured
+
+
+def _stub_raising(monkeypatch, exc: Exception) -> None:
+    """Make the HTTP client raise *exc* — the swap's failure-injection seam."""
+    def fake_get(*_args: Any, **_kwargs: Any) -> Any:
+        raise exc
+
+    monkeypatch.setattr(ego_filter.api_client, "get_json", fake_get)
 
 
 def test_parse_max_collaborators_defaults_when_absent():
@@ -143,10 +159,14 @@ def test_success_path_renders_no_summary_banner(monkeypatch):
 
 def test_error_path_still_renders_an_alert(monkeypatch):
     """Removing the summary must not remove the error feedback region."""
-    def boom(*_args: Any, **_kwargs: Any) -> EgoNetworkResponse:
-        raise ValueError("some genuinely invalid input")
+    # A 400 from the API maps through translate_api_error to ValueError, which
+    # is the same exception the raw service used to raise here.
+    from ui.api_client import ApiError
 
-    monkeypatch.setattr(ego_filter, "get_ego_network", boom)
+    _stub_raising(
+        monkeypatch,
+        ApiError(400, detail_error="Invalid collaboration configuration", message="bad"),
+    )
 
     result = ego_filter.load_ego_network(
         PERSON, "", PAGE, DEFAULT_MAX_COLLABORATORS, []
@@ -164,12 +184,18 @@ def test_no_collaborators_renders_a_warning_not_a_settings_error(monkeypatch):
     was told "one of the settings in the link is not a valid value". The two
     outcomes are now distinct exception types.
     """
-    def no_data(*_args: Any, **_kwargs: Any) -> EgoNetworkResponse:
-        raise CollaborationDataUnavailable(
-            "No collaborations found for person 'x' in this window."
-        )
+    from ui.api_client import ApiError
 
-    monkeypatch.setattr(ego_filter, "get_ego_network", no_data)
+    # The empty result now arrives as the API's 404; translate_api_error turns it
+    # back into the CollaborationDataUnavailable this handler catches.
+    _stub_raising(
+        monkeypatch,
+        ApiError(
+            404,
+            detail_error="No collaboration data",
+            message="No collaborations found for person 'x' in this window.",
+        ),
+    )
 
     result = ego_filter.load_ego_network(
         PERSON, "", PAGE, DEFAULT_MAX_COLLABORATORS, []
@@ -190,10 +216,12 @@ def test_no_collaborators_renders_a_warning_not_a_settings_error(monkeypatch):
 
 def test_no_collaborators_keeps_the_picker_prompt_hidden(monkeypatch):
     """A person *is* selected, so the "pick a person" prompt must stay hidden."""
-    def no_data(*_args: Any, **_kwargs: Any) -> EgoNetworkResponse:
-        raise CollaborationDataUnavailable("none")
+    from ui.api_client import ApiError
 
-    monkeypatch.setattr(ego_filter, "get_ego_network", no_data)
+    _stub_raising(
+        monkeypatch,
+        ApiError(404, detail_error="No collaboration data", message="none"),
+    )
 
     result = ego_filter.load_ego_network(
         PERSON, "", PAGE, DEFAULT_MAX_COLLABORATORS, []
@@ -208,10 +236,12 @@ def test_settings_error_keeps_the_settings_message(monkeypatch):
     Pins the other half of the split: a real ValueError still routes through
     ``describe_config_error``.
     """
-    def bad_config(*_args: Any, **_kwargs: Any) -> EgoNetworkResponse:
-        raise ValueError("boom")
+    from ui.api_client import ApiError
 
-    monkeypatch.setattr(ego_filter, "get_ego_network", bad_config)
+    _stub_raising(
+        monkeypatch,
+        ApiError(400, detail_error="Invalid collaboration configuration", message="boom"),
+    )
 
     result = ego_filter.load_ego_network(
         PERSON, "", PAGE, DEFAULT_MAX_COLLABORATORS, []
@@ -761,10 +791,12 @@ def test_fetch_callback_clears_the_overlay_when_it_completes(monkeypatch):
 
 def test_fetch_callback_clears_the_overlay_on_error(monkeypatch):
     """An error must lift the overlay too, or it would spin forever."""
-    def boom(*_args: Any, **_kwargs: Any) -> EgoNetworkResponse:
-        raise ValueError("bad settings")
+    from ui.api_client import ApiError
 
-    monkeypatch.setattr(ego_filter, "get_ego_network", boom)
+    _stub_raising(
+        monkeypatch,
+        ApiError(400, detail_error="Invalid collaboration configuration", message="bad"),
+    )
 
     result = ego_filter.load_ego_network(PERSON, "", PAGE, DEFAULT_MAX_COLLABORATORS, [])
     assert result[5] is False, "the overlay must clear on a settings error"

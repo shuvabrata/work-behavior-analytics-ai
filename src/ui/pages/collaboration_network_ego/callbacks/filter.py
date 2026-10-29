@@ -10,7 +10,9 @@ from dash.exceptions import PreventUpdate
 from domain.collaboration.config import CollaborationNetworkConfig, LAYER_ORDER
 from domain.collaboration.ego_metadata import cap_options_for
 from domain.collaboration.errors import CollaborationDataUnavailable
-from app.api.graph.v1.service import get_ego_network
+from ui import api_client
+from ui.api_client import ApiError
+from ui.collaboration_params import ego_query_params, translate_api_error
 from domain.person_network_url import (
     DEFAULT_MAX_COLLABORATORS,
     PERSON_NETWORK_PATH,
@@ -195,11 +197,25 @@ def load_ego_network(
         # try below; now it is a plain check, with the same banner and styles.
         return [], _EGO_LAYOUT, [_error_banner(" ".join(url_problems))], show, hide, False, cap_options, cap_update
 
+    # ``_ego_config_from_params`` returns a config with no problems or ``None``
+    # with one, so reaching here means *config* is non-None. The explicit guard
+    # makes that narrowing visible to the type checker (it cannot correlate the
+    # two tuple members) and cannot fire in practice.
+    if config is None:  # pragma: no cover - the url_problems branch above returns first
+        raise PreventUpdate
+
     logger.info(f"[EGO-PAGE] Loading ego network person={focus_id} search={search!r}")
 
     try:
-        data = get_ego_network(focus_id, config=config, max_collaborators=max_collaborators)
-        elements = data.elements
+        try:
+            data = api_client.get_json(
+                "/api/v1/graph/collaboration-network/ego",
+                params=ego_query_params(config, focus_id, max_collaborators),
+            )
+        except ApiError as exc:
+            translate_api_error(exc)  # raises CollaborationDataUnavailable / ValueError
+            raise
+        elements = data["elements"]
 
         if not elements:
             logger.warning("[EGO-PAGE] No elements returned")
@@ -207,7 +223,7 @@ def load_ego_network(
 
         logger.info(
             f"[EGO-PAGE] SUCCESS — {len(elements)} elements, "
-            f"{data.shown_collaborators}/{data.total_collaborators} collaborators"
+            f"{data['shown_collaborators']}/{data['total_collaborators']} collaborators"
         )
 
         # No summary banner on this page: the focus person, lookback window and

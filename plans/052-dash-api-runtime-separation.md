@@ -1914,9 +1914,16 @@ SEEDED_CONFIGS: list[CollaborationNetworkConfig] = [
     # one the comparison never exercises the branch the swaps can silently
     # break (see 7d-i): the API answers 404 here, the in-process call raises
     # CollaborationDataUnavailable, and both must keep producing the same
-    # *kind* of outcome. lookback_days=1 is the cheapest way to guarantee no
-    # records on a stack whose data is older than a day.
-    CollaborationNetworkConfig(lookback_days=1),
+    # *kind* of outcome.
+    #
+    # `min_pair_score` set above every real edge weight, NOT `lookback_days=1`.
+    # lookback_days=1 was the original choice and it DOES NOT WORK on this
+    # stack: measured live, it returns 200 with 7 elements (recent activity
+    # exists inside a 1-day window), so the leg would report `kind == "data"` on
+    # both sides and silently stop covering the 404 branch — the leg would be
+    # vacuous, and 7c's own verify catches that only after the run. A
+    # min_pair_score no edge can reach empties the graph on any window.
+    CollaborationNetworkConfig(min_pair_score=999999.0),
 ]
 
 # The INVALID-CONFIG path: the API answers 400, the in-process call raises
@@ -1924,7 +1931,17 @@ SEEDED_CONFIGS: list[CollaborationNetworkConfig] = [
 # naive swap turns this into "An unexpected error occurred.". Sent as raw query
 # values, not through the serializer, because from_query_values would reject it
 # before it left the client — and the point is to reach the server with it.
-INVALID_ORG_PARAMS = {"lookback_days": "0", "min_pair_score": "-1"}
+#
+# Use a BAD LAYER NAME, not an out-of-range number. Measured live:
+# {"lookback_days": "0", "min_pair_score": "-1"} is rejected by FastAPI's own
+# Query(ge=…) validation as **422 with a list detail**, before the handler ever
+# runs — so the HTTP leg never reaches the 400 branch, and 7c's expected-400
+# assertion would fail (or, worse, an executor "fixes" it by accepting 422 and
+# the mapping ships untested against the real 400). A layer name is a plain
+# string with no Query bound, so it reaches `from_query_values`, raises inside
+# the handler's try, and the router maps it to 400 with a dict detail:
+#   in-process -> ValidationError   |   HTTP -> 400 {"error": "Invalid collaboration configuration"}
+INVALID_ORG_PARAMS = {"layers": "nonexistent"}
 
 # Ego boundaries only. max_collaborators is ge=1/le=500 in the endpoint
 # (router.py:345-349) while the UI has its own cap_options_for — two bound
@@ -1936,7 +1953,24 @@ EGO_MAX_COLLABORATORS = [1, 25, 500]
 # the case the in-process call handled and a naive unscoped swap would silently
 # drop. The 7c verify block asserts the >20 case actually occurs — without it the
 # comparison cannot distinguish scoped from unscoped, and the leg proves nothing.
-SPOTLIGHT_QUERIES = ["review", "issue", "urgent", "a"]
+#
+# MEASURED ON THE LIVE STACK, and the original list does not work. The canvas is
+# Person-only (its node ids are `github::Person::<login>`), and a scoped search
+# intersects on `wba_id`, so a query only matches if a *Person* document in ES
+# contains it. Measured matches against the 226-node canvas:
+#
+#   "review" -> 0    "issue" -> 0    "urgent" -> 0    "a" -> 0
+#   "bot"    -> 2    "shuva" -> 0    "smith" -> 1     "o" -> 1
+#   "github" -> 223  <-- the >20 case
+#
+# The three keyword queries match Commit/Issue documents, never Person ones, so
+# with the original list the >20 assertion is unsatisfiable and 7c STOPS. "github"
+# is the query that works because the canvas wba_ids are `github::Person::…`, and
+# it is also exactly the discriminating case: unscoped `GET /search?q=github`
+# returns total=2442 (100 on the first page, clipped by page_size), so a naive
+# unscoped swap would highlight 100 of 226 nodes while the scoped call highlights
+# 223 — a difference this leg detects and a small-match query would not.
+SPOTLIGHT_QUERIES = ["github", "bot", "o"]
 
 
 def canonical(payload: dict) -> dict:
@@ -2079,6 +2113,23 @@ identical in form, and must not be compared as if they were** — the two legs
 legitimately express the same outcome differently (a raised type vs a status
 code).
 
+**All three failure triggers below are measured against the live stack, and two
+of them were wrong as originally written** — see the comments on `SEEDED_CONFIGS`
+and `INVALID_ORG_PARAMS`. In short: `lookback_days=1` returns data (200), and
+out-of-range numbers fail FastAPI's `Query(ge=…)` validation as **422 with a list
+detail** before the handler runs. The corrected forms raise *inside* the handler's
+`try`, which is the only way to reach the 404/400 branches 7d-i maps:
+
+| Leg | Trigger | In-process | HTTP |
+|---|---|---|---|
+| `org_7` | `min_pair_score=999999.0` | `CollaborationDataUnavailable` | `404` |
+| `ego_unknown_person` | `person:does-not-exist-00000000` | `CollaborationDataUnavailable` | `404` |
+| `org_invalid` | `layers=nonexistent` | `ValidationError` | `400` |
+
+All four rows were confirmed on the live stack before dispatch. If a leg reports
+`kind == "data"` in your run, the trigger is wrong — do not "fix" it by relaxing
+the assertion.
+
 **What these legs do and do not prove.** They establish the *contract 7d-i
 targets*: that the endpoint really does answer 404 where the in-process function
 raises `CollaborationDataUnavailable`, and 400 where it raises a validation error.
@@ -2092,10 +2143,16 @@ construction. **The guard for the mapping is the unit test in 7d-iii below**,
 which stubs the transport and asserts the exception type directly.
 
 **Sanity-check the numbers before trusting the file.** On the live stack
-`org_0.in_process.payload` must show `element_count` **5041**,
-`stats["num_people"]` **223**, `stats["num_pairs"]` **4818**. `element_count` is
-nodes **plus** edges — it is *not* `num_people`. If the counts are far off, the
-script is wrong and the comparison would prove nothing.
+`org_0.in_process.payload` must show `element_count` **5062**,
+`stats["num_people"]` **226**, `stats["num_pairs"]` **4836** (re-measured
+2026-10-29; the plan originally said 5041/223/4818 and the producers have since
+ingested more data). `element_count` is nodes **plus** edges — it is *not*
+`num_people`. If the counts are far off, the script is wrong and the comparison
+would prove nothing. **Treat these as a shape check, not a magic constant**: the
+live numbers drift as producers run, and `before == after` on the same run is
+what the gate actually rests on. If the two runs disagree with each other, that
+is the failure; if both agree and differ from the figures above, that is data
+growth, not a defect.
 
 **Sanity-check the failure legs too, or 7d-i's whole reason for existing goes
 unchecked.** `org_7`, `org_invalid` and `ego_unknown_person` must each read
@@ -2122,7 +2179,7 @@ Re-run `docker compose ps` and confirm `neo4j` is healthy first, or the sanity
 numbers below will be off for a reason unrelated to the swap.
 
 **Verify (7c)**: `PYTHONPATH=src python scripts/capture_ui_baseline.py` → exit 0
-**Verify (7c)**: `python -c "import json;d=json.load(open('scripts/ui_baseline.json'));p=d['org_0']['in_process']['payload'];print(p['element_count'], p['stats']['num_people'])"` → `5041 223`
+**Verify (7c)**: `python -c "import json;d=json.load(open('scripts/ui_baseline.json'));p=d['org_0']['in_process']['payload'];print(p['element_count'], p['stats']['num_people'])"` → `5062 226` (re-measured 2026-10-29). The precise figures drift as producers ingest; what matters is that the number is in the low thousands and **identical across the before/after runs**. If it differs by more than a handful between runs, that is data growth during the window, and the `before == after` comparison must be re-run rather than reinterpreted.
 **Verify (7c)**: `python -c "import json;d=json.load(open('scripts/ui_baseline.json'));m=max(len(v['in_process']) for k,v in d.items() if k.startswith('spotlight_'));assert m>20, f'no spotlight query matched >20 canvas nodes (max {m})'"` → exit 0. Without a >20-match query the spotlight leg cannot distinguish scoped from unscoped, so it proves nothing — pick different queries rather than proceeding.
 **Verify (7c)**: **the canvas is large enough to have broken a GET.** This is a separate constraint from the match count above, and it is the one that matters for the transport choice:
 ```bash
@@ -2131,7 +2188,7 @@ import json
 d = json.load(open('scripts/ui_baseline.json'))
 # Re-derive the canvas size the script actually used.
 n = len(d['org_0']['in_process']['payload']['node_ids'])
-assert n >= 223, f'canvas only {n} nodes — too small to distinguish GET from POST'
+assert n >= 223, f'canvas only {n} nodes — too small to distinguish GET from POST'  # measured 226 on 2026-10-29
 print('canvas nodes:', n)
 "
 ```
@@ -2496,7 +2553,11 @@ reaches a driver fails this test rather than passing via a stale allowance.
 >    function already disagreed, and the before/after comparison is meaningless.
 > 4. The two summaries are **identical**, not merely "close" — same node ids, same
 >    edge set, same stats, same element count, same matched-ID sets. The sanity
->    numbers are `5041` elements / `223` people / `4818` pairs for `org_0`.
+>    numbers for `org_0` were `5062` elements / `226` people / `4836` pairs when
+>    this plan was last checked (2026-10-29); **the exact figures drift as the
+>    producers ingest, so compare the two runs against each other, not against
+>    these constants.** A large numeric drift is data growth; a *difference
+>    between the two runs* is the defect this gate exists to catch.
 > 5. If they differ, the number of differing elements is reported. **Do not accept
 >    "the difference is small"** — a lossy param translation is exactly the bug
 >    this gate exists to catch.
@@ -3354,7 +3415,7 @@ Mark each cell as you go. `⬜` not started · `🔄` in progress · `✅` passe
 |------|-----------------|------------------|-------------|--------|
 | 5  | `src/app/dash_app/` → `src/ui/`; `api_main.py` + `ui_main.py` created; Flask request logging ported; `main.py` reduced to a **temporary composition**. `routes_pathname_prefix` stays **unset** — Step 8's edit | suite green, no `app.dash_app` remains, no `a2wsgi` outside `main.py`, `main.py` still imports, no `routes_pathname_prefix`, `/app/` **and** `/app/chat` both `200`, `mypy` | Operator confirms the prefix is **absent** (the mount strips `/app`), `main.py` **not** deleted, `ui_main` imports no FastAPI/DB/transport, and the rebuilt stack still serves `/app` | ✅ passed — operator confirmed 2026-10-29 (browser + dual-logging check); reviewer re-ran all automated verify. Carries four extras: `Dockerfile.app` `COPY src/ui/` + `COPY src/ui_main.py` (authorized, same defect class as the Phase 1 addendum), `mypy.ini` `[mypy-app.dash_app.*]` → `[mypy-ui.*]`, and two moved-symbol call sites (`api/settings/v1/service.py`, `scripts/render_activity_cards.py`) |
 | 6  | 12 import-time constants → function-local reads + regression test; **DB-free `UISettings` / `ui.runtime_settings` / `domain.timezone` so the UI stops importing `app.runtime_settings`, `app.common.timezone` and `app.settings`** (25 files — without this the UI container cannot boot); `CONNECTOR_SCAN_POLL_INTERVAL` on `UISettings`; MCP env table from `GET /api/v1/settings/`; `NEO4J_URI` message fixed | both new tests pass **and fail on mutation**; the three old imports gone from `src/ui/`; `_PENDING_STEP_7` names exactly the five bypass-reached modules; grep gates | Operator **runs both mutations**; `test_ui_isolation.py` blocks real package names and its allowlist is exactly the five; `domain/` imports nothing from `app.*`/`ui.*`; `/app/chat` renders (it uses the timezone helpers) | ✅ passed — reviewer re-ran all gates (2344 passed / mypy 0 / pylint 9.67 / bandit 0 / 4 greps clean / isolation test 1 pass / `/app/` + `/app/chat` 200). Two review-round-1 fixes landed: **non-destructive cache seed** (was clobbering 7 API fields with code defaults) and **TTL-bounded `refresh_if_stale`** (was dead code). 4 new guard tests. Operator confirmed 2026-10-29 (browser: `/app/chat` timestamps + the Connectors→GitHub MCP env rows). |
-| 7  | Collab + ego + spotlight bypasses → HTTP, **one baseline captured before any swap**; new **`POST /search/scoped`** (a GET would 414 on the 223-id canvas — 10,438-byte request line vs an 8 KB header buffer); `src/ui/api_client.py` created with the status→exception mapping (7d-i) so the collab empty/invalid banners survive; **`_PENDING_STEP_7` drained to empty and asserted** | before/after identities hold, **including the empty-result and invalid-config legs**; status-mapping unit test passes **and fails on mutation**; scoped route is a POST and returns 200 for a 223-id body; the canvas check printed ≥223 nodes; `pytest tests/test_ui_isolation.py -q` passes with an empty `_PENDING_STEP_7`; script deleted, both permanent tests kept | Operator confirms the baseline predates every swap, every data leg matches exactly, every error leg errored on both sides, the no-data banners still render, spotlight works **with a full 200+ node canvas** in the browser, and **`_PENDING_STEP_7` is empty with the assert in place** | ⬜ |
+| 7  | Collab + ego + spotlight bypasses → HTTP, **one baseline captured before any swap**; new **`POST /search/scoped`** (a GET would 414 on the 223-id canvas — 10,438-byte request line vs an 8 KB header buffer); `src/ui/api_client.py` created with the status→exception mapping (7d-i) so the collab empty/invalid banners survive; **`_PENDING_STEP_7` drained to empty and asserted** | before/after identities hold, **including the empty-result and invalid-config legs**; status-mapping unit test passes **and fails on mutation**; scoped route is a POST and returns 200 for a 223-id body; the canvas check printed ≥223 nodes; `pytest tests/test_ui_isolation.py -q` passes with an empty `_PENDING_STEP_7`; script deleted, both permanent tests kept | Operator confirms the baseline predates every swap, every data leg matches exactly, every error leg errored on both sides, the no-data banners still render, spotlight works **with a full 200+ node canvas** in the browser, and **`_PENDING_STEP_7` is empty with the assert in place** | 🔄 automated verify re-run by reviewer and green (2365 passed / mypy 0 / pylint 9.67 / bandit 0 / `_PENDING_STEP_7 = set()` + isolation pass / `/app/` + `/app/chat` 200); before==after byte-identical; all 3 mutations non-vacuous; test-seam rewrites re-verified non-vacuous; spotlight proven HTTP (broke on a dead API base) and drove the live POST route to "235 of 238 nodes match". **Awaiting operator manual gate** |
 
 **Phase 3 — go live**
 

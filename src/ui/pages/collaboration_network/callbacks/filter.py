@@ -9,7 +9,9 @@ from dash.exceptions import PreventUpdate
 
 from domain.collaboration.config import CollaborationNetworkConfig, LAYER_ORDER
 from domain.collaboration.errors import CollaborationDataUnavailable
-from app.api.graph.v1.service import get_collaboration_network
+from ui import api_client
+from ui.api_client import ApiError
+from ui.collaboration_params import config_to_query_params, translate_api_error
 from ui.components.common import (
     create_alert,
     describe_config_error,
@@ -85,14 +87,21 @@ def load_collaboration_network(search: str | None, pathname: str | None) -> tupl
         }
         config = CollaborationNetworkConfig.from_query_values(query_dict)
 
-        data = get_collaboration_network(config=config)
-        elements = data.elements
+        try:
+            data = api_client.get_json(
+                "/api/v1/graph/collaboration-network",
+                params=config_to_query_params(config),
+            )
+        except ApiError as exc:
+            translate_api_error(exc)  # raises CollaborationDataUnavailable / ValueError
+            raise
+        elements = data["elements"]
 
         if not elements:
             logger.warning("[COLLAB-PAGE] No elements returned")
             return [], _COLLABORATION_LAYOUT, [], hide, {**empty_state_style, "display": "block"}, False
 
-        applied_config = data.config or {}
+        applied_config = data.get("config") or {}
         lookback_days  = applied_config.get("lookback_days", 90)
         top_n          = applied_config.get("top_n_edges_per_node", 0)
         layer_count    = len(applied_config.get("enabled_layers", []))
@@ -101,10 +110,10 @@ def load_collaboration_network(search: str | None, pathname: str | None) -> tupl
             [
                 html.Strong("Org Collaboration Network"),
                 html.Span(f"  \u2014  Last {lookback_days} days  "),
-                dbc.Badge(f"{data.num_people} people",                color="primary",   className="me-1"),
-                dbc.Badge(f"{data.num_pairs} pairs",                  color="secondary", className="me-1"),
-                dbc.Badge(f"{data.num_communities} communities",       color="success",   className="me-1"),
-                dbc.Badge(f"modularity {data.modularity:.3f}",        color="info",      className="me-1"),
+                dbc.Badge(f"{data['num_people']} people",             color="primary",   className="me-1"),
+                dbc.Badge(f"{data['num_pairs']} pairs",               color="secondary", className="me-1"),
+                dbc.Badge(f"{data['num_communities']} communities",    color="success",   className="me-1"),
+                dbc.Badge(f"modularity {data['modularity']:.3f}",     color="info",      className="me-1"),
                 dbc.Badge(f"{layer_count} layers",                    color="dark",      className="me-1"),
                 dbc.Badge("Top-N off" if top_n <= 0 else f"top {top_n}/node", color="warning"),
             ],
@@ -114,8 +123,8 @@ def load_collaboration_network(search: str | None, pathname: str | None) -> tupl
         )
 
         logger.info(
-            f"[COLLAB-PAGE] SUCCESS — {len(elements)} elements, {data.num_people} people, {data.num_communities} "
-            f"communities, modularity={data.modularity:.3f}"
+            f"[COLLAB-PAGE] SUCCESS — {len(elements)} elements, {data['num_people']} people, {data['num_communities']} "
+            f"communities, modularity={data['modularity']:.3f}"
         )
 
         return elements, _COLLABORATION_LAYOUT, [banner_content], {**show, "flex": "1"}, hide, False

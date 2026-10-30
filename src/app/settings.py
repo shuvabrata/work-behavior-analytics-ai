@@ -62,6 +62,13 @@ class ApiSettings(UISettings):
     # Connector encryption
     CONNECTOR_ENCRYPTION_KEY: str = ""
 
+    # Keycloak client secrets. Confidential-client credentials: only the API
+    # runtime exchanges them for tokens (plans 054/056). They must never sit on
+    # ``UISettings``, which ``src/ui/settings.py`` instantiates bare — a secret
+    # there would be resident in the UI process's memory for no purpose.
+    KEYCLOAK_CLIENT_SECRET: str = ""
+    KEYCLOAK_SERVICE_CLIENT_SECRET: str = ""
+
     # Connector / Producer configuration
     COMMIT_DAYS_LIMIT: int = 60
     PULL_REQUEST_DAYS_LIMIT: int = 60

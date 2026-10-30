@@ -587,8 +587,9 @@ where they are user-tunable, and as startup-only `Settings` fields where they ar
 | `KEYCLOAK_ISSUER` | startup-only | Public issuer URL; must match the `iss` claim exactly |
 | `KEYCLOAK_REALM` | startup-only | Realm name (`wba`) |
 | `KEYCLOAK_CLIENT_ID` | startup-only | `wba-web` |
-| `KEYCLOAK_CLIENT_SECRET` | startup-only, sensitive | Confidential client secret |
-| `KEYCLOAK_SERVICE_CLIENT_ID` / `_SECRET` | startup-only, sensitive | `wba-internal` credentials for producers/consumer |
+| `KEYCLOAK_CLIENT_SECRET` | startup-only, sensitive, **`ApiSettings` only** | Confidential client secret |
+| `KEYCLOAK_SERVICE_CLIENT_ID` | startup-only | `wba-internal` |
+| `KEYCLOAK_SERVICE_CLIENT_SECRET` | startup-only, sensitive, **`ApiSettings` only** | `wba-internal` credential for producers/consumer |
 | `AUTH_COOKIE_SECURE` | startup-only | `Secure` flag; **must** be true wherever TLS terminates |
 | `AUTH_SESSION_IDLE_MINUTES` | runtime-tunable | Idle timeout enforced by the application |
 | `AUTH_SESSION_MAX_HOURS` | runtime-tunable | Absolute session cap |

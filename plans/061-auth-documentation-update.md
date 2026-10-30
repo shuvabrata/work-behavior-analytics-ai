@@ -249,6 +249,16 @@ the dev seed passwords `DEV_ADMIN_PASSWORD` / `DEV_USER_PASSWORD` — with one
 sentence on the `KEYCLOAK_ISSUER` vs `KEYCLOAK_INTERNAL_URL` distinction, since
 that is the single most error-prone setting.
 
+State which settings class owns each variable, because the split is deliberate
+and non-obvious: `KEYCLOAK_CLIENT_SECRET` and `KEYCLOAK_SERVICE_CLIENT_SECRET`
+are on **`ApiSettings`** (`src/app/settings.py`); every other `KEYCLOAK_*` /
+`AUTH_*` / `APP_PUBLIC_BASE_URL` field is on **`UISettings`**
+(`src/domain/settings.py`), which the UI runtime instantiates bare. The secrets
+are API-only because no UI-side code ever exchanges them — the browser client's
+token exchange is an API endpoint, and producers read the service secret from the
+environment. A secret on `UISettings` would sit in the UI process's memory for no
+purpose.
+
 Also add, under "Repo conventions" or the Architecture section, a short note:
 
 > **`/api/v1` requires a bearer token.** Exactly two endpoints accept the session

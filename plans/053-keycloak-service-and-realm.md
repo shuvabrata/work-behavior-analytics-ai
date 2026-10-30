@@ -148,7 +148,9 @@ store on any machine that ran `mkcert -install`.
 - `deploy/keycloak/keycloak.env.example` (create) — documents `DEV_ADMIN_PASSWORD` / `DEV_USER_PASSWORD`.
 - `deploy/postgres/init-keycloak.sql` (create) — creates the `keycloak` role + DB on a **fresh** volume.
 - `deploy/nginx/nginx.conf` — replace the reserved block with the real one.
-- `src/domain/settings.py` — add the `KEYCLOAK_*` and `AUTH_*` settings fields.
+- `src/domain/settings.py` — add the non-secret `KEYCLOAK_*` and `AUTH_*` settings
+  fields (including both client **IDs**).
+- `src/app/settings.py` — add the two client **secrets** to `ApiSettings`.
 - `.env.example` — document the new variables.
 - `docs/design/authn-authz-design.md` — **only** the "Issuer URL" open item
   (Step 7) and the "Production checklist" subsection (Step 8).
@@ -190,13 +192,15 @@ URL and cookie flags, and the API validates tokens.
     KEYCLOAK_REALM: str = "wba"
 
     # `wba-web` — the confidential browser client used by the BFF.
+    # The ID is not a secret and is safe on the UI runtime; the SECRET is not
+    # here — it lives on `ApiSettings` in `src/app/settings.py`. See the note
+    # below the block.
     KEYCLOAK_CLIENT_ID: str = "wba-web"
-    KEYCLOAK_CLIENT_SECRET: str = ""
 
     # `wba-internal` — the service-account client used by producers and the
     # signal consumer (client-credentials grant). Plan 055 consumes these.
+    # Same split as above: the ID is here, the SECRET is on `ApiSettings`.
     KEYCLOAK_SERVICE_CLIENT_ID: str = "wba-internal"
-    KEYCLOAK_SERVICE_CLIENT_SECRET: str = ""
 
     # `Secure` flag on the session cookie. MUST be true wherever TLS
     # terminates (it does: nginx). Set false ONLY for a plain-HTTP local run.
@@ -211,11 +215,31 @@ URL and cookie flags, and the API validates tokens.
 Use `Field(default=..., ge=...)` if a bound is natural; the repo already imports
 `Field` in this module for `RECENT_ACTIONS_LIMIT`.
 
-**Do not** add `KEYCLOAK_CLIENT_SECRET` or the service secret to `UISettings`
-if you judge that a secret must not sit in the UI runtime — but note the
-consequence before deciding: the UI **never** uses them (the token exchange is
-an API endpoint, plan 056), so they are harmless here and keeping one settings
-class avoids a second source of truth. Leave them in `UISettings`.
+**The two client secrets go on `ApiSettings`, not here.** Add them to
+`src/app/settings.py` in the `ApiSettings` body, next to `CONNECTOR_ENCRYPTION_KEY`:
+
+```python
+    # Keycloak client secrets. Confidential-client credentials: only the API
+    # runtime exchanges them for tokens (plans 054/056). They must never sit on
+    # ``UISettings``, which ``src/ui/settings.py`` instantiates bare — a secret
+    # there would be resident in the UI process's memory for no purpose.
+    KEYCLOAK_CLIENT_SECRET: str = ""
+    KEYCLOAK_SERVICE_CLIENT_SECRET: str = ""
+```
+
+This is the operator's decision, and it follows `src/ui/settings.py`'s own
+docstring ("Anything the UI needs that is not on `UISettings` must come from the
+API over HTTP, not from here"). It is safe because **no UI-side code reads either
+secret**: the browser client's token exchange is an API endpoint (plan 056's
+`complete_login` / refresh, both in `src/app/api/auth/v1/service.py`), plan 055
+reads the service secret from `os.environ` rather than from settings, and plan
+056's UI guard explicitly does not validate the session. The client **IDs** stay
+on `UISettings` — they are not secrets, and plan 054 needs `KEYCLOAK_CLIENT_ID`
+for the audience check.
+
+Consequence to be aware of: `KEYCLOAK_CLIENT_SECRET` and
+`KEYCLOAK_SERVICE_CLIENT_SECRET` are then reachable only as
+`app.settings.settings.<NAME>`, never `ui.settings.settings.<NAME>`.
 
 Add one more field, so the issuer is never silently inconsistent with the app's
 own public URL:
@@ -263,14 +287,70 @@ the issuer invariant attached. In practice a deployment sets
 **Verify**: `python -c "import sys; sys.path.insert(0,'src'); from domain.settings import UISettings; s=UISettings(); print(s.KEYCLOAK_ISSUER, s.KEYCLOAK_INTERNAL_URL, s.AUTH_COOKIE_SECURE, s.APP_PUBLIC_BASE_URL)"` → prints `https://localhost/auth/realms/wba http://keycloak:8080/auth/realms/wba True https://localhost`
 **Verify** (mismatch is rejected): `python -c "import sys; sys.path.insert(0,'src'); from domain.settings import UISettings; UISettings(APP_PUBLIC_BASE_URL='https://prod.example.com')"` → raises `ValidationError` mentioning `KEYCLOAK_ISSUER`
 **Verify** (a matched production pair is accepted): `python -c "import sys; sys.path.insert(0,'src'); from domain.settings import UISettings; s=UISettings(APP_PUBLIC_BASE_URL='https://wba.example.com', KEYCLOAK_ISSUER='https://wba.example.com/auth/realms/wba', AUTH_COOKIE_SECURE=True); print('ok')"` → `ok`
-**Verify**: `mypy src/domain/settings.py` → exit 0
+**Verify** (the secrets are NOT on the UI runtime):
+```bash
+PYTHONPATH=src python -c "
+from domain.settings import UISettings
+from app.settings import ApiSettings
+for name in ('KEYCLOAK_CLIENT_SECRET', 'KEYCLOAK_SERVICE_CLIENT_SECRET'):
+    assert name not in UISettings.model_fields, name
+    assert name in ApiSettings.model_fields, name
+for name in ('KEYCLOAK_CLIENT_ID', 'KEYCLOAK_SERVICE_CLIENT_ID', 'KEYCLOAK_ISSUER',
+             'KEYCLOAK_INTERNAL_URL', 'APP_PUBLIC_BASE_URL', 'AUTH_COOKIE_SECURE'):
+    assert name in UISettings.model_fields, name
+print('ok')"
+```
+→ prints `ok`. This is the check that makes the secret split enforced rather than
+a convention: it fails if either secret is ever re-added to `UISettings`.
+
+**Verify** (the UI runtime constructs cleanly without a database):
+`PYTHONPATH=src python -c "from ui.settings import settings; print('ui ok')"` → `ui ok`
+**Verify**: `mypy src/domain/settings.py src/app/settings.py` → exit 0
 **Verify**: `pytest -m unit tests -q` → same pass count as before this step
 
 > ### 🚦 MANUAL GATE 1 — settings
 >
-> Operator verifies: the three values print as above, and the new fields are on
-> `UISettings` (not `ApiSettings`), so the API inherits them without duplication.
+> Operator verifies: the three values print as above, the non-secret fields are on
+> `UISettings` (so the API inherits them without duplication), and **the two client
+> secrets are on `ApiSettings` only** — never on `UISettings`.
 > Wait for `PASS`.
+
+#### Gate 1 record — 2026-10-30 — AWAITING OPERATOR PASS
+
+Executed in the live working tree on `feature/plan-c-keycloak`, uncommitted.
+
+Diff: `src/domain/settings.py` **+59 / −1** (the one deletion is the `from pydantic
+import ...` line gaining `model_validator`) and `src/app/settings.py` **+7 / −0**.
+Purely additive; no existing field, value or behaviour changed.
+
+| Check | Command | Observed |
+|---|---|---|
+| V1 defaults | `python -c "... UISettings() ..."` | `https://localhost/auth/realms/wba http://keycloak:8080/auth/realms/wba True https://localhost` — exact match |
+| V2 mismatch rejected | `UISettings(APP_PUBLIC_BASE_URL='https://prod.example.com')` | `ValidationError`; message contains `KEYCLOAK_ISSUER` |
+| V3 matched prod pair | `UISettings(APP_PUBLIC_BASE_URL='https://wba.example.com', KEYCLOAK_ISSUER='https://wba.example.com/auth/realms/wba')` | `ok` |
+| V4 typecheck | `mypy src/domain/settings.py src/app/settings.py` | `Success: no issues found in 2 source files` (exit 0) |
+| V5 regression | `pytest -m unit tests -q` | **2391 passed, 2 skipped, 750 deselected** (exit 0) — unchanged from the planning-time count |
+| **V6 secret split** | assert both secrets absent from `UISettings.model_fields` and present on `ApiSettings.model_fields`; six ID/URL fields present on `UISettings` | `ok` |
+| V7 UI runtime | `from ui.settings import settings` | `ui ok` — constructs with no database, no secret |
+| V8 API runtime | `ApiSettings().KEYCLOAK_CLIENT_SECRET == ''` | `True` |
+| Validator edges (reviewer probes) | matched-but-different origin (`https://localhost.evil.com` pair) | accepted — a legitimately different deployment origin, not a spoof |
+| | `APP_PUBLIC_BASE_URL='https://local'` (prefix spoof) | rejected |
+| | scheme downgrade (`http://localhost` + `https://…` issuer) | rejected |
+| | trailing slash on the base (`https://localhost/`) | accepted — `rstrip("/")` handles it |
+| Independent consumer sweep | `grep -rn 'KEYCLOAK_CLIENT_SECRET\|KEYCLOAK_SERVICE_CLIENT_SECRET' src/ tests/ scripts/` | only the two field **declarations** in `src/app/settings.py:69-70`; no code reads them from `ui.settings` |
+
+**Secret split (operator decision, 2026-10-30).** `KEYCLOAK_CLIENT_SECRET` and
+`KEYCLOAK_SERVICE_CLIENT_SECRET` are on `ApiSettings` only. The client **IDs**
+stay on `UISettings` (not secrets; plan 054 needs `KEYCLOAK_CLIENT_ID` for the
+audience check). Verified safe because no UI-side code exchanges either secret:
+plan 056's `client_secret` reads are both in API service functions, its UI guard
+explicitly does not validate the session, and plan 055 reads the service secret
+from `os.environ`.
+
+**Scope**: `git status --porcelain` shows ` M src/domain/settings.py` and
+` M src/app/settings.py` from this step. (The ` M docs/design/...` and
+` M plans/...` entries are the reviewer's own plan/doc edits, not the executor's.)
+Nothing committed. No file outside Step 1's in-scope list was touched.
 
 ---
 

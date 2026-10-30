@@ -117,6 +117,22 @@ generate_fernet_key() {
     python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())" 2>/dev/null
 }
 
+# ── Generate a random secret for a Keycloak credential ──────────────────────
+# Prefers openssl, falls back to python3, then to /dev/urandom. Prints the
+# value, or nothing on total failure (the caller reports that).
+generate_secret() {
+    if command -v openssl &>/dev/null; then
+        openssl rand -base64 24 2>/dev/null && return 0
+    fi
+    if command -v python3 &>/dev/null; then
+        python3 -c "import secrets,base64; print(base64.b64encode(secrets.token_bytes(24)).decode())" 2>/dev/null && return 0
+    fi
+    if [[ -r /dev/urandom ]]; then
+        head -c 24 /dev/urandom | base64 2>/dev/null && return 0
+    fi
+    return 1
+}
+
 # ── Create / reset .env ─────────────────────────────────────────────────────
 if $RESET_ENV; then
     cp "$ENV_EXAMPLE" "$ENV_FILE"
@@ -298,6 +314,40 @@ else
     info "Encryption key already set — preserving it"
 fi
 
+# ── Keycloak credentials ────────────────────────────────────────────────────
+# All five are generated, never prompted: they are secrets the operator has no
+# reason to choose, and generating them keeps every one out of git (none has a
+# default in docker-compose.yml). Same idempotent pattern as the encryption
+# key — a re-run must NOT rotate these, because KEYCLOAK_DB_PASSWORD is the
+# password of an already-created Postgres role, and the client secrets are
+# baked into the imported realm. Rotating them here would silently desync the
+# database and the realm from .env.
+echo ""
+info "Keycloak credentials (generated)"
+
+KEYCLOAK_SECRET_KEYS=(
+    "KEYCLOAK_DB_PASSWORD"
+    "KEYCLOAK_CLIENT_SECRET"
+    "KEYCLOAK_SERVICE_CLIENT_SECRET"
+    "DEV_ADMIN_PASSWORD"
+    "DEV_USER_PASSWORD"
+)
+
+for KEY in "${KEYCLOAK_SECRET_KEYS[@]}"; do
+    if is_placeholder "$(get_env_value "$KEY" "$ENV_FILE")"; then
+        SECRET_VALUE="$(generate_secret)" || SECRET_VALUE=""
+        if [[ -z "$SECRET_VALUE" ]]; then
+            error "Failed to generate a value for ${KEY}."
+            error "Install openssl, or ensure python3 is available."
+            exit 1
+        fi
+        set_env_value "$KEY" "$SECRET_VALUE" "$ENV_FILE"
+        success "${KEY} generated"
+    else
+        info "${KEY} already set — preserving it"
+    fi
+done
+
 # ── Optional prompts ────────────────────────────────────────────────────────
 heading "Optional settings"
 
@@ -347,6 +397,7 @@ echo "    • Neo4j:          ${NEO4J_USER} / ${NEO4J_PASS}  (bolt://neo4j:7687)
 echo "    • RabbitMQ:       ${RABBIT_USER} / ${RABBIT_PASS}      (mgmt UI: http://localhost:15672)"
 echo "    • LLM model:      ${LLM_MODEL_VAL}"
 echo "    • Encryption key: auto-generated"
+echo "    • Keycloak:       5 credentials auto-generated"
 echo ""
 
 # ── Offer to start ──────────────────────────────────────────────────────────

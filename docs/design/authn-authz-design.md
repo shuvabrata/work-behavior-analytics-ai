@@ -532,9 +532,6 @@ network and credential hardening, which is a different discipline:
 
 ### 3. Other exposures → Plan E
 
-- **`GET /docs`, `/redoc`, `/openapi.json`** — FastAPI defaults, exposed because `FastAPI(...)`
-  is constructed with no `docs_url`/`redoc_url`/`openapi_url` overrides (`src/app/main.py:155`).
-  They publish the complete API schema.
 - **`scripts/temp_stream_server.py`** — a standalone FastAPI app binding `0.0.0.0:8001` with no
   auth, reaching `stream_chat` and streaming metrics. Its own docstring says "DO NOT use this
   server in production", but nothing enforces that.
@@ -543,9 +540,40 @@ network and credential hardening, which is a different discipline:
 
 30 `clientside_callback` registrations exist across the Dash app. All but one manipulate the DOM,
 Cytoscape, or theme classes and fetch no data. The single exception is
-`assets/stream-bridge.js:215`, which calls `/api/v1/chats/{id}/stream` directly from the browser
+`src/ui/assets/stream-bridge.js:215`, which calls `/api/v1/chats/{id}/stream` directly from the browser
 and must be re-pointed at the Dash proxy route described in
 [Dash Integration](#dash-integration-bff).
+
+### 5. Deliberately public — the API documentation routes
+
+`GET /docs`, `/redoc` and `/openapi.json` are **intentionally served without authentication**.
+nginx proxies all three to the API upstream (`deploy/nginx/nginx.conf`, the "API documentation"
+location block), and the API serves them from FastAPI's defaults — `FastAPI(lifespan=lifespan)`
+in `src/app/api_main.py` sets no `docs_url` / `redoc_url` / `openapi_url` override.
+
+This is a **decision, not an oversight**, and it supersedes an earlier note in this document that
+listed these endpoints as exposures for Plan E to close. The routes were unreachable for a period
+by accident rather than by design: nginx routes only `/api` and `/app`, and the API publishes no
+host port, so the API's own root paths had no browser-facing URL. Exposing them restores a
+developer affordance lost in that transition.
+
+Consequences to keep in view:
+
+- **The full API schema is public** to anyone who can reach `localhost:443`. That is acceptable
+  for a developer-local deployment; it is a deliberate exception to "the API is authorized",
+  not an exemption from it. **Plan C must revisit it**: once Keycloak is in place, these routes
+  either move behind the BFF session or are disabled via `docs_url=None`, at which point this
+  section should become a record of a closed exposure.
+- **`/docs` and `/redoc` load their JS/CSS from a CDN** (`cdn.jsdelivr.net`, `cdn.redoc.ly`).
+  With no browser egress they render a blank page; the schema at `/openapi.json` is unaffected.
+- **`/docs` is proxied as a prefix**, not an exact match, so Swagger's `/docs/oauth2-redirect`
+  callback resolves. With `location = /docs` that sub-path returns nginx's own 404.
+- **No `root_path` is set**, so the schema emits no `servers` entry and Swagger resolves its
+  "Try it out" requests against the page origin — they arrive at `https://localhost/api/v1/...`
+  and are proxied normally. Setting `root_path` would break that.
+- The routes stay **inside the TLS server block** and do not introduce a catch-all: unmatched
+  paths still 404 rather than being proxied to an upstream. `tests/test_nginx_docs_routes.py`
+  (config structure) and `tests/test_docs_endpoints_server.py` (live over TLS) guard both.
 
 ---
 
@@ -662,7 +690,7 @@ Six plans. Dependency order is **A → B → C → D → E**, with **F** indepen
 | **B — Dash–API runtime separation and API completeness** | Split the UI and API into separate runtimes; the UI container loses all database access; every remaining in-process and direct-config shortcut is routed through `/api/v1`. Includes the API-completeness audit. Full scope below. | A |
 | **C — Keycloak AuthN/AuthZ** | This design: Keycloak service and realm, `auth_session` table, bearer resource server, BFF session, roles, service accounts, the `/app/stream/<id>` SSE proxy route, per-user ownership of chat and favourites, UI error handling. | A, B |
 | **D — Per-user configuration** | Adds nullable `subject` ownership to `graph_themes` (scoping user themes to their creator, keeping the global `is_default` shared) and a `user_preferences` table keyed by subject. Unlocks user-writable theme authoring. | C |
-| **E — Infrastructure surface hardening** | Elasticsearch security, RabbitMQ credentials, Neo4j/Postgres port exposure, `github-mcp` exposure, FastAPI docs endpoints, `temp_stream_server.py`. | — |
+| **E — Infrastructure surface hardening** | Elasticsearch security, RabbitMQ credentials, Neo4j/Postgres port exposure, `github-mcp` exposure, `temp_stream_server.py`. The unauthenticated `/docs` / `/redoc` / `/openapi.json` routes are **not** in this scope — they are deliberately public (see [Non-API Surfaces §5](#5-deliberately-public--the-api-documentation-routes)), and Plan C owns their disposition. | — |
 | **F — Per-person data scoping** | Scope reads to the caller's own person/team. Requires a subject→`Person.wba_id` link and a team model, neither of which exists. | C |
 
 **Why B precedes C.** Locking the API down while any component still reaches the database

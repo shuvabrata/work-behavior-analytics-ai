@@ -16,7 +16,7 @@ dropped. The plans below remain; all are open except 051.
 | 005  | [MCP thread join timeout](005-mcp-thread-join-timeout.md) | P2 | S | — | TODO — finding re-verified on `40ef1e5` |
 | 045  | [Graph query validator rejects entity ids containing a write keyword](045-graph-query-validator-rejects-entity-ids.md) | **P1** | — | — | **PROBLEM STATEMENT ONLY** — no solution specified; not executable |
 | 051  | [Serve the app over HTTPS behind nginx, and make it proxy-aware](051-tls-reverse-proxy-and-proxy-awareness.md) | **P1** | M | — | **COMPLETE** — all 11 steps, executed 2026-10-27 from `8cb2390`; see the plan's execution summary |
-| 052  | [Separate the Dash UI and the API into independent runtimes](052-dash-api-runtime-separation.md) | **P1** | **XL** | 051 | **IN PROGRESS** — Phases 1–3 complete and approved (Steps 1–9); Phase 4 Steps 10–12 complete (Gates 10–12 passed 2026-10-30); Step 13 executed and reviewer-approved 2026-10-30, awaiting the operator's Gate 13 PASS; Step 14 open |
+| 052  | [Separate the Dash UI and the API into independent runtimes](052-dash-api-runtime-separation.md) | **P1** | **XL** | 051 | **COMPLETE** — all 14 steps; Phases 1–3 (Steps 1–9) and Phase 4 (Steps 10–14) approved; Gates 10–14 passed 2026-10-30 from `c3614978` |
 | —    | `src/app/` → `src/api/` package rename (**not yet written**) | P3 | M | 052 | DEFERRED by 052 Decision 6 — cosmetic (238 import sites), no isolation gain. Slot when 052 and Plan C have both settled |
 
 **Dependency:** 052 depends on 051, which is complete. 005, 045 and 051 have no
@@ -30,7 +30,7 @@ follows:
 | Design plan | Scope | Status |
 |---|---|---|
 | A | TLS termination and proxy-awareness | **this file: 051** — COMPLETE |
-| B | Dash–API runtime separation and API completeness | **this file: 052** — planned 2026-10-28 |
+| B | Dash–API runtime separation and API completeness | **this file: 052** — COMPLETE 2026-10-30 |
 | C | Keycloak AuthN/AuthZ | not yet planned; depends on 052 (052 revises four sections of the design doc that Plan C builds on) |
 | D | Per-user configuration | not yet planned |
 | E | Infrastructure surface hardening | not yet planned |

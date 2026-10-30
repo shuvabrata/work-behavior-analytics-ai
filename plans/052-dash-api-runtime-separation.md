@@ -43,7 +43,7 @@
 
 - **Priority**: P1
 - **Phases 1–3 (Steps 1–9)**: ✅ complete, operator-approved — see the Progress tracker
-- **Remaining**: Phase 4 — Steps 10–14
+- **Phase 4 (Steps 10–14)**: ✅ **complete** — all five gates passed 2026-10-30
 - **Category**: architecture | security
 - **Design reference**: `docs/design/authn-authz-design.md`, "Plan B Scope"
 - **Baseline to hold**: `pytest -m unit tests -q` → **2365 passed, 0 failed, 2 skipped**;
@@ -570,15 +570,19 @@ titled "PostgreSQL Only" and started only `postgres`, but the locally-run API re
 and Elasticsearch directly: with either down, `/api/v1/search` and
 `/api/v1/graph/collaboration-network` return **`500`** (verified by the reviewer — the API
 still reports `/api/health` `200`, so the failure shows only on the data endpoints). The
-section must start **all three** stores and retitle accordingly. RabbitMQ is optional
-here: the lifespan catches the connection failure and logs a warning (`api_main.py:107`),
-and the API stays healthy without it. The stores publish their default host ports
-(`docker-compose.yml`: postgres `5432`, neo4j `7474`/`7687`, elasticsearch `9200`), so no
-`.env` change is needed.
+section must start all four backing services and retitle accordingly:
 
-**Keep the prose minimal** — the operator has flagged verbosity in this section. State the
-command and the one-line reason; do not restate rationale, ports, env defaults or failure
-modes in the doc.
+```bash
+docker compose up -d postgres neo4j elasticsearch rabbitmq
+```
+
+RabbitMQ is not strictly required — the lifespan catches the connection failure and
+startup completes (`api_main.py:107`) — but it is started anyway so a developer does not
+have to read past a full `aiormq` traceback to tell the API is fine.
+
+**Keep the prose to the command plus one line of reason.** The operator has flagged
+verbosity here twice; the first fix added ~20 lines of rationale (failure modes, port
+list, `.env` defaults) and was cut back. Do not restate any of that in the doc.
 
 Keep Option 1 (Compose) labelled as the recommended path; Option 2 is the local flow.
 
@@ -745,8 +749,8 @@ is in the backup of the original plan and in the git log.
 | 10 | `src/ui/api_client.py` grown into the single chokepoint; **57** remaining call sites across **14** files migrated | zero raw `requests.*` in `src/ui/`; suite/`mypy`/`pylint` | Operator confirms no credentials; **full page sweep** | ✅ complete — Gate 10 passed 2026-10-30 |
 | 11 | API-completeness audit (`A ⊆ B`, response shapes, orphans) | comparison passes; artifact discarded | Operator reviews mismatch and orphan lists | ✅ complete — Gate 11 passed 2026-10-30 |
 | 12 | gunicorn concurrency gate | 4 and 12 concurrent requests all return 2xx | Operator confirms all succeed; no 5xx/timeouts | ✅ complete — Gate 12 passed 2026-10-30 |
-| 13 | Docs: `CLAUDE.md`, `DEVELOPER_QUICK_START.md`, `USER_GUIDE.md`, `setup.sh`, `authn-authz-design.md` (`.env.example` already correct) | eight grep gates + `bash -n` | Operator **walks the two-process local dev flow** | 🔄 executed 2026-10-30, reviewer-approved — **awaiting operator PASS** |
-| 14 | Full CI gates + full-stack smoke | all five gates; every page renders | Operator signs off the complete page sweep | ⬜ |
+| 13 | Docs: `CLAUDE.md`, `DEVELOPER_QUICK_START.md`, `USER_GUIDE.md`, `setup.sh`, `authn-authz-design.md` (`.env.example` already correct) | eight grep gates + `bash -n` | Operator **walks the two-process local dev flow** | ✅ complete — Gate 13 passed 2026-10-30 |
+| 14 | Full CI gates + full-stack smoke | all five gates; every page renders | Operator signs off the complete page sweep | ✅ complete — Gate 14 passed 2026-10-30 |
 
 ### Gate 10 record — 2026-10-30, `61a29670` + uncommitted Step 10 diff
 
@@ -861,8 +865,29 @@ measurement is what proves the flags are effective rather than merely present.
 
 ### Gate 13 record — 2026-10-30, `cb11f9b1` + uncommitted Step 13 diff
 
-Executed in the live working tree, uncommitted. **Reviewer-approved; awaiting the
-operator's PASS at the manual gate.**
+Executed in the live working tree, uncommitted. **Operator PASSED the gate 2026-10-30.**
+
+**Two operator corrections landed after the first review — the plan got both wrong, not
+the executor:**
+
+1. **Option 2 started only PostgreSQL.** The locally-run API reads Neo4j and
+   Elasticsearch too; with either down, `/api/v1/search` and
+   `/api/v1/graph/collaboration-network` return `500` while `/api/health` still reports
+   `200` (verified by the reviewer by pointing both at dead ports). The doc now starts
+   `postgres neo4j elasticsearch rabbitmq`. The plan's step text said "Option 2 …
+   update to the two-process flow" and never questioned whether Postgres alone was
+   sufficient; Gate 13's greps only look for stale service *names*, so no gate would
+   have caught it.
+2. **The first fix was far too verbose for a quick-start.** It added ~20 lines of
+   rationale (failure modes, port list, `.env` defaults). The operator cut it to the
+   command plus one line of reason. The rule for this section: state the command and
+   the one-line reason, nothing more.
+
+**RabbitMQ is started unconditionally, not flagged optional.** The lifespan catches the
+connection failure (`api_main.py:107`) and startup completes — the operator confirmed
+this live (`Application startup complete.` after the warning) — but the warning dumps a
+full `aiormq` traceback, which reads as a failure. Starting the container avoids the
+noise, so the doc's instruction is the four-service command with no optional branch.
 
 **The step was reconciled before dispatch.** Its original text cited
 `src/app/main.py:196-197`, `dash_app/layout.py:27` and a `uvicorn app.main:app` row at
@@ -924,6 +949,91 @@ gate doing its job rather than scope creep.
 **Pre-existing, untouched:** `plans/052-dash-api-runtime-separation.md` shows as modified;
 that is the reviewer's own reconciliation edit and the gate-record block, not the executor's.
 
+### Gate 14 record — 2026-10-30, `c3614978` (Steps 10–13 committed) + **no Step 14 diff**
+
+Executed in the live working tree on the current branch. Step 14 changes **no code** —
+it is the final verification gate. **Operator PASSED the gate 2026-10-30.**
+
+**The five CI gates (run by the reviewer, not taken from a report):**
+
+| Gate | Result |
+|---|---|
+| `pytest -m unit tests -q` | **2378 passed, 0 failed, 2 skipped** (baseline 2365; +13, no drop) |
+| `mypy src/` | No issues found, exit 0 |
+| `pylint src --score=y` | **9.68** (baseline 9.67, ≥ 9.0) |
+| `bandit -c .bandit.yml -r src/ -lll` | exit 0 — High 0, Medium 0, Low 29 |
+| `docker compose config -q` | exit 0 |
+
+**Done-criteria grep battery — all 14 gates pass:** zero `requests.*`,
+`import requests`, `requests.get|post|put|patch|delete`, `requests.exceptions`,
+`requests.RequestException` and `raise_for_status` under `src/ui/` (excluding
+`api_client.py`); zero `CollaborationDataUnavailable` in `api_client.py`; **20**
+files reference `api_client` (floor ≥ 20); **0** credential references
+(`authorization|bearer|keycloak|AUTH_`) in `api_client.py`; the doc gates
+(`app.main`, `docker compose logs|exec|restart app`, `Three separately`,
+`app:8000`, `ASGI middleware is the only mechanism`, `WSGIMiddleware|a2wsgi`)
+all clean. The single surviving `dash_app` match in `CLAUDE.md:148` is
+`create_dash_app()` — the real function name, as Gate 13 recorded.
+
+**Stack smoke over TLS:** `/api/health` → `{"status":"healthy"}`; `/app/` → `200`;
+`nginx -t` → `syntax is ok`, `test is successful`.
+
+**The page sweep was driven with headless Chromium over CDP** (12 routes,
+`Runtime`/`Network` domains enabled), not eyeballed. Measured results:
+
+| Page | Result |
+|---|---|
+| Chat | renders; submit streamed `GET /api/v1/chats/<id>/stream` → **200** |
+| Search | typed + Enter → **"22 results", 20 result cards** |
+| Graph | renders; **Execute** → 9 callbacks, all 200 |
+| Timeline | renders |
+| Analytics | renders both cards; **Open Visualization** → `/app/collaboration`, 9 callbacks 200 |
+| Collaboration org (238 nodes) | plots; **community filter toggle** → 3 callbacks 200 |
+| Collaboration ego | **person picker**: typed → suggestions → picked → ego network **200 with data** |
+| Catalog | renders; **Edit** → 21 callbacks, all 200; `/app/catalog/<slug>` → 200 |
+| Connectors | renders 9 connections + 2 MCP rows; `/app/connectors/github` → 200 |
+| Settings | renders; **write round-tripped** — `PATCH /api/v1/settings/` → **200** |
+| Settings runtime / graph-styling | render |
+
+**Zero JS errors, zero API 5xx, zero tracebacks** across the entire sweep. Server
+logs for the window: every `request_complete` was 2xx.
+
+**Granular API status codes preserved** (Decision 19): `/api/v1/nonexistent` →
+**404**, a malformed request body → **422**. The only non-2xx entries in the API
+log are these deliberate probes.
+
+**Scope:** `git status --short` is the two `plans/` bookkeeping files only — Step
+14 produced no source diff. The `src/connectors/` files in the branch-wide diff
+belong to **Step 4** (`settings_events` import move) and **Step 8**
+(`API_SERVER` `app:8000` → `api:8000`), both Phases 1–3; nothing in Phase 4
+touched `src/connectors/`. No Step 11 audit artifact was left behind.
+
+**Three findings from the sweep worth recording:**
+
+1. **The Settings write test mutated real state, and the reviewer reverted it.**
+   Driving the save path toggled `NEO4J_AI_LOOKUP_ENABLED=False` into the
+   database. It was reset via `POST /api/v1/settings/NEO4J_AI_LOOKUP_ENABLED/reset`
+   (200) and re-verified: `source=env`, `effective_value=True`, and **no
+   `source=db` overrides remain**. The write is itself the evidence the
+   round-trip works; the store is back where it started.
+2. **A "0 results" reading on Search was an artifact of the probe, not a defect.**
+   The first run appended to a session-restored query, sending `q=reviewreview`.
+   Re-run with a cleared field: `q=review` → **22 results**. The API returned 22
+   throughout.
+3. **`net::ERR_ABORTED` on `_dash-update-component` is benign.** Every page showed
+   1–5. They are client-side cancellations of superseded Dash callbacks: the
+   server logged **all 200s**, with zero 4xx/5xx and zero tracebacks.
+
+**One transient, not treated as a STOP condition:** `docker compose up -d`
+returned `ports are not available ... 0.0.0.0:443` on the first attempt; the
+stack came up healthy on retry (nginx bound, all services healthy) and it did not
+recur. See the STOP condition on `bind: address already in use` on 80/443 — if it
+reappears, that is the stop, not something to work around.
+
+**Not covered by automated gates, operator-verified:** the sweep above was
+executed by the reviewer with a headless browser over CDP; the operator reviewed
+the evidence and signed off.
+
 ---
 
 ## Test plan
@@ -977,39 +1087,39 @@ regardless of its arguments passes while proving nothing.
 
 ALL must hold:
 
-- [ ] `pytest -m unit tests -q` exits 0, with ≥ **2365** passed and **0 failed**
-- [ ] `mypy src/` exits 0
-- [ ] `pylint src --score=y` reports ≥ 9.0
-- [ ] `bandit -c .bandit.yml -r src/ -lll` exits 0
-- [ ] `docker compose config -q` exits 0
-- [ ] `grep -rn "requests\." src/ui/ --include="*.py" | grep -v "src/ui/api_client.py"` → **no matches** (catches call sites, `requests.exceptions.*` and `requests.RequestException` clauses; `api_client.py` is the exempt wrapper)
-- [ ] `grep -rn "import requests" src/ui/ --include="*.py" | grep -v "src/ui/api_client.py"` → **no matches**
-- [ ] `grep -rn "requests\.\(get\|post\|put\|patch\|delete\)" src/ui/` → **no matches**
-- [ ] `grep -rn "requests\.exceptions" src/ui/ --include="*.py"` → **no matches**
-- [ ] `grep -rn "requests\.RequestException" src/ui/ --include="*.py"` → **no matches**
-- [ ] `grep -rn "raise_for_status" src/ui/ --include="*.py"` → **no matches**
+- [x] `pytest -m unit tests -q` exits 0, with ≥ **2365** passed and **0 failed**
+- [x] `mypy src/` exits 0
+- [x] `pylint src --score=y` reports ≥ 9.0
+- [x] `bandit -c .bandit.yml -r src/ -lll` exits 0
+- [x] `docker compose config -q` exits 0
+- [x] `grep -rn "requests\." src/ui/ --include="*.py" | grep -v "src/ui/api_client.py"` → **no matches** (catches call sites, `requests.exceptions.*` and `requests.RequestException` clauses; `api_client.py` is the exempt wrapper)
+- [x] `grep -rn "import requests" src/ui/ --include="*.py" | grep -v "src/ui/api_client.py"` → **no matches**
+- [x] `grep -rn "requests\.\(get\|post\|put\|patch\|delete\)" src/ui/` → **no matches**
+- [x] `grep -rn "requests\.exceptions" src/ui/ --include="*.py"` → **no matches**
+- [x] `grep -rn "requests\.RequestException" src/ui/ --include="*.py"` → **no matches**
+- [x] `grep -rn "raise_for_status" src/ui/ --include="*.py"` → **no matches**
       (`api_client.py` uses `response.ok`, not `raise_for_status`, so there is no
       legitimate match anywhere under `src/ui/`)
-- [ ] `grep -n "CollaborationDataUnavailable" src/ui/api_client.py` → **no matches**
+- [x] `grep -n "CollaborationDataUnavailable" src/ui/api_client.py` → **no matches**
       (the collaboration mapping stays at the call sites, in
       `src/ui/collaboration_params.py`)
-- [ ] `grep -rln --include="*.py" "api_client" src/ui/ | wc -l` → **≥ 20** files (Step 7's 3 + Step 10's 14 call-site files + `collaboration_params.py` + the 2 handler files); the `--include` keeps `__pycache__/*.pyc` out of the count
-- [ ] `src/ui/api_client.py` carries **no credentials** — no `Authorization` header, no token parameter, no `AUTH_*` / `KEYCLOAK_*` reference
-- [ ] Timeouts are read **per call** from `ui.runtime_settings`, never captured at import
-- [ ] Step 11: every path in A resolves in B; response shapes match for all A endpoints; orphans listed and reviewed (not necessarily zero); **no artifact left behind**
-- [ ] Step 12: 4 and 12 concurrent requests all complete with **2xx** responses; no 5xx or timeouts under concurrent load
-- [ ] `grep -rn "app\.main\|uvicorn app.main" CLAUDE.md DEVELOPER_QUICK_START.md` → no matches
-- [ ] `grep -rn "docker compose logs app\|docker compose exec app\|docker compose restart app" USER_GUIDE.md DEVELOPER_QUICK_START.md scripts/setup.sh` → no matches
-- [ ] `grep -n "Three separately\|three-layer" CLAUDE.md` → no matches
-- [ ] `grep -n "dash_app" CLAUDE.md` → no matches
-- [ ] `grep -n "app:8000" .env.example CLAUDE.md` → no matches
-- [ ] `grep -n "ASGI middleware is the only mechanism" docs/design/authn-authz-design.md` → no matches
-- [ ] `grep -n "WSGIMiddleware\|a2wsgi" docs/design/authn-authz-design.md` → no matches
-- [ ] `bash -n scripts/setup.sh` → exit 0
-- [ ] Every page in Step 14's sweep renders and its primary action works
-- [ ] No files outside the Scope list are modified (`git status`)
-- [ ] **All of Steps 10–14's manual gates recorded `✅` in the Progress tracker**
-- [ ] `plans/README.md` status row updated
+- [x] `grep -rln --include="*.py" "api_client" src/ui/ | wc -l` → **≥ 20** files (Step 7's 3 + Step 10's 14 call-site files + `collaboration_params.py` + the 2 handler files); the `--include` keeps `__pycache__/*.pyc` out of the count
+- [x] `src/ui/api_client.py` carries **no credentials** — no `Authorization` header, no token parameter, no `AUTH_*` / `KEYCLOAK_*` reference
+- [x] Timeouts are read **per call** from `ui.runtime_settings`, never captured at import
+- [x] Step 11: every path in A resolves in B; response shapes match for all A endpoints; orphans listed and reviewed (not necessarily zero); **no artifact left behind**
+- [x] Step 12: 4 and 12 concurrent requests all complete with **2xx** responses; no 5xx or timeouts under concurrent load
+- [x] `grep -rn "app\.main\|uvicorn app.main" CLAUDE.md DEVELOPER_QUICK_START.md` → no matches
+- [x] `grep -rn "docker compose logs app\|docker compose exec app\|docker compose restart app" USER_GUIDE.md DEVELOPER_QUICK_START.md scripts/setup.sh` → no matches
+- [x] `grep -n "Three separately\|three-layer" CLAUDE.md` → no matches
+- [x] `grep -n "dash_app" CLAUDE.md` → no matches
+- [x] `grep -n "app:8000" .env.example CLAUDE.md` → no matches
+- [x] `grep -n "ASGI middleware is the only mechanism" docs/design/authn-authz-design.md` → no matches
+- [x] `grep -n "WSGIMiddleware\|a2wsgi" docs/design/authn-authz-design.md` → no matches
+- [x] `bash -n scripts/setup.sh` → exit 0
+- [x] Every page in Step 14's sweep renders and its primary action works
+- [x] No files outside the Scope list are modified (`git status`)
+- [x] **All of Steps 10–14's manual gates recorded `✅` in the Progress tracker**
+- [x] `plans/README.md` status row updated
 
 ## STOP conditions
 

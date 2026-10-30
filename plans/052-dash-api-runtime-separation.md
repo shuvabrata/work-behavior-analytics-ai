@@ -641,11 +641,63 @@ is in the backup of the original plan and in the git log.
 
 | Step | What it changes | Automated verify | Manual gate | Status |
 |------|-----------------|------------------|-------------|--------|
-| 10 | `src/ui/api_client.py` grown into the single chokepoint; **57** remaining call sites across **14** files migrated | zero raw `requests.*` in `src/ui/`; suite/`mypy`/`pylint` | Operator confirms no credentials; **full page sweep** | 🔄 executed, awaiting Gate 10 |
+| 10 | `src/ui/api_client.py` grown into the single chokepoint; **57** remaining call sites across **14** files migrated | zero raw `requests.*` in `src/ui/`; suite/`mypy`/`pylint` | Operator confirms no credentials; **full page sweep** | ✅ complete — Gate 10 passed 2026-10-30 |
 | 11 | API-completeness audit (`A ⊆ B`, response shapes, orphans) | comparison passes; artifact discarded | Operator reviews mismatch and orphan lists | ⬜ |
 | 12 | gunicorn concurrency gate | 4 and 12 concurrent requests all return 2xx | Operator confirms all succeed; no 5xx/timeouts | ⬜ |
 | 13 | Docs: `CLAUDE.md`, `DEVELOPER_QUICK_START.md`, `USER_GUIDE.md`, `setup.sh`, `.env.example`, `authn-authz-design.md` | six grep gates | Operator **walks the two-process local dev flow** | ⬜ |
 | 14 | Full CI gates + full-stack smoke | all five gates; every page renders | Operator signs off the complete page sweep | ⬜ |
+
+### Gate 10 record — 2026-10-30, `61a29670` + uncommitted Step 10 diff
+
+Executed in the live working tree, uncommitted. Operator passed the gate.
+
+**Automated gates (re-run by the reviewer, not taken from the executor's report):**
+
+| Gate | Result |
+|---|---|
+| `requests\.` in `src/ui/` (excl. `api_client.py`) | 0 — confirmed by an independent `pathlib.rglob` scan |
+| `import requests` (excl. client) | 0 ✓ second method |
+| `requests.get/post/put/patch/delete` | 0 ✓ second method |
+| `requests.exceptions` / `.RequestException` | 0 / 0 ✓ second method |
+| `raise_for_status` in `src/ui/` | 0 |
+| `CollaborationDataUnavailable` in `api_client.py` | 0 — mapping stays in `collaboration_params.py` |
+| Files referencing `api_client` | 20 (floor ≥20) |
+| `pytest -m unit tests -q` | 2378 passed, 0 failed, 2 skipped |
+| `mypy src/` | exit 0 |
+| `pylint src --score=y` | 9.68 (baseline 9.67) |
+| `bandit -c .bandit.yml -r src/ -lll` | exit 0, High 0 |
+| Credentials in `api_client.py` | none |
+
+**Recorded deviations (judged on merit):**
+
+1. **`ApiError` was extended with `STATUS_NO_RESPONSE = 0`.** Five files genuinely
+   need to tell a transport failure from an HTTP status to preserve their old
+   alerts (the Graph timeout/connection messages, Timeline's `HTTP nnn` vs
+   `request failed`). It reuses the existing `status_code` field rather than
+   adding a flag, so the single-type contract holds. It carries no credential, so
+   the Plan B / Plan C boundary is intact.
+2. **The former `Timeout` and `ConnectionError` alerts were consolidated.** The
+   two branches both catch `ApiError` now, so the old "Could not connect to
+   server." wording is gone. The plan permits this consolidation; the specific
+   timeout alerts are preserved, which is what Gate 10 check 8 requires.
+
+**Out-of-scope change, operator-requested:** `tests/producers/test_daemon_common.py`
+— deleted `TestUpdateStatus::test_default_api_server`. Its
+`patch.dict(os.environ, {}, clear=True)` block contained only `pass`, so it never
+unset `API_SERVER`; it passed only on ambient state and would fail whenever
+`load_dotenv()` pulled `API_SERVER` from `.env`. It asserted a fallback that never
+applies in deployment (every connector service in `docker-compose.yml` sets
+`API_SERVER` explicitly). The suite is green in both env states after removal.
+
+**Pre-existing, unrelated, not fixed here:** nine inconsistent silent `API_SERVER`
+fallbacks exist across `src/connectors/` (three different values). Candidate for
+its own plan.
+
+**Not covered by automated gates, operator-verified:** the full page sweep and the
+forced-expansion-timeout alert check (Gate 10 checks 7–8). The reviewer separately
+drove the real expansion callbacks to confirm an `ApiError` renders
+"Expansion timed out" while a generic `Exception` renders "Expansion error: …",
+and that the new tests are non-vacuous.
 
 ---
 

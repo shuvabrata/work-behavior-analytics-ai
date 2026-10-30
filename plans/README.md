@@ -16,7 +16,7 @@ dropped. The plans below remain; all are open except 051.
 | 005  | [MCP thread join timeout](005-mcp-thread-join-timeout.md) | P2 | S | — | TODO — finding re-verified on `40ef1e5` |
 | 045  | [Graph query validator rejects entity ids containing a write keyword](045-graph-query-validator-rejects-entity-ids.md) | **P1** | — | — | **PROBLEM STATEMENT ONLY** — no solution specified; not executable |
 | 051  | [Serve the app over HTTPS behind nginx, and make it proxy-aware](051-tls-reverse-proxy-and-proxy-awareness.md) | **P1** | M | — | **COMPLETE** — all 11 steps, executed 2026-10-27 from `8cb2390`; see the plan's execution summary |
-| 052  | [Separate the Dash UI and the API into independent runtimes](052-dash-api-runtime-separation.md) | **P1** | **XL** | 051 | TODO — 18 steps, 4 phases; the largest plan in the AuthN/AuthZ programme |
+| 052  | [Separate the Dash UI and the API into independent runtimes](052-dash-api-runtime-separation.md) | **P1** | **XL** | 051 | **IN PROGRESS** — Phases 1–3 complete and approved (Steps 1–9); Phase 4 Step 10 complete (Gate 10 passed 2026-10-30); Steps 11–14 open |
 | —    | `src/app/` → `src/api/` package rename (**not yet written**) | P3 | M | 052 | DEFERRED by 052 Decision 6 — cosmetic (238 import sites), no isolation gain. Slot when 052 and Plan C have both settled |
 
 **Dependency:** 052 depends on 051, which is complete. 005, 045 and 051 have no

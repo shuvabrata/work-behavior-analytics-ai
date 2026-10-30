@@ -2,7 +2,7 @@
 
 import pytest
 
-from app.dash_app.pages.graph.utils.cypher_substitution import (
+from ui.pages.graph.utils.cypher_substitution import (
     cypher_literal,
     substitute_catalog_query_parameters,
 )

@@ -16,15 +16,34 @@ from app.analytics.collaboration.algorithm import (
     _weight_to_hex,
     normalize_edge_weights,
 )
-from app.common.person_network_url import DEFAULT_MAX_COLLABORATORS
 from app.runtime_settings import runtime_settings
+from domain.collaboration.ego_metadata import (
+    COLLABORATOR_CAP_OPTIONS,
+    cap_options_for,
+)
+from domain.person_network_url import DEFAULT_MAX_COLLABORATORS
+
+# ``COLLABORATOR_CAP_OPTIONS`` and ``cap_options_for`` are re-exported here so
+# that existing ``from app.analytics.collaboration.ego import ...`` call sites
+# keep resolving after they moved to ``domain.collaboration.ego_metadata``.
+# The declaration is required by mypy's ``no_implicit_reexport`` (strict).
+__all__ = [
+    "COLLABORATOR_CAP_OPTIONS",
+    "RADIUS_MAX",
+    "RADIUS_MIN",
+    "TARGET_SPOKE_SEPARATION",
+    "build_ego_elements",
+    "build_ego_graph",
+    "cap_options_for",
+    "compute_radial_positions",
+]
 
 # Radial ring radii in layout units. The closest collaborator sits at R_IN,
 # the weakest at R_OUT.
 #
 # R_IN is a FLOOR, not the actual innermost radius: with a fixed R_IN the arc
 # between angularly-adjacent spokes shrinks as spokes are added, and Person
-# nodes (66x56px, see app/common/node_size.py) end up overlapping (35.3px apart
+# nodes (66x56px, see domain/node_size.py) end up overlapping (35.3px apart
 # at 25 spokes, 17.2px at 50). The innermost radius is therefore scaled so the
 # arc can never fall below TARGET_SPOKE_SEPARATION — see
 # compute_radial_positions. Overlap is scale-invariant (cy.fit() zooms
@@ -32,30 +51,6 @@ from app.runtime_settings import runtime_settings
 RADIUS_MIN = 120.0
 RADIUS_MAX = 480.0
 TARGET_SPOKE_SEPARATION = 80.0
-
-# Collaborator-cap choices offered by both the Analytics card and the ego page's
-# in-page selector, so the two surfaces cannot offer different sets.
-COLLABORATOR_CAP_OPTIONS = [10, 25, 50, 100]
-
-
-def cap_options_for(max_collaborators: int) -> List[Dict[str, Any]]:
-    """Return the collaborator-cap choices that ``max_collaborators`` can honour.
-
-    The in-page selector slices an already-fetched element set, so a cap above
-    ``max_collaborators`` could never take effect. Offering it would be a dead
-    control, so the option list is truncated to the fetched ceiling — which is
-    always included, even when it is not one of COLLABORATOR_CAP_OPTIONS (the
-    API accepts any value in 1..500, so a hand-edited URL can produce one).
-
-    Args:
-        max_collaborators: The cap the current element set was fetched with.
-
-    Returns:
-        ``{"label": ..., "value": ...}`` dicts ordered ascending, ready for a
-        Dash options prop.
-    """
-    caps = sorted({*[c for c in COLLABORATOR_CAP_OPTIONS if c <= max_collaborators], max_collaborators})
-    return [{"label": f"Top {cap}", "value": cap} for cap in caps]
 
 
 def build_ego_graph(records: List[Dict[str, Any]], focus_id: str) -> nx.Graph:

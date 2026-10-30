@@ -9,7 +9,7 @@ Tests cover:
 
 import pytest
 
-from app.dash_app.pages.graph.utils.data_transform import (
+from ui.pages.graph.utils.data_transform import (
     _compact_node_label,
     _resolve_display_name,
     neo4j_to_cytoscape,

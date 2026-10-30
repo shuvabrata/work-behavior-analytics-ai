@@ -11,7 +11,7 @@ from urllib.parse import parse_qs
 
 import pytest
 from dash import html
-from app.analytics.collaboration.config import (
+from domain.collaboration.config import (
     CollaborationNetworkConfig,
     DEFAULT_COMMUNITY_GAP_X,
     DEFAULT_COMMUNITY_GAP_Y,
@@ -25,11 +25,11 @@ from app.analytics.collaboration.config import (
     LAYER_ORDER,
     SETTING_LABELS,
 )
-from app.analytics.collaboration.ego import COLLABORATOR_CAP_OPTIONS
-from app.analytics.registry import GRAPH_ANALYTICS
-from app.common.person_network_url import DEFAULT_MAX_COLLABORATORS
-from app.dash_app.components.common import describe_config_error
-from app.dash_app.pages.analytics import (
+from domain.collaboration.ego_metadata import COLLABORATOR_CAP_OPTIONS
+from domain.analytics_registry import GRAPH_ANALYTICS
+from domain.person_network_url import DEFAULT_MAX_COLLABORATORS
+from ui.components.common import describe_config_error
+from ui.pages.analytics import (
     COLLABORATION_CARD_SPEC,
     PER_PERSON_CARD_SPEC,
     _bounds_for,
@@ -316,7 +316,7 @@ def test_adding_a_layer_reaches_both_cards():
     provide. The layer is appended in place (the card builders hold the same
     list/dict objects config.py exports) and removed again afterwards.
     """
-    from app.analytics.collaboration import config as config_module
+    from domain.collaboration import config as config_module
 
     new_layer = "synthetic_19th_layer"
     config_module.LAYER_ORDER.append(new_layer)
@@ -349,7 +349,7 @@ def test_adding_a_layer_reaches_both_cards():
 def test_renaming_a_layer_label_reaches_both_cards():
     """Renaming a layer's label updates both cards (labels are looked up, not
     duplicated)."""
-    from app.analytics.collaboration import config as config_module
+    from domain.collaboration import config as config_module
 
     layer = LAYER_ORDER[0]
     original = config_module.LAYER_LABELS[layer]
@@ -587,7 +587,7 @@ def test_href_callbacks_surface_the_alert_and_disable_the_buttons():
 
 def test_config_alert_reports_each_problem():
     """One <li> per problem while blocked; an empty, hidden region otherwise."""
-    from app.dash_app.pages.analytics import _ControlProblem
+    from ui.pages.analytics import _ControlProblem
 
     problems = [
         _ControlProblem("Lookback Days", "Lookback Days must be between 1 and 365."),
@@ -615,7 +615,7 @@ def test_config_alert_is_not_dismissable():
     stranding the user with no way forward and no stated cause. The alert clears
     itself when the values become valid, which is the dismissal that is wanted.
     """
-    from app.dash_app.pages.analytics import _ControlProblem
+    from ui.pages.analytics import _ControlProblem
 
     children, _style, _blocked = _config_alert(
         [_ControlProblem("Lookback Days", "Lookback Days must be between 1 and 365.")]

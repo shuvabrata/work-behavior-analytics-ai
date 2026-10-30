@@ -15,8 +15,8 @@ import dash
 import pytest
 from dash import html
 
-from app.dash_app.pages.timeline import get_layout
-from app.dash_app.pages.timeline.helpers import (
+from ui.pages.timeline import get_layout
+from ui.pages.timeline.helpers import (
     ALL_TIME,
     MAX_CELL_CARDS,
     MAX_LANES,

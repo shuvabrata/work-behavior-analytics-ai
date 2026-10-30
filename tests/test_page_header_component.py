@@ -6,8 +6,8 @@ import pytest
 
 from dash import dcc, html
 
-from app.dash_app.components.common import create_page_header
-from app.dash_app.styles import (
+from ui.components.common import create_page_header
+from ui.styles import (
     COLOR_CHARCOAL_MEDIUM,
     COLOR_GRAY_MEDIUM,
     COLOR_NAVY,

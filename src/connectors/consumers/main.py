@@ -53,7 +53,7 @@ from connectors.consumers.sinks.elasticsearch_sink import (
 from common.logger import logger
 from common.runtime_settings import RuntimeConfigCache
 from common.runtime_settings.client import fetch_runtime_snapshot
-from common.runtime_settings.events import listen_for_settings_changed
+from common.messaging.settings_events import listen_for_settings_changed
 import aio_pika
 
 # ── Module-level runtime settings cache ──────────────────────────────────
@@ -203,7 +203,7 @@ async def consume_queue(
 async def main() -> None:
     """Parse configuration and launch one consumer task per queue."""
     # Fetch runtime settings snapshot at startup (best-effort).
-    api_base = os.environ.get("API_SERVER", "http://app:8000")
+    api_base = os.environ.get("API_SERVER", "http://api:8000")
     runtime_cache.refresh(fetch_runtime_snapshot(api_base))
 
     # Start background listener for live runtime config changes.

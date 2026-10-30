@@ -1,0 +1,362 @@
+"""Query Execution Callbacks
+
+Callbacks for query validation and execution.
+"""
+
+from typing import Any
+import time
+import dash_bootstrap_components as dbc
+from dash import ctx, html, Input, Output, State, callback, no_update
+from dash.exceptions import MissingCallbackContextException, PreventUpdate
+
+from ui import api_client
+from ui.api_client import STATUS_NO_RESPONSE, ApiError
+from ui.runtime_settings import runtime_settings
+from common.logger import logger
+from ui.components.common import create_alert
+from ui.settings import settings
+from ui.styles import (
+    VALIDATION_ALERT_STYLE,
+    VALIDATION_CODE_STYLE,
+    GRAPH_DETAILS_PANEL_STYLE
+)
+from ..utils import (
+    neo4j_to_cytoscape,
+    parse_error_response,
+    create_error_alert,
+    create_table_display,
+    create_graph_success_alert,
+    create_performance_metrics,
+)
+
+
+def _normalize_catalog_parameters(raw_params: dict[str, Any] | None) -> dict[str, Any]:
+    """Unwrap person-parameter dicts before sending to the API.
+
+    Person pickers store ``{"wba": "...", "display": "..."}`` but the API
+    only expects the raw ``wba`` string.  Scalar parameters pass through
+    unchanged.
+    """
+    if not raw_params:
+        return {}
+    normalized: dict[str, Any] = {}
+    for key, value in raw_params.items():
+        normalized[key] = value.get("wba") if isinstance(value, dict) else value
+    return normalized
+
+
+@callback(
+    Output("query-validation-message", "children"),
+    Input("graph-query-input", "value")
+)
+def validate_query(query_text: str | None) -> dbc.Alert | None:
+    """Validate Cypher query and provide real-time feedback"""
+    # Empty query - no message
+    if not query_text or not query_text.strip():
+        return None
+    
+    query_upper = query_text.strip().upper()
+    
+    # Check for write operations (not allowed)
+    write_keywords = ['CREATE', 'MERGE', 'SET', 'DELETE', 'REMOVE', 'DROP']
+    for keyword in write_keywords:
+        if f' {keyword} ' in f' {query_upper} ' or query_upper.startswith(f'{keyword} '):
+            return create_alert([
+                html.I(className="fas fa-exclamation-triangle me-2"),
+                f"Write operations ({keyword}) are not allowed for security reasons. Only read-only queries (MATCH, RETURN) are permitted."
+            ], color="danger", class_name="mb-0", style=VALIDATION_ALERT_STYLE)
+    
+    # Check if query starts with valid read keywords
+    valid_starts = ['MATCH', 'RETURN', 'WITH', 'UNWIND', 'CALL', 'OPTIONAL']
+    starts_valid = any(query_upper.startswith(keyword) for keyword in valid_starts)
+    
+    if not starts_valid:
+        return create_alert([
+            html.I(className="fas fa-info-circle me-2"),
+            "Query should typically start with MATCH, RETURN, or other read-only keywords."
+        ], color="warning", class_name="mb-0", style=VALIDATION_ALERT_STYLE)
+    
+    # Check for missing LIMIT (performance warning)
+    if 'LIMIT' not in query_upper and 'MATCH' in query_upper:
+        return create_alert([
+            html.I(className="fas fa-lightbulb me-2"),
+            "Consider adding ",
+            html.Code("LIMIT 100", style=VALIDATION_CODE_STYLE),
+            " to improve query performance and avoid loading too many nodes."
+        ], color="info", class_name="mb-0", style=VALIDATION_ALERT_STYLE)
+    
+    # Query looks good
+    return None
+
+
+@callback(
+    [Output("graph-data-store", "data"),
+     Output("graph-cytoscape", "elements"),
+     Output("graph-cytoscape-container", "style"),
+    Output("graph-status-strip", "children"),
+    Output("graph-status-strip", "style"),
+     Output("graph-table-container", "children"),
+     Output("graph-table-container", "style"),
+     Output("graph-results-container", "children"),
+     Output("graph-results-container", "style"),
+     Output("graph-details-panel", "style"),
+    Output("graph-performance-metrics", "children"),
+    Output("graph-performance-metrics", "style"),
+    Output("loaded-node-ids", "data"),
+    Output("expanded-nodes", "data"),
+    Output("expansion-debounce-store", "data"),
+    Output("unfiltered-elements-store", "data"),
+    Output("node-type-available-store", "data"),
+    Output("relationship-type-available-store", "data"),
+    Output("node-type-filter", "value", allow_duplicate=True),
+    Output("relationship-type-filter", "value", allow_duplicate=True),
+    Output("weight-threshold-slider", "value", allow_duplicate=True),
+    Output("top-n-toggle", "value", allow_duplicate=True)],
+    [Input("graph-execute-btn", "n_clicks"),
+     Input("catalog-run-btn", "n_clicks"),
+     Input("cypher-autoexec-store", "data")],
+    [State("graph-query-input", "value"),
+     State("selected-catalog-query-store", "data"),
+     State("catalog-parameters-store", "data"),
+     State("catalog-query-view-toggle", "value")],
+    prevent_initial_call=True
+)
+def execute_query(_raw_clicks: Any, _catalog_clicks: Any, store_cypher: Any, query_text: Any, selected_catalog_query: Any, catalog_parameters: Any, catalog_view: Any, ) -> Any:
+    """Execute raw console queries and catalog queries via the unified API."""
+    timeout_seconds = runtime_settings.get_int("HTTP_REQUEST_TIMEOUT")
+    # Default empty states
+    empty_elements: list[Any] = []
+    hide_style = {"display": "none"}
+    show_style = {"display": "block"}
+    graph_visible_style = {"display": "block"}
+    graph_hidden_style = {"display": "none"}
+    default_container_style = {"minHeight": "400px", "padding": "20px"}
+    panel_visible_style = GRAPH_DETAILS_PANEL_STYLE
+
+    def build_response(graph_data: Any, elements: Any, graph_container_style: Any, status_children: Any, status_style: Any, table_children: Any, table_style: Any, results_children: Any, results_style: Any, details_style: Any, metrics_children: Any, metrics_style: Any, unfiltered_elements: Any, ) -> Any:
+        """Build execute-query callback response with a stable output contract."""
+        return (
+            graph_data,
+            elements,
+            graph_container_style,
+            status_children,
+            status_style,
+            table_children,
+            table_style,
+            results_children,
+            results_style,
+            details_style,
+            metrics_children,
+            metrics_style,
+            [],
+            {},
+            {},
+            unfiltered_elements,
+            # The available-store callbacks use None as the "fresh load" sentinel
+            # and then rebuild the checklist values from the new unfiltered baseline.
+            None,
+            None,
+            no_update,
+            no_update,
+            0,
+            "all",
+        )
+
+    def error_response(error_display: html.Div | str | None) -> tuple[Any, ...]:
+        return build_response(
+            None,
+            empty_elements,
+            graph_hidden_style,
+            None,
+            hide_style,
+            None,
+            hide_style,
+            error_display,
+            default_container_style,
+            hide_style,
+            None,
+            hide_style,
+            [],
+        )
+    
+    try:
+        triggered_id = ctx.triggered_id or "graph-execute-btn"
+    except MissingCallbackContextException:
+        triggered_id = "graph-execute-btn"
+
+    # ?cypher= deep-link: the store was set by toggle_query_collapse after
+    # the layout was rendered — safe to execute now.
+    if triggered_id == "cypher-autoexec-store":
+        if not store_cypher:
+            raise PreventUpdate
+        query_text = store_cypher
+
+    if triggered_id == "catalog-run-btn":
+        selected_catalog_query = selected_catalog_query or {}
+        catalog_id = selected_catalog_query.get("id")
+        if not catalog_id:
+            error_display = create_error_alert(
+                "Select a catalog query before running it.",
+                alert_type='warning',
+                heading=None,  # type: ignore[arg-type]
+            )
+            return error_response(error_display)
+
+        payload = {
+            "source": "catalog",
+            "catalog_id": catalog_id,
+            "view": catalog_view or "graph",
+            "parameters": _normalize_catalog_parameters(catalog_parameters),
+        }
+        query_preview = catalog_id
+        query_length = len(catalog_id)
+    else:
+        # Validate query not empty
+        if not query_text or not query_text.strip():
+            error_display = create_error_alert(
+                "Please enter a Cypher query before executing.",
+                alert_type='warning',
+                heading=None,  # type: ignore[arg-type]
+            )
+            return error_response(error_display)
+
+        payload = {
+            "source": "raw",
+            "query": query_text,
+            "view": "auto",
+            "parameters": {},
+        }
+        query_preview = (query_text or "").strip().replace("\n", " ")[:120]
+        query_length = len((query_text or "").strip())
+    
+    # Track execution time
+    start_time = time.time()
+    logger.info(
+        "[GRAPH-DEBUG][query.execute] start "
+        f"trigger={triggered_id} query_len={query_length} api_base={settings.API_BASE_URL} preview='{query_preview}'"
+    )
+
+    try:
+        # Send query to API
+        data = api_client.post("/api/v1/graph/execute", json=payload).json()
+
+        # Calculate execution time in milliseconds
+        execution_time_ms = (time.time() - start_time) * 1000
+        logger.info(
+            "[GRAPH-DEBUG][query.execute] response "
+            f"status=200 duration_ms={round(execution_time_ms, 2)}"
+        )
+
+        # Check if result is a graph or tabular data
+        is_graph = data.get("isGraph", False)
+        node_count = len(data.get("nodes", []))
+        rel_count = len(data.get("relationships", []))
+        result_count = data.get("resultCount", 0)
+        logger.info(
+            "[GRAPH-DEBUG][query.execute] parsed "
+            f"is_graph={is_graph} nodes={node_count} rels={rel_count} "
+            f"result_count={result_count}"
+        )
+        
+        if is_graph:
+            # Transform data to Cytoscape format
+            cyto_elements = neo4j_to_cytoscape(data)
+
+            success_alert = create_graph_success_alert(node_count, rel_count)
+            performance_metrics = create_performance_metrics(node_count, rel_count, execution_time_ms, is_graph=True)
+
+            # Show graph, hide table and default, show details panel
+            return build_response(
+                data,
+                cyto_elements,
+                graph_visible_style,
+                success_alert,
+                show_style,
+                None,
+                hide_style,
+                None,
+                hide_style,
+                panel_visible_style,  # Show details panel for graph results
+                performance_metrics,
+                show_style,  # Show performance metrics
+                cyto_elements,  # Reset unfiltered baseline to fresh execute result
+            )
+        else:
+            # Tabular results - create table
+            raw_results = data.get("rawResults", [])
+            table_display = create_table_display(raw_results, result_count)
+            tabular_success_alert = create_alert([
+                html.I(className="fas fa-check-circle me-2"),
+                f"Query executed successfully! Retrieved {result_count} result(s)."
+            ], color="success", class_name="mb-0")
+            performance_metrics = create_performance_metrics(result_count, 0, execution_time_ms, is_graph=False)
+            
+            # Show table, hide graph and default, hide details panel
+            return build_response(
+                data,
+                empty_elements,
+                graph_hidden_style,
+                tabular_success_alert,
+                show_style,
+                table_display,
+                show_style,
+                None,
+                hide_style,
+                hide_style,  # Hide details panel for tabular results
+                performance_metrics,
+                show_style,  # Show performance metrics
+                [],  # No unfiltered graph baseline for tabular query
+            )
+        
+    except ApiError as exc:
+        if exc.status_code != STATUS_NO_RESPONSE:
+            logger.warning(
+                "[GRAPH-DEBUG][query.execute] error "
+                f"status={exc.status_code} error_preview='{exc.message[:500]}'"
+            )
+            error_data: dict[str, Any] = (
+                {"detail": exc.detail} if isinstance(exc.detail, dict) else {}
+            )
+            heading, hint, doc_link, alert_type = parse_error_response(
+                error_data, exc.status_code
+            )
+            error_display = create_error_alert(
+                "",  # message is in heading for parsed errors
+                alert_type=alert_type,
+                hint=hint,
+                heading=heading,
+                doc_link=doc_link,
+            )
+            return error_response(error_display)
+
+        # No HTTP response: connection refused, DNS failure or a timeout. The
+        # client folds all three into one type, so this is the old timeout and
+        # connection-error branches combined into a single message.
+        logger.error(
+            "[GRAPH-DEBUG][query.execute] request_failed "
+            f"timeout_seconds={timeout_seconds} api_base={settings.API_BASE_URL} error={exc}"
+        )
+        error_display = create_error_alert(
+            "",
+            alert_type='danger',
+            heading="🔌 Backend API Connection Failed",
+            hint=(
+                f"Unable to reach the backend API at {settings.API_BASE_URL} within "
+                f"{timeout_seconds} seconds. Please ensure the API service is running "
+                "(for example 'docker compose up -d api') and that the query is not too "
+                "complex."
+            ),
+            doc_link=None
+        )
+        return error_response(error_display)
+
+    except Exception as e:
+        logger.exception(f"[GRAPH-DEBUG][query.execute] unexpected_error {e}")
+        error_display = create_error_alert(
+            "",
+            alert_type='danger',
+            heading="💥 Unexpected Error",
+            hint=f"An unexpected error occurred: {str(e)}. Please try again or contact support if the issue persists.",
+            doc_link=None
+        )
+        return error_response(error_display)

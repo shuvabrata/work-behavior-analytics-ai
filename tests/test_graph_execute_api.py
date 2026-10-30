@@ -8,7 +8,7 @@ import httpx
 import pytest
 
 from app.api.graph.v1 import service
-from app.main import app
+from app.api_main import app
 from app.query_catalog import CatalogNamespace, CatalogQuery
 
 

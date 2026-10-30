@@ -1,7 +1,7 @@
 import pytest
 
-from app.dash_app.pages.connectors.components.connector_card import connector_card
-from app.dash_app.styles import COLOR_GRAY_LIGHT, COLOR_SUCCESS
+from ui.pages.connectors.components.connector_card import connector_card
+from ui.styles import COLOR_GRAY_LIGHT, COLOR_SUCCESS
 
 
 @pytest.mark.unit

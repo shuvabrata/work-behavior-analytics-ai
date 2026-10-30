@@ -66,7 +66,8 @@ from elasticsearch import Elasticsearch
 from neo4j import GraphDatabase
 from neo4j.time import Date, DateTime, Time, Duration
 
-from app.scripts.create_es_indexes import MANAGED_INDEXES, _index_name
+from app.scripts.create_es_indexes import _index_name
+from domain.es_indexes import MANAGED_INDEXES
 
 
 def _coerce_value(v: object) -> object:

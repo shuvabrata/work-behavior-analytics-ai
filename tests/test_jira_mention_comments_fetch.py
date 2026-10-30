@@ -33,7 +33,7 @@ from typing import Any, Dict, List, Optional
 import httpx
 import pytest
 
-from app.main import app
+from app.api_main import app
 from connectors.producers.jira.fetch_jira import (
     fetch_comments,
     fetch_epics,

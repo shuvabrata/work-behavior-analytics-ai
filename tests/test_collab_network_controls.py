@@ -11,11 +11,11 @@ from unittest.mock import patch
 import pytest
 from dash import html
 
-from app.dash_app.pages.collaboration_network.callbacks.display import (
+from ui.pages.collaboration_network.callbacks.display import (
     display_collab_properties,
     update_collab_stylesheet,
 )
-from app.dash_app.pages.collaboration_network.callbacks.navigation import (
+from ui.pages.collaboration_network.callbacks.navigation import (
     toggle_collab_fullwidth,
 )
 
@@ -141,7 +141,7 @@ class TestUpdateCollabStylesheet:
     def test_fallback_to_base_on_fetch_error(self):
         """When /effective fails, the stylesheet falls back to base tokens."""
         with patch(
-            "app.dash_app.pages.collaboration_network.callbacks.display.fetch_effective_theme",
+            "ui.pages.collaboration_network.callbacks.display.fetch_effective_theme",
             return_value=None,
         ):
             stylesheet = update_collab_stylesheet("executive-light")
@@ -153,15 +153,15 @@ class TestUpdateCollabStylesheet:
 
     def test_merged_override_applies_to_person(self):
         """A merged effective theme override propagates to the stylesheet."""
-        from app.common.graph_theme import NodeOverride, ThemeOverrides, merge_theme_overrides
-        from app.dash_app.styles import get_theme_tokens
+        from domain.graph_theme import NodeOverride, ThemeOverrides, merge_theme_overrides
+        from domain.theme_tokens import get_theme_tokens
 
         effective = merge_theme_overrides(
             get_theme_tokens("executive-light"),
             ThemeOverrides(nodes={"Person": NodeOverride(color="#00FF00")}),
         )
         with patch(
-            "app.dash_app.pages.collaboration_network.callbacks.display.fetch_effective_theme",
+            "ui.pages.collaboration_network.callbacks.display.fetch_effective_theme",
             return_value=effective,
         ):
             stylesheet = update_collab_stylesheet("executive-light")

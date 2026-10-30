@@ -1,15 +1,16 @@
 """Unit tests for the catalog editor Quick Test / View Test callbacks.
 
 These exercise ``_run_test`` / ``quick_test`` in
-``app.dash_app.pages.catalog.editor_test_callbacks`` in isolation. The
+``ui.pages.catalog.editor_test_callbacks`` in isolation. The
 integration paths (payload shape, write-Cypher 400, empty query) are covered by
 the migrated E4–E7 tests in ``test_catalog_editor_callbacks.py``.
 """
 
 import pytest
-import requests as requests_lib
 
-from app.dash_app.pages.catalog import editor_test_callbacks
+from ui import api_client
+from ui.api_client import STATUS_NO_RESPONSE, ApiError
+from ui.pages.catalog import editor_test_callbacks
 
 
 pytestmark = pytest.mark.unit
@@ -21,9 +22,35 @@ class _Resp:
     def __init__(self, payload, status_code=200):
         self._payload = payload
         self.status_code = status_code
+        self.text = ""
+
+    @property
+    def ok(self):
+        return self.status_code < 400
 
     def json(self):
         return self._payload
+
+
+def _install(monkeypatch, response):
+    """Point the client's transport seam at a canned response."""
+    def _transport(method, _url, *, params=None, json=None, timeout=None):
+        assert method == "POST"
+        return response
+
+    monkeypatch.setattr(api_client, "_transport", _transport)
+
+
+def _install_error(monkeypatch, exc=None):
+    """Make the client's transport raise (default: a connection failure)."""
+    import requests as requests_lib
+
+    error = exc or requests_lib.exceptions.ConnectionError("Connection refused")
+
+    def _transport(*_args, **_kwargs):
+        raise error
+
+    monkeypatch.setattr(api_client, "_transport", _transport)
 
 
 class _FakeContext:
@@ -50,9 +77,7 @@ _GRAPH_PAYLOAD = {
 def test_quick_test_tabular_success(monkeypatch):
     """A tabular 200 renders a row-count badge in the tabular output."""
     payload = {"isGraph": False, "rawResults": [{"n": 1}], "resultCount": 1}
-    monkeypatch.setattr(
-        editor_test_callbacks.requests, "post", lambda *a, **k: _Resp(payload)
-    )
+    _install(monkeypatch, _Resp(payload))
 
     result = editor_test_callbacks.quick_test_tabular(
         1, "MATCH (n) RETURN n"
@@ -70,9 +95,7 @@ def test_quick_test_graph_success(monkeypatch):
         "relationships": [{"id": "r1"}],
         "resultCount": 2,
     }
-    monkeypatch.setattr(
-        editor_test_callbacks.requests, "post", lambda *a, **k: _Resp(payload)
-    )
+    _install(monkeypatch, _Resp(payload))
 
     result = editor_test_callbacks.quick_test_graph(
         1, "MATCH (a)-[r]-(b) RETURN a, r, b"
@@ -85,11 +108,7 @@ def test_quick_test_graph_success(monkeypatch):
 def test_quick_test_http_400_shows_error(monkeypatch):
     """A 400 surfaces the API detail message as an error badge."""
     payload = {"detail": {"message": "Query contains write operations"}}
-    monkeypatch.setattr(
-        editor_test_callbacks.requests,
-        "post",
-        lambda *a, **k: _Resp(payload, status_code=400),
-    )
+    _install(monkeypatch, _Resp(payload, status_code=400))
 
     result = editor_test_callbacks.quick_test_tabular(
         1, "MATCH (n) DELETE n"
@@ -100,11 +119,8 @@ def test_quick_test_http_400_shows_error(monkeypatch):
 
 
 def test_quick_test_request_exception_shows_error(monkeypatch):
-    """A raised RequestException is caught and surfaced as an error badge."""
-    def _failing_post(url, json, timeout):
-        raise requests_lib.exceptions.ConnectionError("Connection refused")
-
-    monkeypatch.setattr(editor_test_callbacks.requests, "post", _failing_post)
+    """A transport failure is caught and surfaced as an error badge."""
+    _install_error(monkeypatch)
 
     result = editor_test_callbacks.quick_test_tabular(
         1, "MATCH (n) RETURN n"
@@ -117,9 +133,7 @@ def test_quick_test_request_exception_shows_error(monkeypatch):
 def test_view_test_tabular_success(monkeypatch):
     """View Test (tabular) fills the table pane and hides the graph pane."""
     payload = {"isGraph": False, "rawResults": [{"name": "Alice"}], "resultCount": 1}
-    monkeypatch.setattr(
-        editor_test_callbacks.requests, "post", lambda *a, **k: _Resp(payload)
-    )
+    _install(monkeypatch, _Resp(payload))
     monkeypatch.setattr(
         editor_test_callbacks, "ctx", _FakeContext("editor-view-test-tabular")
     )
@@ -136,9 +150,7 @@ def test_view_test_tabular_success(monkeypatch):
 
 def test_view_test_graph_success(monkeypatch):
     """View Test (graph) fills the Cytoscape elements and shows the graph pane."""
-    monkeypatch.setattr(
-        editor_test_callbacks.requests, "post", lambda *a, **k: _Resp(_GRAPH_PAYLOAD)
-    )
+    _install(monkeypatch, _Resp(_GRAPH_PAYLOAD))
     monkeypatch.setattr(
         editor_test_callbacks, "ctx", _FakeContext("editor-view-test-graph")
     )
@@ -168,7 +180,7 @@ def test_toggle_test_modal_opens_with_title(monkeypatch):
     def _fail_post(*_args, **_kwargs):
         raise AssertionError("toggle_test_modal must not perform HTTP")
 
-    monkeypatch.setattr(editor_test_callbacks.requests, "post", _fail_post)
+    monkeypatch.setattr(api_client, "post", _fail_post)
 
     monkeypatch.setattr(
         editor_test_callbacks, "ctx", _FakeContext("editor-view-test-tabular")
@@ -188,11 +200,7 @@ def test_toggle_test_modal_opens_with_title(monkeypatch):
 def test_view_test_error_shows_error_display(monkeypatch):
     """A non-200 from the execute endpoint renders an error display pane."""
     payload = {"detail": {"message": "Query contains write operations"}}
-    monkeypatch.setattr(
-        editor_test_callbacks.requests,
-        "post",
-        lambda *a, **k: _Resp(payload, status_code=400),
-    )
+    _install(monkeypatch, _Resp(payload, status_code=400))
     monkeypatch.setattr(
         editor_test_callbacks, "ctx", _FakeContext("editor-view-test-tabular")
     )
@@ -208,11 +216,7 @@ def test_view_test_error_shows_error_display(monkeypatch):
 def test_view_test_error_includes_hint_and_doc_link(monkeypatch):
     """The modal renders the curated hint and Cypher doc link, like the Graph page."""
     payload = {"detail": {"message": "Query contains write operations"}}
-    monkeypatch.setattr(
-        editor_test_callbacks.requests,
-        "post",
-        lambda *a, **k: _Resp(payload, status_code=400),
-    )
+    _install(monkeypatch, _Resp(payload, status_code=400))
     monkeypatch.setattr(
         editor_test_callbacks, "ctx", _FakeContext("editor-view-test-tabular")
     )
@@ -227,11 +231,7 @@ def test_view_test_error_includes_hint_and_doc_link(monkeypatch):
 def test_run_test_non_dict_detail_does_not_raise(monkeypatch):
     """A FastAPI 422 (list ``detail``) must not escape as AttributeError."""
     payload = {"detail": [{"loc": ["body"], "msg": "bad"}]}
-    monkeypatch.setattr(
-        editor_test_callbacks.requests,
-        "post",
-        lambda *a, **k: _Resp(payload, status_code=422),
-    )
+    _install(monkeypatch, _Resp(payload, status_code=422))
 
     result = editor_test_callbacks._run_test("MATCH (n) RETURN n")
 
@@ -247,11 +247,7 @@ def test_run_test_non_json_error_body(monkeypatch):
         def json(self):
             raise ValueError("not json")
 
-    monkeypatch.setattr(
-        editor_test_callbacks.requests,
-        "post",
-        lambda *a, **k: _BadJsonResp({}, status_code=500),
-    )
+    _install(monkeypatch, _BadJsonResp({}, status_code=500))
 
     result = editor_test_callbacks._run_test("MATCH (n) RETURN n")
 
@@ -263,11 +259,7 @@ def test_quick_test_badge_keeps_short_message(monkeypatch):
     """The badge shows the short raw message and must not leak the modal hint."""
     payload = {"detail": {"error": "Validation failed",
                           "message": "Query contains write operations"}}
-    monkeypatch.setattr(
-        editor_test_callbacks.requests,
-        "post",
-        lambda *a, **k: _Resp(payload, status_code=400),
-    )
+    _install(monkeypatch, _Resp(payload, status_code=400))
 
     badge = editor_test_callbacks.quick_test_tabular(1, "MATCH (n) DELETE n")
 
@@ -327,9 +319,7 @@ def test_no_callback_owns_both_quick_test_panes():
 def test_tabular_result_hides_fit_row(monkeypatch):
     """A tabular result hides the Cytoscape-only Fit row (output index 6)."""
     payload = {"isGraph": False, "rawResults": [{"name": "Alice"}], "resultCount": 1}
-    monkeypatch.setattr(
-        editor_test_callbacks.requests, "post", lambda *a, **k: _Resp(payload)
-    )
+    _install(monkeypatch, _Resp(payload))
     monkeypatch.setattr(
         editor_test_callbacks, "ctx", _FakeContext("editor-view-test-tabular")
     )
@@ -343,9 +333,7 @@ def test_tabular_result_hides_fit_row(monkeypatch):
 
 def test_graph_result_shows_fit_row(monkeypatch):
     """A graph result shows the right-aligned Fit row (output index 6)."""
-    monkeypatch.setattr(
-        editor_test_callbacks.requests, "post", lambda *a, **k: _Resp(_GRAPH_PAYLOAD)
-    )
+    _install(monkeypatch, _Resp(_GRAPH_PAYLOAD))
     monkeypatch.setattr(
         editor_test_callbacks, "ctx", _FakeContext("editor-view-test-graph")
     )
@@ -385,9 +373,7 @@ def test_fit_row_style_is_explicit_on_every_branch(monkeypatch):
     """Every style dict view_test writes to the Fit row must set `display`
     explicitly — Dash replaces the prop, so an omitted display would un-hide it."""
     def run(pane: str, payload: dict):
-        monkeypatch.setattr(
-            editor_test_callbacks.requests, "post", lambda *a, **k: _Resp(payload)
-        )
+        _install(monkeypatch, _Resp(payload))
         monkeypatch.setattr(
             editor_test_callbacks, "ctx", _FakeContext(f"editor-view-test-{pane}")
         )

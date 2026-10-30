@@ -34,7 +34,7 @@ except ImportError:  # pragma: no cover
 
 from app.scripts.init_rabbitmq import init_rabbitmq
 from app.settings import settings
-from common.runtime_settings.events import (
+from common.messaging.settings_events import (
     RUNTIME_CONFIG_EXCHANGE,
     listen_for_settings_changed,
     publish_settings_changed,

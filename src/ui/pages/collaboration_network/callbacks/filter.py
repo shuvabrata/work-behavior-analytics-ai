@@ -1,0 +1,323 @@
+"""Collaboration Network callbacks — data loading and filter interactions."""
+
+from typing import Any
+from urllib.parse import parse_qs
+
+import dash_bootstrap_components as dbc
+from dash import Input, Output, State, callback, clientside_callback, html
+from dash.exceptions import PreventUpdate
+
+from domain.collaboration.config import CollaborationNetworkConfig, LAYER_ORDER
+from domain.collaboration.errors import CollaborationDataUnavailable
+from ui import api_client
+from ui.api_client import ApiError
+from ui.collaboration_params import config_to_query_params, translate_api_error
+from ui.components.common import (
+    create_alert,
+    describe_config_error,
+    register_loading_overlay_hider,
+)
+from ui.styles import FONT_SIZE_SMALL
+from common.logger import logger
+from ..layout import (
+    _COLLABORATION_LAYOUT,
+    _compute_collab_filtered,
+    _data_unavailable_banner,
+    _error_banner,
+    _get_communities,
+    _split_elements,
+)
+
+
+# ---------------------------------------------------------------------------
+# Server-side callback — load collaboration network data into the store
+# ---------------------------------------------------------------------------
+
+@callback(
+    [Output("collab-elements-store",       "data"),
+     Output("collab-cytoscape",            "layout"),
+     Output("collab-banner",               "children"),
+     Output("collab-banner",               "style"),
+     Output("collab-empty-state",          "style"),
+     Output("collab-loading-state",        "data")],
+    [Input("url", "search"),
+     Input("url", "pathname")],
+)
+def load_collaboration_network(search: str | None, pathname: str | None) -> tuple[list[dict[str, Any]], dict[str, Any], list[Any], dict[str, Any], dict[str, Any], bool]:
+    """Fetch raw elements into the store when this page is active.
+
+    Note: prevent_initial_call is intentionally NOT set here.  In Dash's
+    multi-page pattern the output components don't exist until the user
+    navigates to this page.  When they first appear, Dash treats the callback
+    fire as an "initial call" — which prevent_initial_call=True would suppress.
+    Since url.pathname won't change again after navigation, the callback would
+    never run.  The pathname guard handles all non-collaboration routes safely.
+    """
+    if pathname != "/app/collaboration":
+        raise PreventUpdate
+
+    logger.info(f"[COLLAB-PAGE] Loading collaboration network search={search!r}")
+
+    params = parse_qs((search or "").lstrip("?"), keep_blank_values=True)
+    hide = {"display": "none"}
+    show = {"display": "block"}
+
+    empty_state_style = {
+        "textAlign": "center",
+        "padding": "80px 16px",
+        "color": "var(--color-text-secondary)",
+        "fontSize": FONT_SIZE_SMALL,
+    }
+
+    try:
+        query_dict = {
+            "layers":                     params.get("layers"),
+            "lookback_days":              params.get("lookback_days",              [None])[0],
+            "min_pair_score":             params.get("min_pair_score",             [None])[0],
+            "top_n_edges_per_node":       params.get("top_n_edges_per_node",       [None])[0],
+            "community_gap_x":            params.get("community_gap_x",            [None])[0],
+            "community_gap_y":            params.get("community_gap_y",            [None])[0],
+            "ensure_min_connection":      params.get("ensure_min_connection",      [None])[0],
+            "exclude_bots":               params.get("exclude_bots",               [None])[0],
+            "exclude_suffixes":           params.get("exclude_suffixes",           [None])[0],
+            **{
+                f"w_{layer}": params.get(f"w_{layer}", [None])[0]
+                for layer in LAYER_ORDER
+            },
+        }
+        config = CollaborationNetworkConfig.from_query_values(query_dict)
+
+        try:
+            data = api_client.get_json(
+                "/api/v1/graph/collaboration-network",
+                params=config_to_query_params(config),
+            )
+        except ApiError as exc:
+            translate_api_error(exc)  # raises CollaborationDataUnavailable / ValueError
+            raise
+        elements = data["elements"]
+
+        if not elements:
+            logger.warning("[COLLAB-PAGE] No elements returned")
+            return [], _COLLABORATION_LAYOUT, [], hide, {**empty_state_style, "display": "block"}, False
+
+        applied_config = data.get("config") or {}
+        lookback_days  = applied_config.get("lookback_days", 90)
+        top_n          = applied_config.get("top_n_edges_per_node", 0)
+        layer_count    = len(applied_config.get("enabled_layers", []))
+
+        banner_content = create_alert(
+            [
+                html.Strong("Org Collaboration Network"),
+                html.Span(f"  \u2014  Last {lookback_days} days  "),
+                dbc.Badge(f"{data['num_people']} people",             color="primary",   className="me-1"),
+                dbc.Badge(f"{data['num_pairs']} pairs",               color="secondary", className="me-1"),
+                dbc.Badge(f"{data['num_communities']} communities",    color="success",   className="me-1"),
+                dbc.Badge(f"modularity {data['modularity']:.3f}",     color="info",      className="me-1"),
+                dbc.Badge(f"{layer_count} layers",                    color="dark",      className="me-1"),
+                dbc.Badge("Top-N off" if top_n <= 0 else f"top {top_n}/node", color="warning"),
+            ],
+            color="light",
+            class_name="mb-0 py-2",
+            style={"fontSize": FONT_SIZE_SMALL},
+        )
+
+        logger.info(
+            f"[COLLAB-PAGE] SUCCESS — {len(elements)} elements, {data['num_people']} people, {data['num_communities']} "
+            f"communities, modularity={data['modularity']:.3f}"
+        )
+
+        return elements, _COLLABORATION_LAYOUT, [banner_content], {**show, "flex": "1"}, hide, False
+
+    except CollaborationDataUnavailable as exc:
+        # Query ran cleanly but there is nothing to draw. Distinct from the
+        # ValueError branch below, which is a genuine settings problem.
+        logger.info(f"[COLLAB-PAGE] No collaborations: {exc}")
+        return [], _COLLABORATION_LAYOUT, [_data_unavailable_banner(config)], show, hide, False
+
+    except ValueError as exc:
+        logger.warning(f"[COLLAB-PAGE] Invalid settings: {exc}")
+        return [], _COLLABORATION_LAYOUT, [_error_banner(describe_config_error(exc))], show, hide, False
+
+    except Exception as exc:  # pylint: disable=broad-except
+        logger.exception(f"[COLLAB-PAGE] Unexpected error: {exc}")
+        return [], _COLLABORATION_LAYOUT, [_error_banner("An unexpected error occurred.")], show, hide, False
+
+
+# ---------------------------------------------------------------------------
+# Filter callbacks
+# ---------------------------------------------------------------------------
+
+@callback(
+    Output("collab-cytoscape", "elements"),
+    [Input("collab-elements-store",          "data"),
+     Input("collab-community-filter",        "value"),
+     Input("collab-weight-threshold-slider", "value"),
+     Input("collab-top-n-toggle",            "value")],
+)
+def apply_collab_filters(
+    elements: list[dict[str, Any]] | None,
+    selected_communities: list[int] | None,
+    weight_threshold: float | int | None,
+    top_n_mode: str | None,
+) -> list[dict[str, Any]]:
+    """Translate raw store elements through the active filters \u2192 cytoscape."""
+    if not elements:
+        return []
+    result = _compute_collab_filtered(
+        elements,
+        selected_communities or [],
+        int(weight_threshold or 0),
+        top_n_mode or "all",
+    )
+    logger.debug(
+        f"[COLLAB-FILTER] communities={selected_communities} weight>={weight_threshold} top_n={top_n_mode} → "
+        f"{len(result)} elements"
+    )
+    return result
+
+
+@callback(
+    [Output("collab-community-filter",          "options"),
+     Output("collab-community-filter",          "value"),
+     Output("collab-community-available-store", "data")],
+    Input("collab-elements-store", "data"),
+)
+def update_collab_community_filter(elements: list[dict[str, Any]] | None) -> tuple[list[dict[str, Any]], list[int], list[int]]:
+    """Populate the community checklist when new data loads.
+
+    Note: no prev-state guard here.  On re-navigation the
+    collab-community-available-store can still hold community IDs from the
+    previous visit, which would cause prev_set == curr_set → PreventUpdate
+    → checklist stays empty.  Since collab-elements-store only changes on
+    page load (not on filter interactions), always repopulating is safe and
+    does not clobber mid-session selections.
+    """
+    if not elements:
+        return [], [], []
+    community_ids = _get_communities(elements)
+    options = [{"label": f"Community {cid}", "value": cid} for cid in community_ids]
+    return options, community_ids, community_ids
+
+
+@callback(
+    Output("collab-weight-threshold-label", "children"),
+    Input("collab-weight-threshold-slider", "value"),
+)
+def update_collab_weight_label(value: float | int | None) -> str:
+    """Update the weight threshold label text."""
+    return f"Show edges with weight \u2265 {value or 0}"
+
+
+@callback(
+    [Output("collab-filter-results-summary", "children"),
+     Output("collab-filter-active-chips",    "children")],
+    [Input("collab-elements-store",          "data"),
+     Input("collab-community-filter",        "value"),
+     Input("collab-weight-threshold-slider", "value"),
+     Input("collab-top-n-toggle",            "value")],
+)
+def update_collab_filter_feedback(
+    elements: list[dict[str, Any]] | None,
+    selected_communities: list[int] | None,
+    weight_threshold: float | int | None,
+    top_n_mode: str | None,
+) -> tuple[str, list[Any]]:
+    """Keep the summary line and active-filter chips up to date."""
+    if not elements:
+        return (
+            "Load a graph to refine it locally.",
+            [html.Span("No active filters", className="graph-filter-empty-state")],
+        )
+
+    nodes, edges = _split_elements(elements)
+    filtered = _compute_collab_filtered(
+        elements,
+        selected_communities or [],
+        int(weight_threshold or 0),
+        top_n_mode or "all",
+    )
+    f_nodes, f_edges = _split_elements(filtered)
+
+    summary = (
+        f"Showing {len(f_nodes)} nodes / {len(f_edges)} edges"
+        f" from {len(nodes)} nodes / {len(edges)} edges"
+    )
+
+    chips: list[Any] = []
+    all_community_ids = _get_communities(elements)
+    if selected_communities and set(selected_communities) != set(all_community_ids):
+        chips.append(dbc.Badge(
+            f"Communities: {len(selected_communities)} selected", color="primary", className="me-1"
+        ))
+    if (weight_threshold or 0) > 0:
+        chips.append(dbc.Badge(f"Weight \u2265 {weight_threshold}", color="secondary", className="me-1"))
+    if top_n_mode and top_n_mode != "all":
+        label = "Top 50" if top_n_mode == "top50" else "Top 100"
+        chips.append(dbc.Badge(label, color="info", className="me-1"))
+
+    if not chips:
+        chips = [html.Span("No active filters", className="graph-filter-empty-state")]
+
+    return summary, chips
+
+
+@callback(
+    [Output("collab-community-filter",        "value",  allow_duplicate=True),
+     Output("collab-weight-threshold-slider", "value",  allow_duplicate=True),
+     Output("collab-top-n-toggle",            "value",  allow_duplicate=True)],
+    Input("collab-clear-filters-btn", "n_clicks"),
+    State("collab-community-filter",  "options"),
+    prevent_initial_call=True,
+)
+def clear_collab_filters(n_clicks: int | None, community_options: list[dict[str, Any]] | None) -> tuple[list[int], int, str]:
+    """Reset all filter controls to their defaults."""
+    all_communities = [opt["value"] for opt in (community_options or [])]
+    return all_communities, 0, "all"
+
+
+@callback(
+    Output("collab-right-tab-filters-collapse", "is_open"),
+    Output("collab-right-tab-filters-btn", "className"),
+    Input("collab-right-tab-filters-btn", "n_clicks"),
+    State("collab-right-tab-filters-collapse", "is_open"),
+    prevent_initial_call=True,
+)
+def toggle_collab_filter_panel(n_clicks: int | None, is_open: bool) -> tuple[bool, str]:
+    """Toggle the Filters tab open/closed and update the icon button active state."""
+    new_open = not is_open
+    btn_class = "graph-right-panel-tab-icon active" if new_open else "graph-right-panel-tab-icon"
+    return new_open, btn_class
+
+
+# ---------------------------------------------------------------------------
+# Clientside loading overlay hider
+# ---------------------------------------------------------------------------
+
+register_loading_overlay_hider("collab-loading-state", "collab-loading-overlay")
+
+# ---------------------------------------------------------------------------
+# Clientside callback — cy.resize() + cy.fit() after initial data load
+# ---------------------------------------------------------------------------
+
+clientside_callback(
+    """
+    function(storeData) {
+        if (!storeData || !Array.isArray(storeData) || storeData.length === 0) {
+            return window.dash_clientside.no_update;
+        }
+        // Delay to allow apply_collab_filters to complete and Cytoscape to paint.
+        window.setTimeout(function() {
+            var elem = document.getElementById("collab-cytoscape");
+            if (!elem || !elem._cyreg || !elem._cyreg.cy) { return; }
+            var cy = elem._cyreg.cy;
+            cy.resize();
+            cy.fit(cy.elements(), 30);
+        }, 400);
+        return "fit-scheduled n=" + storeData.length;
+    }
+    """,
+    Output("collab-render-trigger", "children"),
+    Input("collab-elements-store",  "data"),
+    prevent_initial_call=True,
+)

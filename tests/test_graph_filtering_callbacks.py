@@ -2,7 +2,7 @@
 
 import pytest
 
-from app.dash_app.pages.graph.callbacks import filtering as filtering_callbacks
+from ui.pages.graph.callbacks import filtering as filtering_callbacks
 
 
 pytestmark = pytest.mark.unit

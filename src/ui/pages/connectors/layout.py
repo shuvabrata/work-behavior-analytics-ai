@@ -1,0 +1,1050 @@
+"""Dash layouts for the Connectors pages."""
+
+from typing import Any
+from dash import dcc, html
+import dash_bootstrap_components as dbc
+
+from domain.connector_registry import CONNECTOR_REGISTRY
+from ui import api_client
+from ui.api_client import ApiError
+from ui.components.common import create_alert, create_page_header
+from ui.settings import settings
+from ui.styles import (
+    CARD_CONTAINER_STYLE,
+    COLOR_BACKGROUND_LIGHT,
+    COLOR_BORDER,
+    COLOR_CHARCOAL_MEDIUM,
+    COLOR_CODE_BACKGROUND,
+    COLOR_ERROR,
+    COLOR_GRAY_DARK,
+    COLOR_GRAY_MEDIUM,
+    COLOR_NAVY,
+    COLOR_SUCCESS,
+    FONT_SANS,
+    FONT_SIZE_SMALL,
+    FONT_WEIGHT_MEDIUM,
+    FONT_WEIGHT_SEMIBOLD,
+    SPACING_XXXSMALL,
+    SPACING_XSMALL,
+    SPACING_SMALL,
+)
+from .components.config_forms import (
+    CONFIG_FORM_SPECS,
+    FIELD_CHECKBOX,
+    FIELD_MULTISELECT,
+    FIELD_NUMBER,
+    FIELD_PASSWORD,
+    FIELD_TEXT,
+    FIELD_TEXTAREA,
+)
+from .components.tooltips import FIELD_TOOLTIPS
+
+
+def get_layout() -> html.Div:
+    return html.Div(
+        [
+            create_page_header(
+                [("Connectors", None)],
+                "Manage external integrations and verify connectivity.",
+            ),
+            html.Div(
+                [
+                    dcc.Store(id="connectors-store", storage_type="memory"),
+                    dcc.Loading(
+                        id="connectors-loading",
+                        type="circle",
+                        children=html.Div(
+                            dbc.Row(
+                                id="connectors-grid",
+                                className="g-3",
+                                children=[
+                                    dbc.Col(
+                                        html.Div(
+                                            "Loading connectors...",
+                                            style={
+                                                "fontFamily": FONT_SANS,
+                                                "fontSize": FONT_SIZE_SMALL,
+                                                "color": COLOR_GRAY_MEDIUM,
+                                            },
+                                        ),
+                                        width=12,
+                                    )
+                                ],
+                            )
+                        ),
+                    ),
+                ],
+                style=CARD_CONTAINER_STYLE,
+            ),
+        ],
+    )
+
+
+def get_detail_layout(connector_type: str) -> html.Div:
+    connector_meta = CONNECTOR_REGISTRY.get(connector_type, {})
+    display_name: str = connector_meta.get("display_name", connector_type)  # type: ignore[assignment]
+    setup_type = connector_meta.get("setup_type", "db_backed")
+    supports_items = connector_meta.get("supports_items", True)
+    form_spec = CONFIG_FORM_SPECS.get(connector_type, {})
+
+    if setup_type == "manual":
+        return _get_manual_setup_layout(connector_type, connector_meta)
+
+    if not form_spec:
+        return html.Div(
+            [
+                create_page_header(
+                    [("Connectors", None)],
+                    "Manage external integrations and verify connectivity.",
+                ),
+                create_alert(
+                    f"Unknown connector type: {connector_type}",
+                    color="warning",
+                    class_name="mt-3",
+                ),
+            ]
+        )
+
+    # Determine which sections to show
+    producer_container = connector_meta.get("producer_container")
+
+    # Build the sections list dynamically
+    sections: list[Any] = []
+
+    # 1. Top Action Bar — most-used actions
+    sections.append(_section_container(_render_top_action_bar(connector_type, connector_meta)))
+
+    # 2. Recent Actions — only for connectors with a producer
+    if producer_container:
+        sections.append(_section_container(_render_recent_scans(connector_type, connector_meta)))
+
+    # 3. Add New {item label} — only for connectors that support items
+    if supports_items:
+        sections.append(
+            _section_container(
+                html.Div(
+                    [
+                        html.Div(
+                            [
+                                html.I(className="fas fa-plus me-1", style={"fontSize": "11px"}),
+                                f"Add New {form_spec.get('item', {}).get('label', 'Item')}",  # type: ignore[attr-defined]
+                            ],
+                            id="add-item-collapse-toggle",
+                            className="collapse-toggle-subtle",
+                            style={
+                                "fontSize": "11px",
+                                "fontWeight": FONT_WEIGHT_SEMIBOLD,
+                                "color": COLOR_GRAY_DARK,
+                                "marginBottom": SPACING_XSMALL,
+                                "cursor": "pointer",
+                                "userSelect": "none",
+                            },
+                        ),
+                        dbc.Collapse(
+                            id="add-item-collapse",
+                            is_open=False,
+                            children=_render_item_form(form_spec, connector_type),  # type: ignore[arg-type]
+                        ),
+                    ],
+                )
+            )
+        )
+
+    # 4. Connector Settings — connector-level settings, collapsed by default
+    connector_fields = form_spec.get("connector_config", [])  # type: ignore[attr-defined]
+    has_connector_settings = bool(connector_fields) or bool(producer_container)
+
+    connector_settings_children = []
+    if not has_connector_settings:
+        connector_settings_children.append(
+            html.Div(
+                "No connector-level settings required.",
+                style={
+                    "fontFamily": FONT_SANS,
+                    "fontSize": FONT_SIZE_SMALL,
+                    "color": COLOR_GRAY_MEDIUM,
+                },
+            )
+        )
+    else:
+        if connector_fields:
+            connector_settings_children.append(_render_connector_config(form_spec, connector_type))  # type: ignore[arg-type]
+        if producer_container:
+            connector_settings_children.append(_render_scan_interval_input(connector_type))
+        connector_settings_children.append(
+            dbc.Button(
+                "Save Configuration",
+                id={"type": "connector-save", "connector_type": connector_type},
+                color="primary",
+                size="sm",
+                className="mt-2",
+            )
+        )
+
+    sections.append(
+        _section_container(
+            html.Div(
+                [
+                    html.Div(
+                        [
+                            html.I(className="fas fa-cog me-1", style={"fontSize": "11px"}),
+                            "Connector Settings",
+                        ],
+                        id="connector-settings-collapse-toggle",
+                        className="collapse-toggle-subtle",
+                        style={
+                            "fontSize": "11px",
+                            "fontWeight": FONT_WEIGHT_SEMIBOLD,
+                            "color": COLOR_GRAY_DARK,
+                            "marginBottom": SPACING_XSMALL,
+                            "cursor": "pointer",
+                            "userSelect": "none",
+                        },
+                    ),
+                    dbc.Collapse(
+                        id="connector-settings-collapse",
+                        is_open=False,
+                        children=connector_settings_children,
+                    ),
+                ],
+            )
+        )
+    )
+
+    # 5. Repository Cards — only for connectors that support items
+    if supports_items:
+        sections.append(
+            _section_container(
+                html.Div(
+                    id="connector-items-list",
+                    children=[
+                        html.Div(
+                            "No items configured yet.",
+                            style={
+                                "fontFamily": FONT_SANS,
+                                "fontSize": FONT_SIZE_SMALL,
+                                "color": COLOR_GRAY_MEDIUM,
+                                "paddingTop": SPACING_XSMALL,
+                            },
+                        )
+                    ],
+                )
+            )
+        )
+    else:
+        # Hidden placeholder required for shared render_items_list callback
+        sections.append(html.Div(id="connector-items-list", style={"display": "none"}))
+
+    return html.Div(
+        [
+            create_page_header(
+                [("Connectors", "/app/connectors"), (display_name, None)],
+                f"Configure the {display_name} connector.",
+            ),
+            html.Div(
+                [
+                    dcc.Store(id="connector-detail-store", storage_type="memory"),
+                    dcc.Store(id="connector-items-store", storage_type="memory"),
+                    dcc.Store(id="connector-edit-item", storage_type="memory"),
+                    dcc.Store(id="connector-scroll-trigger", storage_type="memory"),
+                    dcc.Store(id="connector-item-delete-target", storage_type="memory"),
+                    dcc.Store(id="connector-delete-target", storage_type="memory"),
+                    dcc.Store(
+                        id={"type": "connector-search-filters-store", "connector_type": connector_type},
+                        storage_type="memory",
+                    ),
+                    dcc.Interval(id="connector-scans-poll", interval=settings.CONNECTOR_SCAN_POLL_INTERVAL, disabled=True),
+                    dcc.ConfirmDialog(
+                        id="connector-delete-confirm",
+                        message="Are you sure you want to delete ALL configurations "
+                                "for this connector? This cannot be undone.",
+                    ),
+                    dcc.ConfirmDialog(
+                        id="connector-item-delete-confirm",
+                        message="Are you sure you want to delete this item? "
+                                "This cannot be undone.",
+                    ),
+                    html.Div(
+                        id="connector-action-feedback",
+                        key=f"connector-feedback-{connector_type}",
+                        style={
+                            "position": "sticky",
+                            "top": SPACING_SMALL,
+                            "zIndex": 1000,
+                            "marginBottom": SPACING_SMALL,
+                        },
+                    ),
+                    *sections,
+                ],
+                style=CARD_CONTAINER_STYLE,
+            ),
+        ],
+    )
+
+
+# ── Top action bar ───────────────────────────────────────────────────────
+
+
+def _render_top_action_bar(connector_type: str, connector_meta: dict[str, Any]) -> html.Div:
+    """Render the top action bar with Run Scan and Delete Configuration.
+
+    Run Scan is only shown for connectors that have a ``producer_container``
+    in the registry (i.e. GitHub, Jira, Confluence).  MCP connectors get a
+    "Test Connection" button instead.
+    """
+    producer_container = connector_meta.get("producer_container")
+    section = connector_meta.get("section")
+    buttons = []
+
+    if producer_container:
+        buttons.append(
+            dbc.Button(
+                "Run Scan",
+                id={"type": "connector-run-scan", "connector_type": connector_type},
+                color="success",
+                size="sm",
+                className="me-2",
+            ),
+        )
+
+    if section == "mcp":
+        buttons.append(
+            dbc.Button(
+                "Test Connection",
+                id={"type": "connector-mcp-test", "connector_type": connector_type},
+                color="secondary",
+                size="sm",
+                className="me-2",
+            ),
+        )
+
+    buttons.append(
+        dbc.Button(
+            "Delete Configuration",
+            id={"type": "connector-delete", "connector_type": connector_type},
+            color="outline-danger",
+            size="sm",
+        ),
+    )
+
+    return html.Div(
+        buttons,
+        style={
+            "display": "flex",
+            "alignItems": "center",
+        },
+    )
+
+
+# ── Recent Actions section ───────────────────────────────────────────────
+
+
+def _render_recent_scans(_connector_type: str, connector_meta: dict[str, Any]) -> html.Div:
+    """Render the Recent Actions section.
+
+    Only shown for connectors that have a ``producer_container`` in the
+    registry (i.e. GitHub, Jira, Confluence).
+
+    Note: ``_connector_type`` is reserved for future use — it will be used
+    to tailor scan messaging per connector type.
+    """
+    producer_container = connector_meta.get("producer_container")
+    if not producer_container:
+        return html.Div()
+
+    return html.Div(
+        [
+            html.Div(
+                [
+                    html.I(className="fas fa-history me-1", style={"fontSize": "11px"}),
+                    "Recent Actions",
+                ],
+                id="recent-actions-collapse-toggle",
+                className="collapse-toggle-subtle",
+                style={
+                    "fontSize": "11px",
+                    "fontWeight": FONT_WEIGHT_SEMIBOLD,
+                    "color": COLOR_GRAY_DARK,
+                    "marginBottom": SPACING_XSMALL,
+                    "cursor": "pointer",
+                    "userSelect": "none",
+                },
+            ),
+            dbc.Collapse(
+                id="recent-actions-collapse",
+                is_open=False,
+                children=html.Div(
+                    id="connector-scans-list",
+                    children="No recent actions.",
+                    style={
+                        "fontFamily": FONT_SANS,
+                        "fontSize": FONT_SIZE_SMALL,
+                        "color": COLOR_GRAY_MEDIUM,
+                    },
+                ),
+            ),
+        ],
+    )
+
+
+# ── Section container helper ─────────────────────────────────────────────
+
+
+def _section_container(children: html.Div) -> html.Div:
+    """Wrap a section in a subtle card with a left navy accent border.
+
+    Uses tighter vertical padding than the shared ``FEATURE_CARD_STYLE`` so a
+    collapsed section (title only) does not waste vertical space above and
+    below the header.
+    """
+    return html.Div(
+        children,
+        style={
+            "padding": SPACING_SMALL,
+            "paddingTop": SPACING_XXXSMALL,
+            "paddingBottom": SPACING_XXXSMALL,
+            "backgroundColor": COLOR_BACKGROUND_LIGHT,
+            "border": f"1px solid {COLOR_BORDER}",
+            "borderLeft": f"3px solid {COLOR_NAVY}",
+            "borderRadius": "2px",
+            "marginBottom": SPACING_SMALL,
+        },
+    )
+
+
+def _section_title(text: str) -> html.Div:
+    return html.Div(
+        text,
+        style={
+            "fontFamily": FONT_SANS,
+            "fontSize": FONT_SIZE_SMALL,
+            "color": COLOR_CHARCOAL_MEDIUM,
+            "fontWeight": FONT_WEIGHT_MEDIUM,
+            "marginBottom": SPACING_XSMALL,
+            "textTransform": "uppercase",
+            "letterSpacing": "0.5px",
+        },
+    )
+
+
+def _render_scan_interval_input(connector_type: str) -> html.Div:
+    """Render the Auto-Scan Interval number input for producer-backed connectors.
+
+    The value is stored in ``connectors.scan_interval_hours``.  A blank/empty
+    value means no automatic schedule (manual scans only).  Any value >= 1
+    enables the scheduler for this connector.
+    """
+    tooltip_id = f"tooltip-target-{connector_type}-scan-interval"
+    return html.Div(
+        [
+            html.Div(
+                [
+                    html.Span("AUTO-SCAN INTERVAL"),
+                    html.I(
+                        className="fas fa-info-circle",
+                        id=tooltip_id,
+                        style={"cursor": "help", "marginLeft": "6px", "color": COLOR_GRAY_MEDIUM},
+                    ),
+                    dbc.Popover(
+                        dbc.PopoverBody(
+                            (
+                                "How often (in hours) the scheduler automatically triggers a scan for this "
+                                "connector. Leave blank to disable automatic scanning (manual only). "
+                                "The minimum value is 1 hour."
+                            ),
+                            style={"maxWidth": "320px"},
+                        ),
+                        target=tooltip_id,
+                        trigger="hover focus",
+                        placement="top",
+                        class_name="popover-inverted",
+                    ),
+                ],
+                style={
+                    "fontFamily": FONT_SANS,
+                    "fontSize": FONT_SIZE_SMALL,
+                    "color": COLOR_GRAY_MEDIUM,
+                    "marginTop": SPACING_SMALL,
+                    "marginBottom": SPACING_XSMALL,
+                    "letterSpacing": "0.5px",
+                    "display": "flex",
+                    "alignItems": "center",
+                },
+            ),
+            dbc.Row(
+                [
+                    dbc.Col(
+                        dbc.Input(
+                            id={
+                                "type": "connector-scan-interval",
+                                "connector_type": connector_type,
+                            },
+                            type="number",
+                            min=1,
+                            step=1,
+                            placeholder="e.g. 24  (blank = disabled)",
+                        ),
+                        md=4,
+                        xs=12,
+                    ),
+                    dbc.Col(
+                        html.Div(
+                            "hours between automated scans",
+                            style={
+                                "fontFamily": FONT_SANS,
+                                "fontSize": FONT_SIZE_SMALL,
+                                "color": COLOR_GRAY_MEDIUM,
+                                "lineHeight": "38px",
+                            },
+                        ),
+                        md=8,
+                        xs=12,
+                    ),
+                ],
+                className="g-2",
+            ),
+        ],
+    )
+
+
+def _render_connector_config(form_spec: dict[str, Any], connector_type: str) -> html.Div:
+    fields = form_spec.get("connector_config", [])
+    if not fields:
+        return html.Div(
+            "No connector-level settings required.",
+            style={
+                "fontFamily": FONT_SANS,
+                "fontSize": FONT_SIZE_SMALL,
+                "color": COLOR_GRAY_MEDIUM,
+            },
+        )
+
+    field_components = [
+        dbc.Col(_render_field(field, connector_type, section="connector"), md=6, xs=12)
+        for field in fields
+    ]
+    return dbc.Row(field_components, className="g-3")
+
+
+def _render_item_form(form_spec: dict[str, Any], connector_type: str) -> html.Div:
+    item_spec = form_spec.get("item", {})
+    fields = item_spec.get("fields", [])
+    if not fields:
+        return html.Div(
+            "No item configuration available.",
+            style={
+                "fontFamily": FONT_SANS,
+                "fontSize": FONT_SIZE_SMALL,
+                "color": COLOR_GRAY_MEDIUM,
+            },
+        )
+
+    field_components = [
+        dbc.Col(_render_field(field, connector_type, section="item"), md=6, xs=12)
+        for field in fields
+    ]
+
+    # Build grid rows: fields in pairs, then search filters in right column
+    grid_rows = []
+    for i in range(0, len(field_components), 2):
+        left = field_components[i]
+        right = field_components[i + 1] if i + 1 < len(field_components) else dbc.Col(html.Div(), md=6, xs=12)
+        grid_rows.append(dbc.Row([left, right], className="g-3"))
+
+    # Add search filters row (right column only) — only for github where search filters exist
+    if connector_type == "github":
+        grid_rows.append(
+            dbc.Row(
+                [
+                    dbc.Col(html.Div(), md=6, xs=12),
+                    dbc.Col(
+                        _render_search_filters_editor(connector_type),
+                        md=6,
+                        xs=12,
+                    ),
+                ],
+                className="g-3",
+            )
+        )
+
+    return html.Div(
+        [
+            html.Div(
+                item_spec.get("label", "Item"),
+                style={
+                    "fontFamily": FONT_SANS,
+                    "fontSize": FONT_SIZE_SMALL,
+                    "color": COLOR_CHARCOAL_MEDIUM,
+                    "fontWeight": FONT_WEIGHT_MEDIUM,
+                    "marginBottom": SPACING_XSMALL,
+                },
+            ),
+            html.Div(grid_rows),
+            html.Div(
+                [
+                    dbc.Button(
+                        "Add Item",
+                        id={"type": "connector-item-add", "connector_type": connector_type},
+                        color="primary",
+                        size="sm",
+                        className="me-2",
+                    ),
+                    dbc.Button(
+                        "Clear Form",
+                        id={"type": "connector-item-cancel", "connector_type": connector_type},
+                        color="outline-secondary",
+                        size="sm",
+                    ),
+                ],
+                className="mt-2"
+            )
+        ]
+    )
+
+
+def _render_search_filters_editor(connector_type: str) -> html.Div:
+    if connector_type != "github":
+        return html.Div()
+
+    tooltip_id = f"tooltip-target-{connector_type}-search-filters"
+
+    return html.Div(
+        [
+            html.Div(
+                [
+                    html.Span("SEARCH FILTERS"),
+                    html.I(
+                        className="fas fa-info-circle",
+                        id=tooltip_id,
+                        style={"cursor": "help", "marginLeft": "6px", "color": COLOR_GRAY_MEDIUM},
+                    ),
+                    dbc.Popover(
+                        dbc.PopoverBody(
+                            (
+                                "Search filters let you tag a repository with custom key/value metadata "
+                                "for downstream filtering and analysis. Add any string key (for example, "
+                                "props.division) and value (for example, platform). These filters do not "
+                                "change GitHub data collection; they help scope and segment results in "
+                                "analytics and queries."
+                            ),
+                            style={"maxWidth": "360px"},
+                        ),
+                        target=tooltip_id,
+                        trigger="hover focus",
+                        placement="top",
+                        class_name="popover-inverted",
+                    ),
+                ],
+                style={
+                    "fontFamily": FONT_SANS,
+                    "fontSize": FONT_SIZE_SMALL,
+                    "color": COLOR_GRAY_MEDIUM,
+                    "marginTop": SPACING_SMALL,
+                    "marginBottom": SPACING_XSMALL,
+                    "letterSpacing": "0.5px",
+                    "display": "flex",
+                    "alignItems": "center",
+                },
+            ),
+            html.Div(
+                "Add one or more key/value filters. Values are stored as strings.",
+                style={
+                    "fontFamily": FONT_SANS,
+                    "fontSize": FONT_SIZE_SMALL,
+                    "color": COLOR_GRAY_MEDIUM,
+                    "marginBottom": SPACING_XSMALL,
+                },
+            ),
+            dbc.Row(
+                [
+                    dbc.Col(
+                        dbc.Input(
+                            id={
+                                "type": "connector-search-filter-key",
+                                "connector_type": connector_type,
+                            },
+                            type="text",
+                            placeholder="props.application-context",
+                        ),
+                        md=5,
+                        xs=12,
+                    ),
+                    dbc.Col(
+                        dbc.Input(
+                            id={
+                                "type": "connector-search-filter-value",
+                                "connector_type": connector_type,
+                            },
+                            type="text",
+                            placeholder="production",
+                        ),
+                        md=5,
+                        xs=12,
+                    ),
+                    dbc.Col(
+                        dbc.Button(
+                            "Add Filter",
+                            id={
+                                "type": "connector-search-filter-add",
+                                "connector_type": connector_type,
+                            },
+                            color="outline-secondary",
+                            size="sm",
+                            className="w-100",
+                        ),
+                        md=2,
+                        xs=12,
+                    ),
+                ],
+                className="g-2",
+            ),
+            html.Div(
+                id={"type": "connector-search-filter-list", "connector_type": connector_type},
+                style={"marginTop": SPACING_XSMALL},
+            ),
+        ]
+    )
+
+
+def _render_field(field: dict[str, Any], connector_type: str, section: str) -> html.Div:
+    field_id = {
+        "type": "connector-field",
+        "connector_type": connector_type,
+        "section": section,
+        "field": field["key"],
+    }
+
+    icon_id = f"tooltip-target-{connector_type}-{section}-{field['key']}"
+    tooltip_text = FIELD_TOOLTIPS.get(connector_type, {}).get(field["key"])
+
+    label_children = [html.Span(field.get("label", field["key"]).upper())]
+
+    if field.get("required"):
+        label_children.append(
+            html.Span(
+                " *",
+                style={
+                    "color": "#b42318",
+                    "fontWeight": FONT_WEIGHT_MEDIUM,
+                    "marginLeft": "2px",
+                },
+            )
+        )
+    
+    if tooltip_text:
+        label_children.append(
+            html.I(  # type: ignore[arg-type]
+                className="fas fa-info-circle",
+                id=icon_id,
+                style={"cursor": "help", "marginLeft": "6px", "color": COLOR_GRAY_MEDIUM}
+            )
+        )
+        label_children.append(
+            dbc.Popover(
+                dbc.PopoverBody(
+                    tooltip_text,
+                    style={"maxWidth": "340px"},
+                ),
+                target=icon_id,
+                trigger="hover focus",
+                placement="top",
+                class_name="popover-inverted",
+            )
+        )
+
+    label = html.Div(
+        label_children,
+        style={
+            "fontFamily": FONT_SANS,
+            "fontSize": FONT_SIZE_SMALL,
+            "color": COLOR_GRAY_MEDIUM,
+            "marginBottom": SPACING_XSMALL,
+            "letterSpacing": "0.5px",
+            "display": "flex",
+            "alignItems": "center",
+        },
+    )
+
+    input_type = field.get("input_type", FIELD_TEXT)
+    placeholder = field.get("placeholder")
+
+    if input_type == FIELD_TEXTAREA:
+        control = dbc.Textarea(id=field_id, placeholder=placeholder, rows=3)
+    elif input_type == FIELD_PASSWORD:
+        control = dbc.Input(id=field_id, type="password", placeholder=placeholder)
+    elif input_type == FIELD_NUMBER:
+        control = dbc.Input(id=field_id, type="number", placeholder=placeholder)
+    elif input_type == FIELD_CHECKBOX:
+        control = dbc.Switch(id=field_id, label="", value=False)
+    elif input_type == FIELD_MULTISELECT:
+        options = field.get("options", [])
+        control = dcc.Dropdown(id=field_id, options=options, value=field.get("default", []), multi=True)
+    else:
+        control = dbc.Input(id=field_id, type="text", placeholder=placeholder)
+
+    return html.Div([label, control])
+
+
+def _fetch_env_setting_rows(keys: tuple[str, ...]) -> dict[str, dict[str, Any]]:
+    """Fetch selected setting rows from the API, keyed by setting name.
+
+    The UI must not read these values from its own environment: ``GITHUB_MCP_TOKEN``
+    is a secret and ``GITHUB_MCP_ENABLED`` / ``GITHUB_MCP_SERVER_URL`` are the API
+    runtime's configuration. ``GET /api/v1/settings/`` returns each row with the
+    already-masked ``value``/``effective_value`` and, crucially, ``is_configured``
+    — computed on the *raw* value, so it tells the user whether the secret is set
+    without revealing any part of it.
+
+    An unreachable API degrades to an empty mapping (every row renders "Not set")
+    rather than raising.
+    """
+    try:
+        rows: list[dict[str, Any]] = api_client.get("/api/v1/settings/").json()
+    except (ApiError, ValueError):
+        return {}
+    return {row["key"]: row for row in rows if row.get("key") in keys}
+
+
+_MCP_ENV_KEYS = ("GITHUB_MCP_ENABLED", "GITHUB_MCP_SERVER_URL", "GITHUB_MCP_TOKEN")
+
+
+def _get_manual_setup_layout(connector_type: str, connector_meta: dict[str, Any]) -> html.Div:
+    """Render a manual setup guidance page for connectors that are env/Docker-managed."""
+    display_name = connector_meta.get("display_name", connector_type)
+    env_rows = _fetch_env_setting_rows(_MCP_ENV_KEYS)
+
+    def _env_row(var: str, description: str) -> html.Tr:
+        """Render an env var row from its API setting row, with a set/not-set indicator."""
+        row = env_rows.get(var, {})
+        is_set = bool(row.get("is_configured", False))
+        # ``effective_value`` is already masked by the API for sensitive rows, so
+        # the UI never has to compute a mask of its own.
+        raw_value = row.get("effective_value")
+        display_value = "" if raw_value is None else str(raw_value)
+
+        # Status indicator: green dot + "Set" when present, red dot + "Not set" when absent.
+        status_color = COLOR_SUCCESS if is_set else COLOR_ERROR
+        status_label = "Set" if is_set else "Not set"
+
+        return html.Tr(
+            [
+                html.Td(
+                    html.Code(
+                        var,
+                        style={
+                            "fontFamily": "monospace",
+                            "fontSize": FONT_SIZE_SMALL,
+                            "color": COLOR_CHARCOAL_MEDIUM,
+                            "backgroundColor": COLOR_CODE_BACKGROUND,
+                            "padding": "2px 6px",
+                            "borderRadius": "2px",
+                        },
+                    ),
+                    style={"padding": f"{SPACING_XSMALL} {SPACING_SMALL} {SPACING_XSMALL} 0", "whiteSpace": "nowrap"},
+                ),
+                html.Td(
+                    description,
+                    style={
+                        "fontFamily": FONT_SANS,
+                        "fontSize": FONT_SIZE_SMALL,
+                        "color": COLOR_GRAY_MEDIUM,
+                        "padding": SPACING_XSMALL,
+                    },
+                ),
+                html.Td(
+                    [
+                        html.Span(
+                            "●",
+                            style={
+                                "color": status_color,
+                                "fontSize": "10px",
+                                "marginRight": "6px",
+                            },
+                        ),
+                        html.Span(
+                            status_label,
+                            style={
+                                "fontFamily": FONT_SANS,
+                                "fontSize": FONT_SIZE_SMALL,
+                                "fontWeight": FONT_WEIGHT_MEDIUM,
+                                "color": status_color,
+                                "marginRight": SPACING_SMALL,
+                            },
+                        ),
+                        html.Span(
+                            display_value if is_set else "—",
+                            style={
+                                "fontFamily": "monospace",
+                                "fontSize": FONT_SIZE_SMALL,
+                                "color": COLOR_GRAY_DARK if is_set else COLOR_GRAY_MEDIUM,
+                                "wordBreak": "break-all",
+                            },
+                        ),
+                    ],
+                    style={
+                        "padding": SPACING_XSMALL,
+                        "whiteSpace": "nowrap",
+                        "maxWidth": "320px",
+                    },
+                ),
+            ]
+        )
+
+    return html.Div(
+        [
+            create_page_header(
+                [("Connectors", "/app/connectors"), (display_name, None)],
+                f"Configure the {display_name} connector.",
+            ),
+            html.Div(
+                [
+                    # Required stores — callbacks still fire on all detail pages
+                    dcc.Store(id="connector-detail-store", storage_type="memory"),
+                    dcc.Store(id="connector-items-store", storage_type="memory"),
+                    dcc.Store(id="connector-edit-item", storage_type="memory"),
+                    dcc.Store(id="connector-scroll-trigger", storage_type="memory"),
+                    dcc.Store(
+                        id={"type": "connector-search-filters-store", "connector_type": connector_type},
+                        storage_type="memory",
+                    ),
+                    html.Div(
+                        id="connector-action-feedback",
+                        key=f"connector-feedback-{connector_type}",
+                        style={
+                            "position": "sticky",
+                            "top": SPACING_SMALL,
+                            "zIndex": 1000,
+                            "marginBottom": SPACING_SMALL,
+                        },
+                    ),
+                    # Hidden items list element — required for shared render_items_list callback
+                    html.Div(id="connector-items-list", style={"display": "none"}),
+                    # Test Connection action — verifies the MCP server listed tools
+                    html.Div(
+                        [
+                            dbc.Button(
+                                "Test Connection",
+                                id={"type": "connector-mcp-test", "connector_type": connector_type},
+                                color="secondary",
+                                size="sm",
+                            ),
+                        ],
+                        style={
+                            "padding": SPACING_SMALL,
+                            "backgroundColor": COLOR_BACKGROUND_LIGHT,
+                            "border": f"1px solid {COLOR_BORDER}",
+                            "borderLeft": f"3px solid {COLOR_NAVY}",
+                            "borderRadius": "2px",
+                            "marginBottom": SPACING_SMALL,
+                        },
+                    ),
+                    # Setup method notice
+                    html.Div(
+                        [
+                            _section_title("Setup Method"),
+                            html.Div(
+                                [
+                                    html.I(className="fa-solid fa-circle-info me-2", style={"color": "#4299e1"}),
+                                    html.Span(
+                                        "GitHub MCP Server is configured through Docker Compose environment "
+                                        "variables. Credentials are not stored in the database for this connector.",
+                                        style={
+                                            "fontFamily": FONT_SANS,
+                                            "fontSize": FONT_SIZE_SMALL,
+                                            "color": COLOR_CHARCOAL_MEDIUM,
+                                        },
+                                    ),
+                                ],
+                                style={
+                                    "display": "flex",
+                                    "alignItems": "flex-start",
+                                    "padding": SPACING_SMALL,
+                                    "backgroundColor": COLOR_CODE_BACKGROUND,
+                                    "border": f"1px solid {COLOR_BORDER}",
+                                    "borderRadius": "2px",
+                                    "marginBottom": SPACING_SMALL,
+                                },
+                            ),
+                        ],
+                        style={"marginBottom": SPACING_SMALL},
+                    ),
+                    # App service env vars
+                    html.Div(
+                        [
+                            _section_title("App Service — Required Variables"),
+                            html.Div(
+                                "Set these in the",
+                                style={"fontFamily": FONT_SANS, "fontSize": FONT_SIZE_SMALL, "color": COLOR_GRAY_MEDIUM, "marginBottom": SPACING_XSMALL, "display": "inline"},
+                            ),
+                            html.Code(
+                                " app ",
+                                style={"fontFamily": "monospace", "fontSize": FONT_SIZE_SMALL, "color": COLOR_CHARCOAL_MEDIUM, "backgroundColor": COLOR_CODE_BACKGROUND, "padding": "2px 6px", "borderRadius": "2px"},
+                            ),
+                            html.Div(
+                                "service environment in docker-compose.yml:",
+                                style={"fontFamily": FONT_SANS, "fontSize": FONT_SIZE_SMALL, "color": COLOR_GRAY_MEDIUM, "marginBottom": SPACING_SMALL, "display": "inline"},
+                            ),
+                            html.Table(
+                                [
+                                    html.Tbody(
+                                        [
+                                            _env_row(
+                                                "GITHUB_MCP_ENABLED",
+                                                "Set to true to enable the GitHub MCP integration in the AI agent.",
+                                            ),
+                                            _env_row(
+                                                "GITHUB_MCP_SERVER_URL",
+                                                "The URL of the running GitHub MCP sidecar service (e.g., http://github-mcp:8082).",
+                                            ),
+                                            _env_row(
+                                                "GITHUB_MCP_TOKEN",
+                                                "A GitHub personal access token passed to the MCP client manager.",
+                                            ),
+                                        ]
+                                    )
+                                ],
+                                style={"width": "100%", "borderCollapse": "collapse"},
+                            ),
+                        ],
+                        style={
+                            "marginBottom": SPACING_SMALL,
+                            "padding": SPACING_SMALL,
+                            "border": f"1px solid {COLOR_BORDER}",
+                            "borderRadius": "2px",
+                        },
+                    ),
+                    # Restart guidance
+                    html.Div(
+                        [
+                            _section_title("Applying Changes"),
+                            html.Div(
+                                "After editing environment variables in docker-compose.yml, restart the affected services:",
+                                style={"fontFamily": FONT_SANS, "fontSize": FONT_SIZE_SMALL, "color": COLOR_GRAY_MEDIUM, "marginBottom": SPACING_XSMALL},
+                            ),
+                            html.Pre(
+                                "docker compose stop app github-mcp\ndocker compose up -d app github-mcp",
+                                style={
+                                    "fontFamily": "monospace",
+                                    "fontSize": FONT_SIZE_SMALL,
+                                    "color": COLOR_CHARCOAL_MEDIUM,
+                                    "backgroundColor": COLOR_CODE_BACKGROUND,
+                                    "border": f"1px solid {COLOR_BORDER}",
+                                    "borderRadius": "2px",
+                                    "padding": SPACING_SMALL,
+                                    "margin": 0,
+                                    "overflowX": "auto",
+                                },
+                            ),
+                        ],
+                        style={
+                            "marginBottom": SPACING_SMALL,
+                            "padding": SPACING_SMALL,
+                            "border": f"1px solid {COLOR_BORDER}",
+                            "borderRadius": "2px",
+                        },
+                    ),
+                ],
+                style=CARD_CONTAINER_STYLE,
+            ),
+        ],
+    )

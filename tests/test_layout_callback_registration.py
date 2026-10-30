@@ -15,7 +15,7 @@ works regardless of how Dash formats multi-output keys.
 How to use when a test fails
 -----------------------------
 1. The test docstring names the callback function and the feature it guards.
-2. Find that function in ``src/app/dash_app/layout.py``.
+2. Find that function in ``src/ui/layout.py``.
 3. Verify its ``@app.callback(...)`` decorator still contains the expected
    ``Output(...)`` argument — it was likely dropped during an edit or a
    string-replacement refactor.
@@ -53,7 +53,7 @@ def registered_outputs():
     module — Dash callback registration is global and idempotent, so this is
     both safe and fast.
     """
-    from app.dash_app.layout import create_dash_app  # noqa: PLC0415
+    from ui.layout import create_dash_app  # noqa: PLC0415
     app = create_dash_app()
     return set(app.callback_map.keys())
 
@@ -175,7 +175,7 @@ def test_display_page_output_registered(registered_outputs):
 @pytest.fixture(scope="module")
 def app_layout() -> Any:
     """Return the booted Dash app's top-level layout component."""
-    from app.dash_app.layout import create_dash_app  # noqa: PLC0415
+    from ui.layout import create_dash_app  # noqa: PLC0415
     return create_dash_app().layout
 
 

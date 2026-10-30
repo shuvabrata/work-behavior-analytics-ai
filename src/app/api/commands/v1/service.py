@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from common.command_n_control.models import CommandEnvelope
 from common.command_n_control.publisher import CommandPublisher
 from common.logger import logger
-from app.api.connectors.v1.registry import CONNECTOR_REGISTRY
+from domain.connector_registry import CONNECTOR_REGISTRY
 from app.db.models.command_status import CommandStatus
 from app.settings import settings
 

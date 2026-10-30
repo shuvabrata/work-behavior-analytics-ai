@@ -26,41 +26,14 @@ import sys
 from elasticsearch import Elasticsearch
 from elasticsearch.exceptions import NotFoundError, RequestError
 
+from domain.es_indexes import MANAGED_INDEXES
+
 # ---------------------------------------------------------------------------
 # Registry of all managed (source, entity_type) pairs.
 # ---------------------------------------------------------------------------
-# This constant is the authoritative list used by:
-#   • this script to create indexes
-#   • tests/test_es_index_coverage.py to verify every SUPPORTED_ENTITY_TYPE
-#     is covered
-#
-# CRITICAL: Any new entity type OR new source for an existing entity type MUST
-# be added here AND to SUPPORTED_ENTITY_TYPES in src/common/activity_signal/models.py.
-# If you miss adding a (source, entity_type) pair here:
-#   1. Elasticsearch will dynamically create the index without proper text analyzers
-#      (e.g., partial searches on email/name won't work).
-#   2. The unmanaged index will NOT be included in the `wba_all` global search alias,
-#      meaning cross-domain searches will silently fail to find these entities.
-
-MANAGED_INDEXES: list[tuple[str, str]] = [
-    ("github", "Repository"),
-    ("github", "Commit"),
-    ("github", "PullRequest"),
-    ("github", "Issue"),
-    ("github", "Person"),
-    ("github", "Team"),
-    ("github", "File"),
-    ("jira", "Project"),
-    ("jira", "Issue"),
-    ("jira", "Epic"),
-    ("jira", "Initiative"),
-    ("jira", "Sprint"),
-    ("jira", "Person"),
-    ("confluence", "Space"),
-    ("confluence", "Page"),
-    ("confluence", "Blogpost"),
-    ("confluence", "Person"),
-]
+# The authoritative list lives in ``domain.es_indexes`` (shared with the UI
+# and the operational scripts); it is imported rather than redefined so this
+# script, the search dropdowns and the tests cannot drift apart.
 
 
 def _index_name(source: str, entity_type: str) -> str:

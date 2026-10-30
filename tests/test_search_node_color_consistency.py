@@ -22,10 +22,10 @@ import pytest
 # ---------------------------------------------------------------------------
 # Imports under test
 # ---------------------------------------------------------------------------
-from app.common.graph_theme import NodeOverride, ThemeOverrides, merge_theme_overrides
-from app.dash_app.graph_styles import build_cytoscape_stylesheet
-from app.dash_app.styles import get_theme_tokens
-import app.dash_app.pages.search as search_module
+from domain.graph_theme import NodeOverride, ThemeOverrides, merge_theme_overrides
+from ui.graph_styles import build_cytoscape_stylesheet
+from domain.theme_tokens import get_theme_tokens
+import ui.pages.search as search_module
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -66,7 +66,7 @@ def test_all_graph_node_types_have_search_badge_color():
     missing = [t for t in graph_colors if t not in badge_colors]
     assert not missing, (
         f"These node types have a graph colour but no search badge colour: {missing}. "
-        "Add them to _ENTITY_TYPE_BADGE_COLORS in src/app/dash_app/pages/search.py."
+        "Add them to _ENTITY_TYPE_BADGE_COLORS in src/ui/pages/search.py."
     )
 
 
@@ -87,8 +87,8 @@ def test_search_badge_colors_match_graph_colors():
             f"  {t}: graph={v['graph']!r}, search={v['search']!r}"
             for t, v in mismatches.items()
         )
-        + "\nUpdate _ENTITY_TYPE_BADGE_COLORS in src/app/dash_app/pages/search.py "
-        "or the TOKENS in src/app/dash_app/styles.py so both sides match."
+        + "\nUpdate _ENTITY_TYPE_BADGE_COLORS in src/ui/pages/search.py "
+        "or the TOKENS in src/ui/styles.py so both sides match."
     )
 
 
@@ -97,7 +97,7 @@ def test_no_extra_search_badge_colors_use_wrong_token():
     """Search badge colours that are not in the graph stylesheet must still
     come from TOKENS (not arbitrary hardcoded hex strings) — verified by
     checking they are present somewhere in the TOKENS dict values."""
-    from app.dash_app.styles import TOKENS
+    from ui.styles import TOKENS
 
     badge_colors = search_module._ENTITY_TYPE_BADGE_COLORS
     token_values = set(TOKENS.values())

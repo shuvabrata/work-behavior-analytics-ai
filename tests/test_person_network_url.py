@@ -12,7 +12,7 @@ from urllib.parse import urlsplit
 
 import pytest
 
-from app.common.person_network_url import (
+from domain.person_network_url import (
     DEFAULT_MAX_COLLABORATORS,
     MAX_MAX_COLLABORATORS,
     MIN_MAX_COLLABORATORS,

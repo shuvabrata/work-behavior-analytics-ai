@@ -7,7 +7,7 @@ from typing import Any
 import pytest
 from dash import no_update
 
-from app.dash_app.pages.settings.runtime import (
+from ui.pages.settings.runtime import (
     CATEGORY_META,
     CATEGORY_ORDER,
     _build_category_section,

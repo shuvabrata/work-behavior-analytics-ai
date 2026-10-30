@@ -1,0 +1,50 @@
+# UI runtime image — the Dash/Flask service only.
+#
+# This image is the *isolation* half of Plan 052's split: it holds no database
+# driver, no data-store credentials and no LLM provider key. Every piece of data
+# it renders arrives over HTTP from the API (see src/ui/api_client.py). Do not
+# add a data-store or LLM package here — see requirements.ui.txt's header.
+FROM python:3.14.2-slim
+
+# curl backs the UI healthcheck (docker-compose.yml) and the entrypoint's own
+# readiness probing; the API image installs it alongside postgresql-client.
+RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
+
+# Set work directory
+WORKDIR /app
+
+ENV PYTHONPATH=/app
+
+# Install dependencies
+COPY requirements.ui.txt ./requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy the Dash UI package (including its entrypoint.sh) and its WSGI entrypoint
+COPY src/ui/ ./ui/
+COPY src/ui_main.py ./ui_main.py
+
+# Copy only the reachable parts of the shared common package: the logger and
+# the pure runtime-settings client. common/messaging/ (aio-pika) and
+# common/command_n_control/ are transport code the UI must not hold, so they are
+# deliberately not copied — a stray import fails loudly instead of silently
+# working in a container that was never meant to have a transport.
+COPY src/common/__init__.py ./common/
+COPY src/common/logger.py ./common/
+COPY src/common/runtime_settings/ ./common/runtime_settings/
+
+# Copy the pure shared domain package
+COPY src/domain/ ./domain/
+
+# Create non-root user for security
+RUN useradd -m -u 1000 -s /bin/bash appuser && \
+    mkdir -p /var/log/ui && \
+    chown -R appuser:appuser /var/log/ui /app
+
+# Expose port (not published to the host; nginx fronts this service)
+EXPOSE 8000
+
+# Switch to non-root user
+USER appuser
+
+# Use entrypoint script
+ENTRYPOINT ["ui/entrypoint.sh"]

@@ -15,7 +15,7 @@ import os
 import pytest
 from dash import no_update
 
-from app.dash_app.pages.chat import get_layout, render_from_session
+from ui.pages.chat import get_layout, render_from_session
 from app.runtime_settings import runtime_settings
 
 pytestmark = pytest.mark.unit
@@ -41,7 +41,7 @@ def _find_by_id(component, target_id: str):
 
 
 _ASSETS_DIR = os.path.join(
-    os.path.dirname(__file__), "..", "src", "app", "dash_app", "assets"
+    os.path.dirname(__file__), "..", "src", "ui", "assets"
 )
 _STREAM_BRIDGE = os.path.join(_ASSETS_DIR, "stream-bridge.js")
 

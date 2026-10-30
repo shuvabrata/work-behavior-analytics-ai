@@ -46,6 +46,23 @@ class SearchRequest(BaseModel):
     )
 
 
+class ScopedSearchRequest(BaseModel):
+    """Request body for ``POST /api/v1/search/scoped`` — the graph spotlight.
+
+    A ``wba_id`` set is data, not a resource identifier, and the live canvas
+    carries 200+ ids: a comma-joined ``ids`` query string is ~10,438 bytes for
+    223 nodes and exceeds nginx's 8 KB request-line limit, so the request is a
+    POST body (which no header buffer bounds). ``ids`` is therefore a real list,
+    with no comma-splitting — that was only ever needed for a query string.
+    """
+
+    q: Optional[str] = Field(default=None, description="Free-text query.")
+    ids: List[str] = Field(
+        default_factory=list,
+        description="The wba_ids to scope the search to (all loaded graph nodes).",
+    )
+
+
 class SearchResult(BaseModel):
     """A single search result."""
 

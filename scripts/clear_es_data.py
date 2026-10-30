@@ -20,11 +20,11 @@ from __future__ import annotations
 from elasticsearch.exceptions import NotFoundError
 
 from app.scripts.create_es_indexes import (
-    MANAGED_INDEXES,
     _build_client,
     _index_name,
     create_indexes,
 )
+from domain.es_indexes import MANAGED_INDEXES
 
 
 def clear_and_recreate() -> None:

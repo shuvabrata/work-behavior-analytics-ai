@@ -19,19 +19,19 @@ from dash import no_update
 from dash.exceptions import PreventUpdate
 import dash_bootstrap_components as dbc
 
-from app.api.connectors.v1.registry import CONNECTOR_REGISTRY
-from app.dash_app.pages.connectors.callbacks import (
+from domain.connector_registry import CONNECTOR_REGISTRY
+from ui.pages.connectors.callbacks import (
     populate_search_filters_store,
     render_search_filters_list,
     toggle_add_item_collapse,
     update_search_filters_store,
 )
-from app.dash_app.pages.connectors.components.scan_status import (
+from ui.pages.connectors.components.scan_status import (
     STATUS_CONFIG,
     render_scan_item,
 )
-from app.dash_app.pages.connectors.layout import _render_top_action_bar, _render_recent_scans
-from app.dash_app.styles import (
+from ui.pages.connectors.layout import _render_top_action_bar, _render_recent_scans
+from ui.styles import (
     COLOR_ERROR,
     COLOR_GRAY_MEDIUM,
     COLOR_SUCCESS,
@@ -534,13 +534,13 @@ class TestCancelButtonCallback:
 
     def test_cancel_click_sends_api_request(self):
         """Button click triggers POST to /api/v1/commands/ with cancel command."""
-        from app.dash_app.pages.connectors.callbacks import handle_cancel_scan
+        from ui.pages.connectors.callbacks import handle_cancel_scan
 
         scan_command_id = str(uuid.uuid4())
 
         with (
-            patch("app.dash_app.pages.connectors.callbacks.callback_context") as mock_ctx,
-            patch("app.dash_app.pages.connectors.callbacks.requests.post") as mock_post,
+            patch("ui.pages.connectors.callbacks.callback_context") as mock_ctx,
+            patch("ui.pages.connectors.callbacks.api_client.post") as mock_post,
         ):
             mock_ctx.triggered = [
                 {
@@ -567,9 +567,9 @@ class TestCancelButtonCallback:
 
     def test_cancel_no_trigger_returns_no_update(self):
         """No trigger → returns no_update."""
-        from app.dash_app.pages.connectors.callbacks import handle_cancel_scan
+        from ui.pages.connectors.callbacks import handle_cancel_scan
 
-        with patch("app.dash_app.pages.connectors.callbacks.callback_context") as mock_ctx:
+        with patch("ui.pages.connectors.callbacks.callback_context") as mock_ctx:
             mock_ctx.triggered = []
 
             result = handle_cancel_scan([None], "/app/connectors/github")
@@ -578,9 +578,9 @@ class TestCancelButtonCallback:
 
     def test_cancel_no_pathname_returns_no_update(self):
         """No pathname → returns no_update."""
-        from app.dash_app.pages.connectors.callbacks import handle_cancel_scan
+        from ui.pages.connectors.callbacks import handle_cancel_scan
 
-        with patch("app.dash_app.pages.connectors.callbacks.callback_context") as mock_ctx:
+        with patch("ui.pages.connectors.callbacks.callback_context") as mock_ctx:
             scan_command_id = str(uuid.uuid4())
             mock_ctx.triggered = [
                 {
@@ -607,15 +607,15 @@ class TestRecentActionsCollapsePolling:
 
     def _run_load_recent_scans(self, commands, triggered_id):
         """Invoke ``load_recent_scans`` with a mocked API and trigger."""
-        from app.dash_app.pages.connectors.callbacks import load_recent_scans
+        from ui.pages.connectors.callbacks import load_recent_scans
 
         mock_response = MagicMock()
         mock_response.raise_for_status.return_value = None
         mock_response.json.return_value = {"commands": commands}
 
         with (
-            patch("app.dash_app.pages.connectors.callbacks.callback_context") as mock_ctx,
-            patch("app.dash_app.pages.connectors.callbacks.requests.get") as mock_get,
+            patch("ui.pages.connectors.callbacks.callback_context") as mock_ctx,
+            patch("ui.pages.connectors.callbacks.api_client.get") as mock_get,
         ):
             mock_ctx.triggered_id = triggered_id
             mock_get.return_value = mock_response
@@ -623,7 +623,7 @@ class TestRecentActionsCollapsePolling:
 
     def test_sync_poll_to_collapse(self):
         """Expanded section polls; collapsed section does not."""
-        from app.dash_app.pages.connectors.callbacks import sync_poll_to_collapse
+        from ui.pages.connectors.callbacks import sync_poll_to_collapse
 
         assert sync_poll_to_collapse(True) is False
         assert sync_poll_to_collapse(False) is True
@@ -753,11 +753,11 @@ class TestTestConnectionCallback:
 
     def test_test_connection_button_sends_command(self):
         """Button click POSTs to /api/v1/commands/ with command_type: test."""
-        from app.dash_app.pages.connectors.callbacks import handle_item_test_connection
+        from ui.pages.connectors.callbacks import handle_item_test_connection
 
         with (
-            patch("app.dash_app.pages.connectors.callbacks.callback_context") as mock_ctx,
-            patch("app.dash_app.pages.connectors.callbacks.requests.post") as mock_post,
+            patch("ui.pages.connectors.callbacks.callback_context") as mock_ctx,
+            patch("ui.pages.connectors.callbacks.api_client.post") as mock_post,
         ):
             mock_ctx.triggered = [
                 {
@@ -788,11 +788,11 @@ class TestTestConnectionCallback:
 
     def test_test_connection_no_producer_container(self):
         """Non-producer connector shows warning, no API call."""
-        from app.dash_app.pages.connectors.callbacks import handle_item_test_connection
+        from ui.pages.connectors.callbacks import handle_item_test_connection
 
         with (
-            patch("app.dash_app.pages.connectors.callbacks.callback_context") as mock_ctx,
-            patch("app.dash_app.pages.connectors.callbacks.requests.post") as mock_post,
+            patch("ui.pages.connectors.callbacks.callback_context") as mock_ctx,
+            patch("ui.pages.connectors.callbacks.api_client.post") as mock_post,
         ):
             mock_ctx.triggered = [
                 {
@@ -815,9 +815,9 @@ class TestTestConnectionCallback:
 
     def test_test_connection_no_trigger(self):
         """No trigger → returns no_update for both outputs."""
-        from app.dash_app.pages.connectors.callbacks import handle_item_test_connection
+        from ui.pages.connectors.callbacks import handle_item_test_connection
 
-        with patch("app.dash_app.pages.connectors.callbacks.callback_context") as mock_ctx:
+        with patch("ui.pages.connectors.callbacks.callback_context") as mock_ctx:
             mock_ctx.triggered = []
             result = handle_item_test_connection([None])
 
@@ -842,7 +842,7 @@ class TestConnectorSettingsLayout:
         return None
 
     def test_github_connector_settings_has_scan_interval_and_no_fallback_message(self):
-        from app.dash_app.pages.connectors.layout import get_detail_layout
+        from ui.pages.connectors.layout import get_detail_layout
 
         layout = get_detail_layout("github")
         collapse = self._find_component(layout, lambda c: getattr(c, "id", None) == "connector-settings-collapse")
@@ -858,7 +858,7 @@ class TestConnectorSettingsLayout:
         assert save_button is not None
 
     def test_jira_and_confluence_have_scan_interval_and_no_fallback_message(self):
-        from app.dash_app.pages.connectors.layout import get_detail_layout
+        from ui.pages.connectors.layout import get_detail_layout
 
         for conn in ("jira", "confluence"):
             layout = get_detail_layout(conn)
@@ -869,7 +869,7 @@ class TestConnectorSettingsLayout:
             assert "No connector-level settings required." not in text
 
     def test_slack_has_fallback_message_and_no_save_button(self):
-        from app.dash_app.pages.connectors.layout import get_detail_layout
+        from ui.pages.connectors.layout import get_detail_layout
 
         layout = get_detail_layout("slack")
         collapse = self._find_component(layout, lambda c: getattr(c, "id", None) == "connector-settings-collapse")
@@ -885,7 +885,7 @@ class TestConnectorSettingsLayout:
         assert save_button is None
 
     def test_atlassian_mcp_has_connector_fields_and_save_button(self):
-        from app.dash_app.pages.connectors.layout import get_detail_layout
+        from ui.pages.connectors.layout import get_detail_layout
 
         layout = get_detail_layout("atlassian_mcp")
         collapse = self._find_component(layout, lambda c: getattr(c, "id", None) == "connector-settings-collapse")
@@ -902,7 +902,7 @@ class TestConnectorSettingsLayout:
     def test_connector_fields_use_popover_inverted(self):
         """Verify connector fields use dbc.Popover with Scheme A popover-inverted class."""
         import dash_bootstrap_components as dbc
-        from app.dash_app.pages.connectors.layout import _render_field, _render_scan_interval_input
+        from ui.pages.connectors.layout import _render_field, _render_scan_interval_input
 
         field_div = _render_field(
             {"key": "url", "label": "Repository URL", "required": True},

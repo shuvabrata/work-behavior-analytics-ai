@@ -17,7 +17,7 @@ from typing import Any
 
 import pytest
 
-from app.analytics.collaboration.config import CollaborationNetworkConfig, LAYER_ORDER
+from domain.collaboration.config import CollaborationNetworkConfig, LAYER_ORDER
 from app.api.graph.v1.query import execute_cypher_query
 from app.settings import settings
 

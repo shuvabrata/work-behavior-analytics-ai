@@ -8,7 +8,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, Query
 
 from common.logger import logger
-from .model import SearchRequest, SearchResponse
+from .model import ScopedSearchRequest, SearchRequest, SearchResponse
 from . import service
 
 router = APIRouter(prefix="/search", tags=["search"])
@@ -82,4 +82,36 @@ async def search(
         ) from exc
 
     logger.info(f"[Search] response total={response.total} returned={len(response.results)}")
+    return response
+
+
+@router.post("/scoped", response_model=SearchResponse)
+async def search_scoped(request: ScopedSearchRequest) -> SearchResponse:
+    """Search scoped to a set of ``wba_id``s — the graph spotlight's query.
+
+    POST rather than a query param: the canvas carries 200+ ids, and a
+    comma-joined ``ids`` query string exceeds nginx's 8 KB request-line limit
+    (measured: 10,438 B for 223 nodes) and returns 414 before reaching the app.
+
+    Only the documents whose ``wba_id`` is in ``request.ids`` are candidates, so
+    every loaded graph node is considered regardless of how common the query term
+    is across the corpus. An empty ``ids`` list returns an empty response rather
+    than a 422 — the graph simply has nothing loaded to scope to.
+    """
+    logger.info(
+        f"[Search] scoped request q={request.q!r} ids={len(request.ids)}"
+    )
+
+    try:
+        response = service.search_scoped(request.q, request.ids)
+    except Exception as exc:
+        logger.exception(f"[Search] Unhandled error during scoped search: {exc}")
+        raise HTTPException(
+            status_code=500,
+            detail={"error": "Search failed", "message": str(exc)},
+        ) from exc
+
+    logger.info(
+        f"[Search] scoped response total={response.total} returned={len(response.results)}"
+    )
     return response

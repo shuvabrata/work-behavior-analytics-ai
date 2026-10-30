@@ -1,12 +1,26 @@
-from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+"""API-runtime settings.
 
-from pydantic import AliasChoices, Field, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+``ApiSettings`` extends the credential-free :class:`domain.settings.UISettings`
+with everything only the API runtime may hold: the database URL, the data-store
+credentials, the RabbitMQ URL, the connector-encryption key and the LLM provider
+keys.
 
-class Settings(BaseSettings):
+``DATABASE_URL`` deliberately has **no default**. That is what makes
+``ApiSettings`` unconstructable in the UI runtime, which never receives a
+database URL — the type system enforces the runtime boundary (Decision 3 of
+plan 052).
+"""
+
+from domain.settings import UISettings
+from pydantic import Field
+
+
+class ApiSettings(UISettings):
+    """The API runtime's settings — ``UISettings`` plus every credential."""
+
     # PostgreSQL configuration
     DATABASE_URL: str
-    
+
     # Neo4j configuration
     NEO4J_URI: str = "bolt://localhost:7687"
     NEO4J_USERNAME: str = "neo4j"
@@ -16,20 +30,6 @@ class Settings(BaseSettings):
 
     # RabbitMQ configuration
     RABBITMQ_URL: str = "amqp://guest:guest@localhost:5672/"
-
-    # ── External URL / reverse proxy ────────────────────────────────────
-    # The URL the BROWSER uses to reach this application. nginx terminates
-    # TLS and forwards plain HTTP to this container, so the app must never
-    # derive its external scheme or host from its own listener. Anything
-    # that needs an absolute, browser-facing URL (e.g. an OAuth redirect_uri
-    # in Plan C) must build it from this value.
-    EXTERNAL_BASE_URL: str = "https://localhost"
-
-    # The URL the Dash code uses to call the API from INSIDE this container.
-    # The Dash callbacks run in this same process and call the API over the
-    # Docker network, so this stays plain HTTP even though the browser
-    # speaks HTTPS. Deliberately NOT the same value as EXTERNAL_BASE_URL.
-    API_BASE_URL: str = "http://localhost:8000"
 
     # Elasticsearch configuration
     ELASTICSEARCH_AI_LOOKUP_ENABLED: bool = True
@@ -48,7 +48,7 @@ class Settings(BaseSettings):
     ATLASSIAN_MCP_TOKEN: str = ""
     GITHUB_MCP_SERVER_URL: str = "http://github-mcp:8082/"
     ATLASSIAN_MCP_SERVER_URL: str = "https://mcp.atlassian.com/v1/mcp"
-    
+
     # LLM configuration (provider-agnostic)
     LLM_PROVIDER: str = "openai"
     LLM_MODEL: str = "gpt-5"
@@ -61,13 +61,6 @@ class Settings(BaseSettings):
 
     # Connector encryption
     CONNECTOR_ENCRYPTION_KEY: str = ""
-
-    # Logging configuration
-    LOG_LEVEL: str = "INFO"
-    LOG_FORMAT: str = "JSON"
-    ENABLE_FILE_LOGGING: bool = False
-    LOG_DIR: str = "logs"
-    LOG_SIGNAL_DUMPS: bool = False
 
     # Connector / Producer configuration
     COMMIT_DAYS_LIMIT: int = 60
@@ -82,18 +75,11 @@ class Settings(BaseSettings):
     JIRA_ISSUE_TEAM_FIELD: str = "Team"
     JIRA_EPIC_START_DATE_FIELD: str = "created"
     JIRA_EPIC_DUE_DATE_FIELD: str = "duedate"
-    API_SERVER: str = "http://app:8000/"
+    API_SERVER: str = "http://api:8000/"
     CONFIGURATION_SOURCE: str = "SERVER"
-    
-    # HTTP request timeout configuration (in seconds)
-    HTTP_REQUEST_TIMEOUT: int = 60
-    
+
     # Neo4j query timeout (should be less than HTTP_REQUEST_TIMEOUT to allow overhead)
     NEO4J_QUERY_TIMEOUT: int = 10
-    
-    # Graph UI configuration
-    GRAPH_UI_MAX_NODES_TO_EXPAND: int = 20
-    GRAPH_UI_MAX_NODE_LABEL_CHARS: int = 10
 
     # Activity Timeline mock data (DEV ONLY).
     # Empty = disabled. When set to one of the scenario names in
@@ -101,12 +87,6 @@ class Settings(BaseSettings):
     # and /suggest serve deterministic INVENTED data instead of querying the DB.
     # Never set this in a real deployment.
     TIMELINE_MOCK_SCENARIO: str = ""
-    
-    # Number of milliseconds between scan status polls in the connector UI
-    CONNECTOR_SCAN_POLL_INTERVAL: int = 5000
-    
-    # Max recent action rows to display in the connector UI
-    RECENT_ACTIONS_LIMIT: int = Field(default=5, ge=1, le=50)
 
     # Scheduler configuration
     # How often (in minutes) the scheduler wakes up to check for due connector scans.
@@ -118,23 +98,12 @@ class Settings(BaseSettings):
     RETRY_BACKOFF_CAP_SECONDS: int = Field(default=30, ge=1)
     RETRY_BASE_DELAY_SECONDS: int = Field(default=1, ge=1)
 
-    # UI Configuration
-    TIMEZONE: str = Field(default="UTC", validation_alias=AliasChoices("TIMEZONE", "TZ"))
-    UI_DATETIME_FORMAT: str = "%b %d, %Y %I:%M %p"
-    UI_DATE_FORMAT: str = "%b %d, %Y"
 
-    @field_validator("TIMEZONE")
-    @classmethod
-    def validate_timezone(cls, value: str) -> str:
-        try:
-            ZoneInfo(value)
-        except ZoneInfoNotFoundError as exc:
-            raise ValueError(f"Invalid timezone: {value}") from exc
-        return value
+settings = ApiSettings()  # type: ignore[call-arg]
 
-    model_config = SettingsConfigDict(
-        env_file=".env",
-        extra="ignore",
-    )
+# Backwards-compatible alias: ``Settings`` was the pre-split name of this class.
+# Kept so existing importers (the API, and tests that construct it directly)
+# do not have to be rewritten for what is otherwise a pure rename.
+Settings = ApiSettings
 
-settings = Settings()  # type: ignore[call-arg]
+__all__ = ["ApiSettings", "Settings", "settings"]

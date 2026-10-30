@@ -2,7 +2,7 @@
 
 import pytest
 
-from app.dash_app.pages.graph.callbacks import catalog as catalog_callbacks
+from ui.pages.graph.callbacks import catalog as catalog_callbacks
 
 
 pytestmark = pytest.mark.unit

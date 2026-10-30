@@ -337,21 +337,20 @@ it mutates data even though the endpoint returns quickly.
 Enforcement is split by client type, which is also the split that makes the existing test suite
 survive:
 
-**ASGI middleware guards the browser surface (`/app/*`).** It resolves the session cookie and
-redirects to Keycloak when absent. Middleware is the only mechanism that can guard a mounted
-WSGI application — FastAPI dependencies do not apply to `app.mount("/app", WSGIMiddleware(...))`
-(`src/app/main.py:196-197`).
+**Flask `before_request` guards the browser surface (`/app/*`).** The UI is a standalone Flask
+app (`src/ui_main.py` → `server = app.server`), served by gunicorn, so there is no FastAPI mount
+for FastAPI dependencies to apply to. A Flask `before_request` hook on that server resolves the
+session cookie and, when it is absent, redirects to the login flow. The SSE proxy uses
+`stream_with_context` so the request context survives while the API response streams back.
 
 This also covers Dash's own internal routes, which are a real data path: `POST
 /app/_dash-update-component` executes every server-side callback, including the three that reach
-Neo4j and Elasticsearch. Note the prefix behaviour, which is worth stating precisely because it
-determines where the stream proxy route below can be registered: `requests_pathname_prefix="/app/"`
-is set (`dash_app/layout.py:27`) while `routes_pathname_prefix` is left unset and therefore
-defaults to **`"/"`, not to `requests_pathname_prefix`** (`dash/_configs.py:104-105`). Dash
-registers its handlers on the Flask server at the root, and the `/app` mount is what makes them
-browser-visible under `/app/...`. Consequently a Flask route registered as `/stream/<session_id>`
-on `dash_app.server` is reachable by the browser at `/app/stream/<session_id>`, and the
-middleware — which sees the full pre-mount path — guards it.
+Neo4j and Elasticsearch. Note the prefix configuration, which determines where the stream proxy
+route below can be registered: in `src/ui/layout.py:27-28` **both** `requests_pathname_prefix`
+and `routes_pathname_prefix` are set to `"/app/"`, so Dash registers its handlers under `/app`.
+Consequently a Flask route registered as `/stream/<session_id>` on `server` is reachable by the
+browser at `/app/stream/<session_id>` directly, with no mount involved, and the `before_request`
+hook guards it.
 
 **FastAPI dependencies guard `/api/v1`.** `get_principal`, `require_user`, `require_admin`, and
 `require_service` read the principal resolved from the bearer token. This is the only shape that
@@ -442,7 +441,7 @@ to the shared client.
 
 ### The one browser-direct API call
 
-`src/app/dash_app/assets/stream-bridge.js:215` is the single place where the **browser** calls
+`src/ui/assets/stream-bridge.js:215` is the single place where the **browser** calls
 `/api/v1` directly:
 
 ```js
@@ -456,15 +455,14 @@ fetch('/api/v1/chats/' + sessionId + '/stream', {
 Under a bearer-only API this call returns `401`, because the browser holds a session cookie and
 not a token. **This call site must change** — it is the one exception to "the browser never
 talks to the API". The fix keeps the bearer-only rule intact rather than weakening it: add a
-cookie-authenticated **Dash proxy route** on the Dash Flask server
-(`dash_app.server`, registered at `/stream/<session_id>` and therefore browser-reachable at
-`/app/stream/<session_id>` through the mount), which resolves the session, attaches the bearer
+cookie-authenticated **Dash proxy route** — a plain Flask route on the UI's `server`
+(`src/ui_main.py` → `server = app.server`), registered at `/stream/<session_id>` and therefore
+browser-reachable at `/app/stream/<session_id>` — which resolves the session, attaches the bearer
 token, and streams the API response back through to the browser.
 
 The client change is then a one-line URL change to `/app/stream/<session_id>`. The proxy route
-sits under `/app`, so it is already covered by the middleware described above. This is also why
-the proxy belongs to Plan C rather than Plan B: it exists solely to attach a token, and before
-auth lands the direct call still works.
+sits under `/app`, so it is already covered by the `before_request` guard described above. It
+exists solely to attach a token; before auth lands the direct call still works.
 
 The alternative — exempting `/chats/{id}/stream` from bearer authentication so the cookie works
 directly — was rejected: it would make the session cookie a first-class API credential for one
@@ -498,25 +496,26 @@ that has one.
 The brief requires that paths reaching the backend without passing through the secured API be
 identified and handled by a separate plan. The full inventory:
 
-### 1. Application-internal bypasses → Plan B
+### 1. Application-internal bypasses
 
-Three Dash callbacks reach Neo4j and Elasticsearch **in-process**, by importing the API's own
-service functions. A request to the unauthenticated `POST /app/_dash-update-component` reaches
-them without touching `/api/v1`, so **securing the API alone would leave these open**:
+Three Dash callbacks used to reach Neo4j and Elasticsearch **in-process**, by importing the API's
+own service functions. A request to the unauthenticated `POST /app/_dash-update-component` reached
+them without touching `/api/v1`, so securing the API alone would have left these open. All three
+are now resolved: each imports `ui.api_client` and calls the HTTP endpoint instead.
 
-| Callback | Import | Reaches | Existing endpoint to use instead |
+| Callback | Import | Reaches | Endpoint now used |
 |---|---|---|---|
-| `pages/collaboration_network/callbacks/filter.py:88` | `get_collaboration_network` (`:12`) | Neo4j | `GET /api/v1/graph/collaboration-network` |
-| `pages/collaboration_network_ego/callbacks/filter.py:201` | `get_ego_network` (`:13`) | Neo4j | `GET /api/v1/graph/collaboration-network/ego` |
-| `pages/graph/callbacks/spotlight.py:118` | `search_in_graph` (`:13-14`) | Elasticsearch | `GET /api/v1/search` |
+| `pages/collaboration_network/callbacks/filter.py:91` | `ui.api_client` (`:12-13`) | Neo4j | `GET /api/v1/graph/collaboration-network` |
+| `pages/collaboration_network_ego/callbacks/filter.py:211` | `ui.api_client` (`:13-14`) | Neo4j | `GET /api/v1/graph/collaboration-network/ego` |
+| `pages/graph/callbacks/spotlight.py:126` | `ui.api_client` (`:18`) | Elasticsearch | `POST /api/v1/search/scoped` |
 
-All three are pure shortcuts — the HTTP endpoints already exist. Plan B deletes the imports and
-routes them through the shared client, and isolates the UI runtime so no equivalent shortcut can
-reappear. It must land **before** the API is locked down, or the collaboration pages break.
+All three were pure shortcuts — the HTTP endpoints already existed. The isolation is enforced by
+the container split: the UI image carries neither a database driver nor a data-store client, so
+an equivalent in-process shortcut cannot reappear.
 
-Also worth noting: `pages/connectors/callbacks.py:17` and `pages/connectors/layout.py:7` import
-`CONNECTOR_REGISTRY` from the API package. That is a hardcoded dict, not a data path, so it is
-a coupling to note rather than a bypass to close.
+Also worth noting: `pages/connectors/callbacks.py:13` and `pages/connectors/layout.py:7` import
+`CONNECTOR_REGISTRY` from `src/domain/connector_registry.py`. That is a hardcoded dict, not a data
+path, so it is a coupling to note rather than a bypass to close.
 
 ### 2. Host-exposed infrastructure → Plan E
 
@@ -533,9 +532,6 @@ network and credential hardening, which is a different discipline:
 
 ### 3. Other exposures → Plan E
 
-- **`GET /docs`, `/redoc`, `/openapi.json`** — FastAPI defaults, exposed because `FastAPI(...)`
-  is constructed with no `docs_url`/`redoc_url`/`openapi_url` overrides (`src/app/main.py:155`).
-  They publish the complete API schema.
 - **`scripts/temp_stream_server.py`** — a standalone FastAPI app binding `0.0.0.0:8001` with no
   auth, reaching `stream_chat` and streaming metrics. Its own docstring says "DO NOT use this
   server in production", but nothing enforces that.
@@ -544,9 +540,40 @@ network and credential hardening, which is a different discipline:
 
 30 `clientside_callback` registrations exist across the Dash app. All but one manipulate the DOM,
 Cytoscape, or theme classes and fetch no data. The single exception is
-`assets/stream-bridge.js:215`, which calls `/api/v1/chats/{id}/stream` directly from the browser
+`src/ui/assets/stream-bridge.js:215`, which calls `/api/v1/chats/{id}/stream` directly from the browser
 and must be re-pointed at the Dash proxy route described in
 [Dash Integration](#dash-integration-bff).
+
+### 5. Deliberately public — the API documentation routes
+
+`GET /docs`, `/redoc` and `/openapi.json` are **intentionally served without authentication**.
+nginx proxies all three to the API upstream (`deploy/nginx/nginx.conf`, the "API documentation"
+location block), and the API serves them from FastAPI's defaults — `FastAPI(lifespan=lifespan)`
+in `src/app/api_main.py` sets no `docs_url` / `redoc_url` / `openapi_url` override.
+
+This is a **decision, not an oversight**, and it supersedes an earlier note in this document that
+listed these endpoints as exposures for Plan E to close. The routes were unreachable for a period
+by accident rather than by design: nginx routes only `/api` and `/app`, and the API publishes no
+host port, so the API's own root paths had no browser-facing URL. Exposing them restores a
+developer affordance lost in that transition.
+
+Consequences to keep in view:
+
+- **The full API schema is public** to anyone who can reach `localhost:443`. That is acceptable
+  for a developer-local deployment; it is a deliberate exception to "the API is authorized",
+  not an exemption from it. **Plan C must revisit it**: once Keycloak is in place, these routes
+  either move behind the BFF session or are disabled via `docs_url=None`, at which point this
+  section should become a record of a closed exposure.
+- **`/docs` and `/redoc` load their JS/CSS from a CDN** (`cdn.jsdelivr.net`, `cdn.redoc.ly`).
+  With no browser egress they render a blank page; the schema at `/openapi.json` is unaffected.
+- **`/docs` is proxied as a prefix**, not an exact match, so Swagger's `/docs/oauth2-redirect`
+  callback resolves. With `location = /docs` that sub-path returns nginx's own 404.
+- **No `root_path` is set**, so the schema emits no `servers` entry and Swagger resolves its
+  "Try it out" requests against the page origin — they arrive at `https://localhost/api/v1/...`
+  and are proxied normally. Setting `root_path` would break that.
+- The routes stay **inside the TLS server block** and do not introduce a catch-all: unmatched
+  paths still 404 rather than being proxied to an upstream. `tests/test_nginx_docs_routes.py`
+  (config structure) and `tests/test_docs_endpoints_server.py` (live over TLS) guard both.
 
 ---
 
@@ -623,9 +650,8 @@ plain HTTP internally and must trust `X-Forwarded-Proto` / `X-Forwarded-Host` fr
 Cookies carry `Secure`; `redirect_uri` is built from `EXTERNAL_BASE_URL`.
 
 Two containers: the UI runtime (Dash only, no database access) and the API runtime (routers,
-lifespan, scheduler). They are separated by Plan B. The UI container holds no provider
-credentials and no database drivers, so a compromise of the presentation layer does not
-directly yield either.
+lifespan, scheduler). The UI container holds no provider credentials and no database drivers,
+so a compromise of the presentation layer does not directly yield either.
 
 ### AWS API Gateway + ECS (target)
 
@@ -664,7 +690,7 @@ Six plans. Dependency order is **A → B → C → D → E**, with **F** indepen
 | **B — Dash–API runtime separation and API completeness** | Split the UI and API into separate runtimes; the UI container loses all database access; every remaining in-process and direct-config shortcut is routed through `/api/v1`. Includes the API-completeness audit. Full scope below. | A |
 | **C — Keycloak AuthN/AuthZ** | This design: Keycloak service and realm, `auth_session` table, bearer resource server, BFF session, roles, service accounts, the `/app/stream/<id>` SSE proxy route, per-user ownership of chat and favourites, UI error handling. | A, B |
 | **D — Per-user configuration** | Adds nullable `subject` ownership to `graph_themes` (scoping user themes to their creator, keeping the global `is_default` shared) and a `user_preferences` table keyed by subject. Unlocks user-writable theme authoring. | C |
-| **E — Infrastructure surface hardening** | Elasticsearch security, RabbitMQ credentials, Neo4j/Postgres port exposure, `github-mcp` exposure, FastAPI docs endpoints, `temp_stream_server.py`. | — |
+| **E — Infrastructure surface hardening** | Elasticsearch security, RabbitMQ credentials, Neo4j/Postgres port exposure, `github-mcp` exposure, `temp_stream_server.py`. The unauthenticated `/docs` / `/redoc` / `/openapi.json` routes are **not** in this scope — they are deliberately public (see [Non-API Surfaces §5](#5-deliberately-public--the-api-documentation-routes)), and Plan C owns their disposition. | — |
 | **F — Per-person data scoping** | Scope reads to the caller's own person/team. Requires a subject→`Person.wba_id` link and a team model, neither of which exists. | C |
 
 **Why B precedes C.** Locking the API down while any component still reaches the database
@@ -742,10 +768,10 @@ outside `app.dash_app`**, in these categories:
 ### Work items
 
 1. **Split `src/app/main.py`** (~250 LOC) into a UI entrypoint (Dash only) and an API entrypoint
-   (routers, lifespan, scheduler). This is the load-bearing change: today a single FastAPI app
-   owns both, and `app.mount("/app", WSGIMiddleware(dash_app.server))` is what makes them one
-   runtime. The UI runtime no longer needs `scheduler.py`, the RabbitMQ settings listener, or
-   the database startup sequence.
+   (routers, lifespan, scheduler). This is the load-bearing change: the Dash UI and the FastAPI
+   API were one process, and splitting them is what makes the two runtimes independent. The UI
+   runtime no longer needs `scheduler.py`, the RabbitMQ settings listener, or the database startup
+   sequence.
 
 2. **Introduce a shared domain package.** `src/common/` currently includes `messaging/` and
    `command_n_control/`, which pull in `aio_pika` and RabbitMQ. Moving domain logic there would

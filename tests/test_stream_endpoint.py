@@ -64,7 +64,7 @@ class TestStreamEndpointContentType:
     """The /stream endpoint must respond with text/event-stream."""
 
     async def test_content_type_is_text_event_stream(self, monkeypatch):
-        from app.main import app
+        from app.api_main import app
         from app.ai_agent import ai_agent
 
         session_id = "ct-test-session"
@@ -99,7 +99,7 @@ class TestStreamEndpointEventSequence:
     """The /stream endpoint must emit a well-formed SSE event sequence."""
 
     async def test_event_sequence_starts_with_thinking_start(self, monkeypatch):
-        from app.main import app
+        from app.api_main import app
         from app.ai_agent import ai_agent
 
         session_id = "seq-test-session"
@@ -129,7 +129,7 @@ class TestStreamEndpointEventSequence:
         assert types[-1] == "message_end"
 
     async def test_message_chunks_contain_expected_tokens(self, monkeypatch):
-        from app.main import app
+        from app.api_main import app
         from app.ai_agent import ai_agent
 
         session_id = "chunk-test-session"
@@ -156,7 +156,7 @@ class TestStreamEndpointEventSequence:
         assert chunks == tokens
 
     async def test_session_history_saved_after_stream(self, monkeypatch):
-        from app.main import app
+        from app.api_main import app
         from app.ai_agent import ai_agent
 
         session_id = "history-test-session"
@@ -193,7 +193,7 @@ class TestStreamEndpointUnknownSession:
     """Streaming an unknown session_id must return a JSON 404, not a broken stream."""
 
     async def test_unknown_session_returns_404(self):
-        from app.main import app
+        from app.api_main import app
 
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=app),
@@ -217,7 +217,7 @@ class TestStreamEndpointDisconnect:
     """Closing the connection mid-stream must increment the disconnect metric."""
 
     async def test_disconnect_increments_metric(self, monkeypatch):
-        from app.main import app
+        from app.api_main import app
         from app.ai_agent import ai_agent
 
         session_id = "disconnect-ep-session"
@@ -270,7 +270,7 @@ class TestStreamMetricsEndpoint:
     """GET /api/v1/chats/metrics/stream must return the expected metric keys."""
 
     async def test_metrics_endpoint_returns_expected_keys(self):
-        from app.main import app
+        from app.api_main import app
 
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=app),
@@ -284,7 +284,7 @@ class TestStreamMetricsEndpoint:
             assert key in data, f"Missing key: {key}"
 
     async def test_metrics_starts_increments_after_stream(self, monkeypatch):
-        from app.main import app
+        from app.api_main import app
         from app.ai_agent import ai_agent
 
         session_id = "metrics-starts-session"

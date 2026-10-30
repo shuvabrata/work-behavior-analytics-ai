@@ -8,7 +8,7 @@ import httpx
 import pytest
 import yaml
 
-from app.main import app
+from app.api_main import app
 from app.query_catalog import get_default_catalog_dir
 
 

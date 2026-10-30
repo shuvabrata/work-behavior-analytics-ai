@@ -59,7 +59,7 @@ class TestRuntimeConfigDefaults:
             ("JIRA_ISSUE_TEAM_FIELD", "Team"),
             ("JIRA_EPIC_START_DATE_FIELD", "created"),
             ("JIRA_EPIC_DUE_DATE_FIELD", "duedate"),
-            ("API_SERVER", "http://app:8000/"),
+            ("API_SERVER", "http://api:8000/"),
             ("CONFIGURATION_SOURCE", "SERVER"),
             # ── Logging ───────────────────────────────────────────────
             ("LOG_LEVEL", "INFO"),

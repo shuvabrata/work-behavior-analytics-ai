@@ -6,7 +6,7 @@ dimensions when parsing raw override documents.
 
 import pytest
 
-from app.common.graph_theme import parse_overrides
+from domain.graph_theme import parse_overrides
 
 pytestmark = pytest.mark.unit
 

@@ -11,7 +11,7 @@ import json
 import httpx
 import pytest
 
-from app.main import app
+from app.api_main import app
 from app.ai_agent import ai_agent
 from app.ai_agent.chains import mcp_chain
 from app.settings import settings

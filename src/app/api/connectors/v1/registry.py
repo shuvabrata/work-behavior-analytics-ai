@@ -1,75 +1,15 @@
-CONNECTOR_REGISTRY = {
-    "github": {
-        "display_name": "GitHub",
-        "icon": "fa-brands fa-github",
-        "section": "connections",
-        "supports_items": True,
-        "setup_type": "db_backed",
-        "producer_container": "github-producer",
-    },
-    "jira": {
-        "display_name": "Jira",
-        "icon": "fa-brands fa-jira",
-        "section": "connections",
-        "supports_items": True,
-        "setup_type": "db_backed",
-        "producer_container": "jira-producer",
-    },
-    "slack": {
-        "display_name": "Slack",
-        "icon": "fa-brands fa-slack",
-        "section": "connections",
-        "supports_items": True,
-        "setup_type": "db_backed",
-    },
-    "teams": {
-        "display_name": "Microsoft Teams",
-        "icon": "fa-brands fa-microsoft",
-        "section": "connections",
-        "supports_items": True,
-        "setup_type": "db_backed",
-    },
-    "confluence": {
-        "display_name": "Confluence",
-        "icon": "fa-brands fa-confluence",
-        "section": "connections",
-        "supports_items": True,
-        "setup_type": "db_backed",
-        "producer_container": "confluence-producer",
-    },
-    "google_docs": {
-        "display_name": "Google Docs",
-        "icon": "fa-brands fa-google",
-        "section": "connections",
-        "supports_items": True,
-        "setup_type": "db_backed",
-    },
-    "sharepoint": {
-        "display_name": "SharePoint",
-        "icon": "fa-brands fa-microsoft",
-        "section": "connections",
-        "supports_items": True,
-        "setup_type": "db_backed",
-    },
-    "email": {
-        "display_name": "Email",
-        "icon": "fa-solid fa-envelope",
-        "section": "connections",
-        "supports_items": True,
-        "setup_type": "db_backed",
-    },
-    "atlassian_mcp": {
-        "display_name": "Atlassian MCP Server",
-        "icon": "fa-brands fa-atlassian",
-        "section": "mcp",
-        "supports_items": False,
-        "setup_type": "db_backed",
-    },
-    "github_mcp": {
-        "display_name": "GitHub MCP Server",
-        "icon": "fa-brands fa-github",
-        "section": "mcp",
-        "supports_items": False,
-        "setup_type": "manual",
-    },
-}
+"""Re-export of the connector registry.
+
+``CONNECTOR_REGISTRY`` now lives in :mod:`domain.connector_registry` so the UI
+runtime can read it without importing the API package. This module keeps it
+importable as ``app.api.connectors.v1.registry.CONNECTOR_REGISTRY`` for the
+API's own call sites (``app/api/connectors/v1/service.py`` uses the relative
+``from .registry import CONNECTOR_REGISTRY``).
+
+``__all__`` is required: ``mypy`` runs strict (``no_implicit_reexport``), so an
+undeclared re-export is an error at the importing site.
+"""
+
+from domain.connector_registry import CONNECTOR_REGISTRY
+
+__all__ = ["CONNECTOR_REGISTRY"]

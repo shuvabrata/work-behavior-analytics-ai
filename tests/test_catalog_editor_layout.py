@@ -2,7 +2,7 @@
 
 import pytest
 
-from app.dash_app.pages.catalog.editor_layout import get_editor_layout
+from ui.pages.catalog.editor_layout import get_editor_layout
 
 
 pytestmark = pytest.mark.unit
@@ -128,7 +128,7 @@ def _style_output_ids() -> set[str]:
     """Ids that some callback writes a `style` prop to, excluding those whose display
     is managed through a `className` output instead (a display class is legitimate
     when the class itself is the thing being toggled)."""
-    import app.dash_app.pages.catalog  # noqa: F401  (registers the callbacks)
+    import ui.pages.catalog  # noqa: F401  (registers the callbacks)
     from dash import _callback
 
     def parse(sig: str) -> list[tuple[str, str]]:

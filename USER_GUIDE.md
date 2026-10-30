@@ -132,8 +132,8 @@ The `-d` flag runs containers in detached mode (background).
 - Dash UI: https://localhost/app
 - FastAPI API: https://localhost/api/health
 
-> **`http://localhost:8000` is expected to fail.** The application container no
-> longer publishes port 8000 — that is deliberate, so all traffic is forced
+> **`http://localhost:8000` is expected to fail.** Neither the `api` nor the `ui`
+> container publishes a host port — that is deliberate, so all traffic is forced
 > through nginx over HTTPS. A connection error there is the intended behaviour,
 > not a fault to fix. `http://localhost` (port 80) redirects to HTTPS.
 
@@ -171,9 +171,10 @@ docker compose start
 docker compose logs
 ```
 
-### View App Logs Only
+### View API or UI Logs Only
 ```bash
-docker compose logs app
+docker compose logs api
+docker compose logs ui
 ```
 
 ### View PostgreSQL Logs Only
@@ -183,19 +184,20 @@ docker compose logs postgres
 
 ### Follow Logs in Real-Time
 ```bash
-docker compose logs -f app
+docker compose logs -f api
+docker compose logs -f ui
 ```
 
 Press `Ctrl+C` to stop following logs.
 
 ### View Last N Lines
 ```bash
-docker compose logs app --tail 50
+docker compose logs api --tail 50
 ```
 
 ### View Logs with Timestamps
 ```bash
-docker compose logs -f -t app
+docker compose logs -f -t api
 ```
 
 ## Checking Status
@@ -230,9 +232,11 @@ docker compose up -d
 
 ## Accessing Containers
 
-### Open a Shell in the App Container
+### Open a Shell in the API Container
+The API service is the one with the database and migrations. Substitute `ui` for
+`api` to get a shell in the UI container instead.
 ```bash
-docker compose exec app bash
+docker compose exec api bash
 ```
 
 ### Open a PostgreSQL Shell
@@ -258,11 +262,13 @@ docker compose exec postgres psql -U <your_postgres_user> -d <your_postgres_db>
   it with `sudo ss -ltnp | grep ':443'`) and start again.
 
 - **`https://localhost/app` returns 502 Bad Gateway.**
-  *Cause*: nginx is up but the application container behind it is not healthy.
-  *Fix*: check the app logs and wait for the healthcheck to pass:
+  *Cause*: nginx is up but the `api` or `ui` container behind it is not healthy —
+  a 502 on the UI paths is usually the `ui` service.
+  *Fix*: check the container logs and wait for the healthchecks to pass:
 
   ```bash
-  docker compose logs app
+  docker compose logs api
+  docker compose logs ui
   ```
 
 - **`deploy/certs/` is empty.**
@@ -274,7 +280,8 @@ docker compose exec postgres psql -U <your_postgres_user> -d <your_postgres_db>
 ### Container Keeps Restarting
 Check the logs:
 ```bash
-docker compose logs app
+docker compose logs api
+docker compose logs ui
 ```
 
 Common issues:
@@ -312,9 +319,12 @@ cat logs/logger_*.log
 ### Environment Configuration
 The `.env` file is mounted read-only into the container at `/app/.env`.
 
-⚠️ **Note**: After changing `.env`, restart the containers:
+⚠️ **Note**: After changing `.env`, restart the containers. The `.env` is mounted
+into the `api` service only, so restarting `ui` is only needed for its own
+environment changes:
 ```bash
-docker compose restart app
+docker compose restart api
+docker compose restart ui
 ```
 
 
@@ -327,16 +337,16 @@ docker compose restart app
 | Start services | `docker compose up -d` |
 | Open the app | https://localhost/app |
 | Stop services | `docker compose down` |
-| View logs | `docker compose logs -f app` |
+| View logs | `docker compose logs -f api` (or `-f ui`) |
 | Check status | `docker compose ps` |
 | Rebuild | `docker compose up -d --build` |
-| Restart app | `docker compose restart app` |
-| Shell access | `docker compose exec app bash` |
+| Restart app | `docker compose restart api` (or `ui`) |
+| Shell access | `docker compose exec api bash` |
 | Clean reset | `docker compose down -v && docker compose up -d --build` |
 
 ## Support
 
 For issues or questions:
-1. Check the logs: `docker compose logs -f app`
+1. Check the logs: `docker compose logs -f api` (or `-f ui`)
 2. Review the [quick-start.md](quick-start.md) guide
 3. Ensure your `.env` file is properly configured

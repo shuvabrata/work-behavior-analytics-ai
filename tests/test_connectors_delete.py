@@ -15,7 +15,9 @@ import pytest
 from dash import no_update
 from dash.exceptions import PreventUpdate
 
-from app.dash_app.pages.connectors.callbacks import (
+from ui import api_client
+from ui.api_client import STATUS_NO_RESPONSE, ApiError
+from ui.pages.connectors.callbacks import (
     confirm_connector_delete,
     confirm_item_delete,
     handle_connector_delete,
@@ -42,7 +44,7 @@ class TestConfirmItemDelete:
     def test_click_shows_dialog_and_captures_target(self) -> None:
         """A click on a delete button shows the dialog and stores the target."""
         with patch(
-            "app.dash_app.pages.connectors.callbacks.callback_context"
+            "ui.pages.connectors.callbacks.callback_context"
         ) as mock_ctx:
             mock_ctx.triggered_id = {
                 "type": "connector-item-delete",
@@ -57,7 +59,7 @@ class TestConfirmItemDelete:
     def test_triggered_id_not_dict_raises_prevent_update(self) -> None:
         """If triggered_id is not a dict, raise PreventUpdate."""
         with patch(
-            "app.dash_app.pages.connectors.callbacks.callback_context"
+            "ui.pages.connectors.callbacks.callback_context"
         ) as mock_ctx:
             mock_ctx.triggered_id = "not-a-dict"
             with pytest.raises(PreventUpdate):
@@ -94,21 +96,14 @@ class TestHandleItemDelete:
 
     def test_successful_delete(self) -> None:
         """Happy path: DELETE succeeds, items reloaded, success alert returned."""
-        mock_delete_resp = MagicMock()
-        mock_delete_resp.raise_for_status.return_value = None
-
         mock_items_resp = MagicMock()
         mock_items_resp.raise_for_status.return_value = None
         mock_items_resp.json.return_value = [
             {"id": "1", "name": "other-repo"}
         ]
 
-        with patch(
-            "app.dash_app.pages.connectors.callbacks.requests.delete",
-            return_value=mock_delete_resp,
-        ), patch(
-            "app.dash_app.pages.connectors.callbacks.requests.get",
-            return_value=mock_items_resp,
+        with patch.object(api_client, "delete"), patch.object(
+            api_client, "get", return_value=mock_items_resp
         ):
             store, edit, alert, dialog = handle_item_delete(
                 1, {"connector_type": "github", "item_id": "42"}
@@ -121,12 +116,11 @@ class TestHandleItemDelete:
         assert dialog is False
 
     def test_delete_request_failure(self) -> None:
-        """DELETE raises RequestException → error alert, stores unchanged."""
-        import requests as req_lib
-
-        with patch(
-            "app.dash_app.pages.connectors.callbacks.requests.delete",
-            side_effect=req_lib.RequestException("Connection refused"),
+        """A client failure → error alert, stores unchanged."""
+        with patch.object(
+            api_client,
+            "delete",
+            side_effect=ApiError(STATUS_NO_RESPONSE, message="Connection refused"),
         ):
             store, edit, alert, dialog = handle_item_delete(
                 1, {"connector_type": "github", "item_id": "42"}
@@ -154,7 +148,7 @@ class TestConfirmConnectorDelete:
     def test_click_shows_dialog_and_captures_target(self) -> None:
         """A click shows the dialog and stores the connector type."""
         with patch(
-            "app.dash_app.pages.connectors.callbacks.callback_context"
+            "ui.pages.connectors.callbacks.callback_context"
         ) as mock_ctx:
             mock_ctx.triggered_id = {
                 "type": "connector-delete",
@@ -168,7 +162,7 @@ class TestConfirmConnectorDelete:
     def test_triggered_id_not_dict_raises_prevent_update(self) -> None:
         """If triggered_id is not a dict, raise PreventUpdate."""
         with patch(
-            "app.dash_app.pages.connectors.callbacks.callback_context"
+            "ui.pages.connectors.callbacks.callback_context"
         ) as mock_ctx:
             mock_ctx.triggered_id = "not-a-dict"
             with pytest.raises(PreventUpdate):
@@ -200,13 +194,7 @@ class TestHandleConnectorDelete:
 
     def test_successful_delete(self) -> None:
         """Happy path: DELETE succeeds, stores cleared, navigates to list."""
-        mock_resp = MagicMock()
-        mock_resp.raise_for_status.return_value = None
-
-        with patch(
-            "app.dash_app.pages.connectors.callbacks.requests.delete",
-            return_value=mock_resp,
-        ):
+        with patch.object(api_client, "delete"):
             detail, items, alert, pathname, dialog = handle_connector_delete(
                 1, {"connector_type": "github"}
             )
@@ -218,12 +206,11 @@ class TestHandleConnectorDelete:
         assert dialog is False
 
     def test_delete_request_failure(self) -> None:
-        """DELETE raises RequestException → error alert, no navigation."""
-        import requests as req_lib
-
-        with patch(
-            "app.dash_app.pages.connectors.callbacks.requests.delete",
-            side_effect=req_lib.RequestException("Connection refused"),
+        """A client failure → error alert, no navigation."""
+        with patch.object(
+            api_client,
+            "delete",
+            side_effect=ApiError(STATUS_NO_RESPONSE, message="Connection refused"),
         ):
             detail, items, alert, pathname, dialog = handle_connector_delete(
                 1, {"connector_type": "github"}

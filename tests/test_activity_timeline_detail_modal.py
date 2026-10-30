@@ -15,28 +15,28 @@ from urllib.parse import parse_qs, unquote
 import pytest
 from dash import html, no_update
 
-from app.dash_app.components.common import (
+from ui.components.common import (
     build_element_properties_content,
     render_properties_table,
     render_visible_properties,
 )
-from app.dash_app.pages.graph.utils import neo4j_to_cytoscape
-from app.dash_app.pages.timeline import api as timeline_api
-from app.dash_app.pages.timeline import callbacks
-from app.dash_app.pages.timeline.api import (
+from ui.pages.graph.utils import neo4j_to_cytoscape
+from ui.pages.timeline import api as timeline_api
+from ui.pages.timeline import callbacks
+from ui.pages.timeline.api import (
     _NODE_PROPERTIES_CYPHER,
     NodePropertiesError,
     _mapping_id_for,
     fetch_node_properties,
 )
-from app.dash_app.pages.timeline.helpers import (
+from ui.pages.timeline.helpers import (
     _humanize_event_time,
     _node_pattern,
     detail_payload,
     detail_sentence,
     graph_deep_link,
 )
-from app.dash_app.pages.timeline.layout import build_event_card
+from ui.pages.timeline.layout import build_event_card
 
 pytestmark = pytest.mark.unit
 
@@ -117,6 +117,11 @@ class _FakeResponse:
     def __init__(self, payload: dict[str, Any], status_code: int = 200) -> None:
         self._payload = payload
         self.status_code = status_code
+        self.text = ""
+
+    @property
+    def ok(self) -> bool:
+        return self.status_code < 400
 
     def json(self) -> dict[str, Any]:
         return self._payload
@@ -124,14 +129,17 @@ class _FakeResponse:
 
 def _stub_http(monkeypatch: pytest.MonkeyPatch,
                payload: dict[str, Any]) -> list[dict[str, Any]]:
-    """Patch ``requests.post`` and record each call's JSON body."""
+    """Stub the client transport and record each call's JSON body."""
     calls: list[dict[str, Any]] = []
 
-    def fake_post(_url: str, *, json: dict[str, Any], timeout: int) -> _FakeResponse:
+    def fake_transport(
+        method: str, _url: str, *, json: dict[str, Any], **_kwargs: Any
+    ) -> _FakeResponse:
+        assert method == "POST"
         calls.append(json)
         return _FakeResponse(payload)
 
-    monkeypatch.setattr(timeline_api.requests, "post", fake_post)
+    monkeypatch.setattr(timeline_api.api_client, "_transport", fake_transport)
     return calls
 
 

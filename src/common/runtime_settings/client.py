@@ -36,7 +36,7 @@ def fetch_runtime_snapshot(
     ``RuntimeConfig()`` with all-defaults (env / code defaults).
 
     Args:
-        api_base_url: Base URL of the running app, e.g. ``http://app:8000``.
+        api_base_url: Base URL of the running app, e.g. ``http://api:8000``.
         timeout: HTTP request timeout in seconds.
 
     Returns:

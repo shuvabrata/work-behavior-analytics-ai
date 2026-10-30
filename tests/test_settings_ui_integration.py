@@ -21,7 +21,7 @@ from typing import Any
 import httpx
 import pytest
 
-from app.dash_app.pages.settings.runtime import (
+from ui.pages.settings.runtime import (
     _build_setting_row,
     get_runtime_layout,
     render_settings,

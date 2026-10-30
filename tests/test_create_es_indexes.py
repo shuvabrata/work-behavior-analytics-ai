@@ -20,13 +20,13 @@ from unittest.mock import MagicMock
 import pytest
 
 from app.scripts.create_es_indexes import (
-    MANAGED_INDEXES,
     _SHARED_MAPPINGS,
     _full_text_field,
     _index_name,
     _standard_text_field,
     create_indexes,
 )
+from domain.es_indexes import MANAGED_INDEXES
 from common.activity_signal.models import SUPPORTED_ENTITY_TYPES
 
 pytestmark = [pytest.mark.unit]
@@ -51,7 +51,7 @@ def test_managed_indexes_covers_all_supported_entity_types() -> None:
     assert not missing, (
         f"Entity types in SUPPORTED_ENTITY_TYPES not covered by MANAGED_INDEXES: {missing}\n"
         "Add the missing (source, entity_type) pairs to MANAGED_INDEXES in "
-        "src/app/scripts/create_es_indexes.py."
+        "src/domain/es_indexes.py."
     )
 
 

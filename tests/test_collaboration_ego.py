@@ -24,7 +24,7 @@ from app.analytics.collaboration.ego import (
     compute_radial_positions,
 )
 from app.api.graph.v1.model import EgoNetworkResponse
-from app.common.person_network_url import DEFAULT_MAX_COLLABORATORS
+from domain.person_network_url import DEFAULT_MAX_COLLABORATORS
 
 
 pytestmark = pytest.mark.unit
@@ -32,7 +32,7 @@ pytestmark = pytest.mark.unit
 FOCUS = "github::Person::focus"
 
 PERSON_NODE_WIDTH_PX = 66.0
-"""Rendered width of a Person node — app/common/node_size.py:16."""
+"""Rendered width of a Person node — domain/node_size.py:16."""
 
 
 # ---------------------------------------------------------------------------

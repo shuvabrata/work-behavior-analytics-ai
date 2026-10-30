@@ -1,7 +1,7 @@
 """Unit tests for the Activity Timeline page's server callbacks.
 
 These call the ``@callback``-decorated functions in
-``app.dash_app.pages.timeline.callbacks`` directly with explicit arguments,
+``ui.pages.timeline.callbacks`` directly with explicit arguments,
 mirroring ``tests/test_collab_network_controls.py``. External collaborators
 (``fetch_suggestions``, ``fetch_timeline``, ``fetch_effective_theme``) and the
 Dash ``callback_context`` are patched **in the callbacks module's namespace**,
@@ -14,18 +14,18 @@ here.
 from __future__ import annotations
 
 from typing import Any
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
 import pytest
 from dash import no_update
 from dash.exceptions import PreventUpdate
 
-from app.dash_app.pages.timeline.api import (
+from ui.pages.timeline.api import (
     SuggestionFetchError,
     TimelineFetchError,
     fetch_suggestions,
 )
-from app.dash_app.pages.timeline.callbacks import (
+from ui.pages.timeline.callbacks import (
     apply_deeplink,
     load_more,
     load_timeline,
@@ -48,8 +48,8 @@ pytestmark = pytest.mark.unit
 # Fixtures / factories (shape mirrors tests/test_activity_timeline_ui_helpers.py)
 # ---------------------------------------------------------------------------
 
-_CB = "app.dash_app.pages.timeline.callbacks"
-_API = "app.dash_app.pages.timeline.api"
+_CB = "ui.pages.timeline.callbacks"
+_API = "ui.pages.timeline.api"
 
 
 def _event(signal_id: str, iso: str, summary: str = "event") -> dict[str, Any]:
@@ -178,8 +178,24 @@ def test_render_suggestions_empty_shows_no_matches() -> None:
 
 def test_fetch_suggestions_raises_on_http_error() -> None:
     """A non-200 suggest response raises rather than returning an empty list."""
-    response = Mock(status_code=500)
-    with patch(f"{_API}.requests.get", return_value=response):
+    from ui import api_client
+    from ui.api_client import ApiError
+
+    with patch.object(
+        api_client, "get", side_effect=ApiError(500, message="boom")
+    ):
+        with pytest.raises(SuggestionFetchError):
+            fetch_suggestions("alice")
+
+
+def test_fetch_suggestions_raises_on_transport_failure() -> None:
+    """A request that never reaches the API raises too (one exception type)."""
+    from ui import api_client
+    from ui.api_client import STATUS_NO_RESPONSE, ApiError
+
+    with patch.object(
+        api_client, "get", side_effect=ApiError(STATUS_NO_RESPONSE, message="down")
+    ):
         with pytest.raises(SuggestionFetchError):
             fetch_suggestions("alice")
 

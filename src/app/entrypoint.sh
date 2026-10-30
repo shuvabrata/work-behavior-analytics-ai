@@ -42,5 +42,5 @@ cd /app && python app/scripts/create_es_indexes.py
 # (docker-compose.yml removed the 8000:8000 mapping), so the only reachable
 # peers are nginx and the other compose services. Re-publishing a host port
 # would make this a spoofing hole — keep the two in sync.
-cd /app && uvicorn app.main:app --host 0.0.0.0 --port 8000 \
+cd /app && uvicorn app.api_main:app --host 0.0.0.0 --port 8000 \
     --forwarded-allow-ips="*"

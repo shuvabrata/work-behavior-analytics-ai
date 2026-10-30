@@ -25,7 +25,8 @@ from __future__ import annotations
 
 import pytest
 
-from app.scripts.create_es_indexes import MANAGED_INDEXES, _index_name
+from app.scripts.create_es_indexes import _index_name
+from domain.es_indexes import MANAGED_INDEXES
 from app.settings import settings
 from common.activity_signal.models import SUPPORTED_ENTITY_TYPES
 
@@ -47,7 +48,7 @@ def test_every_supported_entity_type_is_covered_by_managed_indexes() -> None:
         f"SUPPORTED_ENTITY_TYPES contains entity types with no corresponding ES index "
         f"definition in MANAGED_INDEXES: {uncovered}\n"
         "Add the missing (source, entity_type) pairs to MANAGED_INDEXES in "
-        "src/app/scripts/create_es_indexes.py."
+        "src/domain/es_indexes.py."
     )
 
 

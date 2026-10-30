@@ -212,20 +212,36 @@ def search_in_graph(request: SearchRequest, graph_wba_ids: list[str]) -> SearchR
         graph_wba_ids:  The list of ``wba_id`` values for all nodes currently
                         rendered in the graph.
     """
-    if not graph_wba_ids:
+    return search_scoped(request.q, graph_wba_ids)
+
+
+def search_scoped(q: Optional[str], ids: list[str]) -> SearchResponse:
+    """Search scoped to a set of ``wba_id``s — the graph spotlight's query.
+
+    The single implementation of the scoped search; ``search_in_graph`` delegates
+    here, so the two entry points cannot drift. Behaves exactly as described on
+    ``search_in_graph``; an empty *ids* yields the empty response rather than an
+    error, and the result ``size`` is always ``len(ids)``.
+
+    Args:
+        q:   The free-text query used for scoring.
+        ids: The ``wba_id`` values to constrain the search to.
+    """
+    if not ids:
         return SearchResponse(total=0, page=1, page_size=0, results=[])
 
+    request = SearchRequest(q=q)
     client = _build_client()
     body = _build_query_body(request)
 
     # Override pagination — return all graph nodes in one shot.
     body["from"] = 0
-    body["size"] = len(graph_wba_ids)
+    body["size"] = len(ids)
 
     # Constrain to the wba_ids currently in the graph.
     bool_clause = body["query"]["bool"]
     filters: List[Dict[str, Any]] = list(bool_clause.get("filter", []))
-    filters.append({"terms": {"wba_id": graph_wba_ids}})
+    filters.append({"terms": {"wba_id": ids}})
     bool_clause["filter"] = filters
 
     try:
@@ -247,7 +263,7 @@ def search_in_graph(request: SearchRequest, graph_wba_ids: list[str]) -> SearchR
         _hit_to_result(hit, False) for hit in hits.get("hits", [])
     ]
 
-    return SearchResponse(total=total, page=1, page_size=len(graph_wba_ids), results=results)
+    return SearchResponse(total=total, page=1, page_size=len(ids), results=results)
 
 
 def search(request: SearchRequest) -> SearchResponse:

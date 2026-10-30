@@ -642,8 +642,8 @@ is in the backup of the original plan and in the git log.
 | Step | What it changes | Automated verify | Manual gate | Status |
 |------|-----------------|------------------|-------------|--------|
 | 10 | `src/ui/api_client.py` grown into the single chokepoint; **57** remaining call sites across **14** files migrated | zero raw `requests.*` in `src/ui/`; suite/`mypy`/`pylint` | Operator confirms no credentials; **full page sweep** | ✅ complete — Gate 10 passed 2026-10-30 |
-| 11 | API-completeness audit (`A ⊆ B`, response shapes, orphans) | comparison passes; artifact discarded | Operator reviews mismatch and orphan lists | ⬜ |
-| 12 | gunicorn concurrency gate | 4 and 12 concurrent requests all return 2xx | Operator confirms all succeed; no 5xx/timeouts | ⬜ |
+| 11 | API-completeness audit (`A ⊆ B`, response shapes, orphans) | comparison passes; artifact discarded | Operator reviews mismatch and orphan lists | ✅ complete — Gate 11 passed 2026-10-30 |
+| 12 | gunicorn concurrency gate | 4 and 12 concurrent requests all return 2xx | Operator confirms all succeed; no 5xx/timeouts | ✅ complete — Gate 12 passed 2026-10-30 |
 | 13 | Docs: `CLAUDE.md`, `DEVELOPER_QUICK_START.md`, `USER_GUIDE.md`, `setup.sh`, `.env.example`, `authn-authz-design.md` | six grep gates | Operator **walks the two-process local dev flow** | ⬜ |
 | 14 | Full CI gates + full-stack smoke | all five gates; every page renders | Operator signs off the complete page sweep | ⬜ |
 
@@ -698,6 +698,65 @@ forced-expansion-timeout alert check (Gate 10 checks 7–8). The reviewer separa
 drove the real expansion callbacks to confirm an `ApiError` renders
 "Expansion timed out" while a generic `Exception` renders "Expansion error: …",
 and that the new tests are non-vacuous.
+
+### Gate 12 record — 2026-10-30, `234f1cb7` + uncommitted Step 10 diff
+
+Executed in the live working tree, uncommitted. Operator passed the gate.
+
+**Mechanism, read from the running process (not the file):**
+
+```
+/proc/1/cmdline: gunicorn ui_main:server --bind 0.0.0.0:8000 \
+                 --worker-class gthread --workers 4 --threads 8 --preload
+```
+
+Process tree: 1 master (pid 1) + exactly 4 workers (pids 7–10).
+
+**Functional result** (real Dash callback POSTs to
+`https://localhost/app/_dash-update-component`, using the theme-toggle callback
+from `src/ui/layout.py:258`; threads released together via `threading.Barrier`):
+
+| N | Status codes | Result |
+|---|---|---|
+| 4 | `200` × 4 | all 2xx, no 5xx, no timeout |
+| 12 | `200` × 12 | all 2xx, no 5xx, no timeout |
+
+Server log for the run window: **371 requests, all `status=200`, zero 4xx/5xx.**
+
+**Non-vacuity — genuine parallelism, not just 2xx.** A serialized `sync` worker
+also returns 200s, so wall-clock overlap was measured separately: wall vs the
+sum of per-request latencies (what wall would equal if fully serial).
+
+| N | wall | sum of latencies | max latency | overlap factor |
+|---|---|---|---|---|
+| 4 | 13.25 ms | 32.26 ms | 9.37 ms | 2.44× |
+| 12 | 33.26 ms | 223.95 ms | 25.69 ms | 6.73× |
+
+At N=12 wall (33 ms) is far below the serialized bound (224 ms) — concurrent
+execution confirmed.
+
+**Two discarded measurements (not counted as evidence):**
+
+1. All threads sharing one `requests.Session` with `pool_maxsize=1` — this
+   serialized the requests **client-side**, producing a false "SERIALIZED"
+   reading.
+2. Comparing against a ~4 ms serial baseline where TLS-handshake cost dominated
+   the signal.
+
+The final method gives each worker its own pre-warmed session, so the timed
+window contains only server-side work.
+
+**Harness note (Dash 4.4.1, for future callback-level load tests):** the
+`outputs` field of a `_dash-update-component` body must be a **dict** for a
+single non-pattern output. A list raises `InvalidCallbackReturnValue`
+("output 0 is a wildcard multi-output") → 500. The browser always sends the
+correct form; no product code is affected. The transient 500s in the UI log
+around 06:28–06:30 were malformed probe payloads from this investigation, not a
+stack defect.
+
+**Not covered by automated gates, operator-verified:** the running worker class
+and count were confirmed from `/proc`, not from the entrypoint file; the overlap
+measurement is what proves the flags are effective rather than merely present.
 
 ---
 

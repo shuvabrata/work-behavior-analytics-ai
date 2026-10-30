@@ -26,28 +26,30 @@
 - **Category**: security
 - **Planned at**: commit `225d3639`, 2026-10-30
 
-### Execution progress — RESUMED HERE
+### Execution progress — RESUME AT STEP 5
 
-Session paused **2026-10-30** after Gate 2. All work is uncommitted in the
-working tree on `feature/plan-c-keycloak` (the operator commits; Step 1 was
-committed by the operator as `0baf39d5`).
+Session paused **2026-10-30** after Gate 4 (Steps 1–4 complete and approved).
+Steps 1–3 are committed by the operator (`0baf39d5`, `4257ad65`, `96217cae`);
+Step 4's files are still untracked in the working tree on
+`feature/plan-c-keycloak`.
 
 | Step | State |
 |---|---|
 | 1 — settings fields | ✅ **PASS** (operator). Committed as `0baf39d5`. Split across `UISettings` (non-secrets) and `ApiSettings` (the two client secrets), after the operator rejected keeping secrets on `UISettings`. |
 | 2 — DB bootstrap | ✅ **PASS** (operator). Committed as `4257ad65`. Reworked from `.sql` to `.sh` after the operator rejected a committed password literal; the credential policy now covers all five Keycloak secrets, and `scripts/setup.sh` generates them. |
-| 3 — existing-volume role/DB | ⏳ Role + DB created by the operator; **Gate 3 awaiting operator PASS**. A doc bug was found and fixed (uncommitted). |
-| 4 — realm as code | ⬜ **NEXT.** Not started. |
-| 5–8 | ⬜ Not started. |
+| 3 — existing-volume role/DB | ✅ **PASS** (operator). Committed as `96217cae`. A security-relevant doc bug (silent passwordless role) was found and fixed. |
+| 4 — realm as code | ✅ **PASS** (operator). Three files created; realm proven to import and issue correct tokens. `envsubst` blocker found and fixed. |
+| 5 — compose service + nginx | ⬜ **NEXT.** Not started — operator paused here on 2026-10-30. |
+| 6–8 | ⬜ Not started. |
 
-**Before Step 4:** nothing outstanding — `KEYCLOAK_DB_PASSWORD` exists in `.env`,
-the `keycloak` role has a real password (not the passwordless path the old doc
-would have produced), the `keycloak` database exists owned by `keycloak`, and the
-18 application tables are untouched.
+**Before Step 5:** nothing outstanding. The realm imports cleanly and every
+credential path is proven. Step 5 is the first place the realm imports into the
+**real Compose stack with the real `.env` values** — until now the proof was a
+throwaway container against the template.
 
 **Changed files not yet committed by the operator:**
-`DEVELOPER_QUICK_START.md` (Step 3 snippet fix), `plans/053-*.md`,
-`plans/061-*.md`, `docs/design/authn-authz-design.md`.
+`deploy/keycloak/` (3 new files, untracked), `DEVELOPER_QUICK_START.md`,
+`plans/053-*.md`, `plans/061-*.md`, `docs/design/authn-authz-design.md`.
 
 **Two decisions taken during execution that override the plan's original text:**
 1. The two client secrets live on `ApiSettings`, not `UISettings` (Step 1).
@@ -701,7 +703,7 @@ Then run it once yourself against the operator's running stack.
 > and that the application database and its tables are untouched.
 > Wait for `PASS`.
 
-#### Gate 3 record — 2026-10-30 — AWAITING OPERATOR PASS
+#### Gate 3 record — 2026-10-30 — ✅ PASS (operator, 2026-10-30)
 
 The role/database snippet had already been committed to
 `DEVELOPER_QUICK_START.md` by Step 2's commit `4257ad65`. **A security-relevant
@@ -800,35 +802,42 @@ Create `deploy/keycloak/entrypoint.sh`:
 
 ```bash
 #!/bin/bash
-set -e
-# Render the realm template with the dev passwords from the environment.
-# envsubst is used rather than Keycloak's own substitution because the latter's
-# syntax varies by version.
-: "${DEV_ADMIN_PASSWORD:?DEV_ADMIN_PASSWORD must be set}"
-: "${DEV_USER_PASSWORD:?DEV_USER_PASSWORD must be set}"
+set -euo pipefail
+
+# Render the realm template, then start Keycloak.
+# Pure bash substitution, not envsubst (absent from this image) and not sed
+# (mangles a `&` in a password).
+: "${APP_PUBLIC_BASE_URL:?APP_PUBLIC_BASE_URL must be set (e.g. https://wba.example.com)}"
 : "${KEYCLOAK_CLIENT_SECRET:?KEYCLOAK_CLIENT_SECRET must be set}"
 : "${KEYCLOAK_SERVICE_CLIENT_SECRET:?KEYCLOAK_SERVICE_CLIENT_SECRET must be set}"
-# The public origin this app is served from. Derived from EXTERNAL_BASE_URL so
-# the same image works in development and production. The realm template's
-# redirectUris/webOrigins are built from it — a wrong value makes every login
-# fail with a redirect_uri mismatch.
-: "${APP_PUBLIC_BASE_URL:?APP_PUBLIC_BASE_URL must be set (e.g. https://wba.example.com)}"
+: "${DEV_ADMIN_PASSWORD:?DEV_ADMIN_PASSWORD must be set}"
+: "${DEV_USER_PASSWORD:?DEV_USER_PASSWORD must be set}"
 
 mkdir -p /opt/keycloak/data/import
-# Keycloak imports EVERY json under this directory, so clear it first.
 rm -f /opt/keycloak/data/import/*.json
-envsubst < /opt/keycloak/realm-wba.json.template \
-  > /opt/keycloak/data/import/realm-wba.json
+
+rendered=$(<"/opt/keycloak/realm-wba.json.template")
+for name in APP_PUBLIC_BASE_URL KEYCLOAK_CLIENT_SECRET \
+            KEYCLOAK_SERVICE_CLIENT_SECRET DEV_ADMIN_PASSWORD DEV_USER_PASSWORD; do
+  rendered=${rendered//"\${$name}"/"${!name}"}
+done
+
+# A surviving placeholder means a name above is misspelled; importing it would
+# set a client secret to the literal string.
+case "$rendered" in
+  *'${'*) echo "FATAL: unsubstituted placeholder remains in realm template" >&2; exit 1 ;;
+esac
+printf '%s\n' "$rendered" > /opt/keycloak/data/import/realm-wba.json
 
 exec /opt/keycloak/bin/kc.sh start-dev --import-realm --http-relative-path=/auth
 ```
 
 `chmod +x deploy/keycloak/entrypoint.sh`.
 
-`envsubst` only substitutes variables present in the environment; because the
-template also contains `${...}` inside strings you intend to substitute, this is
-the desired behaviour. If `envsubst` is absent from the image, **STOP** — do not
-substitute a different templating mechanism without reporting.
+The template contains exactly five `${...}` placeholders, all intended for
+substitution — enumerated and confirmed. Do **not** add a Keycloak-native
+`${...}` expression to the template without extending the loop, or the guard
+above will abort the container (which is the intended failure, not a bug).
 
 Create `deploy/keycloak/keycloak.env.example` documenting the five variables
 `entrypoint.sh` requires — `DEV_ADMIN_PASSWORD`, `DEV_USER_PASSWORD`,
@@ -842,13 +851,33 @@ copy. Cross-reference `.env.example`, which is where the real values live.
 **Verify**: `test -x deploy/keycloak/entrypoint.sh && echo executable` → `executable`
 **Verify**: `grep -c 'wba-admin\|wba-user\|wba-service' deploy/keycloak/realm-wba.json.template` → at least `3`
 **Verify** (no hardcoded public origin): `grep -c 'localhost' deploy/keycloak/realm-wba.json.template` → **`0`**. The template must contain `${APP_PUBLIC_BASE_URL}` for both `redirectUris` and `webOrigins`. A literal here is a production-blocking defect, not a style issue.
-**Verify** (renders correctly for a non-localhost host):
+**Verify** (renders correctly for a non-localhost host). Use the same pure-bash
+renderer the entrypoint uses, so this tests the shipped mechanism, not a
+different one:
 ```bash
-APP_PUBLIC_BASE_URL=https://wba.example.com KEYCLOAK_CLIENT_SECRET=x \
-KEYCLOAK_SERVICE_CLIENT_SECRET=x DEV_ADMIN_PASSWORD=x DEV_USER_PASSWORD=x \
-  envsubst < deploy/keycloak/realm-wba.json.template | grep -o 'https://wba.example.com[^"]*' | sort -u
+bash -c 'export APP_PUBLIC_BASE_URL=https://wba.example.com KEYCLOAK_CLIENT_SECRET=x \
+  KEYCLOAK_SERVICE_CLIENT_SECRET=x DEV_ADMIN_PASSWORD=x DEV_USER_PASSWORD=x
+  out=$(<deploy/keycloak/realm-wba.json.template)
+  for n in APP_PUBLIC_BASE_URL KEYCLOAK_CLIENT_SECRET KEYCLOAK_SERVICE_CLIENT_SECRET DEV_ADMIN_PASSWORD DEV_USER_PASSWORD; do
+    out=${out//"\${$n}"/"${!n}"}
+  done
+  printf "%s" "$out" | grep -o "https://wba.example.com[^\"]*" | sort -u'
 ```
 → prints `https://wba.example.com` and `https://wba.example.com/api/v1/auth/callback` — proving the template is host-agnostic.
+**Verify** (renderer survives meta-characters — the `sed` trap):
+```bash
+bash -c 'export APP_PUBLIC_BASE_URL=https://h.example KEYCLOAK_CLIENT_SECRET="a&b" \
+  KEYCLOAK_SERVICE_CLIENT_SECRET="c|d" DEV_ADMIN_PASSWORD="e/f=g" DEV_USER_PASSWORD="h+i"
+  out=$(<deploy/keycloak/realm-wba.json.template)
+  for n in APP_PUBLIC_BASE_URL KEYCLOAK_CLIENT_SECRET KEYCLOAK_SERVICE_CLIENT_SECRET DEV_ADMIN_PASSWORD DEV_USER_PASSWORD; do
+    out=${out//"\${$n}"/"${!n}"}
+  done
+  printf "%s" "$out" | grep -o "\"secret\": \"[^\"]*\""'
+```
+→ prints both secrets **intact** (`"a&b"`, `"c|d"`). A `sed`-based renderer
+returns `"a__PLACEHOLDER__b"` here.
+**Verify** (`envsubst` is genuinely absent, so this is not a gratuitous rewrite):
+`docker run --rm --entrypoint /bin/sh quay.io/keycloak/keycloak:26.4 -c 'command -v envsubst || echo ABSENT'` → `ABSENT`
 
 > ### 🚦 MANUAL GATE 4 — realm content
 >
@@ -857,6 +886,99 @@ KEYCLOAK_SERVICE_CLIENT_SECRET=x DEV_ADMIN_PASSWORD=x DEV_USER_PASSWORD=x \
 > host); `wba-internal` has service accounts enabled; the two dev users carry
 > the right roles; no real password is committed.
 > Wait for `PASS`.
+
+#### Gate 4 record — 2026-10-30 — ✅ PASS (operator, 2026-10-30) — blocker resolved
+
+The three files were created correctly and the realm was **proven to import and
+work end-to-end**. But the renderer mechanism fails: **`envsubst` does not exist
+in `quay.io/keycloak/keycloak:26.4`.** This must be resolved before Step 5, or
+the `keycloak` container will crash on start.
+
+**THE BLOCKER (confirmed by the reviewer).** The image ships no gettext at all:
+
+```
+$ docker run --rm --entrypoint /bin/sh quay.io/keycloak/keycloak:26.4 -c 'command -v envsubst'
+NOT FOUND
+```
+
+Available in the image: `bash`, `sh`, `sed`, `java`. **Absent:** `envsubst`,
+`awk`, `python3`, `perl`. The plan's STOP condition fired exactly as written, and
+the executor correctly did not substitute a different mechanism unilaterally.
+
+**Fix APPLIED to `deploy/keycloak/entrypoint.sh`** (uncommitted), and to Step 4's
+instructions so the plan and the file agree. `bash` is present in the image, and
+pure bash is *safer* than `sed`:
+
+| Renderer | `a/b+c=d` | `a&b` | `` `id` `` |
+|---|---|---|---|
+| `envsubst` | ok | ok | ok |
+| `sed "s\|K\|V\|"` | ok | **BROKEN** → `a__K__b` | ok |
+| **pure bash `${s//K/V}`** | ok | ok | ok |
+
+`sed` corrupts any value containing `&` (a legal base64 character is not, but a
+future operator-chosen password could contain it). Pure bash substitutes
+literally and was tested inside the real image with adversarial values
+(`/+abc=def`, `x&y\|z`, `p/w=d+f`) — output byte-identical to `envsubst` apart
+from a trailing newline. Verified with:
+
+```bash
+out=$(<"/opt/keycloak/realm-wba.json.template")
+for n in APP_PUBLIC_BASE_URL KEYCLOAK_CLIENT_SECRET KEYCLOAK_SERVICE_CLIENT_SECRET \
+         DEV_ADMIN_PASSWORD DEV_USER_PASSWORD; do
+  out=${out//"\${$n}"/"${!n}"}
+done
+printf '%s\n' "$out" > /opt/keycloak/data/import/realm-wba.json
+```
+
+**Templates contain exactly five `${...}` placeholders**, all intended for
+substitution — confirmed by enumeration, so a positional loop cannot accidentally
+touch a Keycloak-native `${...}`.
+
+**Verification of the realm itself (reviewer, in a throwaway container).** The
+rendered realm was imported into a temporary Keycloak 26.4 on loopback :8899 with
+an H2 store; the operating stack was never touched and the probe was removed.
+
+| Check | Observed |
+|---|---|
+| Template valid JSON after substitution | `valid` |
+| Rendered output valid JSON | `valid`, `realm= wba` |
+| Import succeeds | `Realm 'wba' imported` / `Import finished successfully` |
+| Exactly the three roles exist | `wba-admin`, `wba-service`, `wba-user` (plus Keycloak's built-ins) |
+| **Service account carries `wba-service`** | `users/…/role-mappings/realm` → `['wba-service']` |
+| **Client-credentials grant works** | HTTP 200, `expires_in=900`, `realm_access.roles=['wba-service']` |
+| `dev-admin` password login | OK, `expires_in=900`, roles `['wba-admin','wba-user']` |
+| `dev-user` password login | OK, `expires_in=900`, roles `['wba-user']` |
+| `wba-web` refuses direct grants | `unauthorized_client: Client not allowed for direct access grants` — correct, it is BFF-only |
+| No `localhost` literal | `0` |
+| No credential literal | `0` |
+| `entrypoint.sh` executable | yes |
+| **Renderer fixed: no live `envsubst` call** | `grep -n '^[^#]*envsubst'` → no matches (the word survives only in the comment explaining its absence) |
+| **Render test, adversarial values, in the real image** | JSON parses (`realm= wba`); secrets intact as `a&b/base64+val=` and `c\|d&e` — no mangling, proving bash beats `sed` here |
+| **Placeholder guard aborts** | with the variables unset: exits 1 on the first `:?` guard, before rendering |
+
+The plan has **no** `grep -c envsubst` gate, so the comment text naming
+`envsubst` is harmless. A future gate must match non-comment lines
+(`grep -n '^[^#]*envsubst'`), not the bare word.
+
+The login tests required a temporary direct-grant client (`tmp-pwtest`), created
+**only inside the throwaway probe** and destroyed with it — `wba-internal`
+correctly refuses password grants, so it could not be used for this.
+
+**Justified deviation from the plan, accepted.** The executor added
+`firstName` / `lastName` to both dev users. The plan's user spec omitted them.
+Without them Keycloak 26.4 rejects the password grant with HTTP 400
+`invalid_grant` / "Account is not fully set up", so Gate 5's dev-login check
+could not have passed. The reviewer confirmed both logins succeed **with** these
+fields present. This is a documented, meritorious adaptation.
+
+**Service-account mapping shape — the plan's flagged uncertainty, resolved.**
+The full-export form is correct: a third `users[]` entry with
+`"username": "service-account-wba-internal"`, `"serviceAccountClientId":
+"wba-internal"`, `"realmRoles": ["wba-service"]`. Proven by reading the mapping
+back from the imported realm **and** by a real client-credentials token.
+
+**Scope**: three new files under `deploy/keycloak/` (untracked). Nothing
+committed. No other file touched.
 
 ---
 
@@ -1150,7 +1272,9 @@ Stop and report (do not improvise) if:
 - The image rejects `KC_HOSTNAME_STRICT` or `--http-relative-path` in a way the
   notes above do not cover.
 - The `issuer` differs between the host and the container in Step 6.
-- `envsubst` is missing from the Keycloak image.
+- ~~`envsubst` is missing from the Keycloak image.~~ **RESOLVED — it is missing,
+  confirmed on 2026-10-30, and Step 4 now uses a pure-bash renderer instead.** Do
+  not reintroduce `envsubst`.
 - A credential has to be written as a literal to make something work. Stop and
   report instead — the policy is that every Keycloak credential is a `${VAR}`
   with no default, and reintroducing a literal defeats the point of this plan.

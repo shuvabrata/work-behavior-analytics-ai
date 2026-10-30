@@ -34,19 +34,20 @@ committed by the operator as `0baf39d5`).
 
 | Step | State |
 |---|---|
-| 1 — settings fields | ✅ **PASS** (operator). Split across `UISettings` (non-secrets) and `ApiSettings` (the two client secrets), after the operator rejected keeping secrets on `UISettings`. |
-| 2 — DB bootstrap | ✅ **PASS** (operator). Reworked from `.sql` to `.sh` after the operator rejected a committed password literal; the credential policy now covers all five Keycloak secrets, and `scripts/setup.sh` generates them. |
-| 3 — existing-volume role/DB | ⬜ **NEXT.** Not started. |
-| 4–8 | ⬜ Not started. |
+| 1 — settings fields | ✅ **PASS** (operator). Committed as `0baf39d5`. Split across `UISettings` (non-secrets) and `ApiSettings` (the two client secrets), after the operator rejected keeping secrets on `UISettings`. |
+| 2 — DB bootstrap | ✅ **PASS** (operator). Committed as `4257ad65`. Reworked from `.sql` to `.sh` after the operator rejected a committed password literal; the credential policy now covers all five Keycloak secrets, and `scripts/setup.sh` generates them. |
+| 3 — existing-volume role/DB | ⏳ Role + DB created by the operator; **Gate 3 awaiting operator PASS**. A doc bug was found and fixed (uncommitted). |
+| 4 — realm as code | ⬜ **NEXT.** Not started. |
+| 5–8 | ⬜ Not started. |
 
-**Before Step 3:** nothing outstanding — `.env` has all five credentials
-(verified), and `deploy/postgres/init-keycloak.sh` is proven on the fresh-clone
-path.
+**Before Step 4:** nothing outstanding — `KEYCLOAK_DB_PASSWORD` exists in `.env`,
+the `keycloak` role has a real password (not the passwordless path the old doc
+would have produced), the `keycloak` database exists owned by `keycloak`, and the
+18 application tables are untouched.
 
-**Changed files at pause** (all uncommitted except Step 1):
-`docker-compose.yml`, `deploy/postgres/init-keycloak.sh` (new),
-`scripts/setup.sh`, `USER_GUIDE.md`, `DEVELOPER_QUICK_START.md`,
-`docs/design/authn-authz-design.md`, `plans/053-*.md`, `plans/061-*.md`.
+**Changed files not yet committed by the operator:**
+`DEVELOPER_QUICK_START.md` (Step 3 snippet fix), `plans/053-*.md`,
+`plans/061-*.md`, `docs/design/authn-authz-design.md`.
 
 **Two decisions taken during execution that override the plan's original text:**
 1. The two client secrets live on `ApiSettings`, not `UISettings` (Step 1).
@@ -699,6 +700,56 @@ Then run it once yourself against the operator's running stack.
 > Operator verifies `\l` in psql lists a `keycloak` database owned by `keycloak`,
 > and that the application database and its tables are untouched.
 > Wait for `PASS`.
+
+#### Gate 3 record — 2026-10-30 — AWAITING OPERATOR PASS
+
+The role/database snippet had already been committed to
+`DEVELOPER_QUICK_START.md` by Step 2's commit `4257ad65`. **A security-relevant
+bug was found in it and fixed before it was ever run** (see below).
+
+**THE BUG (found by the reviewer, not by execution).** The committed snippet
+began:
+
+```bash
+set -a; . ./.env; set +a
+```
+
+Sourcing `.env` **fails**: `./.env:171: parse error near '\n'`. Line 171
+(`PERSON2_ID`) holds an unquoted `<...>` value — the neo4j test-catalog ids — which
+is not valid shell syntax. `KEYCLOAK_DB_PASSWORD` is at line 173, so sourcing dies
+*before* reaching it.
+
+The failure is **silent and unsafe**: the heredoc's `${KEYCLOAK_DB_PASSWORD}`
+then expands to an empty string, and Postgres runs
+`CREATE ROLE keycloak WITH LOGIN PASSWORD ''` without error — a passwordless role
+that Keycloak would nonetheless connect with. Verified by simulation:
+`RESULT: var UNSET -> heredoc expands to EMPTY password`.
+
+**Fix applied to `DEVELOPER_QUICK_START.md`** (uncommitted): read only the one
+value using the idiom `scripts/setup.sh:146` already uses, guard it with `:?`,
+and use `-v ON_ERROR_STOP=1`. The `set -a; . ./.env` line is gone.
+
+**Verification of the fix** (extracted from the doc's own fenced block and run):
+
+| Check | Observed |
+|---|---|
+| Doc snippet syntax | `bash -n` → SYNTAX OK |
+| Dry-run with `docker` stubbed | SQL contains the real 32-char value; no `${KEYCLOAK_DB_PASSWORD}` leak; `$$` dollar-quoting intact |
+| Guard aborts on empty value | `KEYCLOAK_DB_PASSWORD: KEYCLOAK_DB_PASSWORD missing from .env`, **zero** docker calls reached |
+| Role exists | count = 1 |
+| Database exists + owner | `keycloak owner=keycloak` |
+| **Password is set (not the passwordless path)** | `role_requires_password = t` — the bug did **not** bite, because the corrected command was used |
+| Application tables unchanged | **18** before, **18** after |
+| Idempotent — role branch | `IF NOT EXISTS` no-ops (role present) |
+| Idempotent — database branch | `SELECT 1 … \| grep -q 1` succeeds, so `createdb` is skipped |
+
+**Why the password-hash check is a boolean.** The direct query was blocked twice
+by the harness classifier as credential material; the reviewer did not work
+around it. `rolpassword IS NOT NULL AND <> ''` answers the question that matters
+(a passwordless role) while revealing nothing about the value.
+
+**Scope**: `DEVELOPER_QUICK_START.md` (uncommitted, the fix above). The database
+change is the operator's, applied by them to their own Postgres.
 
 ---
 

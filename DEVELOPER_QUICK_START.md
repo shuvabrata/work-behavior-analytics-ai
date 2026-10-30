@@ -23,17 +23,19 @@ A fresh `docker compose down -v` creates it automatically. An existing `pgdata`
 volume needs this once against a running stack:
 
 ```bash
-set -a; . ./.env; set +a
-docker compose exec -T postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" <<SQL
-DO \$\$ BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'keycloak') THEN
-    CREATE ROLE keycloak WITH LOGIN PASSWORD '${KEYCLOAK_DB_PASSWORD}';
-  END IF;
-END \$\$;
-SQL
-docker compose exec -T postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
-  -tc "SELECT 1 FROM pg_database WHERE datname = 'keycloak'" | grep -q 1 || \
-  docker compose exec -T postgres createdb -U "$POSTGRES_USER" -O keycloak keycloak
+KEYCLOAK_DB_PASSWORD=$(sed -n 's/^KEYCLOAK_DB_PASSWORD=//p' .env | head -1)
+: "${KEYCLOAK_DB_PASSWORD:?KEYCLOAK_DB_PASSWORD missing from .env}"
+
+docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U postgres -d postgres \
+  -c "DO \$\$ BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'keycloak') THEN
+          CREATE ROLE keycloak WITH LOGIN PASSWORD '${KEYCLOAK_DB_PASSWORD}';
+        END IF;
+      END \$\$;"
+
+docker compose exec -T postgres psql -U postgres -d postgres \
+  -tc "SELECT 1 FROM pg_database WHERE datname='keycloak'" | grep -q 1 || \
+  docker compose exec -T postgres createdb -U postgres -O keycloak keycloak
 ```
 
 Safe to re-run.

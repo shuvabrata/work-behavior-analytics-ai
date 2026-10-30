@@ -12,7 +12,7 @@ Activate the virtualenv first (`source .venv/bin/activate`). Code lives in `src/
 |---|---|
 | Backing services | `docker compose up -d postgres neo4j rabbitmq` |
 | Migrations | `cd src/app && alembic upgrade head` (Alembic config is `src/app/alembic.ini`) |
-| Run app (API + UI) | `PYTHONPATH=src uvicorn app.main:app --reload` → UI at `http://127.0.0.1:8000/app`, health at `/api/health` (plain HTTP, no nginx — this is the local-uvicorn workflow) |
+| Run app (local dev) | Start the **API** and the **UI** as two processes — see *Local development* below. Both are required; the Compose stack remains the supported path |
 | Compose stack (API + UI) | `docker compose up -d` → UI at `https://localhost/app` via nginx, health at `https://localhost/api/health`. Port `8000` is not published to the host |
 | Unit tests (regression gate) | `pytest -m unit tests -q` |
 | Single test | `pytest tests/test_analytics_page.py::test_layout_contains_layer_table_and_components -q` |
@@ -29,12 +29,28 @@ Full stack: `docker compose up -d`. One-shot producers/sync services are run man
 
 Shell/git/project commands in this repo are wrapped by the `rtk` token-optimizing proxy in harnesses that use it (e.g. `rtk git status`). Claude Code applies the rewrite automatically via a hook — there, do not hand-prefix.
 
+### Local development
+
+The API and the UI are separate services, so local dev needs **both** processes running. Start the API first — the UI fetches its runtime-settings snapshot from it:
+
+```bash
+# Terminal 1 — API. Start this FIRST.
+PYTHONPATH=src uvicorn app.api_main:app --reload            # → http://127.0.0.1:8000/api/health  → 200
+
+# Terminal 2 — UI. Needs the API's URL; the UI is a Flask/WSGI service.
+API_BASE_URL=http://127.0.0.1:8000 PYTHONPATH=src \
+  gunicorn ui_main:server --bind 127.0.0.1:8001 --reload    # → http://127.0.0.1:8001/app         → 200
+```
+
+`gunicorn --reload` works with the default `sync` worker and with `--worker-class gthread`. `gunicorn` is in `requirements.ui.txt`, not `requirements_dev.txt` — installing all `requirements*.txt` per `DEVELOPER_QUICK_START.md`'s setup loop provides it. The Compose stack (`docker compose up -d`) remains the supported path for day-to-day work.
+
 ### Docker Compose services
 
 | Service | Purpose | Port(s) |
 |---|---|---|
-| `app` | FastAPI + Dash (internal only; no published host port) | 8000 |
-| `nginx` | TLS termination + reverse proxy in front of `app` | 443, 80 (301 redirect to HTTPS) |
+| `api` | FastAPI API only (internal only; no published host port) | 8000 |
+| `ui` | Dash UI served by Flask/gunicorn (internal only; no published host port) | 8000 |
+| `nginx` | TLS termination + reverse proxy in front of the api and ui services | 443, 80 (301 redirect to HTTPS) |
 | `postgres` | Primary database | 5432 |
 | `neo4j` | Graph database | 7474, 7687 |
 | `rabbitmq` | Message queue for producers/consumer | 5672, 15672 (mgmt UI) |
@@ -46,7 +62,7 @@ Shell/git/project commands in this repo are wrapped by the `rtk` token-optimizin
 ### CI gates (`.github/workflows/pr_checks.yml`) — a PR fails if any fails
 
 - `pytest -q -m unit tests --cov=src`
-- `mypy src/` — **strict** (`disallow_untyped_defs`, `disallow_untyped_calls`). Only `app.dash_app.*` relaxes `return-value, index, union-attr`. Every new function needs full annotations.
+- `mypy src/` — **strict** (`disallow_untyped_defs`, `disallow_untyped_calls`). Only `ui.*` relaxes `return-value, index, union-attr`. Every new function needs full annotations.
 - `pylint src` — the repo-wide score must stay **≥ 9.0**
 - `bandit -c .bandit.yml -r src/ -lll` — fails on High severity
 - **Spec freshness** — CI regenerates `docs/design/spec-activity-signal.md` and fails if the committed file differs. After changing ActivitySignal models, run the generator above and leave the regenerated doc in the working tree; it must ship in the same change as the model update or CI fails.
@@ -57,8 +73,9 @@ Code lives in `src/` but is imported as top-level packages (`PYTHONPATH=src`). N
 
 ```python
 from common.logger import logger          # cross-service shared code → src/common/
-from app.settings import settings         # the app → src/app/
+from app.settings import settings         # the API → src/app/
 from app.ai_agent.providers import get_provider
+from domain.graph_theme import ...        # pure shared domain logic → src/domain/
 ```
 
 When a package `__init__.py` re-exports a symbol, declare it with `__all__` (mypy strict treats plain re-exports as private):
@@ -70,12 +87,14 @@ from .layout import get_layout
 
 ## Architecture
 
-Three separately-containerized layers share `src/common/` (logger, `activity_signal/` schema, `messaging/`, `command_n_control/`, `runtime_settings/`):
+Four separately-containerized layers share `src/common/` (logger, `activity_signal/` schema, `messaging/`, `command_n_control/`, `runtime_settings/`), plus `src/domain/` for pure shared logic:
 
 ```
-src/app/         FastAPI + Dash application (imported as app.*)
+src/ui/          Dash UI served by Flask/gunicorn (imported as ui.*)
+src/app/         FastAPI API (imported as app.*)
 src/connectors/  Producer/consumer services (imported as connectors.*) — own Dockerfiles
 src/common/      Cross-service shared code (imported as common.*)
+src/domain/      Pure shared domain logic (imported as domain.*) — no I/O, no service deps
 ```
 
 ### Data pipeline (connectors)
@@ -96,7 +115,7 @@ Strict separation — routers do HTTP only, services hold business logic, querie
 
 ```
 model.py    Pydantic request/response models
-router.py   FastAPI routes, wired in src/app/main.py with prefix="/api/v1"
+router.py   FastAPI routes, wired in src/app/api_main.py with prefix="/api/v1"
 service.py  business logic (manages transaction boundaries)
 query.py    SQLAlchemy / database access
 ```
@@ -124,25 +143,27 @@ To add a provider, implement `LLMProvider` in `providers/` and register it in `f
 
 The `mcp_integration/` layer is the *application's own* outbound MCP client (`client_manager.py`, `tool_executor.py`, `mcp_chain.py`), flagged by `GITHUB_MCP_ENABLED` / `ATLASSIAN_MCP_ENABLED`. This is app runtime code — write code for it, don't invoke it as a tool.
 
-### Dash UI (`src/app/dash_app/`)
+### Dash UI (`src/ui/`)
 
-Created by `create_dash_app()` in `layout.py` and mounted onto FastAPI at `/app` via `a2wsgi` `WSGIMiddleware`. One page is rendered at a time into `#page-content` by the `display_page` callback matching `dcc.Location` `pathname`.
+Created by `create_dash_app()` in `ui/layout.py` and served by gunicorn as a standalone Flask app from `src/ui_main.py`. It owns the `/app/*` paths; the API owns `/api/*`. One page is rendered at a time into `#page-content` by the `display_page` callback matching `dcc.Location` `pathname`.
 
 - Pages live in `pages/<name>/` as a package: `layout.py` (view builders), `callbacks.py` (Dash callbacks), plus helpers.
 - **A page package's `__init__.py` must `from . import callbacks  # noqa: F401`** — module-level `@callback`s register only on import, and `suppress_callback_exceptions=True` means a missing import fails *silently* (page renders, interactions do nothing). Existing examples: `pages/collaboration_network/__init__.py`, `pages/connectors/__init__.py`.
-- **Shared Dash code must live outside `pages/`.** Importing any submodule of a page package runs its `__init__` (which imports `.layout`/`.callbacks`), so a module inside `pages/<name>/` cannot be imported by a different page without a circular import. Put cross-page modules at `dash_app/` (e.g. `dash_app/graph_styles.py`) or in the shared `dash_app/components/` package (e.g. `components/result_pane.py`), and import them absolutely (`from app.dash_app.graph_styles import …`). When a second page needs something that currently lives in a page package, move it out rather than importing across pages.
+- **Shared Dash code must live outside `pages/`.** Importing any submodule of a page package runs its `__init__` (which imports `.layout`/`.callbacks`), so a module inside `pages/<name>/` cannot be imported by a different page without a circular import. Put cross-page modules at `ui/` (e.g. `ui/graph_styles.py`) or in the shared `ui/components/` package (e.g. `components/result_pane.py`), and import them absolutely (`from ui.graph_styles import …`). When a second page needs something that currently lives in a page package, move it out rather than importing across pages.
 - `display_page` falls through to the chat page for unknown paths — add an explicit branch for each new route.
 - Styling constants (`COLOR_*`, `FONT_*`, `SPACING_*`) come from `styles.py`; theme rules live in `assets/executive-dashboard.css` scoped under `.theme-executive-light` / `.theme-executive-dark`. The theme is a CSS class on `#app-shell` (plus `document.body` for portals); **`get_theme_tokens()` with no argument returns the static `ACTIVE_THEME` ("executive-light"), so pass the active theme explicitly if you need runtime-theme-correct colors.**
 - Sidebar pages: Chat, Search, Graph, Analytics, Connectors, Settings. Collaboration Network is reached by deep-link from Analytics, not the sidebar.
 
 ### Runtime-mutable settings
 
-Two layers, both important:
+Two layers, both important — these are **API-side**:
 
 - `app.settings.settings` — pydantic-settings from `.env` (startup config).
 - `app.runtime_settings.runtime_settings` — DB-backed overrides editable at runtime via the Settings UI (`/api/v1/settings`), e.g. `runtime_settings.get_int("HTTP_REQUEST_TIMEOUT")`, `runtime_settings.get("UI_DATETIME_FORMAT")`. Prefer these over hardcoding when a value is user-tunable. Design: `docs/design/runtime-settings-design.md`.
 
-Dash pages call the backend API over HTTP with sync `requests` (e.g. `pages/search.py`), using `settings.API_BASE_URL` (the container-internal `http://localhost:8000`; distinct from `settings.EXTERNAL_BASE_URL`, the browser-facing `https://localhost`) and `runtime_settings.get_int("HTTP_REQUEST_TIMEOUT")`.
+The UI holds neither. It reads `ui.settings` (a credential-free `UISettings`) and `ui.runtime_settings` (fetched from the API's runtime-snapshot endpoint), so the same page code calls `runtime_settings.get_int(...)` with the value sourced over HTTP rather than from a database.
+
+Dash pages call the backend API over HTTP through the single client in `src/ui/api_client.py` — it owns the base URL (`UISettings.API_BASE_URL`, the container-internal `http://api:8000`, distinct from `EXTERNAL_BASE_URL`, the browser-facing `https://localhost`) and reads the timeout per call.
 
 ## Testing
 
@@ -181,7 +202,7 @@ Some suites (e.g. connector validation) live in their own `tests/<suite>/` direc
 ## Repo conventions
 
 - **Never commit, push, open a PR, or rewrite history unless the user explicitly asks in that turn.** Leave changes in the working tree and report them. An earlier request does not authorize later commits.
-- API endpoints: `/api/v1/` prefix; add a router module and include it in `src/app/main.py`.
+- API endpoints: `/api/v1/` prefix; add a router module and include it in `src/app/api_main.py`.
 - Alembic for every schema change; import new models in `src/app/db/models/__init__.py`.
 - `queries_catalog/` (top level) holds the Cypher query catalog by domain; `src/app/query_catalog/` loads it. Neo4j uses a single **undirected** edge per relationship — do not add bidirectional edges (see `docs/design/RELATIONSHIPS_DESIGN.md`).
 - `plans/` holds advisor-generated implementation plans with an index at `plans/README.md`; check it before starting sizable work.
@@ -189,10 +210,10 @@ Some suites (e.g. connector validation) live in their own `tests/<suite>/` direc
 
 ## Common tasks
 
-- **Add an API endpoint** — define Pydantic models in `src/app/api/<domain>/v1/model.py`, DB access in `query.py`, business logic in `service.py`, routes in `router.py`; include the router in `src/app/main.py`.
+- **Add an API endpoint** — define Pydantic models in `src/app/api/<domain>/v1/model.py`, DB access in `query.py`, business logic in `service.py`, routes in `router.py`; include the router in `src/app/api_main.py`.
 - **Add a DB model** — create it in `src/app/db/models/`, import it in `src/app/db/models/__init__.py`, then `cd src/app && alembic revision --autogenerate -m "description"` and `alembic upgrade head`.
 - **Add an augmentation chain** — add a file under `ai_agent/chains/` yielding context envelopes `{"source": ..., "context": ...}`, then register it in `chains.py`'s `augment_message_stream()` behind a settings feature flag.
-- **Add a UI page** — create the package in `dash_app/pages/`, add the nav link and route branch in `dash_app/layout.py`, and import `callbacks` from the page's `__init__.py`.
+- **Add a UI page** — create the package in `ui/pages/`, add the nav link and route branch in `ui/layout.py`, and import `callbacks` from the page's `__init__.py`.
 
 ## Environment configuration
 
@@ -208,7 +229,7 @@ Loaded from `.env` (see `.env.example`) via `app.settings`. Key variables:
 
 **Infrastructure & UI** — `RABBITMQ_URL`, `CONNECTOR_ENCRYPTION_KEY` (Fernet key for connector secrets, required), `HTTP_REQUEST_TIMEOUT` (default `60`), `TIMEZONE` (IANA name, default `UTC`), `UI_DATETIME_FORMAT` (`%b %d, %Y %I:%M %p`), `UI_DATE_FORMAT` (`%b %d, %Y`), `GRAPH_UI_MAX_NODES_TO_EXPAND` (default `20`), `GRAPH_UI_MAX_NODE_LABEL_CHARS` (default `10`).
 
-**External URL / reverse proxy** — `EXTERNAL_BASE_URL` (default `https://localhost`) is the URL the *browser* uses; `API_BASE_URL` (default `http://localhost:8000`) is the URL the Dash code uses to call the API from *inside* the container. They are deliberately different values and must stay that way — conflating them sends every Dash callback through TLS to the public host and breaks the UI. Anything needing an absolute, browser-facing URL (an OAuth `redirect_uri`, for example) must build it from `EXTERNAL_BASE_URL`, never from the request's own scheme or host. The Compose stack terminates TLS at the `nginx` service; the app publishes no host port.
+**External URL / reverse proxy** — `EXTERNAL_BASE_URL` (default `https://localhost`) is the URL the *browser* uses; `API_BASE_URL` (default `http://localhost:8000`) is the URL the UI code uses to call the API from *inside* the container. They are deliberately different values and must stay that way — conflating them sends every UI callback through TLS to the public host and breaks the UI. Anything needing an absolute, browser-facing URL (an OAuth `redirect_uri`, for example) must build it from `EXTERNAL_BASE_URL`, never from the request's own scheme or host. The Compose stack terminates TLS at the `nginx` service; neither the `api` nor the `ui` service publishes a host port.
 
 Note on the two `*_AI_LOOKUP_ENABLED` flags: the augmentation chains read them from the
 `app.settings` singleton (`.env` at startup), not from `runtime_settings`. Editing them in

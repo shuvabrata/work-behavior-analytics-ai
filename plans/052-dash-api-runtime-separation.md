@@ -161,8 +161,10 @@ Run Python commands with the virtualenv active (`source .venv/bin/activate`) and
   in `pages/graph/utils/graph_operations.py` (which *is* in the table). Step 10's
   exception-handler subsection covers them.
 - `tests/` — new tests for the client and the audit, and any stub repointed by a swap
-- `CLAUDE.md`, `DEVELOPER_QUICK_START.md`, `USER_GUIDE.md`, `scripts/setup.sh`, `.env.example`
+- `CLAUDE.md`, `DEVELOPER_QUICK_START.md`, `USER_GUIDE.md`, `scripts/setup.sh`
 - `docs/design/authn-authz-design.md` — **the four sections in Step 13 only**
+- **`.env.example` is NOT in scope** — its `API_SERVER` value was already corrected to
+  `http://api:8000/` before this step; Step 13e records this. Touching it fails the gate.
 - The Step 11 audit artifact (**temporary** — discarded once it passes)
 - `plans/README.md` — status row
 
@@ -493,68 +495,166 @@ threads within a worker. Any real callback works — a fast one is fine.
 
 ### Step 13: Update the documentation
 
-Four categories, all of which are now false or incomplete.
+> **Reconciled 2026-10-30 at `cb11f9b1`.** The step below was re-written against the live
+> tree: `src/app/main.py` **no longer exists**, `src/app/dash_app/` is now `src/ui/`, and
+> `src/domain/` and `src/ui_main.py` are new. The previous line-number citations had
+> drifted, so they have been replaced with a grep-verified inventory. The executor must
+> work from the inventory, not from line numbers.
+>
+> **The edits must not reference this plan, its phase, or its step numbers.** These are
+> ordinary project docs; they describe the system as it is, with no provenance markers.
 
-**17a. `CLAUDE.md`**
+**Scope of "now false or incomplete" is wider than the four categories below** — every
+place in the in-scope files that names the retired `app` **service**, the deleted
+`app.main:app` **module path**, or the old `dash_app/` **package** is wrong and is listed
+here. Do not touch files outside this list.
 
-- Line 15, the "Run app (API + UI)" row: replace the single `uvicorn app.main:app --reload`
-  with **two commands**, per Decision 14:
-  - API: `PYTHONPATH=src uvicorn app.api_main:app --reload` → `http://127.0.0.1:8000/api/health`
-  - UI: `PYTHONPATH=src gunicorn ui_main:server --bind 127.0.0.1:8001 --reload` →
-    `http://127.0.0.1:8001/app` (with `API_BASE_URL=http://127.0.0.1:8000` set).
-  State plainly that local dev needs **both** processes, and that the Compose
-  stack remains the supported path.
-- The "Docker Compose services" table: replace the `app` row with `api` and add
-  a `ui` row. Neither publishes a host port.
-- The architecture section: `src/ui/` and `src/domain/` are new top-level
-  packages; update the three-layer diagram to four.
-- The import-convention examples: add `from domain.graph_theme import …`.
+**Verified local-dev invocation.** Both commands below were run against this tree and
+returned the stated result — write them into the docs as-is:
 
-**17b. `DEVELOPER_QUICK_START.md`** — Option 2 (`:106`, `:134`) currently says
-`uvicorn app.main:app --reload`. Update to the two-process flow, and label it
-clearly (Option 1, the Compose path, is unchanged and still recommended).
+```bash
+# Terminal 1 — API. Start this FIRST.
+PYTHONPATH=src uvicorn app.api_main:app --reload            # → http://127.0.0.1:8000/api/health  → 200
 
-**17c. `USER_GUIDE.md`** — the container/logs sections reference the `app`
-service. Update `docker compose logs app` → `logs api`, and note that `ui` is a
-separate service.
+# Terminal 2 — UI. Needs the API's URL; the UI is a Flask/WSGI service.
+API_BASE_URL=http://127.0.0.1:8000 PYTHONPATH=src \
+  gunicorn ui_main:server --bind 127.0.0.1:8001 --reload    # → http://127.0.0.1:8001/app         → 200
+```
 
-**17d. `scripts/setup.sh`** — the failure message at `:400` says
-`docker compose logs app`; change to `api`. The health poll at `:384` still
-targets `https://localhost/api/health`, which is correct. Consider adding a UI
-readiness check.
+Both were verified on 2026-10-30 (API on `:8021`, UI on `:8022`/`:8023`/`:8025`):
+`/api/health` → `200`, `/app/` → `200`, and the UI log shows it reaching the API —
+`Fetched runtime settings snapshot from http://127.0.0.1:8021/api/v1/settings/runtime-snapshot`.
+`gunicorn --reload` works with the default `sync` worker **and** with
+`--worker-class gthread`. `gunicorn` is not in `requirements_dev.txt`; it is in
+`requirements.ui.txt`, so a developer who installed all `requirements*.txt` per
+`DEVELOPER_QUICK_START.md`'s setup loop already has it.
 
-**17e. `.env.example`** — `API_SERVER=http://app:8000/` (`:106`) → `http://api:8000/`.
+**13a. `CLAUDE.md`** — grep-verified stale claims. Every one of these must be corrected:
 
-**17f. `docs/design/authn-authz-design.md`** — **four sections** now state
-mechanisms this plan made impossible. Edit them so Plan C is not written against
-a stale premise:
+| Line | Current (stale) | Why it is wrong | Correction |
+|---|---|---|---|
+| 15 | `uvicorn app.main:app --reload` → UI at `127.0.0.1:8000/app` | `app.main` is deleted; one process no longer serves both | The two-command block above; state that local dev needs **both** processes and that the Compose stack remains the supported path |
+| 36 | Compose table row: `` `app` `` \| FastAPI + Dash \| 8000 | Service renamed in Phase 3 | Replace with `api` (FastAPI only) and add a `ui` row (Dash/Flask). Neither publishes a host port. Match `docker-compose.yml:23,97` |
+| 37 | `` `nginx` `` \| … front of `` `app` `` | Stale service name | `front of the api and ui services` |
+| 49 | "Only `app.dash_app.*` relaxes …" | `mypy.ini:32` now has `[mypy-ui.*]` | `ui.*` |
+| 60 | import examples omit `domain` | `src/domain/` is a new top-level package | Add `from domain.graph_theme import …   # pure shared domain logic → src/domain/` |
+| 73 | "Three separately-containerized layers" | Now four packages | Four; list `src/ui/`, `src/app/`, `src/connectors/`, `src/common/` (+ `src/domain/` as pure shared logic) |
+| 76 | `src/app/  FastAPI + Dash application` | Dash is no longer in `src/app/` | `src/app/` = FastAPI API (`app.*`); `src/ui/` = Dash/Flask UI (`ui.*`); `src/domain/` = pure shared logic (`domain.*`) |
+| 99 | "router.py  FastAPI routes, wired in src/app/main.py" | `src/app/main.py` is deleted | `wired in src/app/api_main.py` |
+| 127 | `### Dash UI (src/app/dash_app/)` | Package moved | `### Dash UI (src/ui/)` |
+| 129 | "mounted onto FastAPI at `/app` via `a2wsgi` `WSGIMiddleware`" | There is **no** mount and no `a2wsgi` — the UI is its own Flask service | `created by create_dash_app() in ui/layout.py and served by gunicorn as a standalone Flask app from src/ui_main.py. It owns the /app/* paths; the API owns /api/*.` |
+| 133 | "Put cross-page modules at `dash_app/` … (`from app.dash_app.graph_styles import …`)" | Stale paths | `ui/` and `from ui.graph_styles import …` |
+| 142–143 | runtime-settings bullets name only `app.settings` / `app.runtime_settings` | The UI holds neither | Keep the `app.*` bullets as **API-side**, and add that the UI reads `ui.settings` (credential-free `UISettings`) and `ui.runtime_settings` (fetched from the API's snapshot endpoint) |
+| 145 | "Dash pages call the backend API over HTTP with sync `requests` … using `settings.API_BASE_URL` … and `runtime_settings.get_int(...)`" | Dash no longer calls `requests` directly | `through the single client in src/ui/api_client.py` — it owns the base URL (`UISettings.API_BASE_URL`) and reads the timeout per call |
+| 184, 192 | "include it in `src/app/main.py`" | Deleted | `src/app/api_main.py` |
+| 195 | "create the package in `dash_app/pages/` … `dash_app/layout.py`" | Stale paths | `ui/pages/` … `ui/layout.py` |
+| 211 | "the app publishes no host port" | Now two services | `neither the api nor the ui service publishes a host port` |
 
-1. **Enforcement points** — "ASGI middleware is the only mechanism that can guard
-   a mounted WSGI application" is **false**. The UI is a Flask/WSGI service. The
-   replacement is Flask `before_request` (redirect to login when no session
-   cookie) plus `stream_with_context` for the SSE proxy.
-2. **The `/app/stream/<session_id>` proxy route** — its justification referenced
-   the `a2wsgi` mount and the `routes_pathname_prefix` asymmetry. It is now a
-   plain Flask route on `ui_main:server`.
-3. **Deployment Topologies** — "Two containers: the UI runtime and the API
-   runtime… They are separated by Plan B" becomes present tense, and the UI
-   container's contents listed there are now literally true.
-4. **Non-API Surfaces → "Application-internal bypasses → Plan B"** — the three
-   in-process callbacks are resolved. Update the table to say so.
+**Leave the API-layering and AI-agent sections (`src/app/api/<domain>/v1/`,
+`src/app/ai_agent/`) alone** — those paths are still correct.
 
-**Do not rewrite the rest of that document.** It owns authn/authz; this plan
-only corrects what it invalidated.
+**13b. `DEVELOPER_QUICK_START.md`** — four stale spots:
 
-**Verify**: `grep -rn "uvicorn app.main" CLAUDE.md DEVELOPER_QUICK_START.md` → no matches
-**Verify**: `grep -rn "app\.main:app" CLAUDE.md DEVELOPER_QUICK_START.md` → no matches
-**Verify**: `grep -n "docker compose logs app" USER_GUIDE.md scripts/setup.sh` → no matches
+- `:95` `docker compose logs -f app` → `-f api` (and mention `ui`).
+- `:106` (Option 2's local run) and `:134` (the integration-test note) both say
+  `uvicorn app.main:app --reload` → the two-command block above.
+- `:111` "Dash UI: http://localhost:8000/app" → the UI now runs on its own port;
+  state `http://127.0.0.1:8001/app` (with the API on `:8000`).
+- `:122` `docker compose exec app bash -c "cd app && alembic revision …"` → the API
+  service. The API image's WORKDIR is `/app` and it copies `src/app/` to `./app/`
+  (`Dockerfile.api:8,23`), so the inner `cd app` is correct once the service name is
+  `api`: `docker compose exec api bash -c "cd app && alembic revision --autogenerate -m 'description'"`.
+
+**Plus one correction the plan missed — operator-reported 2026-10-30.** Option 2 was
+titled "PostgreSQL Only" and started only `postgres`, but the locally-run API reads Neo4j
+and Elasticsearch directly: with either down, `/api/v1/search` and
+`/api/v1/graph/collaboration-network` return **`500`** (verified by the reviewer — the API
+still reports `/api/health` `200`, so the failure shows only on the data endpoints). The
+section must start **all three** stores and retitle accordingly. RabbitMQ is optional
+here: the lifespan catches the connection failure and logs a warning (`api_main.py:107`),
+and the API stays healthy without it. The stores publish their default host ports
+(`docker-compose.yml`: postgres `5432`, neo4j `7474`/`7687`, elasticsearch `9200`), so no
+`.env` change is needed.
+
+**Keep the prose minimal** — the operator has flagged verbosity in this section. State the
+command and the one-line reason; do not restate rationale, ports, env defaults or failure
+modes in the doc.
+
+Keep Option 1 (Compose) labelled as the recommended path; Option 2 is the local flow.
+
+**13c. `USER_GUIDE.md`** — the `app` **service** is referenced 13 times and no longer
+exists. Every one must change; `ui` is a separate service now:
+
+| Line(s) | Current | Correction |
+|---|---|---|
+| 135 | "the application container no longer publishes port 8000" | Still true; say the `api` and `ui` containers publish no host port |
+| 174–176 | "### View App Logs Only" / `docker compose logs app` | Retitle to cover both services; show `docker compose logs -f api` and `-f ui` |
+| 186, 193, 198 | `docker compose logs -f app`, `logs app --tail 50`, `logs -f -t app` | `api` (add a `ui` variant where it reads naturally) |
+| 235 | "Open a Shell in the App Container" / `exec app bash` | Say which service; the API is the one with migrations and a DB |
+| 265, 277 | `docker compose logs app` (in the troubleshooting sections) | `api` and `ui` — a 502 is usually `ui` |
+| 317 | `docker compose restart app` (after a `.env` change) | `api` and `ui` — the `.env` is mounted into `api` only (`docker-compose.yml:70`) |
+| 330, 333, 334, 340 | Quick-reference / support table rows | Same substitutions |
+
+**13d. `scripts/setup.sh`** — `:400` says `docker compose logs app`; change to `api`.
+The health poll at `:384` targets `https://localhost/api/health` and is correct as-is —
+`api` is the service that owns `/api/health`. Do **not** add a UI readiness check unless
+it is trivially safe; the UI's own healthcheck already exists in compose and this is a
+shell script whose only failure path is a timeout message.
+
+**13e. `.env.example`** — **already correct, no change needed.** `:106` reads
+`API_SERVER=http://api:8000/`. Verified 2026-10-30. Skip it; do not "fix" it again.
+
+**13f. `docs/design/authn-authz-design.md`** — **four sections** state mechanisms this
+programme has made impossible. Edit **only** these; the document owns authn/authz and
+this step corrects what it invalidated. **Do not rewrite the rest, and do not add plan
+or phase provenance to the prose — write it as present-tense fact.**
+
+1. **"Enforcement points" (`:335–364`)** — the claim "Middleware is the only mechanism
+   that can guard a mounted WSGI application — FastAPI dependencies do not apply to
+   `app.mount("/app", WSGIMiddleware(...))` (`src/app/main.py:196-197`)" is now **false
+   twice over**: there is no mount and `src/app/main.py` does not exist. The UI is a
+   standalone Flask app (`src/ui_main.py` → `server = app.server`, served by gunicorn).
+   Replace with Flask `before_request` (resolve the session cookie, otherwise redirect
+   to the login flow) as the `/app/*` guard, plus `stream_with_context` for the SSE proxy.
+   The paragraph at `:345–354` explaining the `requests_pathname_prefix` /
+   `routes_pathname_prefix` asymmetry and the pre-mount path is also obsolete: in
+   `src/ui/layout.py:27-28` **both** prefixes are now set to `"/app/"`, so a Flask route
+   registered as `/stream/<session_id>` is reachable at `/app/stream/<session_id>`
+   directly, with no mount involved. Rewrite that paragraph to say so.
+2. **"The one browser-direct API call" (`:445–471`)** — it justifies the proxy via the
+   `a2wsgi` mount and the prefix asymmetry, and cites
+   `src/app/dash_app/assets/stream-bridge.js:215`. That path is now
+   `src/ui/assets/stream-bridge.js:215` (the file, and its `fetch('/api/v1/chats/' … )`
+   call, still exist — verify before editing). Restate the route's home as a plain Flask
+   route on `ui_main:server`. Keep the `401`/dual-credential reasoning intact.
+3. **"Deployment Topologies" → "Docker Compose (current)" (`:619–628`)** — "Two
+   containers: the UI runtime … and the API runtime … They are separated by Plan B"
+   becomes present tense, and the sentence describing what the UI container holds is now
+   literally true (verify against `docker-compose.yml:97–137` and `requirements.ui.txt`).
+4. **"Non-API Surfaces" → "1. Application-internal bypasses" (`:501–519`)** — all three
+   listed callbacks are resolved: each now imports `ui.api_client` and calls the HTTP
+   endpoint (`pages/collaboration_network/callbacks/filter.py:12-13,91`;
+   `pages/collaboration_network_ego/callbacks/filter.py:13-14,211`;
+   `pages/graph/callbacks/spotlight.py:18,126`). Update the table/paragraph to past
+   tense and note the isolation is enforced by the container split. The
+   `CONNECTOR_REGISTRY` note below it now lives at `src/domain/connector_registry.py`;
+   update the path.
+
+**Verify**: `grep -rn "app\.main\|uvicorn app.main" CLAUDE.md DEVELOPER_QUICK_START.md` → no matches
+**Verify**: `grep -rn "docker compose logs app\|docker compose exec app\|docker compose restart app" USER_GUIDE.md DEVELOPER_QUICK_START.md scripts/setup.sh` → no matches
+**Verify**: `grep -n "three-layer\|Three separately" CLAUDE.md` → no matches
+**Verify**: `grep -n "dash_app" CLAUDE.md` → no matches
 **Verify**: `grep -n "app:8000" .env.example CLAUDE.md` → no matches
 **Verify**: `grep -n "ASGI middleware is the only mechanism" docs/design/authn-authz-design.md` → no matches
+**Verify**: `grep -n "WSGIMiddleware\|a2wsgi" docs/design/authn-authz-design.md` → no matches
 **Verify**: `bash -n scripts/setup.sh` → exit 0
+**Verify**: `git status --short` shows changes to **only** `CLAUDE.md`,
+`DEVELOPER_QUICK_START.md`, `USER_GUIDE.md`, `scripts/setup.sh` and
+`docs/design/authn-authz-design.md`
 
 > ### 🚦 MANUAL GATE 13 — operator check
 >
-> **Report to the operator:** the six verify outputs and `git diff` for each file.
+> **Report to the operator:** the verify outputs and `git diff` for each file.
 >
 > **Operator verifies:**
 > 1. **The local-dev story is actually followable.** Walk it: start the API in
@@ -563,9 +663,10 @@ only corrects what it invalidated.
 >    agent reads — if these two commands are wrong, every subsequent task is
 >    misled.
 > 2. The Compose services table matches `docker-compose.yml` exactly.
-> 3. `authn-authz-design.md` no longer claims an ASGI-mount mechanism for the UI.
->    Read the four edited sections.
-> 4. **The doc edits did not stray.** Only the four specified sections changed.
+> 3. `authn-authz-design.md` no longer claims an ASGI-mount mechanism for the UI,
+>    and the four edited sections are the only ones that changed.
+> 4. **The doc edits did not stray** — no file outside the five named was touched,
+>    and no edit mentions a plan, phase or step number.
 >
 > Wait for `PASS` before starting Step 14.
 
@@ -644,7 +745,7 @@ is in the backup of the original plan and in the git log.
 | 10 | `src/ui/api_client.py` grown into the single chokepoint; **57** remaining call sites across **14** files migrated | zero raw `requests.*` in `src/ui/`; suite/`mypy`/`pylint` | Operator confirms no credentials; **full page sweep** | ✅ complete — Gate 10 passed 2026-10-30 |
 | 11 | API-completeness audit (`A ⊆ B`, response shapes, orphans) | comparison passes; artifact discarded | Operator reviews mismatch and orphan lists | ✅ complete — Gate 11 passed 2026-10-30 |
 | 12 | gunicorn concurrency gate | 4 and 12 concurrent requests all return 2xx | Operator confirms all succeed; no 5xx/timeouts | ✅ complete — Gate 12 passed 2026-10-30 |
-| 13 | Docs: `CLAUDE.md`, `DEVELOPER_QUICK_START.md`, `USER_GUIDE.md`, `setup.sh`, `.env.example`, `authn-authz-design.md` | six grep gates | Operator **walks the two-process local dev flow** | ⬜ |
+| 13 | Docs: `CLAUDE.md`, `DEVELOPER_QUICK_START.md`, `USER_GUIDE.md`, `setup.sh`, `authn-authz-design.md` (`.env.example` already correct) | eight grep gates + `bash -n` | Operator **walks the two-process local dev flow** | 🔄 executed 2026-10-30, reviewer-approved — **awaiting operator PASS** |
 | 14 | Full CI gates + full-stack smoke | all five gates; every page renders | Operator signs off the complete page sweep | ⬜ |
 
 ### Gate 10 record — 2026-10-30, `61a29670` + uncommitted Step 10 diff
@@ -758,6 +859,71 @@ stack defect.
 and count were confirmed from `/proc`, not from the entrypoint file; the overlap
 measurement is what proves the flags are effective rather than merely present.
 
+### Gate 13 record — 2026-10-30, `cb11f9b1` + uncommitted Step 13 diff
+
+Executed in the live working tree, uncommitted. **Reviewer-approved; awaiting the
+operator's PASS at the manual gate.**
+
+**The step was reconciled before dispatch.** Its original text cited
+`src/app/main.py:196-197`, `dash_app/layout.py:27` and a `uvicorn app.main:app` row at
+`CLAUDE.md:15` — all of which the plan's own Phases 1–3 had since removed. The step was
+re-written in place against the live tree: grep-verified claim inventory instead of line
+numbers, `.env.example` moved **out** of scope (its `API_SERVER` was corrected before this
+step), and the stale-claim set widened from 4 categories to the real set — the original
+counted only `logs app` in `USER_GUIDE.md`; there were **13** `app`-service references.
+
+**The local-dev commands were verified by the reviewer, not transcribed.** Both were run
+against this tree on spare ports:
+
+| Check | Result |
+|---|---|
+| `uvicorn app.api_main:app` → `/api/health` | `200` |
+| `gunicorn ui_main:server` → `/app/` | `200` |
+| UI reaches the API | `Fetched runtime settings snapshot from http://127.0.0.1:8021/api/v1/settings/runtime-snapshot` |
+| `gunicorn --reload`, default `sync` worker | `200` |
+| `gunicorn --worker-class gthread --reload` | `200` |
+
+**Automated gates (re-run by the reviewer, not taken from the executor's report):**
+
+| Gate | Result |
+|---|---|
+| `grep -rn "app\.main\|uvicorn app.main"` CLAUDE.md, DEV_QUICK_START.md | 0 |
+| `grep -rn "docker compose (logs\|exec\|restart) app"` USER_GUIDE.md, DEV_QUICK_START.md, setup.sh | 0 |
+| `grep "Three separately\|three-layer"` CLAUDE.md | 0 |
+| `grep "dash_app/\|app\.dash_app"` CLAUDE.md | 0 (the surviving `create_dash_app` match is the real function name) |
+| `grep "app:8000"` .env.example, CLAUDE.md | 0 |
+| `grep "ASGI middleware is the only mechanism"` design doc | 0 |
+| `grep -E "WSGIMiddleware\|a2wsgi"` design doc | 0 |
+| `bash -n scripts/setup.sh` | exit 0 |
+| `git diff --name-only` | the 5 in-scope docs only |
+| Plan/phase/step provenance markers in the 5 docs | none added |
+
+**Independently verified facts, not taken on trust:** the three former bypasses now call
+HTTP (`get_json("/api/v1/graph/collaboration-network")` at
+`collaboration_network/callbacks/filter.py:91`, `…/ego` at the ego `filter.py:211`, and
+`post_json("/api/v1/search/scoped")` at `spotlight.py:126`); `CONNECTOR_REGISTRY` is
+imported from `src/domain/connector_registry.py` (`connectors/callbacks.py:13`);
+`src/ui/layout.py:27-28` sets **both** Dash prefixes to `/app/`;
+`src/ui/assets/stream-bridge.js:215` still holds the browser-direct
+`fetch('/api/v1/chats/' …)`; `requirements.ui.txt` carries no data-store driver;
+`src/app/main.py` is absent and `src/app/api_main.py` is present.
+
+**One executor correction to the plan, accepted:** the plan said spotlight's replacement
+was `GET /api/v1/search`. It is **`POST /api/v1/search/scoped`** (`spotlight.py:126`) —
+the `ids`-scoped endpoint Step 7 added. The executor used the true endpoint. The
+original claim in this plan's Step 10 "verify" list is stale on this point; recorded here
+rather than silently fixed.
+
+**Documented deviation, judged on merit:** the gate requiring zero `WSGIMiddleware`/`a2wsgi`
+matches forced a sixth edit, outside the four named sections — `:744` in the "Plan B Scope"
+section still described `app.mount("/app", WSGIMiddleware(dash_app.server))`. The executor
+reworded that one sentence to drop the stale mechanism while keeping the factual claim, and
+added no provenance. The gate as written could not have passed without it, so this is the
+gate doing its job rather than scope creep.
+
+**Pre-existing, untouched:** `plans/052-dash-api-runtime-separation.md` shows as modified;
+that is the reviewer's own reconciliation edit and the gate-record block, not the executor's.
+
 ---
 
 ## Test plan
@@ -832,11 +998,13 @@ ALL must hold:
 - [ ] Timeouts are read **per call** from `ui.runtime_settings`, never captured at import
 - [ ] Step 11: every path in A resolves in B; response shapes match for all A endpoints; orphans listed and reviewed (not necessarily zero); **no artifact left behind**
 - [ ] Step 12: 4 and 12 concurrent requests all complete with **2xx** responses; no 5xx or timeouts under concurrent load
-- [ ] `grep -rn "uvicorn app.main" CLAUDE.md DEVELOPER_QUICK_START.md` → no matches
-- [ ] `grep -rn "app\.main:app" CLAUDE.md DEVELOPER_QUICK_START.md` → no matches
-- [ ] `grep -n "docker compose logs app" USER_GUIDE.md scripts/setup.sh` → no matches
+- [ ] `grep -rn "app\.main\|uvicorn app.main" CLAUDE.md DEVELOPER_QUICK_START.md` → no matches
+- [ ] `grep -rn "docker compose logs app\|docker compose exec app\|docker compose restart app" USER_GUIDE.md DEVELOPER_QUICK_START.md scripts/setup.sh` → no matches
+- [ ] `grep -n "Three separately\|three-layer" CLAUDE.md` → no matches
+- [ ] `grep -n "dash_app" CLAUDE.md` → no matches
 - [ ] `grep -n "app:8000" .env.example CLAUDE.md` → no matches
 - [ ] `grep -n "ASGI middleware is the only mechanism" docs/design/authn-authz-design.md` → no matches
+- [ ] `grep -n "WSGIMiddleware\|a2wsgi" docs/design/authn-authz-design.md` → no matches
 - [ ] `bash -n scripts/setup.sh` → exit 0
 - [ ] Every page in Step 14's sweep renders and its primary action works
 - [ ] No files outside the Scope list are modified (`git status`)

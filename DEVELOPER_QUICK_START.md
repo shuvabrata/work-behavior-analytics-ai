@@ -92,23 +92,31 @@ docker compose down
 
 To view logs:
 ```bash
-docker compose logs -f app
+docker compose logs -f api    # API service
+docker compose logs -f ui     # UI service
 ```
 
-## Option 2: PostgreSQL Only (For Local Development)
-If you want to run the app locally but use PostgreSQL in Docker:
+## Option 2: Backing Stores in Docker, App Local (For Local Development)
+The API reads Neo4j and Elasticsearch as well as PostgreSQL, so start all of the
+backing services:
 ```bash
-docker compose up -d postgres
+docker compose up -d postgres neo4j elasticsearch rabbitmq
 ```
 
-Then run the app locally:
+Then run the API and the UI locally as two processes. Start the API first — the UI
+fetches its runtime-settings snapshot from it:
 ```bash
-uvicorn app.main:app --reload
+# Terminal 1 — API
+PYTHONPATH=src uvicorn app.api_main:app --reload
+
+# Terminal 2 — UI (a Flask/WSGI service; needs the API's URL)
+API_BASE_URL=http://127.0.0.1:8000 PYTHONPATH=src \
+  gunicorn ui_main:server --bind 127.0.0.1:8001 --reload
 ```
 
-Access the services (Option 2 — app running locally, plain HTTP):
-- FastAPI API: http://localhost:8000/api/health
-- Dash UI: http://localhost:8000/app
+Access the services (Option 2 — API and UI running locally, plain HTTP):
+- FastAPI API: http://127.0.0.1:8000/api/health
+- Dash UI: http://127.0.0.1:8001/app
 
 ## Running Migrations Manually (Local Development)
 If running locally, you'll need to run migrations manually:
@@ -119,7 +127,7 @@ cd ../..
 ```
 To create a new migration:
 ```bash
-docker compose exec app bash -c "cd app && alembic revision --autogenerate -m 'description'"
+docker compose exec api bash -c "cd app && alembic revision --autogenerate -m 'description'"
 ```
 
 
@@ -131,7 +139,12 @@ pytest -m unit tests -q
 
 - Integration tests that require app server
 ```bash
-uvicorn app.main:app --reload
+# Terminal 1 — API
+PYTHONPATH=src uvicorn app.api_main:app --reload
+
+# Terminal 2 — UI (a Flask/WSGI service; needs the API's URL)
+API_BASE_URL=http://127.0.0.1:8000 PYTHONPATH=src \
+  gunicorn ui_main:server --bind 127.0.0.1:8001 --reload
 ```
 In another window:
 ```bash

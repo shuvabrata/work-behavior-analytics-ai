@@ -397,7 +397,7 @@ done
 echo ""
 warn "App did not become healthy within ${MAX_WAIT}s."
 echo ""
-echo "  Check logs:  docker compose logs app"
+echo "  Check logs:  docker compose logs api"
 echo "  Check status: docker compose ps"
 echo ""
 echo "  Once healthy, open: https://localhost/app"

@@ -37,17 +37,17 @@ class _FakeResponse:
 
 
 class _PostSequence:
-    """Sequential fake for requests.post returning predefined responses."""
+    """Sequential fake for ``api_client.post`` returning predefined responses."""
 
     def __init__(self, responses):
         self._responses = responses
         self._idx = 0
         self.calls = []
 
-    def __call__(self, _url, json, timeout):
-        self.calls.append({"url": _url, "json": json, "timeout": timeout})
+    def __call__(self, _path, *, json=None, params=None):
+        self.calls.append({"url": _path, "json": json})
         if self._idx >= len(self._responses):
-            raise AssertionError("Unexpected extra requests.post call")
+            raise AssertionError("Unexpected extra api_client.post call")
         response = self._responses[self._idx]
         self._idx += 1
         return response
@@ -79,7 +79,7 @@ def test_execute_query_repeated_runs_refresh_baseline_and_filters(monkeypatch):
     cyto_b = [{"data": {"id": "B1"}}]
 
     post_fake = _PostSequence([_FakeResponse(graph_a), _FakeResponse(graph_b)])
-    monkeypatch.setattr(query_callbacks.requests, "post", post_fake)
+    monkeypatch.setattr(query_callbacks.api_client, "post", post_fake)
 
     def _fake_neo4j_to_cytoscape(payload):
         node_ids = {n["id"] for n in payload.get("nodes", [])}
@@ -142,7 +142,7 @@ def test_execute_query_repeated_runs_refresh_baseline_and_filters(monkeypatch):
     assert result_b[WEIGHT_FILTER] == 0
     assert result_b[TOP_N_FILTER] == "all"
 
-    assert post_fake.calls[0]["url"].endswith("/api/v1/graph/execute")
+    assert post_fake.calls[0]["url"] == "/api/v1/graph/execute"
     assert post_fake.calls[0]["json"] == {
         "source": "raw",
         "query": "MATCH (n)-[r]->(m) RETURN n, r, m LIMIT 10",

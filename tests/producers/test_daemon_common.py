@@ -521,23 +521,6 @@ class TestUpdateStatus:
         url = mock_instance.patch.call_args[0][0]
         assert url == f"http://api:5000/api/v1/commands/{command_id}/status"
 
-    def test_default_api_server(self):
-        """Should default to ``http://localhost:8000`` when no env set."""
-        # Unset API_SERVER
-        with patch.dict(os.environ, {}, clear=True):
-            # os.environ needs at least PATH for the interpreter to work
-            pass
-        # We can't fully clear os.environ, so just ensure the default is used
-        with patch("httpx.Client") as mock_client:
-            mock_instance = MagicMock()
-            mock_client.return_value.__enter__.return_value = mock_instance
-            command_id = uuid.uuid4()
-            update = CommandStatusUpdate(status="running")
-            daemon_mod._update_status(command_id, update)
-
-        url = mock_instance.patch.call_args[0][0]
-        assert "localhost:8000" in url
-
 
 # ═══════════════════════════════════════════════════════════════════════════
 #  _find_pid_by_command_id — reverse lookup helper

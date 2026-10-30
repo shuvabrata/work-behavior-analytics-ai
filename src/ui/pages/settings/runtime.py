@@ -15,7 +15,6 @@ import json
 from typing import Any
 
 import dash_bootstrap_components as dbc
-import requests
 from dash import (
     ALL,
     MATCH,
@@ -31,8 +30,9 @@ from dash import (
 )
 from dash.exceptions import PreventUpdate
 
+from ui import api_client
+from ui.api_client import ApiError
 from ui.components.common import create_alert, create_page_header
-from ui.settings import settings
 from ui.styles import (
     CARD_CONTAINER_STYLE,
     COLOR_BACKGROUND_LIGHT,
@@ -355,15 +355,12 @@ def get_runtime_layout() -> html.Div:
 )
 def load_settings(pathname: str) -> Any:
     """Fetch settings from the API when the settings page is visited."""
-    settings_api = f"{settings.API_BASE_URL}/api/v1/settings/"
     if pathname not in ("/app/settings/runtime", "/app/settings/runtime/"):
         return no_update
 
     try:
-        resp = requests.get(settings_api, timeout=10)
-        resp.raise_for_status()
-        return resp.json()
-    except requests.exceptions.RequestException as exc:
+        return api_client.get("/api/v1/settings/").json()
+    except ApiError as exc:
         return {"status": "error", "message": str(exc)}
 
 
@@ -464,7 +461,6 @@ def save_all_settings(
     input_ids: list[dict[str, str]],
 ) -> tuple[Any, Any]:
     """Save all changed settings via bulk PATCH."""
-    settings_api = f"{settings.API_BASE_URL}/api/v1/settings/"
     if not n_clicks or not initial_data or not input_ids:
         raise PreventUpdate
 
@@ -502,37 +498,18 @@ def save_all_settings(
     expected_updated_at = max(timestamps) if timestamps else None
 
     try:
-        resp = requests.patch(
-            settings_api,
+        result = api_client.patch(
+            "/api/v1/settings/",
             json={
                 "updates": updates,
                 "expected_updated_at": expected_updated_at,
             },
-            timeout=10,
-        )
-        if resp.status_code == 422:
-            detail = resp.json()
-            msg = detail.get("detail", str(detail))
-            if isinstance(msg, list):
-                msg = "; ".join(e.get("msg", str(e)) for e in msg)
-            return no_update, create_alert(
-                f"Validation error: {msg}", color="danger", class_name="mb-3"
-            )
-        if resp.status_code == 409:
-            detail = resp.json().get("detail", {})
-            msg = detail.get("detail", "Stale data \u2014 please reload and try again.")
-            return no_update, create_alert(
-                f"Conflict: {msg}", color="warning", class_name="mb-3"
-            )
-        resp.raise_for_status()
-        result = resp.json()
+        ).json()
         updated_count = len(result.get("updated", {}))
         warning = result.get("propagation_warning")
 
         # Reload to refresh the UI.
-        reload_resp = requests.get(settings_api, timeout=10)
-        reload_resp.raise_for_status()
-        new_data = reload_resp.json()
+        new_data = api_client.get("/api/v1/settings/").json()
 
         feedback = create_alert(
             f"Saved {updated_count} setting(s)." + (f" {warning}" if warning else ""),
@@ -541,7 +518,20 @@ def save_all_settings(
             duration=5000,
         )
         return new_data, feedback
-    except requests.exceptions.RequestException as exc:
+    except ApiError as exc:
+        if exc.status_code == 422:
+            msg: Any = exc.detail
+            if isinstance(msg, list):
+                msg = "; ".join(e.get("msg", str(e)) for e in msg)
+            return no_update, create_alert(
+                f"Validation error: {msg}", color="danger", class_name="mb-3"
+            )
+        if exc.status_code == 409:
+            detail = exc.detail if isinstance(exc.detail, dict) else {}
+            msg = detail.get("detail", "Stale data \u2014 please reload and try again.")
+            return no_update, create_alert(
+                f"Conflict: {msg}", color="warning", class_name="mb-3"
+            )
         return no_update, create_alert(
             f"Save failed: {exc}", color="danger", class_name="mb-3"
         )
@@ -559,7 +549,6 @@ def reset_single_setting(
     initial_data: dict[str, dict[str, Any]] | None,
 ) -> tuple[Any, Any]:
     """Reset a single setting when its reset button is clicked."""
-    settings_api = f"{settings.API_BASE_URL}/api/v1/settings/"
     ctx = callback_context
     if not ctx.triggered:
         raise PreventUpdate
@@ -585,27 +574,11 @@ def reset_single_setting(
     expected_updated_at = entry.get("updated_at") if entry else None
 
     try:
-        resp = requests.post(
-            f"{settings_api}{key}/reset",
+        api_client.post(
+            f"/api/v1/settings/{key}/reset",
             json={"expected_updated_at": expected_updated_at},
-            timeout=10,
         )
-        if resp.status_code == 422:
-            detail = resp.json().get("detail", "Unknown error")
-            return no_update, create_alert(
-                f"Reset failed: {detail}", color="danger", class_name="mb-3"
-            )
-        if resp.status_code == 409:
-            detail = resp.json().get("detail", {})
-            msg = detail.get("detail", "Stale data \u2014 please reload and try again.")
-            return no_update, create_alert(
-                f"Conflict: {msg}", color="warning", class_name="mb-3"
-            )
-        resp.raise_for_status()
-
-        reload_resp = requests.get(settings_api, timeout=10)
-        reload_resp.raise_for_status()
-        new_data = reload_resp.json()
+        new_data = api_client.get("/api/v1/settings/").json()
 
         return new_data, create_alert(
             f"Reset {key} to default.",
@@ -613,7 +586,19 @@ def reset_single_setting(
             class_name="mb-3",
             duration=5000,
         )
-    except requests.exceptions.RequestException as exc:
+    except ApiError as exc:
+        if exc.status_code == 422:
+            return no_update, create_alert(
+                f"Reset failed: {exc.detail or 'Unknown error'}",
+                color="danger",
+                class_name="mb-3",
+            )
+        if exc.status_code == 409:
+            detail = exc.detail if isinstance(exc.detail, dict) else {}
+            msg = detail.get("detail", "Stale data \u2014 please reload and try again.")
+            return no_update, create_alert(
+                f"Conflict: {msg}", color="warning", class_name="mb-3"
+            )
         return no_update, create_alert(
             f"Reset failed: {exc}", color="danger", class_name="mb-3"
         )
@@ -643,7 +628,6 @@ def reset_all_settings(
     initial_data: dict[str, dict[str, Any]] | None,
 ) -> tuple[Any, Any]:
     """Reset all settings to their env/default values."""
-    settings_api = f"{settings.API_BASE_URL}/api/v1/settings/"
     if not n_clicks:
         raise PreventUpdate
 
@@ -657,22 +641,11 @@ def reset_all_settings(
     expected_updated_at = max(timestamps) if timestamps else None
 
     try:
-        resp = requests.post(
-            f"{settings_api}reset",
+        api_client.post(
+            "/api/v1/settings/reset",
             json={"expected_updated_at": expected_updated_at},
-            timeout=10,
         )
-        if resp.status_code == 409:
-            detail = resp.json().get("detail", {})
-            msg = detail.get("detail", "Stale data \u2014 please reload and try again.")
-            return no_update, create_alert(
-                f"Conflict: {msg}", color="warning", class_name="mb-3"
-            )
-        resp.raise_for_status()
-
-        reload_resp = requests.get(settings_api, timeout=10)
-        reload_resp.raise_for_status()
-        new_data = reload_resp.json()
+        new_data = api_client.get("/api/v1/settings/").json()
 
         return new_data, create_alert(
             "All settings reset to defaults.",
@@ -680,7 +653,13 @@ def reset_all_settings(
             class_name="mb-3",
             duration=5000,
         )
-    except requests.exceptions.RequestException as exc:
+    except ApiError as exc:
+        if exc.status_code == 409:
+            detail = exc.detail if isinstance(exc.detail, dict) else {}
+            msg = detail.get("detail", "Stale data \u2014 please reload and try again.")
+            return no_update, create_alert(
+                f"Conflict: {msg}", color="warning", class_name="mb-3"
+            )
         return no_update, create_alert(
             f"Reset all failed: {exc}", color="danger", class_name="mb-3"
         )

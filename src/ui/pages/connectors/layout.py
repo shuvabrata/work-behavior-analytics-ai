@@ -5,8 +5,10 @@ from dash import dcc, html
 import dash_bootstrap_components as dbc
 
 from domain.connector_registry import CONNECTOR_REGISTRY
-from ui.settings import settings
+from ui import api_client
+from ui.api_client import ApiError
 from ui.components.common import create_alert, create_page_header
+from ui.settings import settings
 from ui.styles import (
     CARD_CONTAINER_STYLE,
     COLOR_BACKGROUND_LIGHT,
@@ -796,14 +798,9 @@ def _fetch_env_setting_rows(keys: tuple[str, ...]) -> dict[str, dict[str, Any]]:
     An unreachable API degrades to an empty mapping (every row renders "Not set")
     rather than raising.
     """
-    import requests  # noqa: PLC0415  (kept local to the fetch, matching setup_banner)
-
-    url = f"{settings.API_BASE_URL}/api/v1/settings/"
     try:
-        resp = requests.get(url, timeout=10)
-        resp.raise_for_status()
-        rows: list[dict[str, Any]] = resp.json()
-    except (requests.exceptions.RequestException, ValueError):
+        rows: list[dict[str, Any]] = api_client.get("/api/v1/settings/").json()
+    except (ApiError, ValueError):
         return {}
     return {row["key"]: row for row in rows if row.get("key") in keys}
 

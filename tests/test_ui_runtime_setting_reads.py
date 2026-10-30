@@ -20,32 +20,40 @@ pytestmark = pytest.mark.unit
 
 
 def test_runtime_setting_is_read_per_call_not_at_import(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Changing the cache after import must change the callback's behaviour."""
+    """Changing the cache after import must change the client's timeout."""
     from common.runtime_settings import RuntimeConfig
+    from ui import api_client
     from ui.pages.catalog import callbacks as catalog_callbacks
 
     captured: dict[str, Any] = {}
 
     class _FakeResponse:
-        def raise_for_status(self) -> None:
-            return None
+        text = ""
+        status_code = 200
+
+        @property
+        def ok(self) -> bool:
+            return True
 
         def json(self) -> dict[str, Any]:
             return {"items": []}
 
-    def _fake_get(url: str, timeout: int | None = None, **kwargs: Any) -> _FakeResponse:
-        _ = url, kwargs
+    def _fake_transport(
+        method: str, url: str, *, params: Any = None,
+        json: Any = None, timeout: int | None = None,
+    ) -> _FakeResponse:
+        _ = method, url, params, json
         captured["timeout"] = timeout
         return _FakeResponse()
 
-    monkeypatch.setattr(catalog_callbacks.requests, "get", _fake_get)
+    monkeypatch.setattr(api_client, "_transport", _fake_transport)
 
-    previous = catalog_callbacks.runtime_settings.current()
-    catalog_callbacks.runtime_settings.refresh(RuntimeConfig(HTTP_REQUEST_TIMEOUT=123))
+    previous = api_client.runtime_settings.current()
+    api_client.runtime_settings.refresh(RuntimeConfig(HTTP_REQUEST_TIMEOUT=123))
     try:
         catalog_callbacks.load_library("/app/catalog")
     finally:
-        catalog_callbacks.runtime_settings.refresh(previous)
+        api_client.runtime_settings.refresh(previous)
 
     assert captured.get("timeout") == 123, captured
 

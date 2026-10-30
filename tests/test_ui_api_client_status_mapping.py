@@ -54,16 +54,17 @@ class _StubResponse:
 def _install_transport(monkeypatch: pytest.MonkeyPatch, response: _StubResponse) -> None:
     """Point ``api_client``'s transport seam at a canned response."""
 
-    def _fake_call(
+    def _fake_transport(
         method: str,
-        path: str,
+        url: str,
         *,
         params: dict[str, Any] | None = None,
-        json_body: dict[str, Any] | None = None,
+        json: dict[str, Any] | None = None,
+        timeout: int | None = None,
     ) -> _StubResponse:
         return response
 
-    monkeypatch.setattr(api_client, "_call", _fake_call)
+    monkeypatch.setattr(api_client, "_transport", _fake_transport)
 
 
 # ---------------------------------------------------------------------------
@@ -111,6 +112,102 @@ def test_post_json_raises_api_error(monkeypatch: pytest.MonkeyPatch) -> None:
     with pytest.raises(ApiError) as excinfo:
         api_client.post_json("/api/v1/search/scoped", json={"q": "x", "ids": []})
     assert excinfo.value.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# Half 1b — the five verb helpers, one contract
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("verb", ["get", "post", "put", "patch", "delete"])
+def test_every_verb_raises_the_single_api_error(
+    monkeypatch: pytest.MonkeyPatch, verb: str
+) -> None:
+    """``get``/``post``/``put``/``patch``/``delete`` all raise ``ApiError``.
+
+    Step 10's migration put every UI call site through these five helpers, so
+    a verb that returned a raw response for a non-2xx would reintroduce the
+    dead-handler bug one page at a time.
+    """
+    _install_transport(monkeypatch, _StubResponse(500, {"detail": {"message": "boom"}}))
+    with pytest.raises(ApiError) as excinfo:
+        getattr(api_client, verb)("/api/v1/anything")
+    assert excinfo.value.status_code == 500
+
+
+def test_verb_returns_the_response_on_2xx(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A 2xx is returned verbatim so callers can still read headers/status."""
+    _install_transport(monkeypatch, _StubResponse(200, {"items": []}))
+    response = api_client.get("/api/v1/anything")
+    assert response.status_code == 200
+    assert response.json() == {"items": []}
+
+
+def test_transport_failure_raises_api_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A request that never reaches the API raises the same single type.
+
+    ``ApiError`` carries ``STATUS_NO_RESPONSE`` (0) — a value no real HTTP
+    status takes — so a caller can tell "no response" from a 4xx without a
+    second exception type.
+    """
+    import requests
+
+    def _failing(*_args: Any, **_kwargs: Any) -> _StubResponse:
+        raise requests.exceptions.ConnectionError("Connection refused")
+
+    monkeypatch.setattr(api_client, "_transport", _failing)
+    with pytest.raises(ApiError) as excinfo:
+        api_client.get("/api/v1/anything")
+    assert excinfo.value.status_code == api_client.STATUS_NO_RESPONSE
+
+
+def test_plain_string_detail_is_the_message(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A plain-string ``detail`` is surfaced as the error message.
+
+    The migrated handlers show ``str(exc)`` to the user; before this, a
+    ``{"detail": "Catalog query not found"}`` body (which many routers return)
+    fell through to the raw JSON text.
+    """
+    _install_transport(
+        monkeypatch,
+        _StubResponse(404, {"detail": "Catalog query not found"},
+                      text='{"detail":"Catalog query not found"}'),
+    )
+    with pytest.raises(ApiError) as excinfo:
+        api_client.get("/api/v1/anything")
+    assert str(excinfo.value) == "Catalog query not found"
+
+
+def test_timeout_is_read_per_call(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The timeout is read from the runtime-settings cache on every call.
+
+    A value captured at import is the bug class Step 6 fixed across the UI;
+    this asserts the client re-reads it rather than freezing it.
+    """
+    from common.runtime_settings import RuntimeConfig
+
+    captured: list[int | None] = []
+
+    def _capture(
+        _method: str, _url: str, *, params: Any = None,
+        json: Any = None, timeout: int | None = None,
+    ) -> _StubResponse:
+        _ = params, json
+        captured.append(timeout)
+        return _StubResponse(200, {})
+
+    monkeypatch.setattr(api_client, "_transport", _capture)
+    previous = api_client.runtime_settings.current()
+    try:
+        for value in (111, 222):
+            api_client.runtime_settings.refresh(
+                RuntimeConfig(HTTP_REQUEST_TIMEOUT=value)
+            )
+            api_client.get("/api/v1/anything")
+    finally:
+        api_client.runtime_settings.refresh(previous)
+
+    assert captured == [111, 222]
 
 
 # ---------------------------------------------------------------------------

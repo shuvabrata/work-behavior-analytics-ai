@@ -117,6 +117,11 @@ class _FakeResponse:
     def __init__(self, payload: dict[str, Any], status_code: int = 200) -> None:
         self._payload = payload
         self.status_code = status_code
+        self.text = ""
+
+    @property
+    def ok(self) -> bool:
+        return self.status_code < 400
 
     def json(self) -> dict[str, Any]:
         return self._payload
@@ -124,14 +129,17 @@ class _FakeResponse:
 
 def _stub_http(monkeypatch: pytest.MonkeyPatch,
                payload: dict[str, Any]) -> list[dict[str, Any]]:
-    """Patch ``requests.post`` and record each call's JSON body."""
+    """Stub the client transport and record each call's JSON body."""
     calls: list[dict[str, Any]] = []
 
-    def fake_post(_url: str, *, json: dict[str, Any], timeout: int) -> _FakeResponse:
+    def fake_transport(
+        method: str, _url: str, *, json: dict[str, Any], **_kwargs: Any
+    ) -> _FakeResponse:
+        assert method == "POST"
         calls.append(json)
         return _FakeResponse(payload)
 
-    monkeypatch.setattr(timeline_api.requests, "post", fake_post)
+    monkeypatch.setattr(timeline_api.api_client, "_transport", fake_transport)
     return calls
 
 

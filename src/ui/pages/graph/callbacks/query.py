@@ -5,14 +5,16 @@ Callbacks for query validation and execution.
 
 from typing import Any
 import time
-import requests
 import dash_bootstrap_components as dbc
 from dash import ctx, html, Input, Output, State, callback, no_update
 from dash.exceptions import MissingCallbackContextException, PreventUpdate
 
+from ui import api_client
+from ui.api_client import STATUS_NO_RESPONSE, ApiError
 from ui.runtime_settings import runtime_settings
 from common.logger import logger
 from ui.components.common import create_alert
+from ui.settings import settings
 from ui.styles import (
     VALIDATION_ALERT_STYLE,
     VALIDATION_CODE_STYLE,
@@ -25,7 +27,6 @@ from ..utils import (
     create_table_display,
     create_graph_success_alert,
     create_performance_metrics,
-    get_graph_api_base_url,
 )
 
 
@@ -228,59 +229,24 @@ def execute_query(_raw_clicks: Any, _catalog_clicks: Any, store_cypher: Any, que
         query_preview = (query_text or "").strip().replace("\n", " ")[:120]
         query_length = len((query_text or "").strip())
     
-    # Get API base URL
-    api_base = get_graph_api_base_url()
-    
     # Track execution time
     start_time = time.time()
     logger.info(
         "[GRAPH-DEBUG][query.execute] start "
-        f"trigger={triggered_id} query_len={query_length} api_base={api_base} preview='{query_preview}'"
+        f"trigger={triggered_id} query_len={query_length} api_base={settings.API_BASE_URL} preview='{query_preview}'"
     )
-    
+
     try:
         # Send query to API
-        response = requests.post(
-            f"{api_base}/api/v1/graph/execute",
-            json=payload,
-            timeout=timeout_seconds
-        )
-        
+        data = api_client.post("/api/v1/graph/execute", json=payload).json()
+
         # Calculate execution time in milliseconds
         execution_time_ms = (time.time() - start_time) * 1000
         logger.info(
             "[GRAPH-DEBUG][query.execute] response "
-            f"status={response.status_code} duration_ms={round(execution_time_ms, 2)}"
+            f"status=200 duration_ms={round(execution_time_ms, 2)}"
         )
-        
-        # Handle error responses
-        if response.status_code != 200:
-            error_data = response.json() if response.headers.get('content-type') == 'application/json' else {}
-            error_preview = ""
-            try:
-                error_preview = (response.text or "")[:500]
-            except Exception:
-                error_preview = ""
-            logger.warning(
-                "[GRAPH-DEBUG][query.execute] error "
-                f"status={response.status_code} error_preview='{error_preview}'"
-            )
-            
-            # Parse error and get user-friendly message
-            heading, hint, doc_link, alert_type = parse_error_response(error_data, response.status_code)
-            
-            error_display = create_error_alert(
-                "",  # message is in heading for parsed errors
-                alert_type=alert_type,
-                hint=hint,
-                heading=heading,
-                doc_link=doc_link
-            )
-            return error_response(error_display)
-        
-        response.raise_for_status()
-        data = response.json()
-        
+
         # Check if result is a graph or tabular data
         is_graph = data.get("isGraph", False)
         node_count = len(data.get("nodes", []))
@@ -342,46 +308,48 @@ def execute_query(_raw_clicks: Any, _catalog_clicks: Any, store_cypher: Any, que
                 [],  # No unfiltered graph baseline for tabular query
             )
         
-    except requests.exceptions.Timeout:
+    except ApiError as exc:
+        if exc.status_code != STATUS_NO_RESPONSE:
+            logger.warning(
+                "[GRAPH-DEBUG][query.execute] error "
+                f"status={exc.status_code} error_preview='{exc.message[:500]}'"
+            )
+            error_data: dict[str, Any] = (
+                {"detail": exc.detail} if isinstance(exc.detail, dict) else {}
+            )
+            heading, hint, doc_link, alert_type = parse_error_response(
+                error_data, exc.status_code
+            )
+            error_display = create_error_alert(
+                "",  # message is in heading for parsed errors
+                alert_type=alert_type,
+                hint=hint,
+                heading=heading,
+                doc_link=doc_link,
+            )
+            return error_response(error_display)
+
+        # No HTTP response: connection refused, DNS failure or a timeout. The
+        # client folds all three into one type, so this is the old timeout and
+        # connection-error branches combined into a single message.
         logger.error(
-            "[GRAPH-DEBUG][query.execute] timeout "
-            f"timeout_seconds={timeout_seconds} api_base={api_base}"
-        )
-        error_display = create_error_alert(
-            "",
-            alert_type='warning',
-            heading=f"⏱️ Request Timeout ({timeout_seconds}s)",
-            hint=f"The request to the backend API took longer than {timeout_seconds} seconds. Your query might be too complex or the database is slow. Try adding LIMIT 100 to reduce the result set.",
-            doc_link="https://neo4j.com/docs/cypher-manual/current/clauses/limit/"
-        )
-        return error_response(error_display)
-    
-    except requests.exceptions.ConnectionError:
-        api_url = get_graph_api_base_url()
-        logger.error(
-            "[GRAPH-DEBUG][query.execute] connection_error "
-            f"api_base={api_url}"
+            "[GRAPH-DEBUG][query.execute] request_failed "
+            f"timeout_seconds={timeout_seconds} api_base={settings.API_BASE_URL} error={exc}"
         )
         error_display = create_error_alert(
             "",
             alert_type='danger',
             heading="🔌 Backend API Connection Failed",
-            hint=f"Unable to connect to the backend API at {api_url}. Please ensure the API service is running (for example 'docker compose up -d api').",
+            hint=(
+                f"Unable to reach the backend API at {settings.API_BASE_URL} within "
+                f"{timeout_seconds} seconds. Please ensure the API service is running "
+                "(for example 'docker compose up -d api') and that the query is not too "
+                "complex."
+            ),
             doc_link=None
         )
         return error_response(error_display)
-    
-    except requests.exceptions.HTTPError as e:
-        logger.error(f"[GRAPH-DEBUG][query.execute] http_error {e}")
-        error_display = create_error_alert(
-            "",
-            alert_type='danger',
-            heading="⚠️ HTTP Error",
-            hint=f"An HTTP error occurred: {str(e)}. This usually indicates a server-side issue. Check the backend logs for more details.",
-            doc_link=None
-        )
-        return error_response(error_display)
-    
+
     except Exception as e:
         logger.exception(f"[GRAPH-DEBUG][query.execute] unexpected_error {e}")
         error_display = create_error_alert(

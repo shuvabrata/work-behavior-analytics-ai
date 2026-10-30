@@ -1,14 +1,16 @@
 """Unit tests for the Library query editor callbacks.
 
 These tests exercise the callback functions in
-``ui.pages.catalog.editor_callbacks``. HTTP calls are mocked with a
-fake ``requests`` layer so no live server or Neo4j is required.
+``ui.pages.catalog.editor_callbacks``. HTTP calls are stubbed at
+``ui.api_client``'s transport seam, so no live server or Neo4j is required.
 """
 
 from dataclasses import dataclass
 
 import pytest
 
+from ui import api_client
+from ui.api_client import ApiError
 from ui.pages.catalog import editor_callbacks as editor
 from ui.pages.catalog import editor_test_callbacks
 
@@ -18,10 +20,15 @@ pytestmark = pytest.mark.unit
 
 @dataclass
 class _FakeResponse:
-    """Minimal requests.Response stand-in for callback tests."""
+    """Minimal requests.Response stand-in for the client's transport seam."""
 
     payload: dict
     status_code: int = 200
+    text: str = ""
+
+    @property
+    def ok(self) -> bool:
+        return self.status_code < 400
 
     @property
     def headers(self):
@@ -41,7 +48,12 @@ class _FakeResponse:
 
 
 class _FakeRequests:
-    """Sequential fake for requests.get/put/post/delete."""
+    """Sequential fake for the ``ui.api_client`` transport seam.
+
+    Implements ``requests.request``'s ``(method, url, *, params, json,
+    timeout)`` signature and records each call by method, so callers can assert
+    on the path and body the client sent.
+    """
 
     def __init__(self, responses):
         self._responses = responses
@@ -51,20 +63,10 @@ class _FakeRequests:
         self.post_calls = []
         self.delete_calls = []
 
-    def get(self, url, timeout, params=None):
-        self.get_calls.append({"url": url, "timeout": timeout, "params": params})
-        return self._next()
-
-    def put(self, url, json, timeout):
-        self.put_calls.append({"url": url, "json": json, "timeout": timeout})
-        return self._next()
-
-    def post(self, url, json, timeout):
-        self.post_calls.append({"url": url, "json": json, "timeout": timeout})
-        return self._next()
-
-    def delete(self, url, timeout):
-        self.delete_calls.append({"url": url, "timeout": timeout})
+    def __call__(self, method, url, *, params=None, json=None, timeout=None):
+        record = {"url": url, "timeout": timeout, "params": params, "json": json}
+        {"GET": self.get_calls, "PUT": self.put_calls,
+         "POST": self.post_calls, "DELETE": self.delete_calls}[method].append(record)
         return self._next()
 
     def _next(self):
@@ -73,6 +75,21 @@ class _FakeRequests:
         response = self._responses[self._idx]
         self._idx += 1
         return response
+
+
+def _install(monkeypatch: pytest.MonkeyPatch, fake: _FakeRequests) -> None:
+    """Point the client's transport at *fake* for this test."""
+    monkeypatch.setattr(api_client, "_transport", fake)
+
+
+def _install_failing(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Make every client request fail without a response."""
+    import requests as requests_lib
+
+    def _failing(*_args, **_kwargs):
+        raise requests_lib.exceptions.ConnectionError("Connection refused")
+
+    monkeypatch.setattr(api_client, "_transport", _failing)
 
 
 def _query_payload() -> dict:
@@ -400,7 +417,7 @@ def test_remove_parameter_preserves_remaining_row_values(monkeypatch):
 def test_e1_editor_loads_query(monkeypatch):
     """An edit route fetches and populates the form from the query."""
     fake = _FakeRequests([_FakeResponse(_query_payload(), 200)])
-    monkeypatch.setattr(editor, "requests", fake)
+    _install(monkeypatch, fake)
 
     result = editor.load_query("edit", "/app/catalog/edit/github/top_committers")
 
@@ -423,7 +440,7 @@ def test_e1_editor_loads_query(monkeypatch):
 def test_e1b_new_route_leaves_form_blank(monkeypatch):
     """The new route leaves the form blank without a GET."""
     fake = _FakeRequests([])
-    monkeypatch.setattr(editor, "requests", fake)
+    _install(monkeypatch, fake)
 
     result = editor.load_query("new", "/app/catalog/new")
 
@@ -438,7 +455,7 @@ def test_e1b_new_route_leaves_form_blank(monkeypatch):
 def test_e2_save_puts_to_current_id(monkeypatch):
     """Save issues a PUT to the current namespace/slug."""
     fake = _FakeRequests([_FakeResponse(_query_payload(), 200)])
-    monkeypatch.setattr(editor, "requests", fake)
+    _install(monkeypatch, fake)
 
     state = _form_state()
     feedback = editor.save_query(
@@ -471,7 +488,7 @@ def test_e2b_save_on_new_route_warns(monkeypatch):
     """Save on the new route is unreachable (button hidden), but if triggered
     it falls through to the missing-namespace/key error."""
     fake = _FakeRequests([])
-    monkeypatch.setattr(editor, "requests", fake)
+    _install(monkeypatch, fake)
 
     state = _form_state()
     feedback = editor.save_query(
@@ -502,7 +519,7 @@ def test_e2b_save_on_new_route_warns(monkeypatch):
 def test_e3_save_as_puts_to_new_id(monkeypatch):
     """Save As issues a PUT to the chosen namespace/slug."""
     fake = _FakeRequests([_FakeResponse(_query_payload(), 200)])
-    monkeypatch.setattr(editor, "requests", fake)
+    _install(monkeypatch, fake)
 
     state = _form_state()
     feedback, is_open = editor.save_as_query(
@@ -534,7 +551,7 @@ def test_e3_save_as_puts_to_new_id(monkeypatch):
 def test_e3b_save_as_custom_namespace(monkeypatch):
     """Save As with '+ New namespace…' uses the custom namespace input."""
     fake = _FakeRequests([_FakeResponse(_query_payload(), 200)])
-    monkeypatch.setattr(editor, "requests", fake)
+    _install(monkeypatch, fake)
 
     state = _form_state()
     feedback, _ = editor.save_as_query(
@@ -570,7 +587,7 @@ def test_e4_test_tabular_posts_execute(monkeypatch):
     fake = _FakeRequests(
         [_FakeResponse({"isGraph": False, "rawResults": [{"n": 1}]}, 200)]
     )
-    monkeypatch.setattr(editor_test_callbacks, "requests", fake)
+    _install(monkeypatch, fake)
 
     result = editor_test_callbacks.quick_test_tabular(
         1, "MATCH (n) RETURN n LIMIT 10"
@@ -590,7 +607,7 @@ def test_e5_test_graph_posts_execute(monkeypatch):
     fake = _FakeRequests(
         [_FakeResponse({"isGraph": True, "resultCount": 3}, 200)]
     )
-    monkeypatch.setattr(editor_test_callbacks, "requests", fake)
+    _install(monkeypatch, fake)
 
     result = editor_test_callbacks.quick_test_graph(
         1, "MATCH (a)-[r]-(b) RETURN a, r, b"
@@ -611,7 +628,7 @@ def test_e6_test_with_write_cypher_shows_error(monkeypatch):
             )
         ]
     )
-    monkeypatch.setattr(editor_test_callbacks, "requests", fake)
+    _install(monkeypatch, fake)
 
     result = editor_test_callbacks.quick_test_tabular(1, "MATCH (n) DELETE n")
 
@@ -623,7 +640,7 @@ def test_e6_test_with_write_cypher_shows_error(monkeypatch):
 def test_e7_test_button_disabled_when_empty(monkeypatch):
     """Testing with an empty textarea warns without an HTTP call."""
     fake = _FakeRequests([])
-    monkeypatch.setattr(editor_test_callbacks, "requests", fake)
+    _install(monkeypatch, fake)
 
     result = editor_test_callbacks.quick_test_tabular(1, "")
 
@@ -642,7 +659,7 @@ def test_e8_reset_deletes_and_reloads(monkeypatch):
             _FakeResponse(_query_payload(), 200),
         ]
     )
-    monkeypatch.setattr(editor, "requests", fake)
+    _install(monkeypatch, fake)
 
     result = editor.destructive_action(
         1,
@@ -692,7 +709,7 @@ def test_e9_confirm_delete_shows_dialog():
 def test_e9b_delete_issues_delete_and_navigates_to_library(monkeypatch):
     """Confirming delete issues DELETE then navigates back to the Library."""
     fake = _FakeRequests([_FakeResponse({"message": "Query override deleted"}, 200)])
-    monkeypatch.setattr(editor, "requests", fake)
+    _install(monkeypatch, fake)
 
     result = editor.destructive_action(
         1,
@@ -712,7 +729,7 @@ def test_e9c_delete_failure_shows_error(monkeypatch):
     fake = _FakeRequests(
         [_FakeResponse({"detail": "Not found"}, 404)]
     )
-    monkeypatch.setattr(editor, "requests", fake)
+    _install(monkeypatch, fake)
 
     result = editor.destructive_action(
         1,
@@ -784,7 +801,7 @@ def test_toggle_queries_closes_when_open():
 def test_e1c_load_query_404_shows_error(monkeypatch):
     """A 404 from the catalog endpoint surfaces an error alert."""
     fake = _FakeRequests([_FakeResponse({"detail": "Catalog query not found"}, 404)])
-    monkeypatch.setattr(editor, "requests", fake)
+    _install(monkeypatch, fake)
 
     result = editor.load_query("edit", "/app/catalog/edit/github/nonexistent")
 
@@ -797,18 +814,12 @@ def test_e1c_load_query_404_shows_error(monkeypatch):
 
 
 def test_e1d_load_query_request_exception_shows_error(monkeypatch):
-    """A connection error surfaces an error alert.
+    """A transport failure surfaces an error alert.
 
-    Monkeypatches only ``requests.get`` (not the whole module) so that
-    ``except requests.exceptions.RequestException`` in the source still
-    resolves against the real ``requests`` module.
+    Stubs the client's transport seam to raise a connection error, which the
+    client turns into ``ApiError`` — the type the callback catches.
     """
-    import requests as requests_lib
-
-    def _failing_get(url, timeout):
-        raise requests_lib.exceptions.ConnectionError("Connection refused")
-
-    monkeypatch.setattr(editor.requests, "get", _failing_get)
+    _install_failing(monkeypatch)
 
     result = editor.load_query("edit", "/app/catalog/edit/github/top_committers")
 
@@ -844,7 +855,7 @@ def test_view_changes_button_visible_only_for_override():
 def test_factory_diff_modal_open_issues_no_request(monkeypatch):
     """Opening the modal toggles locally and issues no HTTP call."""
     fake = _FakeRequests([])
-    monkeypatch.setattr(editor, "requests", fake)
+    _install(monkeypatch, fake)
 
     class _FakeContext:
         triggered = True
@@ -881,7 +892,7 @@ def test_factory_diff_fetches_builtin_and_shows_changes(monkeypatch):
         "origin": "builtin",
     }
     fake = _FakeRequests([_FakeResponse(current, 200), _FakeResponse(builtin, 200)])
-    monkeypatch.setattr(editor, "requests", fake)
+    _install(monkeypatch, fake)
 
     result = editor.render_factory_diff(True, _DIFF_PATH, _factory_route("override"))
 
@@ -897,7 +908,7 @@ def test_factory_diff_fetches_builtin_and_shows_changes(monkeypatch):
 def test_factory_diff_skips_non_overrides(monkeypatch):
     """A custom or builtin query issues no request and leaves the node alone."""
     fake = _FakeRequests([])
-    monkeypatch.setattr(editor, "requests", fake)
+    _install(monkeypatch, fake)
 
     for origin in ("custom", "builtin"):
         result = editor.render_factory_diff(True, _DIFF_PATH, _factory_route(origin))
@@ -908,7 +919,7 @@ def test_factory_diff_skips_non_overrides(monkeypatch):
 def test_factory_diff_closed_modal_is_inert(monkeypatch):
     """A closed modal fetches nothing."""
     fake = _FakeRequests([])
-    monkeypatch.setattr(editor, "requests", fake)
+    _install(monkeypatch, fake)
 
     result = editor.render_factory_diff(False, _DIFF_PATH, _factory_route("override"))
 
@@ -917,13 +928,8 @@ def test_factory_diff_closed_modal_is_inert(monkeypatch):
 
 
 def test_factory_diff_request_failure_returns_an_alert(monkeypatch):
-    """A connection error surfaces a diff alert, not a crash."""
-    import requests as requests_lib
-
-    def _failing_get(url, timeout, params=None):
-        raise requests_lib.exceptions.ConnectionError("Connection refused")
-
-    monkeypatch.setattr(editor.requests, "get", _failing_get)
+    """A transport failure surfaces a diff alert, not a crash."""
+    _install_failing(monkeypatch)
 
     result = editor.render_factory_diff(True, _DIFF_PATH, _factory_route("override"))
 
@@ -933,7 +939,7 @@ def test_factory_diff_request_failure_returns_an_alert(monkeypatch):
 def test_factory_diff_non_200_returns_an_alert(monkeypatch):
     """A non-200 from the current fetch surfaces a diff alert."""
     fake = _FakeRequests([_FakeResponse({"detail": "Catalog query not found"}, 404)])
-    monkeypatch.setattr(editor, "requests", fake)
+    _install(monkeypatch, fake)
 
     result = editor.render_factory_diff(True, _DIFF_PATH, _factory_route("override"))
 

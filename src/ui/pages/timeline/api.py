@@ -1,18 +1,16 @@
 """HTTP access for the Activity Timeline page.
 
 Centralizes the calls to ``GET /api/v1/activity/suggest`` and
-``GET /api/v1/activity/timeline``. Mirrors the synchronous ``requests``
-convention used by ``pages/search.py``.
+``GET /api/v1/activity/timeline``. Both go through ``ui.api_client``, so the
+base URL and timeout are owned in one place.
 """
 
 from __future__ import annotations
 
 from typing import Any
 
-import requests
-
-from ui.runtime_settings import runtime_settings
-from ui.settings import settings
+from ui import api_client
+from ui.api_client import STATUS_NO_RESPONSE, ApiError
 from ui.pages.graph.utils import neo4j_to_cytoscape
 from ui.pages.timeline.helpers import MIN_QUERY_LENGTH
 
@@ -47,11 +45,6 @@ class NodePropertiesError(RuntimeError):
     """Raised when the graph property fetch fails (non-200 or transport error)."""
 
 
-def get_api_base_url() -> str:
-    """Return the backend API base URL (falls back to localhost for dev)."""
-    return settings.API_BASE_URL
-
-
 def fetch_suggestions(query: str, limit: int = _DEFAULT_LIMIT) -> list[dict[str, Any]]:
     """Fetch typeahead suggestions for the entity selector.
 
@@ -68,21 +61,15 @@ def fetch_suggestions(query: str, limit: int = _DEFAULT_LIMIT) -> list[dict[str,
 
     params: dict[str, str | int] = {"q": term, "limit": limit}
     try:
-        # Bandit's B113 only recognises literal timeouts; ours is runtime-configured.
-        response = requests.get(  # nosec B113
-            f"{get_api_base_url()}/api/v1/activity/suggest",
-            params=params,
-            timeout=runtime_settings.get_int("HTTP_REQUEST_TIMEOUT"),
-        )
-    except requests.RequestException as exc:
+        response = api_client.get("/api/v1/activity/suggest", params=params)
+    except ApiError as exc:
+        if exc.status_code != STATUS_NO_RESPONSE:
+            logger.warning(
+                f"[Timeline] suggest returned {exc.status_code} for q={term!r}"
+            )
+            raise SuggestionFetchError(f"HTTP {exc.status_code}") from exc
         logger.warning(f"[Timeline] suggest request failed for q={term!r}: {exc}")
         raise SuggestionFetchError(f"request failed: {exc}") from exc
-
-    if response.status_code != 200:
-        logger.warning(
-            f"[Timeline] suggest returned {response.status_code} for q={term!r}"
-        )
-        raise SuggestionFetchError(f"HTTP {response.status_code}")
 
     try:
         payload = response.json()
@@ -126,33 +113,23 @@ def fetch_timeline(
         params["mock"] = mock
 
     try:
-        # Bandit's B113 only recognises literal timeouts; ours is runtime-configured.
-        response = requests.get(  # nosec B113
-            f"{get_api_base_url()}/api/v1/activity/timeline",
-            params=params,
-            timeout=runtime_settings.get_int("HTTP_REQUEST_TIMEOUT"),
-        )
-    except requests.RequestException as exc:
-        raise TimelineFetchError(f"request failed: {exc}") from exc
-
-    if response.status_code != 200:
+        response = api_client.get("/api/v1/activity/timeline", params=params)
+    except ApiError as exc:
+        if exc.status_code == STATUS_NO_RESPONSE:
+            raise TimelineFetchError(f"request failed: {exc}") from exc
         detail = ""
         bad_wba_id: str | None = None
-        try:
-            body = response.json()
-            raw_detail = body.get("detail") if isinstance(body, dict) else None
-            if isinstance(raw_detail, dict):
-                detail = f": {raw_detail.get('message', raw_detail)}"
-                candidate = raw_detail.get("wba_id")
-                if isinstance(candidate, str) and candidate:
-                    bad_wba_id = candidate
-            elif raw_detail:
-                detail = f": {raw_detail}"
-        except ValueError:
-            pass
+        raw_detail = exc.detail
+        if isinstance(raw_detail, dict):
+            detail = f": {raw_detail.get('message', raw_detail)}"
+            candidate = raw_detail.get("wba_id")
+            if isinstance(candidate, str) and candidate:
+                bad_wba_id = candidate
+        elif raw_detail:
+            detail = f": {raw_detail}"
         raise TimelineFetchError(
-            f"HTTP {response.status_code}{detail}", wba_id=bad_wba_id
-        )
+            f"HTTP {exc.status_code}{detail}", wba_id=bad_wba_id
+        ) from exc
 
     try:
         payload = response.json()
@@ -221,26 +198,23 @@ def fetch_node_properties(wba_ids: list[str]) -> dict[str, dict[str, Any]]:
         return {}
     mids = [mid for mid in (_mapping_id_for(w) for w in ids) if mid]
     try:
-        # Bandit's B113 only recognises literal timeouts; ours is runtime-configured.
-        response = requests.post(  # nosec B113
-            f"{get_api_base_url()}/api/v1/graph/execute",
+        response = api_client.post(
+            "/api/v1/graph/execute",
             json={
                 "query": _NODE_PROPERTIES_CYPHER,
                 "source": "raw",
                 "view": "graph",
                 "parameters": {"ids": ids, "mids": mids},
             },
-            timeout=runtime_settings.get_int("HTTP_REQUEST_TIMEOUT"),
         )
-    except requests.RequestException as exc:
+    except ApiError as exc:
+        if exc.status_code != STATUS_NO_RESPONSE:
+            logger.warning(
+                f"[Timeline] node properties returned {exc.status_code}"
+            )
+            raise NodePropertiesError(f"HTTP {exc.status_code}") from exc
         logger.warning(f"[Timeline] node properties request failed: {exc}")
         raise NodePropertiesError(f"request failed: {exc}") from exc
-
-    if response.status_code != 200:
-        logger.warning(
-            f"[Timeline] node properties returned {response.status_code}"
-        )
-        raise NodePropertiesError(f"HTTP {response.status_code}")
 
     try:
         payload = response.json()
@@ -285,5 +259,3 @@ def fetch_node_properties(wba_ids: list[str]) -> dict[str, dict[str, Any]]:
         if data is not None:
             result[requested] = data
     return result
-
-

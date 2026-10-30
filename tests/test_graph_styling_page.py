@@ -517,12 +517,12 @@ def test_load_themes_returns_none_value_on_request_error() -> None:
     """load_themes returns an empty value on a network error."""
     from unittest import mock
 
-    import requests as requests_lib
-
     from ui.pages.settings.graph_styling import callbacks as cb
 
+    from ui.api_client import STATUS_NO_RESPONSE, ApiError
+
     with mock.patch.object(
-        cb, "_list_themes", side_effect=requests_lib.RequestException
+        cb, "_list_themes", side_effect=ApiError(STATUS_NO_RESPONSE, message="down")
     ):
         options, by_id, value = cb.load_themes(
             "/app/settings/graph-styling",
@@ -656,7 +656,7 @@ def test_save_as_theme_success() -> None:
     post_resp.status_code = 201
     post_resp.json.return_value = created
 
-    # _refresh_after_action -> _list_themes -> requests.get
+    # _refresh_after_action -> _list_themes -> api_client.get
     get_resp = mock.Mock()
     get_resp.json.return_value = [
         {"id": 42, "name": "My Theme", "base_theme": "executive-light",
@@ -664,8 +664,8 @@ def test_save_as_theme_success() -> None:
     ]
 
     with mock.patch.object(cb, "callback_context", fake_ctx), \
-         mock.patch.object(cb.requests, "post", return_value=post_resp), \
-         mock.patch.object(cb.requests, "get", return_value=get_resp):
+         mock.patch.object(cb.api_client, "post", return_value=post_resp), \
+         mock.patch.object(cb.api_client, "get", return_value=get_resp):
         result = cb.save_as_theme(1, "My Theme", [], [], [], [], [], [])
 
     is_open, error, options, by_id, feedback, select_value = result
@@ -692,8 +692,13 @@ def test_save_as_theme_conflict() -> None:
     post_resp.status_code = 409
     post_resp.json.return_value = {"detail": "A theme with this name already exists for this base mode."}
 
+    from ui.api_client import ApiError
+
     with mock.patch.object(cb, "callback_context", fake_ctx), \
-         mock.patch.object(cb.requests, "post", return_value=post_resp):
+         mock.patch.object(
+             cb.api_client, "post",
+             side_effect=ApiError(409, detail="A theme with this name already exists for this base mode."),
+         ):
         result = cb.save_as_theme(1, "Dup", [], [], [], [], [], [])
 
     assert result[0] is True
@@ -706,7 +711,6 @@ def test_save_as_theme_request_exception() -> None:
     """A network failure keeps the modal open and shows a Save failed error."""
     from unittest import mock
 
-    import requests as requests_lib
     from dash import no_update
 
     from ui.pages.settings.graph_styling import callbacks as cb
@@ -714,8 +718,10 @@ def test_save_as_theme_request_exception() -> None:
     fake_ctx = mock.Mock()
     fake_ctx.triggered_id = {"type": "gs-save-as-confirm", "base_theme": "executive-light"}
 
+    from ui.api_client import ApiError
+
     with mock.patch.object(cb, "callback_context", fake_ctx), \
-         mock.patch.object(cb.requests, "post", side_effect=requests_lib.RequestException("boom")):
+         mock.patch.object(cb.api_client, "post", side_effect=ApiError(0, message="boom")):
         result = cb.save_as_theme(1, "X", [], [], [], [], [], [])
 
     assert result[0] is True
@@ -756,7 +762,7 @@ def test_save_theme_refreshes_store() -> None:
     patch_resp.status_code = 200
     patch_resp.json.return_value = {"id": 7, "name": "My Theme"}
 
-    # _refresh_after_action -> _list_themes -> requests.get
+    # _refresh_after_action -> _list_themes -> api_client.get
     get_resp = mock.Mock()
     get_resp.json.return_value = [
         {"id": 7, "name": "My Theme", "base_theme": "executive-light",
@@ -764,8 +770,8 @@ def test_save_theme_refreshes_store() -> None:
     ]
 
     with mock.patch.object(cb, "callback_context", fake_ctx), \
-         mock.patch.object(cb.requests, "patch", return_value=patch_resp), \
-         mock.patch.object(cb.requests, "get", return_value=get_resp):
+         mock.patch.object(cb.api_client, "patch", return_value=patch_resp), \
+         mock.patch.object(cb.api_client, "get", return_value=get_resp):
         feedback, store = cb.save_theme(1, 7, [], [], [], [], [], [])
 
     assert store == {"7": get_resp.json.return_value[0]}

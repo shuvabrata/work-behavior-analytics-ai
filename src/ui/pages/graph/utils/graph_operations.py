@@ -9,21 +9,11 @@ import math
 import time
 from datetime import datetime
 
-import requests
-
-from ui.runtime_settings import runtime_settings
-from ui.settings import settings
+from ui import api_client
+from ui.api_client import STATUS_NO_RESPONSE, ApiError
 from common.logger import logger
 from .data_transform import neo4j_to_cytoscape
 from .element_types import is_edge_element, is_node_element
-
-
-def get_graph_api_base_url() -> str:
-    """Return configured Graph API base URL.
-
-    Falls back to localhost for local development.
-    """
-    return settings.API_BASE_URL
 
 
 def fetch_effective_theme(base_theme: str) -> dict[str, Any] | None:
@@ -33,23 +23,14 @@ def fetch_effective_theme(base_theme: str) -> dict[str, Any] | None:
     back to the base tokens (hardcoded palette).
     """
     try:
-        api_base = get_graph_api_base_url()
-        resp = requests.get(
-            f"{api_base}/api/v1/graph-themes/effective",
+        response = api_client.get(
+            "/api/v1/graph-themes/effective",
             params={"base_theme": base_theme},
-            timeout=runtime_settings.get_int("HTTP_REQUEST_TIMEOUT"),
         )
-        if resp.status_code == 200:
-            return resp.json()
-        logger.warning(f"Effective theme fetch returned {resp.status_code} for base_theme={base_theme}")
-    except requests.RequestException as exc:
+        return response.json()
+    except ApiError as exc:
         logger.warning(f"Effective theme fetch failed for base_theme={base_theme}: {exc}")
     return None
-
-
-def get_graph_expand_url() -> str:
-    """Return full expansion endpoint URL."""
-    return f"{get_graph_api_base_url()}/api/v1/graph/expand"
 
 
 def execute_expansion_and_merge(
@@ -61,13 +42,17 @@ def execute_expansion_and_merge(
     expanded_nodes: dict[str, Any] | None,
     current_elements: list[dict[str, Any]],
     current_node_positions: dict[str, Any] | None,
-    timeout_seconds: int,
 ) -> dict[str, Any]:
     """Execute expansion API call and merge returned elements.
 
     Returns a result dict with either:
     - {"ok": True, ...merged state...}
     - {"ok": False, "error_message": str}
+
+    An HTTP error response becomes ``ok=False`` with the API's message. A
+    transport failure (no response at all) propagates as
+    :class:`~ui.api_client.ApiError`, which the callers translate into their
+    expansion-error alert.
     """
     _start = time.monotonic()
 
@@ -87,30 +72,22 @@ def execute_expansion_and_merge(
         f"exclude_count={len(exclude_ids)} current_elements={len(current_elements)}"
     )
 
-    response = requests.post(
-        get_graph_expand_url(),
-        json=payload,  # type: ignore[arg-type]
-        timeout=timeout_seconds,
-    )
-
-    if response.status_code != 200:
-        error_data = response.json() if response.content else {}
-        error_message = error_data.get("detail", {}).get("message", "Unknown error")
-        error_preview = ""
-        try:
-            error_preview = (response.text or "")[:500]
-        except Exception:
-            error_preview = ""
+    try:
+        data = api_client.post("/api/v1/graph/expand", json=payload).json()
+    except ApiError as exc:
+        if exc.status_code == STATUS_NO_RESPONSE:
+            # No HTTP response (timeout / connection refused): the caller's
+            # expansion-error handler owns the user-facing alert.
+            raise
         logger.warning(
             "[GRAPH-DEBUG][expand.merge] error "
-            f"status={response.status_code} message='{error_message}' preview='{error_preview}'"
+            f"status={exc.status_code} message='{exc.message[:500]}'"
         )
         return {
             "ok": False,
-            "error_message": error_message,
+            "error_message": exc.message or "Unknown error",
         }
 
-    data = response.json()
     new_nodes = data.get("nodes", [])
     new_relationships = data.get("relationships", [])
     pagination = data.get("pagination", {})

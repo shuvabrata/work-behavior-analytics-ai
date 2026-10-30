@@ -15,7 +15,6 @@ from __future__ import annotations
 from typing import Any
 
 import dash_bootstrap_components as dbc
-import requests
 from dash import (
     ALL,
     MATCH,
@@ -30,7 +29,8 @@ from dash import (
 from dash.exceptions import PreventUpdate
 
 from domain.graph_theme import effective_semantic_theme
-from ui.settings import settings
+from ui import api_client
+from ui.api_client import ApiError
 from ui.pages.graph.utils.ui_components import get_shape_css
 from ui.pages.settings.graph_styling.components import build_editor_body
 from ui.styles import (
@@ -344,10 +344,7 @@ def update_edge_glyph(
 
 def _list_themes(base_theme: str) -> list[dict[str, Any]]:
     """Fetch all themes for a base mode from the API."""
-    themes_api = f"{settings.API_BASE_URL}/api/v1/graph-themes/"
-    resp = requests.get(themes_api, timeout=10)
-    resp.raise_for_status()
-    themes = resp.json()
+    themes = api_client.get("/api/v1/graph-themes/").json()
     return [t for t in themes if t.get("base_theme") == base_theme]
 
 
@@ -410,7 +407,7 @@ def load_themes(pathname: str, select_id: dict[str, str]) -> tuple[Any, ...]:
 
     try:
         themes = _list_themes(base_theme)
-    except requests.RequestException:
+    except ApiError:
         return [], {}, None
 
     options = _theme_options(themes)
@@ -556,7 +553,6 @@ def save_theme(
     Use Save As\u2026 to create a renamed copy. The backend returns 409 for
     builtin themes, which surfaces as a danger alert.
     """
-    themes_api = f"{settings.API_BASE_URL}/api/v1/graph-themes/"
     base_theme = callback_context.triggered_id["base_theme"]
     if not n_clicks or theme_id is None:
         raise PreventUpdate
@@ -567,15 +563,15 @@ def save_theme(
     payload: dict[str, Any] = {"overrides": overrides}
 
     try:
-        resp = requests.patch(f"{themes_api}{theme_id}", json=payload, timeout=10)
-        if resp.status_code == 409:
-            detail = resp.json().get("detail", "Builtin themes are immutable.")
+        updated = api_client.patch(
+            f"/api/v1/graph-themes/{theme_id}", json=payload
+        ).json()
+    except ApiError as exc:
+        if exc.status_code == 409:
+            detail = exc.detail or "Builtin themes are immutable."
             return _feedback_alert(f"Save failed: {detail}", "danger"), no_update
-        if resp.status_code == 422:
+        if exc.status_code == 422:
             return _feedback_alert("Save failed: invalid values.", "danger"), no_update
-        resp.raise_for_status()
-        updated = resp.json()
-    except requests.RequestException as exc:
         return _feedback_alert(f"Save failed: {exc}", "danger"), no_update
 
     _, by_id = _refresh_after_action(base_theme)
@@ -630,7 +626,6 @@ def save_as_theme(
     the API. Inline validation feedback is shown for empty names and API errors;
     the modal stays open on failure and closes only on success.
     """
-    themes_api = f"{settings.API_BASE_URL}/api/v1/graph-themes/"
     base_theme = callback_context.triggered_id["base_theme"]
     if not n_clicks:
         raise PreventUpdate
@@ -643,17 +638,13 @@ def save_as_theme(
     )
 
     try:
-        resp = requests.post(
-            themes_api,
+        created = api_client.post(
+            "/api/v1/graph-themes/",
             json={"name": name.strip(), "base_theme": base_theme, "overrides": overrides},
-            timeout=10,
-        )
-        if resp.status_code in (409, 422):
-            detail = resp.json().get("detail", "Invalid request.")
-            return True, detail, no_update, no_update, no_update, no_update
-        resp.raise_for_status()
-        created = resp.json()
-    except requests.RequestException as exc:
+        ).json()
+    except ApiError as exc:
+        if exc.status_code in (409, 422):
+            return True, exc.detail or "Invalid request.", no_update, no_update, no_update, no_update
         return True, f"Save failed: {exc}", no_update, no_update, no_update, no_update
 
     options, by_id = _refresh_after_action(base_theme)
@@ -725,7 +716,6 @@ def execute_set_default(
     pending: dict[str, Any] | None,
 ) -> tuple[Any, ...]:
     """Set the pending theme as default for its base mode."""
-    themes_api = f"{settings.API_BASE_URL}/api/v1/graph-themes/"
     if not submit_n_clicks or not pending:
         raise PreventUpdate
 
@@ -734,12 +724,8 @@ def execute_set_default(
         raise PreventUpdate
 
     try:
-        resp = requests.post(
-            f"{themes_api}{theme_id}/set-default",
-            timeout=10,
-        )
-        resp.raise_for_status()
-    except requests.RequestException as exc:
+        api_client.post(f"/api/v1/graph-themes/{theme_id}/set-default")
+    except ApiError as exc:
         return (
             _feedback_alert(f"Set default failed: {exc}", "danger"),
             [no_update, no_update],
@@ -804,7 +790,6 @@ def execute_delete(
     pending: dict[str, Any] | None,
 ) -> tuple[Any, ...]:
     """Delete the pending theme."""
-    themes_api = f"{settings.API_BASE_URL}/api/v1/graph-themes/"
     if not submit_n_clicks or not pending:
         raise PreventUpdate
 
@@ -813,16 +798,15 @@ def execute_delete(
         raise PreventUpdate
 
     try:
-        resp = requests.delete(f"{themes_api}{theme_id}", timeout=10)
-        if resp.status_code == 409:
-            detail = resp.json().get("detail", "Builtin themes cannot be deleted.")
+        api_client.delete(f"/api/v1/graph-themes/{theme_id}")
+    except ApiError as exc:
+        if exc.status_code == 409:
+            detail = exc.detail or "Builtin themes cannot be deleted."
             return (
                 _feedback_alert(f"Delete failed: {detail}", "danger"),
                 [no_update, no_update],
                 [no_update, no_update],
             )
-        resp.raise_for_status()
-    except requests.RequestException as exc:
         return (
             _feedback_alert(f"Delete failed: {exc}", "danger"),
             [no_update, no_update],

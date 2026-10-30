@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from typing import Any
 
-import requests
 import dash_bootstrap_components as dbc
 from dash import (
     Input,
@@ -16,6 +15,8 @@ from dash import (
     no_update,
 )
 
+from ui import api_client
+from ui.api_client import STATUS_NO_RESPONSE, ApiError
 from ui.components.common import create_alert
 from ui.graph_styles import build_cytoscape_stylesheet
 from ui.pages.graph.utils import (
@@ -25,8 +26,6 @@ from ui.pages.graph.utils import (
     neo4j_to_cytoscape,
     parse_error_response,
 )
-from ui.runtime_settings import runtime_settings
-from ._utils import get_api_base_url
 
 
 def _run_test(query_text: str | None) -> dict[str, Any]:
@@ -46,53 +45,43 @@ def _run_test(query_text: str | None) -> dict[str, Any]:
     the classified fields produced by ``parse_error_response`` for the View Test
     modal and may be ``None``.
     """
-    timeout_seconds = runtime_settings.get_int("HTTP_REQUEST_TIMEOUT")
     if not query_text or not query_text.strip():
         return {"ok": False, "data": None,
                 "error": "Enter a query before testing.",
                 "heading": None, "hint": None, "doc_link": None,
                 "alert_type": "danger"}
     payload = {"source": "raw", "query": query_text.strip(), "view": "auto"}
-    api_base = get_api_base_url()
     try:
-        resp = requests.post(
-            f"{api_base}/api/v1/graph/execute",
-            json=payload, timeout=timeout_seconds,
-        )
-        if resp.status_code != 200:
-            try:
-                body = resp.json()
-            except ValueError:
-                body = {}
-            if not isinstance(body, dict):
-                body = {}
-            detail = body.get("detail")
-            if isinstance(detail, dict):
-                heading, hint, doc_link, alert_type = parse_error_response(
-                    body, resp.status_code
-                )
-                message = (
-                    detail.get("message") or detail.get("error")
-                    or "Query execution failed."
-                )
-                return {
-                    "ok": False, "data": None, "error": message,
-                    "heading": heading, "hint": hint,
-                    "doc_link": doc_link, "alert_type": alert_type,
-                }
-            # Non-dict `detail` (FastAPI 422 returns a list): keep the raw text.
-            # parse_error_response would raise AttributeError on this shape.
+        return {"ok": True, "data": api_client.post(
+            "/api/v1/graph/execute", json=payload
+        ).json(), "error": None}
+    except ApiError as exc:
+        if exc.status_code == STATUS_NO_RESPONSE:
+            return {"ok": False, "data": None, "error": str(exc),
+                    "heading": None, "hint": None, "doc_link": None,
+                    "alert_type": "danger"}
+        if isinstance(exc.detail, dict):
+            body = {"detail": exc.detail}
+            heading, hint, doc_link, alert_type = parse_error_response(
+                body, exc.status_code
+            )
+            message = (
+                exc.detail.get("message") or exc.detail.get("error")
+                or "Query execution failed."
+            )
             return {
-                "ok": False, "data": None,
-                "error": str(detail) if detail else "Query execution failed.",
-                "heading": None, "hint": None, "doc_link": None,
-                "alert_type": "danger",
+                "ok": False, "data": None, "error": message,
+                "heading": heading, "hint": hint,
+                "doc_link": doc_link, "alert_type": alert_type,
             }
-        return {"ok": True, "data": resp.json(), "error": None}
-    except requests.exceptions.RequestException as exc:
-        return {"ok": False, "data": None, "error": str(exc),
-                "heading": None, "hint": None, "doc_link": None,
-                "alert_type": "danger"}
+        # Non-dict `detail` (FastAPI 422 returns a list): keep the raw text.
+        # parse_error_response would raise AttributeError on this shape.
+        return {
+            "ok": False, "data": None,
+            "error": str(exc.detail) if exc.detail else "Query execution failed.",
+            "heading": None, "hint": None, "doc_link": None,
+            "alert_type": "danger",
+        }
 
 
 _BADGE_CLASS = "alert-inline-badge"

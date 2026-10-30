@@ -4,9 +4,9 @@ Callbacks for node expansion (double-click and modal-based).
 """
 
 from typing import Any
-import requests
 from dash import Input, Output, State, callback, no_update
 
+from ui.api_client import ApiError
 from ui.runtime_settings import runtime_settings
 from common.logger import logger
 from ..utils import (
@@ -91,7 +91,6 @@ def execute_doubleclick_expansion(dblclick_data: Any, current_elements: Any, cur
             # and cause nodes hidden by a filter to disappear permanently.
             current_elements=current_unfiltered,
             current_node_positions=current_node_positions,
-            timeout_seconds=timeout_seconds,
         )
 
         if not result["ok"]:
@@ -136,27 +135,18 @@ def execute_doubleclick_expansion(dblclick_data: Any, current_elements: Any, cur
         return (no_update, merged_elements, updated_expanded, updated_loaded_ids, updated_debounce,
             success_msg, show_style, "preset", metrics, show_style)
             
-    except requests.exceptions.Timeout:
+    except ApiError as exc:
+        # ``execute_expansion_and_merge`` returns ``ok=False`` for an HTTP error
+        # response, so the only ``ApiError`` reaching this handler is a
+        # transport failure — the old Timeout / ConnectionError pair.
         logger.error(
-            "[GRAPH-DEBUG][expand.doubleclick] timeout "
-            f"node_id={node_id} timeout_seconds={timeout_seconds}"
+            "[GRAPH-DEBUG][expand.doubleclick] request_failed "
+            f"node_id={node_id} timeout_seconds={timeout_seconds} error={exc}"
         )
         error_alert = create_expansion_error_alert("Expansion timed out", error_type="timeout")
         return (no_update, no_update, expanded_nodes, loaded_node_ids, updated_debounce,
                error_alert, show_style, current_layout, no_update, no_update)
-    
-    except requests.exceptions.ConnectionError:
-        logger.error(
-            "[GRAPH-DEBUG][expand.doubleclick] connection_error "
-            f"node_id={node_id} timeout_seconds={timeout_seconds}"
-        )
-        error_alert = create_expansion_error_alert(
-            "Could not connect to server. Please check your connection.",
-            error_type="connection"
-        )
-        return (no_update, no_update, expanded_nodes, loaded_node_ids, updated_debounce,
-               error_alert, show_style, current_layout, no_update, no_update)
-        
+
     except Exception as e:
         logger.exception(f"[GRAPH-DEBUG][expand.doubleclick] unexpected_error {e}")
         error_alert = create_expansion_error_alert(f"Expansion error: {str(e)}")
@@ -244,7 +234,6 @@ def execute_node_expansion(n_clicks: Any, node_id: Any, direction: Any, limit: A
             # Merge against the full unfiltered baseline, not the filtered view.
             current_elements=current_unfiltered,
             current_node_positions=current_node_positions,
-            timeout_seconds=timeout_seconds,
         )
 
         if not result["ok"]:
@@ -285,30 +274,21 @@ def execute_node_expansion(n_clicks: Any, node_id: Any, direction: Any, limit: A
         )
         return no_update, merged_elements, updated_expanded, updated_loaded_ids, False, success_msg, show_style, "preset", fit_count, metrics, show_style
             
-    except requests.exceptions.Timeout:
+    except ApiError as exc:
+        # A transport failure only — an HTTP error response comes back as
+        # ``ok=False`` from ``execute_expansion_and_merge``. This replaces the
+        # old Timeout / ConnectionError pair.
         logger.error(
-            "[GRAPH-DEBUG][expand.modal] timeout "
+            "[GRAPH-DEBUG][expand.modal] request_failed "
             f"node_id={node_id} direction={direction} limit={limit} "
-            f"timeout_seconds={timeout_seconds}"
+            f"timeout_seconds={timeout_seconds} error={exc}"
         )
         error_alert = create_expansion_error_alert(
             "Request timed out. The expansion took too long.",
             error_type="timeout"
         )
         return no_update, no_update, expanded_nodes, loaded_node_ids, True, error_alert, show_style, current_layout, fit_count, no_update, no_update
-    
-    except requests.exceptions.ConnectionError:
-        logger.error(
-            "[GRAPH-DEBUG][expand.modal] connection_error "
-            f"node_id={node_id} direction={direction} limit={limit} "
-            f"timeout_seconds={timeout_seconds}"
-        )
-        error_alert = create_expansion_error_alert(
-            "Could not connect to server. Please check your connection.",
-            error_type="connection"
-        )
-        return no_update, no_update, expanded_nodes, loaded_node_ids, True, error_alert, show_style, current_layout, fit_count, no_update, no_update
-        
+
     except Exception as e:
         logger.exception(f"[GRAPH-DEBUG][expand.modal] unexpected_error {e}")
         error_alert = create_expansion_error_alert(f"Error: {str(e)}")

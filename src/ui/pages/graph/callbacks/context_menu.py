@@ -4,10 +4,10 @@ Callbacks for right-click context menu functionality.
 """
 
 from typing import Any
-import requests
 from dash import html, Input, Output, State, callback, clientside_callback, callback_context, no_update
 from dash.exceptions import PreventUpdate
 
+from ui.api_client import ApiError
 from ui.runtime_settings import runtime_settings
 from common.logger import logger
 from ui.components.common import create_alert
@@ -152,7 +152,6 @@ def context_menu_quick_expand(_n_clicks_incoming: Any, _n_clicks_outgoing: Any, 
             # Merge against the full unfiltered baseline, not the filtered view.
             current_elements=current_unfiltered,
             current_node_positions=current_node_positions,
-            timeout_seconds=timeout_seconds,
         )
 
         if not result["ok"]:
@@ -190,27 +189,18 @@ def context_menu_quick_expand(_n_clicks_incoming: Any, _n_clicks_outgoing: Any, 
         return (no_update, merged_elements, updated_expanded, updated_loaded_ids, updated_menu_style,
             success_msg, show_style, "preset", metrics, show_style)
             
-    except requests.exceptions.Timeout:
+    except ApiError as exc:
+        # ``execute_expansion_and_merge`` returns ``ok=False`` for an HTTP error
+        # response, so the only ``ApiError`` reaching this handler is a
+        # transport failure — the old Timeout / ConnectionError pair.
         logger.error(
-            "[GRAPH-DEBUG][context.expand] timeout "
-            f"node_id={node_id} direction={direction} timeout_seconds={timeout_seconds}"
+            "[GRAPH-DEBUG][context.expand] request_failed "
+            f"node_id={node_id} direction={direction} timeout_seconds={timeout_seconds} error={exc}"
         )
         error_alert = create_expansion_error_alert("Expansion timed out", error_type="timeout")
         return (no_update, no_update, expanded_nodes, loaded_node_ids, updated_menu_style,
                error_alert, show_style, current_layout, no_update, no_update)
-    
-    except requests.exceptions.ConnectionError:
-        logger.error(
-            "[GRAPH-DEBUG][context.expand] connection_error "
-            f"node_id={node_id} direction={direction} timeout_seconds={timeout_seconds}"
-        )
-        error_alert = create_expansion_error_alert(
-            "Could not connect to server. Please check your connection.",
-            error_type="connection"
-        )
-        return (no_update, no_update, expanded_nodes, loaded_node_ids, updated_menu_style,
-               error_alert, show_style, current_layout, no_update, no_update)
-    
+
     except Exception as e:
         logger.exception(f"[GRAPH-DEBUG][context.expand] unexpected_error {e}")
         error_alert = create_expansion_error_alert(f"Expansion error: {str(e)}")

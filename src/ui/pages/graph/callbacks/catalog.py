@@ -7,11 +7,12 @@ from datetime import datetime, timezone
 from urllib.parse import parse_qs
 
 import dash_bootstrap_components as dbc
-import requests
 from dash import ALL, MATCH, Input, Output, State, callback, clientside_callback, ctx, dcc, html, no_update
 from dash.exceptions import MissingCallbackContextException, PreventUpdate
 
 from common.logger import logger
+from ui import api_client
+from ui.api_client import ApiError
 from ui.components.common import create_alert
 from ui.components.person_picker import build_person_chip, build_person_picker
 from ui.styles import (
@@ -22,9 +23,7 @@ from ui.styles import (
     COLOR_TEXT_SECONDARY,
     COLOR_GRAY_MEDIUM,
 )
-from ui.runtime_settings import runtime_settings
-
-from ..utils import create_error_alert, get_graph_api_base_url
+from ..utils import create_error_alert
 from ..utils.cypher_substitution import substitute_catalog_query_parameters
 
 
@@ -274,21 +273,14 @@ def _build_parameter_help_text(parameter: dict[str, Any]) -> html.Div | None:
 )
 def load_query_catalog(pathname: str | None) -> tuple[list[dict[str, Any]], html.Div | None, dict[str, Any]]:
     """Fetch catalog metadata when the Graph page is opened."""
-    timeout_seconds = runtime_settings.get_int("HTTP_REQUEST_TIMEOUT")
     if pathname != "/app/graph":
         return no_update, no_update, no_update
 
-    api_base = get_graph_api_base_url()
     try:
-        response = requests.get(
-            f"{api_base}/api/v1/queries/catalog",
-            timeout=timeout_seconds,
-        )
-        response.raise_for_status()
-        payload = response.json()
+        payload = api_client.get("/api/v1/queries/catalog").json()
         items = payload.get("items", [])
         logger.info(f"[GRAPH-CATALOG] loaded count={len(items)}")
-    except requests.exceptions.RequestException as exc:
+    except ApiError as exc:
         logger.error(f"[GRAPH-CATALOG] load_failed {exc}")
         error_display = create_error_alert(
             "",
@@ -300,24 +292,18 @@ def load_query_catalog(pathname: str | None) -> tuple[list[dict[str, Any]], html
         return [], error_display, {}
 
     # Load favourite metadata alongside the catalog list.
-    metadata = _fetch_catalog_metadata(api_base)
+    metadata = _fetch_catalog_metadata()
     return _sort_catalog_queries(items, metadata), None, metadata
 
 
-def _fetch_catalog_metadata(api_base: str) -> dict[str, Any]:
+def _fetch_catalog_metadata() -> dict[str, Any]:
     """Fetch favourite metadata and normalise it into a ``{catalog_id: {...}}`` map.
 
     Returns an empty dict on any error so the UI degrades gracefully (stars
     simply render as unfilled).
     """
-    timeout_seconds = runtime_settings.get_int("HTTP_REQUEST_TIMEOUT")
     try:
-        response = requests.get(
-            f"{api_base}/api/v1/queries/catalog-metadata",
-            timeout=timeout_seconds,
-        )
-        response.raise_for_status()
-        payload = response.json()
+        payload = api_client.get("/api/v1/queries/catalog-metadata").json()
         metadata: dict[str, Any] = {}
         for item in payload.get("items", []):
             metadata[item["catalog_id"]] = {
@@ -325,7 +311,7 @@ def _fetch_catalog_metadata(api_base: str) -> dict[str, Any]:
                 "updated_at": item.get("updated_at"),
             }
         return metadata
-    except requests.exceptions.RequestException as exc:
+    except ApiError as exc:
         logger.warning(f"[GRAPH-CATALOG] metadata_load_failed {exc}")
         return {}
 
@@ -492,7 +478,6 @@ def toggle_catalog_favourite(
     (Option B) — the star flips in place; re-sort happens on the next
     namespace change/reload.
     """
-    timeout_seconds = runtime_settings.get_int("HTTP_REQUEST_TIMEOUT")
     triggered = ctx.triggered_id
     if not isinstance(triggered, dict):
         raise PreventUpdate
@@ -516,16 +501,12 @@ def toggle_catalog_favourite(
     current = store.get(catalog_id) or {}
     new_value = not bool(current.get("is_favourite"))
 
-    api_base = get_graph_api_base_url()
     try:
-        response = requests.put(
-            f"{api_base}/api/v1/queries/catalog-metadata/{catalog_id}",
+        body = api_client.put(
+            f"/api/v1/queries/catalog-metadata/{catalog_id}",
             json={"is_favourite": new_value},
-            timeout=timeout_seconds,
-        )
-        response.raise_for_status()
-        body = response.json()
-    except requests.exceptions.RequestException as exc:
+        ).json()
+    except ApiError as exc:
         logger.warning(f"[GRAPH-CATALOG] favourite_toggle_failed {exc}")
         raise PreventUpdate from exc
 
@@ -847,8 +828,6 @@ def sync_person_suggestions(
     Only the suggestions panel (a sibling of the input) is updated, so the
     input itself is never re-mounted and retains keyboard focus.
     """
-    timeout_seconds = runtime_settings.get_int("HTTP_REQUEST_TIMEOUT")
-    api_base = get_graph_api_base_url()
     _hidden = {"display": "none"}
     _visible: dict[str, Any] = {
         "display": "block",
@@ -871,14 +850,11 @@ def sync_person_suggestions(
             continue
 
         try:
-            response = requests.get(
-                f"{api_base}/api/v1/search/persons",
-                params={"q": query_text.strip(), "page_size": 10},  # type: ignore[arg-type]
-                timeout=timeout_seconds,
-            )
-            response.raise_for_status()
-            data = response.json()
-        except requests.exceptions.RequestException as exc:
+            data = api_client.get(
+                "/api/v1/search/persons",
+                params={"q": query_text.strip(), "page_size": 10},
+            ).json()
+        except ApiError as exc:
             logger.warning(f"[PersonSearch] API call failed: {exc}")
             all_children.append([
                 html.Small(

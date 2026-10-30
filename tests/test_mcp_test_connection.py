@@ -13,7 +13,7 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch
 
 import pytest
-import requests
+from ui.api_client import STATUS_NO_RESPONSE, ApiError
 from dash import no_update
 
 from domain.connector_registry import CONNECTOR_REGISTRY
@@ -195,7 +195,7 @@ class TestMcpTestConnectionCallback:
 
         with (
             patch("ui.pages.connectors.callbacks.callback_context") as mock_ctx,
-            patch("ui.pages.connectors.callbacks.requests.post") as mock_post,
+            patch("ui.pages.connectors.callbacks.api_client.post") as mock_post,
         ):
             mock_ctx.triggered = [
                 {
@@ -231,7 +231,7 @@ class TestMcpTestConnectionCallback:
 
         with (
             patch("ui.pages.connectors.callbacks.callback_context") as mock_ctx,
-            patch("ui.pages.connectors.callbacks.requests.post") as mock_post,
+            patch("ui.pages.connectors.callbacks.api_client.post") as mock_post,
         ):
             mock_ctx.triggered = [
                 {
@@ -263,7 +263,7 @@ class TestMcpTestConnectionCallback:
 
         with (
             patch("ui.pages.connectors.callbacks.callback_context") as mock_ctx,
-            patch("ui.pages.connectors.callbacks.requests.post") as mock_post,
+            patch("ui.pages.connectors.callbacks.api_client.post") as mock_post,
         ):
             mock_ctx.triggered = [
                 {
@@ -274,7 +274,7 @@ class TestMcpTestConnectionCallback:
                 }
             ]
             mock_ctx.triggered_id = {"type": "connector-mcp-test", "connector_type": "atlassian_mcp"}
-            mock_post.side_effect = requests.exceptions.ConnectionError("Network error")
+            mock_post.side_effect = ApiError(STATUS_NO_RESPONSE, message="Network error")
 
             result = handle_mcp_test_connection([1])
 

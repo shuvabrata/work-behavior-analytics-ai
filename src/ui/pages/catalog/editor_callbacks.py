@@ -6,7 +6,6 @@ import difflib
 import json
 from typing import Any
 
-import requests
 from dash import (
     ALL,
     Input,
@@ -19,10 +18,10 @@ from dash import (
 )
 from dash.exceptions import PreventUpdate
 
-from ui.runtime_settings import runtime_settings
+from ui import api_client
+from ui.api_client import STATUS_NO_RESPONSE, ApiError
 from ui.components.common import create_alert
 from ui.styles import COLOR_GRAY_MEDIUM
-from ._utils import get_api_base_url
 from .editor_layout import render_factory_diff_lines, render_parameter_row
 
 
@@ -146,16 +145,10 @@ def _collect_parameters(
 )
 def init_editor(pathname: str | None) -> tuple[str, Any]:
     """Record the route mode and load namespaces on mount."""
-    timeout_seconds = runtime_settings.get_int("HTTP_REQUEST_TIMEOUT")
     mode, _, _ = _parse_route(pathname)
-    api_base = get_api_base_url()
     try:
-        ns_resp = requests.get(
-            f"{api_base}/api/v1/queries/catalog/namespaces", timeout=timeout_seconds
-        )
-        ns_resp.raise_for_status()
-        namespaces = ns_resp.json().get("items", [])
-    except requests.exceptions.RequestException:
+        namespaces = api_client.get("/api/v1/queries/catalog/namespaces").json().get("items", [])
+    except ApiError:
         namespaces = []
     return mode, namespaces
 
@@ -216,7 +209,6 @@ def load_query(
     For the ``new`` route the form is left blank with editable slug and
     namespace. For an edit route the existing query is fetched and loaded.
     """
-    timeout_seconds = runtime_settings.get_int("HTTP_REQUEST_TIMEOUT")
     if mode == "new":
         return (
             {"mode": "new"},
@@ -254,34 +246,9 @@ def load_query(
             ),
         )
 
-    api_base = get_api_base_url()
     try:
-        resp = requests.get(
-            f"{api_base}/api/v1/queries/catalog/{namespace}/{slug}",
-            timeout=timeout_seconds,
-        )
-        if resp.status_code != 200:
-            detail = resp.json().get("detail", "Unknown error")
-            return (
-                {"mode": "edit"},
-                "",
-                "",
-                None,
-                None,
-                None,
-                "",
-                "",
-                "",
-                None,
-                0,
-                [],
-                create_alert(
-                    f"Failed to load query: {detail}", color="danger", class_name="mb-3"
-                ),
-            )
-        resp.raise_for_status()
-        query = resp.json()
-    except requests.exceptions.RequestException as exc:
+        query = api_client.get(f"/api/v1/queries/catalog/{namespace}/{slug}").json()
+    except ApiError as exc:
         return (
             {"mode": "edit"},
             "",
@@ -429,7 +396,6 @@ def save_query(
     field_ids: list[dict[str, str]],
 ) -> Any:
     """Save the query via PUT to the current namespace/slug."""
-    timeout_seconds = runtime_settings.get_int("HTTP_REQUEST_TIMEOUT")
     if not n_clicks:
         raise PreventUpdate
 
@@ -453,21 +419,12 @@ def save_query(
         parameters,
     )
 
-    api_base = get_api_base_url()
     try:
-        resp = requests.put(
-            f"{api_base}/api/v1/queries/catalog/{namespace}/{slug}",
-            json=payload,
-            timeout=timeout_seconds,
-        )
-        if resp.status_code not in (200, 201):
-            detail = resp.json().get("detail", "Unknown error")
-            return create_alert(f"Save failed: {detail}", color="danger", class_name="mb-3")
-        resp.raise_for_status()
+        api_client.put(f"/api/v1/queries/catalog/{namespace}/{slug}", json=payload)
         return create_alert(
             "Query saved.", color="success", class_name="mb-3", duration=5000
         )
-    except requests.exceptions.RequestException as exc:
+    except ApiError as exc:
         return create_alert(f"Save failed: {exc}", color="danger", class_name="mb-3")
 
 
@@ -571,7 +528,6 @@ def render_factory_diff(
     for them. The override replaces the built-in at load time, so the factory
     text is only reachable via ``include_overrides=false``.
     """
-    timeout_seconds = runtime_settings.get_int("HTTP_REQUEST_TIMEOUT")
     if not is_open:
         return no_update
 
@@ -583,32 +539,16 @@ def render_factory_diff(
     if not namespace or not slug:
         return no_update
 
-    api_base = get_api_base_url()
-    url = f"{api_base}/api/v1/queries/catalog/{namespace}/{slug}"
+    path = f"/api/v1/queries/catalog/{namespace}/{slug}"
     try:
         # Fetch current first, then factory: the diff below is
         # ``unified_diff(factory, current)``, so this order decides which side
         # is ``-``/red and which is ``+``/green.
-        current_resp = requests.get(url, timeout=timeout_seconds)
-        if current_resp.status_code != 200:
-            detail = current_resp.json().get("detail", "Unknown error")
-            return create_alert(
-                f"Diff unavailable: {detail}", color="danger", class_name="mb-3"
-            )
-        current_resp.raise_for_status()
-        current = current_resp.json()
-
-        factory_resp = requests.get(
-            url, timeout=timeout_seconds, params={"include_overrides": "false"}
-        )
-        if factory_resp.status_code != 200:
-            detail = factory_resp.json().get("detail", "Unknown error")
-            return create_alert(
-                f"Diff unavailable: {detail}", color="danger", class_name="mb-3"
-            )
-        factory_resp.raise_for_status()
-        factory = factory_resp.json()
-    except requests.exceptions.RequestException as exc:
+        current = api_client.get(path).json()
+        factory = api_client.get(
+            path, params={"include_overrides": "false"}
+        ).json()
+    except ApiError as exc:
         return create_alert(
             f"Diff unavailable: {exc}", color="danger", class_name="mb-3"
         )
@@ -667,7 +607,6 @@ def save_as_query(
     field_ids: list[dict[str, str]],
 ) -> tuple[Any, bool]:
     """Save the query to a new namespace/slug via PUT."""
-    timeout_seconds = runtime_settings.get_int("HTTP_REQUEST_TIMEOUT")
     if not n_clicks:
         raise PreventUpdate
 
@@ -699,20 +638,8 @@ def save_as_query(
         parameters,
     )
 
-    api_base = get_api_base_url()
     try:
-        resp = requests.put(
-            f"{api_base}/api/v1/queries/catalog/{namespace}/{slug}",
-            json=payload,
-            timeout=timeout_seconds,
-        )
-        if resp.status_code not in (200, 201):
-            detail = resp.json().get("detail", "Unknown error")
-            return (
-                create_alert(f"Save failed: {detail}", color="danger", class_name="mb-3"),
-                True,
-            )
-        resp.raise_for_status()
+        api_client.put(f"/api/v1/queries/catalog/{namespace}/{slug}", json=payload)
         return (
             create_alert(
                 f"Saved as {namespace}/{slug}.",
@@ -722,7 +649,7 @@ def save_as_query(
             ),
             False,
         )
-    except requests.exceptions.RequestException as exc:
+    except ApiError as exc:
         return (
             create_alert(f"Save failed: {exc}", color="danger", class_name="mb-3"),
             True,
@@ -870,7 +797,6 @@ def destructive_action(
     the system data. For a brand-new custom query there is no factory version,
     so the editor navigates back to the Library.
     """
-    timeout_seconds = runtime_settings.get_int("HTTP_REQUEST_TIMEOUT")
     if not n_clicks:
         raise PreventUpdate
 
@@ -886,21 +812,10 @@ def destructive_action(
             ),
         )
 
-    api_base = get_api_base_url()
+    path = f"/api/v1/queries/catalog/{namespace}/{slug}"
     try:
-        resp = requests.delete(
-            f"{api_base}/api/v1/queries/catalog/{namespace}/{slug}",
-            timeout=timeout_seconds,
-        )
-        if resp.status_code not in (200, 204):
-            detail = resp.json().get("detail", "Unknown error")
-            return (
-                *_NO_CHANGE_13,
-                create_alert(
-                    f"Delete failed: {detail}", color="danger", class_name="mb-3"
-                ),
-            )
-    except requests.exceptions.RequestException as exc:
+        api_client.delete(path)
+    except ApiError as exc:
         return (
             *_NO_CHANGE_13,
             create_alert(f"Delete failed: {exc}", color="danger", class_name="mb-3"),
@@ -916,11 +831,13 @@ def destructive_action(
 
     # An override: reload the form with the factory (system) data.
     try:
-        get_resp = requests.get(
-            f"{api_base}/api/v1/queries/catalog/{namespace}/{slug}",
-            timeout=timeout_seconds,
-        )
-        if get_resp.status_code != 200:
+        query = api_client.get(path).json()
+    except ApiError as exc:
+        if exc.status_code != STATUS_NO_RESPONSE:
+            # The delete already succeeded and the follow-up read answered a
+            # non-200: the override is gone, so tell the user to reload rather
+            # than reporting the reset as failed (the old `status != 200`
+            # branch). Only a transport failure is a genuine reset failure.
             return (
                 *_NO_CHANGE_13,
                 create_alert(
@@ -930,9 +847,6 @@ def destructive_action(
                     duration=5000,
                 ),
             )
-        get_resp.raise_for_status()
-        query = get_resp.json()
-    except requests.exceptions.RequestException as exc:
         return (
             *_NO_CHANGE_13,
             create_alert(f"Reset failed: {exc}", color="danger", class_name="mb-3"),

@@ -3,9 +3,10 @@ from typing import Any
 
 import dash_bootstrap_components as dbc
 from dash import html, dcc, Input, Output, State, callback, clientside_callback, ClientsideFunction, no_update
-import requests
 
 from domain.timezone import now_in_app_timezone, humanize_duration
+from ui import api_client
+from ui.api_client import ApiError
 from ui.runtime_settings import runtime_settings
 from ui.settings import settings
 from ui.components.common import create_diamond_icon, create_page_header
@@ -156,21 +157,13 @@ def get_layout() -> html.Div:
 )
 def initialize_session(current_data: dict[str, Any] | None) -> dict[str, Any]:
     """Initialize a new chat session if one doesn't exist or is invalid"""
-    timeout_seconds = runtime_settings.get_int("HTTP_REQUEST_TIMEOUT")
-    api_base = settings.API_BASE_URL
-    
     # If we have existing data, validate the session still exists in backend
     if current_data is not None and current_data.get("session_id"):
         session_id = current_data["session_id"]
         try:
             # Use GET endpoint to check if session exists (doesn't send messages)
-            response = requests.get(
-                f"{api_base}/api/v1/chats/{session_id}",
-                timeout=timeout_seconds
-            )
-            response.raise_for_status()
-            data = response.json()
-            
+            data = api_client.get(f"/api/v1/chats/{session_id}").json()
+
             if data.get("exists"):
                 # Session exists, return current data
                 return current_data
@@ -178,21 +171,18 @@ def initialize_session(current_data: dict[str, Any] | None) -> dict[str, Any]:
                 # Session doesn't exist, create new one
                 print(f"Session {session_id} not found in backend, creating new session")
                 current_data = None
-        except requests.exceptions.RequestException:
+        except ApiError:
             # If any error, treat as invalid session and create new one
             print("Session validation failed, creating new session")
             current_data = None
-    
+
     # Create new session if current_data is None or validation failed
     if current_data is None:
         try:
-            response = requests.post(
-                f"{api_base}/api/v1/chats",
+            data = api_client.post(
+                "/api/v1/chats",
                 json={"system_prompt": "You are a helpful AI technical assistant."},
-                timeout=timeout_seconds
-            )
-            response.raise_for_status()
-            data = response.json()
+            ).json()
             return {"session_id": data["session_id"], "messages": []}
         except Exception as e:
             print(f"Error creating chat session: {e}")

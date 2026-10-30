@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from typing import Any
 
-import requests
 from dash import (
     Input,
     Output,
@@ -14,8 +13,8 @@ from dash import (
 )
 from dash.exceptions import PreventUpdate
 
-from ui.runtime_settings import runtime_settings
-from ._utils import get_api_base_url
+from ui import api_client
+from ui.api_client import ApiError
 
 
 @callback(
@@ -25,25 +24,16 @@ from ._utils import get_api_base_url
 )
 def load_library(pathname: str | None) -> tuple[Any, Any]:
     """Load the catalog and namespaces when the page mounts."""
-    timeout_seconds = runtime_settings.get_int("HTTP_REQUEST_TIMEOUT")
     if pathname not in ("/app/catalog", "/app/catalog/", "/app/library", "/app/library/"):
         return no_update, no_update
 
-    api_base = get_api_base_url()
     try:
-        catalog_resp = requests.get(
-            f"{api_base}/api/v1/queries/catalog", timeout=timeout_seconds
-        )
-        catalog_resp.raise_for_status()
-        ns_resp = requests.get(
-            f"{api_base}/api/v1/queries/catalog/namespaces", timeout=timeout_seconds
-        )
-        ns_resp.raise_for_status()
+        catalog_resp = api_client.get("/api/v1/queries/catalog")
         return (
             catalog_resp.json().get("items", []),
-            ns_resp.json().get("items", []),
+            api_client.get("/api/v1/queries/catalog/namespaces").json().get("items", []),
         )
-    except requests.exceptions.RequestException:
+    except ApiError:
         return [], []
 
 

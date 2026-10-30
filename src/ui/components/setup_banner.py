@@ -8,10 +8,10 @@ from __future__ import annotations
 
 from typing import Any
 
-import requests
-from dash import Input, Output, State, callback, dcc, html
+from dash import Input, Output, callback, dcc, html
 
-from ui.settings import settings
+from ui import api_client
+from ui.api_client import ApiError
 from ui.styles import (
     COLOR_NAVY,
     FONT_WEIGHT_MEDIUM,
@@ -33,16 +33,13 @@ def get_banner_layout() -> html.Div:
 )
 def render_setup_banner(pathname: str, dismissed: bool) -> Any:
     """Fetch settings and render a banner for unconfigured recommended settings."""
-    settings_api = settings.API_BASE_URL + "/api/v1/settings/"
     _ = pathname  # triggers on navigation; content depends only on settings
     if dismissed:
         return None
 
     try:
-        resp = requests.get(settings_api, timeout=10)
-        resp.raise_for_status()
-        settings_list: list[dict[str, Any]] = resp.json()
-    except requests.exceptions.RequestException:
+        settings_list: list[dict[str, Any]] = api_client.get("/api/v1/settings/").json()
+    except ApiError:
         # If the settings API is unreachable, silently skip the banner.
         return None
 

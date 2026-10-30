@@ -540,7 +540,7 @@ class TestCancelButtonCallback:
 
         with (
             patch("ui.pages.connectors.callbacks.callback_context") as mock_ctx,
-            patch("ui.pages.connectors.callbacks.requests.post") as mock_post,
+            patch("ui.pages.connectors.callbacks.api_client.post") as mock_post,
         ):
             mock_ctx.triggered = [
                 {
@@ -615,7 +615,7 @@ class TestRecentActionsCollapsePolling:
 
         with (
             patch("ui.pages.connectors.callbacks.callback_context") as mock_ctx,
-            patch("ui.pages.connectors.callbacks.requests.get") as mock_get,
+            patch("ui.pages.connectors.callbacks.api_client.get") as mock_get,
         ):
             mock_ctx.triggered_id = triggered_id
             mock_get.return_value = mock_response
@@ -757,7 +757,7 @@ class TestTestConnectionCallback:
 
         with (
             patch("ui.pages.connectors.callbacks.callback_context") as mock_ctx,
-            patch("ui.pages.connectors.callbacks.requests.post") as mock_post,
+            patch("ui.pages.connectors.callbacks.api_client.post") as mock_post,
         ):
             mock_ctx.triggered = [
                 {
@@ -792,7 +792,7 @@ class TestTestConnectionCallback:
 
         with (
             patch("ui.pages.connectors.callbacks.callback_context") as mock_ctx,
-            patch("ui.pages.connectors.callbacks.requests.post") as mock_post,
+            patch("ui.pages.connectors.callbacks.api_client.post") as mock_post,
         ):
             mock_ctx.triggered = [
                 {

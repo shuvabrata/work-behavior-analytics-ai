@@ -14,7 +14,7 @@ here.
 from __future__ import annotations
 
 from typing import Any
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
 import pytest
 from dash import no_update
@@ -178,8 +178,24 @@ def test_render_suggestions_empty_shows_no_matches() -> None:
 
 def test_fetch_suggestions_raises_on_http_error() -> None:
     """A non-200 suggest response raises rather than returning an empty list."""
-    response = Mock(status_code=500)
-    with patch(f"{_API}.requests.get", return_value=response):
+    from ui import api_client
+    from ui.api_client import ApiError
+
+    with patch.object(
+        api_client, "get", side_effect=ApiError(500, message="boom")
+    ):
+        with pytest.raises(SuggestionFetchError):
+            fetch_suggestions("alice")
+
+
+def test_fetch_suggestions_raises_on_transport_failure() -> None:
+    """A request that never reaches the API raises too (one exception type)."""
+    from ui import api_client
+    from ui.api_client import STATUS_NO_RESPONSE, ApiError
+
+    with patch.object(
+        api_client, "get", side_effect=ApiError(STATUS_NO_RESPONSE, message="down")
+    ):
         with pytest.raises(SuggestionFetchError):
             fetch_suggestions("alice")
 

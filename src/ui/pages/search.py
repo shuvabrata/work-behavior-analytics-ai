@@ -9,7 +9,6 @@ from typing import Any
 
 import math
 import re
-import requests
 from datetime import datetime
 from urllib.parse import quote
 
@@ -19,6 +18,7 @@ from urllib.parse import parse_qs, unquote
 import dash_bootstrap_components as dbc
 
 from domain.timezone import humanize_duration, to_app_timezone
+from ui import api_client
 from ui.components.common import create_alert, create_page_header
 from ui.pages.graph.utils import fetch_effective_theme
 from ui.styles import (
@@ -52,7 +52,6 @@ from ui.styles import (
 )
 from ui.runtime_settings import runtime_settings
 from domain.es_indexes import MANAGED_INDEXES
-from ui.settings import settings
 from common.logger import logger
 
 
@@ -116,13 +115,6 @@ _PAGE_INDICATOR_STYLE = {
     "minWidth": "80px",
     "textAlign": "center",
 }
-
-
-# ---------------------------------------------------------------------------
-# API base URL — same pattern as graph page utils
-# ---------------------------------------------------------------------------
-def _get_api_base_url() -> str:
-    return settings.API_BASE_URL
 
 
 # ---------------------------------------------------------------------------
@@ -1024,13 +1016,7 @@ def restore_search_on_navigate(
     params.setdefault("page_size", 10)
 
     try:
-        response = requests.get(
-            f"{_get_api_base_url()}/api/v1/search",
-            params=params,
-            timeout=runtime_settings.get_int("HTTP_REQUEST_TIMEOUT"),
-        )
-        response.raise_for_status()
-        data = response.json()
+        data = api_client.get("/api/v1/search", params=params).json()
     except Exception as exc:
         logger.warning(f"Search restore failed: {exc}")
         return _no_restore
@@ -1184,13 +1170,7 @@ def execute_search(
 
     # ── Call search API ────────────────────────────────────────────────────
     try:
-        response = requests.get(
-            f"{_get_api_base_url()}/api/v1/search",
-            params=params,
-            timeout=runtime_settings.get_int("HTTP_REQUEST_TIMEOUT"),
-        )
-        response.raise_for_status()
-        data = response.json()
+        data = api_client.get("/api/v1/search", params=params).json()
     except Exception as exc:
         logger.warning(f"Search API call failed: {exc}")
         error_content = create_alert(
@@ -1305,13 +1285,7 @@ def paginate_search(
         params.setdefault("page_size", 10)
 
     try:
-        response = requests.get(
-            f"{_get_api_base_url()}/api/v1/search",
-            params=params,
-            timeout=runtime_settings.get_int("HTTP_REQUEST_TIMEOUT"),
-        )
-        response.raise_for_status()
-        data = response.json()
+        data = api_client.get("/api/v1/search", params=params).json()
     except Exception as exc:
         logger.warning(f"Pagination API call failed: {exc}")
         error_content = create_alert(

@@ -6,16 +6,16 @@ from datetime import datetime
 import time
 from typing import Any, Dict, List
 
-import requests
 import dash_bootstrap_components as dbc
 from dash import ALL, MATCH, Input, Output, State, callback, callback_context, clientside_callback, html, no_update
 from dash.exceptions import PreventUpdate
 
-from domain.timezone import humanize_duration, to_app_timezone
-from ui.runtime_settings import runtime_settings
-from ui.settings import settings
 from domain.connector_registry import CONNECTOR_REGISTRY
+from domain.timezone import humanize_duration, to_app_timezone
+from ui import api_client
+from ui.api_client import ApiError
 from ui.components.common import create_alert
+from ui.runtime_settings import runtime_settings
 from ui.styles import (
     COLOR_BACKGROUND_LIGHT,
     COLOR_BORDER,
@@ -43,25 +43,17 @@ from .components.scan_status import render_scan_item
 ARRAY_FIELDS = {'include_spaces', 'exclude_spaces', 'branch_name_patterns', 'extraction_sources'}
 
 
-def _get_api_base_url() -> str:
-    return settings.API_BASE_URL
-
-
 @callback(
     Output("connectors-store", "data"),
     Input("url", "pathname"),
 )
 def load_connectors(pathname: str) -> dict[str, Any] | Any:
-    timeout_seconds = runtime_settings.get_int("HTTP_REQUEST_TIMEOUT")
     if pathname not in ("/app/connectors", "/app/connectors/"):
         return no_update
 
-    api_base = _get_api_base_url()
     try:
-        response = requests.get(f"{api_base}/api/v1/connectors/", timeout=timeout_seconds)
-        response.raise_for_status()
-        return {"status": "ok", "data": response.json()}
-    except requests.exceptions.RequestException as exc:
+        return {"status": "ok", "data": api_client.get("/api/v1/connectors/").json()}
+    except ApiError as exc:
         return {"status": "error", "message": str(exc)}
 
 
@@ -202,7 +194,6 @@ def handle_card_click(_timestamps: List[int | None]) -> str | Any:
     prevent_initial_call="initial_duplicate",
 )
 def load_connector_detail(pathname: str) -> tuple[dict[str, Any] | Any, dict[str, Any] | Any, None, None]:
-    timeout_seconds = runtime_settings.get_int("HTTP_REQUEST_TIMEOUT")
     if not pathname or not pathname.startswith("/app/connectors/"):
         return no_update, no_update, no_update, no_update
 
@@ -214,19 +205,11 @@ def load_connector_detail(pathname: str) -> tuple[dict[str, Any] | Any, dict[str
         error = {"status": "error", "connector_type": connector_type, "message": "Unknown connector type"}
         return error, error, None, None
 
-    api_base = _get_api_base_url()
     supports_items = CONNECTOR_REGISTRY.get(connector_type, {}).get("supports_items", True)
     try:
-        detail_resp = requests.get(
-            f"{api_base}/api/v1/connectors/{connector_type}", timeout=timeout_seconds
-        )
-        detail_resp.raise_for_status()
+        detail_resp = api_client.get(f"/api/v1/connectors/{connector_type}")
         if supports_items:
-            items_resp = requests.get(
-                f"{api_base}/api/v1/connectors/{connector_type}/configs", timeout=timeout_seconds
-            )
-            items_resp.raise_for_status()
-            items_data = items_resp.json()
+            items_data = api_client.get(f"/api/v1/connectors/{connector_type}/configs").json()
         else:
             items_data = []
         return (
@@ -235,7 +218,7 @@ def load_connector_detail(pathname: str) -> tuple[dict[str, Any] | Any, dict[str
             None,
             None,
         )
-    except requests.exceptions.RequestException as exc:
+    except ApiError as exc:
         error = {"status": "error", "connector_type": connector_type, "message": str(exc)}
         return error, error, None, None
 
@@ -798,7 +781,6 @@ def handle_item_save(
     search_filter_store_ids: List[Dict[str, Any]],
     search_filter_store_data: List[Dict[str, str] | None],
 ) -> tuple[Dict[str, Any] | Any, Dict[str, Any] | Any, dbc.Alert | Any, bool | Any]:
-    timeout_seconds = runtime_settings.get_int("HTTP_REQUEST_TIMEOUT")
     triggered = callback_context.triggered_id
     if not isinstance(triggered, dict):
         return no_update, no_update, no_update, no_update
@@ -816,27 +798,20 @@ def handle_item_save(
             search_filter_store_data,
         )
         payload["search_filters"] = search_filters if search_filters else None
-    api_base = _get_api_base_url()
     try:
         if is_update:
             item_id = edit_state.get("item_id")
-            response = requests.put(
-                f"{api_base}/api/v1/connectors/{connector_type}/configs/{item_id}",
+            api_client.put(
+                f"/api/v1/connectors/{connector_type}/configs/{item_id}",
                 json=payload,
-                timeout=timeout_seconds,
             )
         else:
-            response = requests.post(
-                f"{api_base}/api/v1/connectors/{connector_type}/configs",
+            api_client.post(
+                f"/api/v1/connectors/{connector_type}/configs",
                 json=payload,
-                timeout=timeout_seconds,
             )
-        response.raise_for_status()
 
-        items_resp = requests.get(
-            f"{api_base}/api/v1/connectors/{connector_type}/configs", timeout=timeout_seconds
-        )
-        items_resp.raise_for_status()
+        items_resp = api_client.get(f"/api/v1/connectors/{connector_type}/configs")
         updated_store = {
             "status": "ok",
             "connector_type": connector_type,
@@ -849,7 +824,7 @@ def handle_item_save(
             create_alert("Item saved successfully.", color="success", class_name="mb-0"),
             False,
         )
-    except requests.exceptions.RequestException as exc:
+    except ApiError as exc:
         return (
             no_update,
             no_update,
@@ -889,7 +864,6 @@ def handle_item_delete(
     submit_clicks: int | None,
     target: Dict[str, Any] | None,
 ) -> tuple[Dict[str, Any] | Any, Dict[str, Any] | Any, dbc.Alert | Any, bool]:
-    timeout_seconds = runtime_settings.get_int("HTTP_REQUEST_TIMEOUT")
     if not submit_clicks:
         raise PreventUpdate
 
@@ -902,18 +876,9 @@ def handle_item_delete(
     if connector_type is None or item_id is None:
         return no_update, no_update, no_update, False
 
-    api_base = _get_api_base_url()
     try:
-        response = requests.delete(
-            f"{api_base}/api/v1/connectors/{connector_type}/configs/{item_id}",
-            timeout=timeout_seconds,
-        )
-        response.raise_for_status()
-
-        items_resp = requests.get(
-            f"{api_base}/api/v1/connectors/{connector_type}/configs", timeout=timeout_seconds
-        )
-        items_resp.raise_for_status()
+        api_client.delete(f"/api/v1/connectors/{connector_type}/configs/{item_id}")
+        items_resp = api_client.get(f"/api/v1/connectors/{connector_type}/configs")
         updated_store = {
             "status": "ok",
             "connector_type": connector_type,
@@ -926,7 +891,7 @@ def handle_item_delete(
             create_alert("Item deleted.", color="success", class_name="mb-0"),
             False,
         )
-    except requests.exceptions.RequestException as exc:
+    except ApiError as exc:
         return (
             no_update,
             no_update,
@@ -968,7 +933,6 @@ def handle_item_test_connection(_clicks: List[int | None]) -> tuple[dbc.Alert | 
     runs the actual connectivity check and reports the result in the
     Recent Actions section.
     """
-    timeout_seconds = runtime_settings.get_int("HTTP_REQUEST_TIMEOUT")
     if not callback_context.triggered:
         return no_update, no_update
     triggered_value = callback_context.triggered[0].get("value")
@@ -994,20 +958,15 @@ def handle_item_test_connection(_clicks: List[int | None]) -> tuple[dbc.Alert | 
             no_update,
         )
 
-    api_base = _get_api_base_url()
     try:
-        response = requests.post(
-            f"{api_base}/api/v1/commands/",
+        api_client.post(
+            "/api/v1/commands/",
             json={
                 "command_type": "test",
-                "target": container_name,  # type: ignore[dict-item]
+                "target": container_name,
                 "parameters": {"item_id": item_id},
             },
-            timeout=timeout_seconds,
         )
-        response.raise_for_status()
-        data = response.json()
-        command_id = data.get("command_id", "unknown")
 
         return (
             create_alert(
@@ -1017,7 +976,7 @@ def handle_item_test_connection(_clicks: List[int | None]) -> tuple[dbc.Alert | 
             ),
             True,  # expand Recent Actions so the result appears
         )
-    except requests.exceptions.RequestException as exc:
+    except ApiError as exc:
         return (
             create_alert(
                 f"Test failed: {exc}",
@@ -1040,7 +999,6 @@ def handle_mcp_test_connection(_clicks: List[int | None]) -> dbc.Alert | Any:
     app container, so the result is returned synchronously and rendered directly
     in the feedback area — no RabbitMQ command or polling is involved.
     """
-    timeout_seconds = runtime_settings.get_int("HTTP_REQUEST_TIMEOUT")
     if not callback_context.triggered:
         return no_update
     triggered_value = callback_context.triggered[0].get("value")
@@ -1054,18 +1012,12 @@ def handle_mcp_test_connection(_clicks: List[int | None]) -> dbc.Alert | Any:
     if not connector_type:
         return no_update
 
-    api_base = _get_api_base_url()
     try:
-        response = requests.post(
-            f"{api_base}/api/v1/connectors/{connector_type}/test",
-            timeout=timeout_seconds,
-        )
-        response.raise_for_status()
-        data = response.json()
+        data = api_client.post(f"/api/v1/connectors/{connector_type}/test").json()
         message = data.get("message", "Connection test completed.")
         color = "success" if data.get("success") else "danger"
         return create_alert(message, color=color, class_name="mb-0")
-    except requests.exceptions.RequestException as exc:
+    except ApiError as exc:
         return create_alert(
             f"Test failed: {exc}",
             color="danger",
@@ -1081,7 +1033,6 @@ def handle_mcp_test_connection(_clicks: List[int | None]) -> dbc.Alert | Any:
 )
 def handle_cancel_scan(n_clicks: List[int | None], pathname: str | None) -> dbc.Alert | Any:
     """Cancel a running scan by sending a cancel command via the API."""
-    timeout_seconds = runtime_settings.get_int("HTTP_REQUEST_TIMEOUT")
     if not callback_context.triggered:
         return no_update
     triggered_value = callback_context.triggered[0].get("value")
@@ -1109,24 +1060,21 @@ def handle_cancel_scan(n_clicks: List[int | None], pathname: str | None) -> dbc.
             class_name="mb-0",
         )
 
-    api_base = _get_api_base_url()
     try:
-        response = requests.post(
-            f"{api_base}/api/v1/commands/",
+        api_client.post(
+            "/api/v1/commands/",
             json={
                 "command_type": "cancel",
-                "target": container_name,  # type: ignore[dict-item]
+                "target": container_name,
                 "parameters": {"cancel_command_id": scan_command_id},
             },
-            timeout=timeout_seconds,
         )
-        response.raise_for_status()
         return create_alert(
             f"Cancel sent for scan {scan_command_id[:8]}...",
             color="warning",
             class_name="mb-0",
         )
-    except requests.exceptions.RequestException as exc:
+    except ApiError as exc:
         return create_alert(
             f"Failed to cancel scan: {exc}",
             color="danger",
@@ -1153,7 +1101,6 @@ def handle_connector_save(
     field_values: List[Any],
     scan_interval_values: List[Any],
 ) -> tuple[Dict[str, Any] | Any, dbc.Alert | Any]:
-    timeout_seconds = runtime_settings.get_int("HTTP_REQUEST_TIMEOUT")
     triggered = callback_context.triggered_id
     if not isinstance(triggered, dict):
         return no_update, no_update
@@ -1173,20 +1120,16 @@ def handle_connector_save(
             except (TypeError, ValueError):
                 payload["scan_interval_hours"] = None
 
-    api_base = _get_api_base_url()
     try:
-        response = requests.patch(
-            f"{api_base}/api/v1/connectors/{connector_type}",
+        updated = api_client.patch(
+            f"/api/v1/connectors/{connector_type}",
             json=payload,
-            timeout=timeout_seconds,
-        )
-        response.raise_for_status()
-        updated = response.json()
+        ).json()
         return (
             {"status": "ok", "connector_type": connector_type, "data": updated},
             create_alert("Configuration saved.", color="success", class_name="mb-0"),
         )
-    except requests.exceptions.RequestException as exc:
+    except ApiError as exc:
         return (
             no_update,
             create_alert(f"Failed to save configuration: {exc}", color="danger", class_name="mb-0"),
@@ -1225,7 +1168,6 @@ def handle_connector_delete(
     submit_clicks: int | None,
     target: Dict[str, Any] | None,
 ) -> tuple[Dict[str, Any] | Any, Dict[str, Any] | Any, dbc.Alert | Any, str | Any, bool]:
-    timeout_seconds = runtime_settings.get_int("HTTP_REQUEST_TIMEOUT")
     if not submit_clicks:
         raise PreventUpdate
 
@@ -1237,12 +1179,8 @@ def handle_connector_delete(
     if connector_type is None:
         return no_update, no_update, no_update, no_update, False
 
-    api_base = _get_api_base_url()
     try:
-        response = requests.delete(
-            f"{api_base}/api/v1/connectors/{connector_type}", timeout=timeout_seconds
-        )
-        response.raise_for_status()
+        api_client.delete(f"/api/v1/connectors/{connector_type}")
         return (
             {"status": "ok", "connector_type": connector_type, "data": {"config": None}},
             {"status": "ok", "connector_type": connector_type, "items": []},
@@ -1250,7 +1188,7 @@ def handle_connector_delete(
             "/app/connectors",
             False,
         )
-    except requests.exceptions.RequestException as exc:
+    except ApiError as exc:
         return (
             no_update,
             no_update,
@@ -1420,7 +1358,6 @@ def handle_inline_toggle(
     new_enabled_state: bool,
     store: Dict[str, Any] | None,
 ) -> tuple[dbc.Alert | Any, bool | Any, str, Dict[str, Any] | Any]:
-    timeout_seconds = runtime_settings.get_int("HTTP_REQUEST_TIMEOUT")
     ctx = callback_context
     if not ctx.triggered:
         return no_update, no_update, no_update, no_update
@@ -1440,16 +1377,13 @@ def handle_inline_toggle(
             no_update,
         )
         
-    api_base = _get_api_base_url()
     try:
         # Dedicated status endpoint for a clean atomic update, avoiding full payload PUT
-        response = requests.patch(
-            f"{api_base}/api/v1/connectors/{connector_type}/configs/{config_id}/status",
+        api_client.patch(
+            f"/api/v1/connectors/{connector_type}/configs/{config_id}/status",
             json={"enabled": new_enabled_state},
-            timeout=timeout_seconds,
         )
-        response.raise_for_status()
-        
+
         # Update local store efficiently to keep UI in sync
         updated_store = dict(store)
         for i, item in enumerate(updated_store.get("items", [])):
@@ -1459,7 +1393,7 @@ def handle_inline_toggle(
                 
         return no_update, no_update, "Active" if new_enabled_state else "Disabled", updated_store
         
-    except requests.exceptions.RequestException as exc:
+    except ApiError as exc:
         error_alert = create_alert(f"Failed to update configuration: {str(exc)}", color="danger", class_name="mb-0")
         return error_alert, not new_enabled_state, "Active" if not new_enabled_state else "Disabled", no_update
 
@@ -1483,7 +1417,6 @@ def handle_run_scan(n_clicks: List[int | None]) -> tuple[dbc.Alert | Any, bool |
     polling is derived from collapse state) and immediately loads the updated
     scan list so the new row appears without waiting for the first poll tick.
     """
-    timeout_seconds = runtime_settings.get_int("HTTP_REQUEST_TIMEOUT")
     _ = n_clicks  # used by Dash as trigger
     if not callback_context.triggered:
         return no_update, no_update, no_update
@@ -1505,30 +1438,23 @@ def handle_run_scan(n_clicks: List[int | None]) -> tuple[dbc.Alert | Any, bool |
             class_name="mb-0",
         ), no_update, no_update
 
-    api_base = _get_api_base_url()
     try:
-        response = requests.post(
-            f"{api_base}/api/v1/commands/",
+        data = api_client.post(
+            "/api/v1/commands/",
             json={
                 "command_type": "scan",
-                "target": container_name,  # type: ignore[dict-item]
+                "target": container_name,
                 "parameters": {},
             },
-            timeout=timeout_seconds,
-        )
-        response.raise_for_status()
-        data = response.json()
+        ).json()
         command_id = data.get("command_id", "unknown")
 
         # Immediately fetch the updated scan list so the new row appears
         # without waiting for the next poll interval.
-        scans_response = requests.get(
-            f"{api_base}/api/v1/commands/",
-            params={"target": container_name or "", "limit": runtime_settings.get_int("RECENT_ACTIONS_LIMIT")},  # type: ignore[arg-type]
-            timeout=timeout_seconds,
-        )
-        scans_response.raise_for_status()
-        scans_data = scans_response.json()
+        scans_data = api_client.get(
+            "/api/v1/commands/",
+            params={"target": container_name or "", "limit": runtime_settings.get_int("RECENT_ACTIONS_LIMIT")},
+        ).json()
         commands = scans_data.get("commands", [])
         if commands:
             scans_children = html.Div([render_scan_item(cmd) for cmd in commands])
@@ -1551,7 +1477,7 @@ def handle_run_scan(n_clicks: List[int | None]) -> tuple[dbc.Alert | Any, bool |
             True,  # expand Recent Actions so the new scan is visible
             scans_children,
         )
-    except requests.exceptions.RequestException as exc:
+    except ApiError as exc:
         return (
             create_alert(
                 f"Failed to trigger scan: {exc}",
@@ -1580,7 +1506,6 @@ def load_recent_scans(
     Also decides whether to expand that section, but only on load or
     navigation — never on a poll tick.
     """
-    timeout_seconds = runtime_settings.get_int("HTTP_REQUEST_TIMEOUT")
     _ = n_intervals  # used by Dash as trigger
     if not pathname or not pathname.startswith("/app/connectors/"):
         return no_update, no_update
@@ -1593,15 +1518,11 @@ def load_recent_scans(
     if not container_name:
         return no_update, no_update
 
-    api_base = _get_api_base_url()
     try:
-        response = requests.get(
-            f"{api_base}/api/v1/commands/",
-            params={"target": container_name or "", "limit": runtime_settings.get_int("RECENT_ACTIONS_LIMIT")},  # type: ignore[arg-type]
-            timeout=timeout_seconds,
-        )
-        response.raise_for_status()
-        data = response.json()
+        data = api_client.get(
+            "/api/v1/commands/",
+            params={"target": container_name or "", "limit": runtime_settings.get_int("RECENT_ACTIONS_LIMIT")},
+        ).json()
         commands = data.get("commands", [])
         if not commands:
             return html.Div(
@@ -1631,7 +1552,7 @@ def load_recent_scans(
             ) or commands[0].get("status") == "failed"
 
         return html.Div(items), collapse
-    except requests.exceptions.RequestException:
+    except ApiError:
         # Silently fail on poll — don't spam UI with errors every 5s
         return no_update, no_update
 

@@ -407,7 +407,7 @@ def test_sync_person_suggestions_calls_persons_api_for_valid_query():
     }
     mock_response.raise_for_status = MagicMock()
 
-    with patch("ui.pages.graph.callbacks.catalog.requests.get") as mock_get:
+    with patch("ui.pages.graph.callbacks.catalog.api_client.get") as mock_get:
         mock_get.return_value = mock_response
         children, styles = catalog_callbacks.sync_person_suggestions(
             debounced_queries=["alice"],
@@ -440,7 +440,7 @@ def test_sync_person_suggestions_renders_buttons_with_correct_id():
     }
     mock_response.raise_for_status = MagicMock()
 
-    with patch("ui.pages.graph.callbacks.catalog.requests.get") as mock_get:
+    with patch("ui.pages.graph.callbacks.catalog.api_client.get") as mock_get:
         mock_get.return_value = mock_response
         children, _ = catalog_callbacks.sync_person_suggestions(
             debounced_queries=["alice"],
@@ -461,7 +461,7 @@ def test_sync_person_suggestions_shows_no_results_message():
     mock_response.json.return_value = {"results": []}
     mock_response.raise_for_status = MagicMock()
 
-    with patch("ui.pages.graph.callbacks.catalog.requests.get") as mock_get:
+    with patch("ui.pages.graph.callbacks.catalog.api_client.get") as mock_get:
         mock_get.return_value = mock_response
         children, styles = catalog_callbacks.sync_person_suggestions(
             debounced_queries=["xyznotfound"],
@@ -478,10 +478,10 @@ def test_sync_person_suggestions_shows_no_results_message():
 
 def test_sync_person_suggestions_falls_back_gracefully_on_api_error():
     """API errors must not raise — they must return an error message in the panel."""
-    import requests as req_lib
+    from ui.api_client import STATUS_NO_RESPONSE, ApiError
 
-    with patch("ui.pages.graph.callbacks.catalog.requests.get") as mock_get:
-        mock_get.side_effect = req_lib.exceptions.RequestException("connection refused")
+    with patch("ui.pages.graph.callbacks.catalog.api_client.get") as mock_get:
+        mock_get.side_effect = ApiError(STATUS_NO_RESPONSE, message="connection refused")
         children, styles = catalog_callbacks.sync_person_suggestions(
             debounced_queries=["alice"],
             debounce_ids=[{"type": "catalog-person-debounce", "name": "person1_id"}],
@@ -510,7 +510,7 @@ def test_sync_person_suggestions_handles_person_without_email():
     }
     mock_response.raise_for_status = MagicMock()
 
-    with patch("ui.pages.graph.callbacks.catalog.requests.get") as mock_get:
+    with patch("ui.pages.graph.callbacks.catalog.api_client.get") as mock_get:
         mock_get.return_value = mock_response
         children, _ = catalog_callbacks.sync_person_suggestions(
             debounced_queries=["bob"],

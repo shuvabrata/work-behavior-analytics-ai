@@ -58,13 +58,15 @@ HTTP. That property is physical — two images, two containers — and it is don
 Phase 4 delivers the **other** property, which is not the same one:
 
 1. ~~**Isolation**~~ — the UI runtime cannot reach a database at all. **Delivered by Phases 1–3.**
-2. **Adequacy** — the API exposes every capability the UI needs, so a different
-   frontend could be built against it today. **Step 11's audit is what proves this.**
+2. **Adequacy** — the **current UI** reaches every capability it needs through the
+   API, with no database driver of its own. A future frontend is out of scope; the
+   bar is that today's Dash UI does its whole job over API interfaces.
+   **Step 11's audit is what proves this.**
 
 Plus two pieces of finishing work that only make sense once the split is real:
-**one HTTP chokepoint** for every UI→API call (Step 10), a **concurrency
-measurement** proving the split did not silently serialize callbacks (Step 12),
-and **documentation** that no longer describes the pre-split world (Step 13).
+**one HTTP chokepoint** for every UI→API call (Step 10), a **concurrency check**
+confirming the split did not silently serialize callbacks (Step 12), and
+**documentation** that no longer describes the pre-split world (Step 13).
 
 Neither property authenticates anyone — Plan C (Keycloak) remains independently
 necessary, and this plan deliberately carries no credentials.
@@ -90,6 +92,7 @@ and recorded in the backup and the git log.
 | 16 | Audit artifact | A **step in this plan**, not a long-lived doc. Three-way comparison, **discarded** once it passes |
 | 17 | Design doc | **Edit `authn-authz-design.md` in Step 13** (4 sections), so Plan C is not written against a stale premise |
 | 18 | Requirements | `requirements.api.txt` / `requirements.ui.txt`, each carrying only what its runtime needs; **CI installs both**. No automated dependency-absence check |
+| 19 | API error granularity | The UI may collapse API responses into one `ApiError`, but the **FastAPI server itself must keep granular HTTP status codes** — `401`/`403`/`404`/`422`/`5xx` as appropriate. Direct consumers (`curl`, a future frontend) see the real status; only the UI's client flattens it. Do **not** add a catch-all handler on the API side. |
 
 ## Repo conventions that apply
 
@@ -151,6 +154,12 @@ Run Python commands with the virtualenv active (`source .venv/bin/activate`) and
 
 - `src/ui/api_client.py` — **extended** in Step 10 (it already exists from Step 7)
 - The **57 remaining** UI→API call sites across **14** `src/ui/` files (Step 10's table)
+- `src/ui/pages/graph/callbacks/context_menu.py` and
+  `src/ui/pages/graph/callbacks/expansion.py` — they contain **no** `requests.*`
+  call sites of their own, so they are absent from the 14-file table, but they
+  `except requests.exceptions.Timeout` / `ConnectionError` around calls that land
+  in `pages/graph/utils/graph_operations.py` (which *is* in the table). Step 10's
+  exception-handler subsection covers them.
 - `tests/` — new tests for the client and the audit, and any stub repointed by a swap
 - `CLAUDE.md`, `DEVELOPER_QUICK_START.md`, `USER_GUIDE.md`, `scripts/setup.sh`, `.env.example`
 - `docs/design/authn-authz-design.md` — **the four sections in Step 13 only**
@@ -185,7 +194,7 @@ Run Python commands with the virtualenv active (`source .venv/bin/activate`) and
 
 ---
 
-### Step 10: Grow `src/ui/api_client.py` and migrate all 57 call sites
+### Step 10: Grow `src/ui/api_client.py`, migrate all 57 call sites and their error handlers
 
 **In this plan the client carries no credentials.** Plan C teaches it to attach a
 bearer token — which is why the two plans are not merged.
@@ -251,24 +260,89 @@ end state is **60** UI→API sites, all through `api_client`.
 must preserve whatever those were suppressing (a missing timeout), by always
 passing one.
 
+**Migrate the exception handlers too — this is part of the migration, not a
+separate cleanup.** Changing a call site from `requests` to `api_client` changes
+the exception type it raises: `requests.exceptions.Timeout` /
+`ConnectionError` / `RequestException` no longer occur; `ApiError` does. An
+`except requests.exceptions.*` clause left in place therefore becomes **dead
+code**, and the generic `except Exception` beneath it catches `ApiError`
+instead — silently changing what the user sees.
+
+**41 such clauses exist across 12 files, plus 9 more in a third spelling.** They
+are not `requests.*` call sites, so the table above does not count them and the
+grep gates below would otherwise miss them. Two spellings exist — both are dead
+after migration:
+
+```bash
+grep -rn "requests\.exceptions" src/ui/ --include="*.py"   # 41 sites, 12 files
+grep -rn "requests\.RequestException" src/ui/ --include="*.py"  # 9 sites, 3 files
+#   timeline/api.py:77,135,235
+#   settings/graph_styling/callbacks.py:413,578,656,742,825
+#   graph/utils/graph_operations.py:45
+```
+
+Also remove the now-unused imports: `grep -rn "import requests" src/ui/ --include="*.py"`
+returns **16** lines outside `api_client.py` (15 module-level plus an indented
+local import at `pages/connectors/layout.py:799` — note that one is inside a
+function, so a `^import` anchored grep misses it; use the unanchored form above).
+
+The two highest-risk files are the ones **absent from the 14-file table**:
+`pages/graph/callbacks/context_menu.py:193,202` and
+`pages/graph/callbacks/expansion.py:139,148,288,300`. They wrap
+`execute_expansion_and_merge` (`pages/graph/utils/graph_operations.py:90`,
+which *is* migrated) and render the specific alerts — for example
+`create_expansion_error_alert("Expansion timed out", error_type="timeout")`.
+After migration those branches never fire and the generic fallback renders
+instead.
+
+For each of the 50 dead exception clauses:
+
+1. Replace the caught type with `ApiError` (import it from `ui.api_client`).
+   `except requests.exceptions.RequestException` → `except ApiError`; the
+   narrower `Timeout` / `ConnectionError` clauses → `except ApiError`.
+2. **Preserve the handler's behaviour and message.** The branching changes
+   meaning: `ApiError` carries `status_code`, not "was this a timeout". Do not
+   try to reconstruct the distinction by inspecting `ApiError` — keep one
+   `except ApiError` per former clause where the handler bodies differ only in
+   their log text, or keep two branches if the handler bodies genuinely differ
+   (e.g. a distinct alert), both catching `ApiError`. If a call site *needs* to
+   tell a transport failure from a 4xx response, **stop and report** — that
+   requires extending `ApiError` and belongs to Plan C.
+3. Remove `import requests` from the file when nothing else in it uses the
+   module (pylint will flag it; an unused import fails the gate below).
+
+Do **not** extend `ApiError` with a timeout/connection flag as part of this
+step.
+
+**Verify**: `grep -rn "requests\." src/ui/ --include="*.py" | grep -v "src/ui/api_client.py"` → **no matches** (this subsumes the narrower greps below and catches `.exceptions`, `.RequestException` and `.Response` spellings). `api_client.py` is excluded because it *is* the wrapper: it legitimately keeps `requests.Response` (`:62`, `:92`) and `requests.request` (`:99`).
+**Verify**: `grep -rn "import requests" src/ui/ --include="*.py" | grep -v "src/ui/api_client.py"` → **no matches**
 **Verify**: `grep -rn "requests\.\(get\|post\|put\|patch\|delete\)" src/ui/` → no matches
-**Verify**: `grep -rln "api_client" src/ui/ | wc -l` → **18 or more** (this step's 14 files, plus Step 7's three, plus `collaboration_params.py`)
+**Verify**: `grep -rn "requests\.exceptions" src/ui/ --include="*.py"` → no matches
+**Verify**: `grep -rn "requests\.RequestException" src/ui/ --include="*.py"` → no matches
+**Verify**: `grep -rln --include="*.py" "api_client" src/ui/ | wc -l` → **20 or more** (this step's 14 call-site files, plus Step 7's three, plus `collaboration_params.py`, plus the two handler files now importing `ApiError`). The `--include` matters: without it, `__pycache__/*.pyc` matches inflate the count (9 vs 4 today) — and after migration that inflation could carry a missed file over the threshold.
 **Verify**: `pytest -m unit tests -q` → all pass
 **Verify**: `mypy src/` → exit 0
 **Verify**: `pylint src --score=y` → ≥ 9.0
 
 > ### 🚦 MANUAL GATE 10 — operator check
 >
-> **Report to the operator:** the five verify outputs and `git diff --stat`.
+> **Report to the operator:** every verify output above and `git diff --stat`.
 >
 > **Operator verifies:**
-> 1. **Zero** raw `requests.*` calls remain in `src/ui/`. The grep is the gate.
+> 1. **Zero** references to the `requests` module remain in `src/ui/` — not just
+>    `requests.get(...)` call sites but also `requests.exceptions.*` clauses and
+>    `import requests` lines. `grep -rn "requests\." src/ui/ --include="*.py" |
+>    grep -v "src/ui/api_client.py"` is the gate — `api_client.py` is exempt
+>    because it is the one module that legitimately wraps `requests`.
 > 2. The client carries **no** credentials — no `Authorization` header, no token
 >    parameter, no `KEYCLOAK_*`/`AUTH_*` reference. Confirm this explicitly; it is
 >    the boundary between this plan and Plan C.
 > 3. One exception type carrying `status_code`, not per-call `raise_for_status` —
 >    `ApiError`, as Step 7 introduced it. Confirm the count is still **one**:
->    `grep -rn "raise_for_status" src/ui/` → no matches outside `api_client.py`.
+>    `grep -rn "raise_for_status" src/ui/ --include="*.py"` → **no matches at
+>    all**. Note `api_client.py` does not use `raise_for_status` itself — it
+>    checks `response.ok` and calls `_describe()` — so there is no legitimate
+>    exception to "no matches" here.
 > 4. **The collaboration mapping is still at the call sites, not in the client.**
 >    `grep -n "CollaborationDataUnavailable" src/ui/api_client.py` → no matches,
 >    and `translate_api_error` still exists in `src/ui/collaboration_params.py`.
@@ -283,6 +357,12 @@ passing one.
 >    Catalog, Connectors, Settings, Collaboration Network (org + ego). A missed
 >    call site is a runtime error on a rarely-exercised page — this is the check
 >    that finds it.
+> 8. **The error handlers were migrated with the calls.** In the Graph page,
+>    force an expansion that times out (or stop the API container mid-expansion):
+>    the "Expansion timed out" alert must still render — not the generic "An
+>    unexpected error occurred." If the generic alert appears, a handler still
+>    catches `requests.exceptions` while the call raises `ApiError`. This is the
+>    regression Gate 10's greps alone cannot prove.
 >
 > Wait for `PASS` before starting Step 11.
 
@@ -379,39 +459,32 @@ Before the split, Starlette ran sync Dash callbacks in a threadpool (~40
 threads), so concurrent callbacks did not block each other. Gunicorn's default
 worker is `sync` with one thread, which **would** serialize them. Step 8 pins
 `--worker-class gthread --workers 4 --threads 8`, but that is an assumption about
-flags, not a measurement.
+flags, not a functional check.
 
-**Measure it.** Fire N concurrent Dash callback POSTs at
-`https://localhost/app/_dash-update-component` and confirm they overlap in time.
-
-Use a payload that takes measurable time — the collaboration network response is
-**1.67 MB** and exercises the slow path (Neo4j + Louvain). `client_max_body_size
-50m` is already set, so payload size is not the limit.
-
-**The gate:** N concurrent requests complete in materially less than N ×
-(single-request duration). If they serialize, total time ≈ N × single.
+**Check it functionally.** Fire N concurrent Dash callback POSTs at
+`https://localhost/app/_dash-update-component` and confirm every request returns
+successfully — no 5xx, no timeout, no dropped connection. The point is that the
+stack handles concurrent callbacks at all; it is not a latency benchmark.
 
 Suggested N = 4 (matching `--workers 4`), and repeat at N = 12 to exercise the
-threads within a worker.
+threads within a worker. Any real callback works — a fast one is fine.
 
-**Verify**: 4 concurrent requests complete in < 2× the single-request duration
-**Verify**: 12 concurrent requests complete in < 4× the single-request duration
-**Verify**: the timings and the single-request baseline are recorded
+**Verify**: 4 concurrent requests all complete with a 2xx response
+**Verify**: 12 concurrent requests all complete with a 2xx response
+**Verify**: no request returns a 5xx or times out during either run
 
 > ### 🚦 MANUAL GATE 12 — operator check
 >
-> **Report to the operator:** the single-request baseline, the 4-concurrent and
-> 12-concurrent timings, and the concurrency mechanism used.
+> **Report to the operator:** the 4-concurrent and 12-concurrent results (status
+> codes and any failures), and the concurrency mechanism observed.
 >
 > **Operator verifies:**
-> 1. **The timings show overlap, not serialization.** If 4 concurrent requests
->    take ≈4× the single-request time, the callbacks are serializing — the flags
->    are wrong or the worker class is not `gthread`.
-> 2. The measurement used a **real slow callback**, not a trivial one. A fast
->    endpoint cannot distinguish serialization from parallelism.
-> 3. Confirm in the UI container that the running process is
+> 1. **All concurrent requests succeed.** No 5xx, no timeout, no connection drop.
+>    A serialization failure shows up here as timeouts or gateway errors when the
+>    request queue backs up.
+> 2. Confirm in the UI container that the running process is
 >    `gunicorn --worker-class gthread` — check the process args, not the file.
-> 4. If serialization is observed, the fix is to correct the flags and re-measure.
+> 3. If failures are observed, correct the flags and re-run the functional check.
 >    **Do not accept the flags as verified because they are present in the file.**
 >
 > Wait for `PASS` before starting Step 13.
@@ -527,6 +600,7 @@ docker compose config -q
 **Verify**: every page in the sweep renders and its primary action works
 **Verify**: `git status --short` shows no files outside the Scope list
 **Verify**: `git diff --stat` touches no file under `src/connectors/` (except the zero expected)
+**Verify**: the API keeps **granular** status codes for direct consumers — `curl -o /dev/null -w '%{http_code}' https://localhost/api/v1/nonexistent` → `404` (not a generic 500), and a validation failure returns `422`. The UI's single `ApiError` type is a client-side concern; it must not flatten the server's HTTP semantics.
 
 > ### 🚦 MANUAL GATE 14 — operator check (final)
 >
@@ -567,9 +641,9 @@ is in the backup of the original plan and in the git log.
 
 | Step | What it changes | Automated verify | Manual gate | Status |
 |------|-----------------|------------------|-------------|--------|
-| 10 | `src/ui/api_client.py` grown into the single chokepoint; **57** remaining call sites across **14** files migrated | zero raw `requests.*` in `src/ui/`; suite/`mypy`/`pylint` | Operator confirms no credentials; **full page sweep** | ⬜ |
+| 10 | `src/ui/api_client.py` grown into the single chokepoint; **57** remaining call sites across **14** files migrated | zero raw `requests.*` in `src/ui/`; suite/`mypy`/`pylint` | Operator confirms no credentials; **full page sweep** | 🔄 executed, awaiting Gate 10 |
 | 11 | API-completeness audit (`A ⊆ B`, response shapes, orphans) | comparison passes; artifact discarded | Operator reviews mismatch and orphan lists | ⬜ |
-| 12 | gunicorn concurrency gate | 4 and 12 concurrent requests overlap | Operator confirms overlap, not serialization | ⬜ |
+| 12 | gunicorn concurrency gate | 4 and 12 concurrent requests all return 2xx | Operator confirms all succeed; no 5xx/timeouts | ⬜ |
 | 13 | Docs: `CLAUDE.md`, `DEVELOPER_QUICK_START.md`, `USER_GUIDE.md`, `setup.sh`, `.env.example`, `authn-authz-design.md` | six grep gates | Operator **walks the two-process local dev flow** | ⬜ |
 | 14 | Full CI gates + full-stack smoke | all five gates; every page renders | Operator signs off the complete page sweep | ⬜ |
 
@@ -593,6 +667,14 @@ a broken import, not that they were removed.
   **repointed to the client seam**, not deleted. Step 7 did exactly this for
   `tests/test_collab_consumer.py` and `tests/test_ego_page_callbacks.py`; the same
   convention applies to Step 10's 14 files.
+- **A regression test for the migrated error handlers**, covering the case this
+  plan's first draft missed: with the client raising `ApiError`, the Graph
+  expansion handlers in `pages/graph/callbacks/context_menu.py` and
+  `pages/graph/callbacks/expansion.py` must still render their specific alert
+  ("Expansion timed out"), not the generic fallback. Model the test on the
+  existing expansion tests in `tests/`; stub the client seam to raise `ApiError`
+  and assert on the alert text. If no such test exists, add one — this is the
+  only automated proof that the `except` clauses were converted.
 
 **Mutations to run (not optional):**
 
@@ -601,6 +683,12 @@ a broken import, not that they were removed.
    This is what proves the gate is not passing on an empty match set.
 2. **Step 10** — break the client's timeout so it is read once at import; the
    per-call test must fail. A test that passes both ways guards the wrong thing.
+3. **Step 10** — restore one `except requests.exceptions.Timeout` clause on a
+   migrated call site (re-add the `import requests` so the file imports); the
+   `grep -rn "requests\." src/ui/ --include="*.py" | grep -v "src/ui/api_client.py"`
+   gate must fail. This proves the gate catches handler clauses, not only call
+   sites — the failure mode that would otherwise silently degrade a page's error
+   message to the generic one.
 
 **Repointed stubs must stay non-vacuous.** After any stub move, break the thing
 under test and confirm the test fails. Step 7's rewrites were verified this way
@@ -617,16 +705,22 @@ ALL must hold:
 - [ ] `pylint src --score=y` reports ≥ 9.0
 - [ ] `bandit -c .bandit.yml -r src/ -lll` exits 0
 - [ ] `docker compose config -q` exits 0
+- [ ] `grep -rn "requests\." src/ui/ --include="*.py" | grep -v "src/ui/api_client.py"` → **no matches** (catches call sites, `requests.exceptions.*` and `requests.RequestException` clauses; `api_client.py` is the exempt wrapper)
+- [ ] `grep -rn "import requests" src/ui/ --include="*.py" | grep -v "src/ui/api_client.py"` → **no matches**
 - [ ] `grep -rn "requests\.\(get\|post\|put\|patch\|delete\)" src/ui/` → **no matches**
-- [ ] `grep -rn "raise_for_status" src/ui/` → no matches outside `api_client.py`
+- [ ] `grep -rn "requests\.exceptions" src/ui/ --include="*.py"` → **no matches**
+- [ ] `grep -rn "requests\.RequestException" src/ui/ --include="*.py"` → **no matches**
+- [ ] `grep -rn "raise_for_status" src/ui/ --include="*.py"` → **no matches**
+      (`api_client.py` uses `response.ok`, not `raise_for_status`, so there is no
+      legitimate match anywhere under `src/ui/`)
 - [ ] `grep -n "CollaborationDataUnavailable" src/ui/api_client.py` → **no matches**
       (the collaboration mapping stays at the call sites, in
       `src/ui/collaboration_params.py`)
-- [ ] `grep -rln "api_client" src/ui/` → **≥ 18** files (Step 7's 3 + Step 10's 14 + `collaboration_params.py`)
+- [ ] `grep -rln --include="*.py" "api_client" src/ui/ | wc -l` → **≥ 20** files (Step 7's 3 + Step 10's 14 call-site files + `collaboration_params.py` + the 2 handler files); the `--include` keeps `__pycache__/*.pyc` out of the count
 - [ ] `src/ui/api_client.py` carries **no credentials** — no `Authorization` header, no token parameter, no `AUTH_*` / `KEYCLOAK_*` reference
 - [ ] Timeouts are read **per call** from `ui.runtime_settings`, never captured at import
 - [ ] Step 11: every path in A resolves in B; response shapes match for all A endpoints; orphans listed and reviewed (not necessarily zero); **no artifact left behind**
-- [ ] Step 12: 4 concurrent requests complete in **< 2×** the single-request duration, and 12 in **< 4×** — measured against a real slow callback, not a trivial one
+- [ ] Step 12: 4 and 12 concurrent requests all complete with **2xx** responses; no 5xx or timeouts under concurrent load
 - [ ] `grep -rn "uvicorn app.main" CLAUDE.md DEVELOPER_QUICK_START.md` → no matches
 - [ ] `grep -rn "app\.main:app" CLAUDE.md DEVELOPER_QUICK_START.md` → no matches
 - [ ] `grep -n "docker compose logs app" USER_GUIDE.md scripts/setup.sh` → no matches
@@ -645,7 +739,10 @@ Stop and report back (do not improvise) if:
 - **More or fewer than 57 `requests.*` call sites** exist in `src/ui/` at Step 10's
   start, or the distribution does not match its 14-file table. The count is
   load-bearing: it is the completeness measure for the one-chokepoint property.
-  Report the actual per-file list rather than working around it.
+  Report the actual per-file list rather than working around it. The two handler
+  files in Scope (`context_menu.py`, `expansion.py`) are expected to contribute
+  **zero** call sites — their 41 siblings' `requests.exceptions` clauses are
+  counted by the separate grep, not this one.
 - **`docker compose up -d --build` cannot reach `https://localhost/app`.** This is
   the stable-state rule. A Phase 4 step that breaks the running UI is a defect in
   the step.
@@ -658,12 +755,18 @@ Stop and report back (do not improvise) if:
 - **A Phase 4 change appears to need credentials in `api_client.py`**, or an
   `AUTH_*` / `KEYCLOAK_*` setting. That is Plan C's scope and this plan
   deliberately excludes it — stop and report rather than adding it.
+- **A migrated call site's handler must distinguish a transport failure (timeout,
+  connection refused) from an HTTP error response.** `ApiError` carries only
+  `status_code`; `requests.exceptions.Timeout` and `ConnectionError` are no
+  longer raised. Converting both branches to `except ApiError` is the expected
+  answer; extending `ApiError` with a timeout/connection flag is Plan C's, not
+  this plan's. Report the site instead of extending the type.
 - **Step 11's `A ⊆ B` fails.** A UI-called path with no route is a broken page;
   fix the call site, do not add a route to satisfy the audit.
-- **Step 12 shows serialization** (4 concurrent ≈ 4× the single-request time).
-  The worker flags are wrong or the worker class is not `gthread`; correct the
-  flags and re-measure. **Do not accept the flags as verified because they are in
-  the file.**
+- **Step 12 shows concurrency failures** (5xx, timeouts or dropped connections
+  under concurrent load). The worker flags are wrong or the worker class is not
+  `gthread`; correct the flags and re-run the functional check. **Do not accept
+  the flags as verified because they are in the file.**
 - **Any Step 14 page fails to render or its primary action errors.**
 - **Producers fall back to default runtime settings.** Check the connector logs
   for `Runtime settings API unreachable` — that is the silent-degradation failure
@@ -717,8 +820,8 @@ Stop and report back (do not improvise) if:
 - **Step 10 did not weaken a stub.** A rewritten test that returns a canned
   response regardless of its arguments is vacuous; break the thing under test and
   confirm it fails.
-- **Step 12 measured rather than assumed.** The gunicorn flags being present in
-  the file is not evidence they are effective.
+- **Step 12 checked concurrency functionally.** The gunicorn flags being present
+  in the file is not evidence they are effective.
 - **`client_max_body_size 50m` survives any nginx edit.** It is a Plan 051 fix and
   the collaboration pages depend on it.
 - **`docs/design/authn-authz-design.md` was edited in exactly four places.** Only

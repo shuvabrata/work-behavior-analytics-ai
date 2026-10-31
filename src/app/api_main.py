@@ -19,6 +19,7 @@ from app.api.commands.v1.router import router as commands_v1_router
 from app.api.settings.v1.router import router as settings_v1_router
 from app.api.graph_themes.v1.router import router as graph_themes_v1_router
 from app.api.activity.v1.router import router as activity_v1_router
+from app.api.auth.v1.router import router as auth_v1_router
 from app.common.neo4j_driver import close_driver
 from app.db.session import ASYNC_SESSION_LOCAL
 from app.runtime_settings import load_db_overrides_from_session
@@ -188,3 +189,4 @@ app.include_router(commands_v1_router, prefix="/api/v1")
 app.include_router(settings_v1_router, prefix="/api/v1")
 app.include_router(graph_themes_v1_router, prefix="/api/v1")
 app.include_router(activity_v1_router, prefix="/api/v1")
+app.include_router(auth_v1_router, prefix="/api/v1")

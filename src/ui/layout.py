@@ -8,6 +8,7 @@ from dash.exceptions import PreventUpdate
 from urllib.parse import quote
 
 from ui.pages import analytics, chat, collaboration_network, collaboration_network_ego, connectors, graph, search, settings, timeline, catalog
+from ui.components.account_bar import get_account_bar_layout
 from ui.components.setup_banner import get_banner_layout
 from ui.settings import settings as app_settings
 from .styles import (
@@ -93,6 +94,7 @@ def create_dash_app() -> dash.Dash:
                                 title="Switch theme",
                                 n_clicks=0,
                             ),
+                            get_account_bar_layout(),
                         ],
                         className="d-flex align-items-center",
                     ),

@@ -4,9 +4,10 @@ Same interface as ``app.runtime_settings`` (``get`` / ``get_int`` / ``refresh``)
 but sourced from the API over HTTP instead of from the database — the UI holds
 no driver and no DB credentials. The snapshot endpoint
 (``GET /api/v1/settings/runtime-snapshot``) is the same one the producer daemons
-and the signal consumer already use; :func:`refresh` reuses the existing
-``common.runtime_settings.client.fetch_runtime_snapshot`` helper rather than
-hand-rolling a second HTTP path.
+and the signal consumer use, but the UI reaches it through :mod:`ui.api_client`
+so the call carries the **user's** bearer token: the UI holds no service
+credential, so the shared service-token helper would always fail here and, once
+the endpoint requires a credential, would silently stop refreshing.
 
 The cache itself is the **shared** object owned by :mod:`domain.timezone`, so a
 refresh here is visible to ``domain.timezone.get_app_timezone`` (and vice versa).
@@ -84,18 +85,41 @@ def _seed_config(ui_settings: UISettings, existing: RuntimeConfig) -> RuntimeCon
 def refresh() -> None:
     """Refresh the shared cache from the API's runtime-snapshot endpoint.
 
-    ``fetch_runtime_snapshot`` logs a WARNING and returns a bare
-    ``RuntimeConfig()`` (code defaults) when the API is unreachable, so this
-    never raises and an unreachable API degrades rather than crashes — the same
-    behaviour the producer daemons and the signal consumer already rely on. A
-    bare-defaults snapshot is rejected, so an unreachable API cannot blank the
-    values the cache already holds.
-    """
-    # Imported lazily so a UI process that never refreshes does not pay for it.
-    # pylint: disable=import-outside-toplevel
-    from common.runtime_settings import fetch_runtime_snapshot
+    The fetch goes through ``ui.api_client`` so it rides the user's bearer token
+    (``ui.api_client`` attaches one from the session cookie). The shared
+    ``common.runtime_settings.client.fetch_runtime_snapshot`` helper is no longer
+    used here: it authenticates with a **service** token, and the UI container
+    holds no ``KEYCLOAK_*`` environment, so that call would always go out
+    unauthenticated — and once plan 057 requires a credential on the snapshot
+    route, silently stop refreshing with no error and no broken page.
 
-    snapshot = fetch_runtime_snapshot(settings.API_BASE_URL)
+    This must never raise into the request cycle: ``refresh`` is called from the
+    Flask ``before_request`` hook. An ``ApiError`` — including
+    :data:`ui.api_client.STATUS_NO_RESPONSE` for a down API — is caught and the
+    values the cache already holds are preserved, exactly as the previous
+    helper's fallback did.
+    """
+    # Imported lazily: ui.api_client imports this module at module level, so a
+    # top-level import here is a cycle.
+    # pylint: disable=import-outside-toplevel
+    from ui import api_client
+    from ui.api_client import ApiError
+
+    try:
+        payload = api_client.get_json("/api/v1/settings/runtime-snapshot")
+        snapshot = RuntimeConfig(**payload)
+    except ApiError as exc:
+        logger.warning(
+            f"UI runtime-settings snapshot unavailable (status={exc.status_code}) "
+            "— keeping current values"
+        )
+        return
+    except (ValueError, TypeError) as exc:
+        logger.warning(
+            f"UI runtime-settings snapshot was invalid ({exc}) — keeping current values"
+        )
+        return
+
     if snapshot == RuntimeConfig():
         logger.warning(
             "UI runtime-settings snapshot was empty — keeping current values"

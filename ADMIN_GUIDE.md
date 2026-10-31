@@ -147,9 +147,73 @@ docker compose exec keycloak /opt/keycloak/bin/kc.sh bootstrap-admin user \
 
 Then sign in as `admin` with the `DEV_KEYCLOAK_ADMIN_PASSWORD` value from `.env`.
 
-To re-seed from the variable instead (a fresh realm import plus a fresh admin),
-recreate the `keycloak` database — safe because it is derived entirely from
-`deploy/keycloak/realm-wba.json.template` and holds no hand-made state:
+## Applying a realm change
+
+### Why editing the template is not enough
+
+The realm is imported on the very first boot against an empty Keycloak
+database. `--import-realm` is **create-only**: it imports a realm that does not
+exist and *skips* one that already does. Editing
+`deploy/keycloak/realm-wba.json.template` therefore has no effect on a stack
+that is already running — the file on disk says one thing, the live realm says
+another, and nothing errors to tell you.
+
+The symptom is silent. Compare the template against the running realm:
+
+```bash
+docker exec wba-ai-keycloak /opt/keycloak/bin/kcadm.sh get realms/wba
+```
+
+If what you edited is not in that output, the change has not been delivered.
+Restarting Keycloak does not help either — the realm already exists, so the
+import is skipped again.
+
+### The normal path
+
+Run the reconcile script. It delivers the current template's realm changes to
+the **running** instance with `kcadm.sh` — no database drop, no restart, no
+downtime, and it preserves every user, group, session and client secret:
+
+```bash
+./scripts/keycloak-realm-reconcile.sh
+```
+
+It is idempotent. Run it as often as you like:
+
+- First run, when the change is missing:
+  `✓ Added wba-web-audience to client wba-web`
+- Any run after that, when the change is already there:
+  `✓ wba-web audience mapper already present — nothing to do`
+
+A re-run issues no write. That property is what makes it safe to run against a
+live environment, and it only holds because every reconcile block checks the
+running realm before it writes.
+
+### Extending it for a new change
+
+The script currently reconciles one thing: the `wba-web` audience mapper.
+Adding a realm change is a two-part job, always in this order:
+
+1. Edit `deploy/keycloak/realm-wba.json.template` — it is the **source of
+   truth**, and the script's mapper must match it exactly.
+2. Add the matching check-and-update block to
+   `scripts/keycloak-realm-reconcile.sh`: read the current value, skip the write
+   if it already matches, otherwise apply it.
+
+The template alone changes nothing on a running stack (see above); the script
+alone puts the realm out of step with the file that defines it. Both are needed,
+and they must agree.
+
+> **The console is not a source of truth.** A change made by hand through the
+> admin console is invisible to the template and to the next reconcile. It will
+> be silently reverted the moment the realm is re-imported, and the next
+> reconcile will not carry it forward. Make realm changes in the template and
+> deliver them with the script.
+
+### Re-seeding from scratch — destructive, last resort only
+
+If the realm must be built again from the template and nothing in it needs to
+survive, recreate the `keycloak` database:
 
 ```bash
 docker compose stop keycloak
@@ -158,8 +222,29 @@ docker compose exec -T postgres createdb -U "$POSTGRES_USER" -O keycloak keycloa
 docker compose up -d keycloak
 ```
 
+**This destroys every user, group, session and client secret in the realm and
+causes a full authentication outage while it runs.** It is appropriate **only**
+on a local dev stack, where the realm holds nothing but the seeded `dev-*` users
+and is derived entirely from the template. It is **never** appropriate against an
+environment with real users — for that, use the reconcile script above.
+
 This drops **only** the `keycloak` database. The application's own database is a
 separate one on the same server and is not touched.
+
+### Verify a change
+
+After any realm change, confirm the running realm carries it. For the audience
+mapper:
+
+```bash
+docker exec wba-ai-keycloak /opt/keycloak/bin/kcadm.sh get clients -r wba \
+  -q clientId=wba-web --fields 'id,clientId,protocolMappers' --format json
+```
+
+The JSON must contain a `wba-web-audience` entry whose
+`"included.client.audience"` is `"wba-web"`. Use the same shape to check any
+other change you made — read the field you changed back from the running realm
+and compare it to the template.
 
 ## Disable the console again
 

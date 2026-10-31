@@ -3,6 +3,13 @@
 These tests sign real JWTs with a generated RSA keypair and point the JWKS
 client at the matching public key, so a stubbed signature check cannot pass.
 No network I/O and no Keycloak are involved.
+
+The interactive client's ``aud`` is produced by an ``oidc-audience-mapper`` in
+``deploy/keycloak/realm-wba.json.template`` — realm configuration, not code.
+``TestRealmShapedToken`` feeds the validator a token in exactly the shape that
+mapper must produce, so it is the only thing coupling that realm configuration
+to the validator's ``aud`` requirement: a realm that stops emitting the mapper
+fails this test rather than a browser login.
 """
 
 from __future__ import annotations
@@ -117,6 +124,7 @@ def _sign(
     iss: str = _ISSUER,
     exp_delta: int = 900,
     include_exp: bool = True,
+    include_aud: bool = True,
 ) -> str:
     """Sign a token with *private_pem* shaped like a Keycloak access token."""
     now = datetime.now(tz=timezone.utc)
@@ -124,11 +132,12 @@ def _sign(
         "sub": sub,
         "preferred_username": username,
         "iss": iss,
-        "aud": aud,
         "azp": azp,
         "iat": now,
         "realm_access": {"roles": list(roles)},
     }
+    if include_aud:
+        payload["aud"] = aud
     if include_exp:
         payload["exp"] = now + timedelta(seconds=exp_delta)
     return jwt.encode(payload, private_pem, algorithm="RS256", headers={"kid": "test-key"})
@@ -269,3 +278,45 @@ class TestValidateBearerToken:
         token = _sign(private_pem, roles=("wba-user",))
         principal = tokens.validate_bearer_token(token)
         assert principal.subject == "sub-1"
+
+
+class TestRealmShapedToken:
+    """Pin the claim shape the ``wba-web`` audience mapper must produce."""
+
+    def test_realm_shaped_token_validates(
+        self, private_pem: bytes, jwks: Any
+    ) -> None:
+        """A ``wba-web`` token carries its audience and validates."""
+        token = _sign(
+            private_pem,
+            sub="kc-user-id",
+            username="dev-user",
+            roles=("wba-user",),
+            aud=[_CLIENT_ID],
+            azp=_CLIENT_ID,
+            iss=_ISSUER,
+        )
+        principal = tokens.validate_bearer_token(token)
+        assert principal.subject == "kc-user-id"
+        assert principal.username == "dev-user"
+        assert principal.roles == frozenset({"wba-user"})
+
+    def test_realm_shaped_token_without_aud_is_rejected(
+        self, private_pem: bytes, jwks: Any
+    ) -> None:
+        """The same token without ``aud`` is rejected, naming the claim.
+
+        This is the realm gap that first showed up in a browser: the mapper
+        missing means no ``aud``, and the validator rejects it.
+        """
+        token = _sign(
+            private_pem,
+            sub="kc-user-id",
+            username="dev-user",
+            roles=("wba-user",),
+            azp=_CLIENT_ID,
+            iss=_ISSUER,
+            include_aud=False,
+        )
+        with pytest.raises(tokens.TokenValidationError, match="aud"):
+            tokens.validate_bearer_token(token)

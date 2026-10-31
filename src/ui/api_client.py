@@ -30,6 +30,7 @@ from typing import Any
 import requests
 from requests import RequestException as RequestsTransportError
 
+from ui.auth import SessionMissingError, TokenExchangeUnavailableError, get_token
 from ui.runtime_settings import runtime_settings
 from ui.settings import settings
 
@@ -141,14 +142,28 @@ def _call(
     """
     url = settings.API_BASE_URL.rstrip("/") + path
     transport = _transport or requests.request
+
+    headers: dict[str, str] = {}
     try:
-        return transport(
-            method,
-            url,
-            params=params,
-            json=json_body,
-            timeout=runtime_settings.get_int("HTTP_REQUEST_TIMEOUT"),
-        )
+        headers["Authorization"] = f"Bearer {get_token()}"
+    except (SessionMissingError, TokenExchangeUnavailableError):
+        # No session (tests, or an unauthenticated surface) — send without one.
+        # Plan 057 makes the API require it; until then this degrades exactly as
+        # today, so a missing cookie never masks a real API error.
+        pass
+
+    request_kwargs: dict[str, Any] = {
+        "params": params,
+        "json": json_body,
+        "timeout": runtime_settings.get_int("HTTP_REQUEST_TIMEOUT"),
+    }
+    # Omitting the key entirely when there is no token keeps the request byte-for
+    # -byte identical to the pre-auth client on an unauthenticated surface.
+    if headers:
+        request_kwargs["headers"] = headers
+
+    try:
+        return transport(method, url, **request_kwargs)
     except RequestsTransportError as exc:
         raise ApiError(STATUS_NO_RESPONSE, message=str(exc)) from exc
 

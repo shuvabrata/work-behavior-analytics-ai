@@ -775,23 +775,36 @@ delivery through the proxy, rendered account bar, and the login/logout round tri
 
 ## Done criteria
 
-- [ ] `pytest -m unit tests -q` exits 0, ≥ baseline + new tests
-- [ ] `mypy src/` exits 0; `pylint src --score=y` ≥ 9.0; `bandit` exits 0
-- [ ] `docker compose config -q` exits 0; `nginx -t` passes
-- [ ] `curl -s -o /dev/null -w '%{http_code}' https://localhost/api/v1/auth/login` → `302`
-- [ ] `curl -s -o /dev/null -w '%{http_code}' -X POST https://localhost/api/v1/auth/token` → `401`
-- [ ] `curl -s -o /dev/null -w '%{http_code}' https://localhost/app/graph` → `302` (no cookie)
-- [ ] `grep -c "/api/v1/chats" src/ui/assets/stream-bridge.js` → `0`
-- [ ] The UI snapshot fetch goes through `api_client` and carries a bearer:
+- [x] `pytest -m unit tests -q` exits 0, ≥ baseline + new tests — **2519 passed, 2 skipped** (baseline 2457)
+- [x] `mypy src/` exits 0; `pylint src --score=y` ≥ 9.0; `bandit` exits 0 — mypy 322 files clean; pylint 9.69; bandit exit 0
+- [x] `docker compose config -q` exits 0; `nginx -t` passes — both exit 0
+- [x] `curl -s -o /dev/null -w '%{http_code}' https://localhost/api/v1/auth/login` → `302`
+- [x] `curl -s -o /dev/null -w '%{http_code}' -X POST https://localhost/api/v1/auth/token` → `401`
+- [x] `curl -s -o /dev/null -w '%{http_code}' https://localhost/app/graph` → `302` (no cookie)
+- [x] `grep -c "/api/v1/chats" src/ui/assets/stream-bridge.js` → `0`
+- [x] The UI snapshot fetch goes through `api_client` and carries a bearer:
       `pytest -m unit tests/test_ui_runtime_snapshot_auth.py -q` passes, and
       `grep -c "fetch_runtime_snapshot" src/ui/runtime_settings.py` counts no
       *call* site (README handoff 3 — without this, 057 silently stops the UI
-      picking up runtime-settings edits)
-- [ ] The Step 3d mutation runs both failed on the expected assertion
-- [ ] **MANUAL GATE 1 passed** — chat streams word-by-word through `/app/stream/<id>` in the browser
-- [ ] No log line contains a token: `grep -rn "access_token\|refresh_token" src/app/api/auth/service.py | grep -i logger` → no matches
-- [ ] **No route gained a role dependency**: `grep -rn "Depends(require_" src/app/api/` shows only `src/app/api/auth/v1/router.py`
-- [ ] `plans/README.md` status row updated
+      picking up runtime-settings edits) — 6 tests pass; the only occurrence is
+      in a docstring
+- [x] The Step 3d mutation runs both failed on the expected assertion — the
+      bridge mutation was reproduced by the reviewer; **the rotation mutation this
+      plan prescribed was inert** (deleting `"aud"` from `require` does not
+      disable the check — PyJWT's `verify_aud` still enforces it via `audience=`).
+      A correct substitute was used instead and did fail on the intended
+      assertion. See Step 5 of plan 062.
+- [x] **MANUAL GATE 1 passed** — chat streams word-by-word through `/app/stream/<id>` in the browser
+- [x] No log line contains a token: `grep -rn "access_token\|refresh_token" src/app/api/auth/service.py | grep -i logger` → no matches
+- [x] **No route gained a role dependency**: `grep -rn "Depends(require_" src/app/api/` shows only `src/app/api/auth/v1/router.py`
+- [x] `plans/README.md` status row updated
+
+> **Caution when reading the curl criteria above.** Four of them passed *before*
+> the defects in the execution record were found, and one is actively misleading:
+> the `POST /app/stream/<id>` → `401` check (originally Step 3's) passed while the
+> route was unreachable, because the session guard answers before routing. A 401
+> from a guarded path is not evidence the route exists. Do not treat a green curl
+> against a guarded endpoint as proof of anything but the guard.
 
 ## STOP conditions
 

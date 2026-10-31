@@ -32,6 +32,8 @@ KC_SERVER="http://localhost:8080/auth"
 REALM="wba"
 WEB_CLIENT_ID="wba-web"
 WEB_MAPPER_NAME="wba-web-audience"
+INTERNAL_CLIENT_ID="wba-internal"
+INTERNAL_MAPPER_NAME="wba-internal-audience"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -98,34 +100,39 @@ kcadm() {
     docker exec "$CONTAINER" "$KCADM" "$@"
 }
 
-web_client_id() {
+client_uuid() {
+    local client_id_name="$1"
     local client_id
-    client_id="$(kcadm get clients -r "$REALM" -q clientId="$WEB_CLIENT_ID" --fields id --format csv --noquotes)"
+    client_id="$(kcadm get clients -r "$REALM" -q clientId="$client_id_name" --fields id --format csv --noquotes)"
     if [[ -z "$client_id" ]]; then
-        error "Client ${WEB_CLIENT_ID} not found in realm ${REALM}."
+        error "Client ${client_id_name} not found in realm ${REALM}."
         exit 1
     fi
     printf '%s' "$client_id"
 }
 
-reconcile_web_audience() {
-    local client_id="$1"
+reconcile_audience_mapper() {
+    local client_id_name="$1" mapper_name="$2"
+
+    local client_id
+    client_id="$(client_uuid "$client_id_name")"
 
     local mappers
     mappers="$(kcadm get "clients/${client_id}/protocol-mappers/models" -r "$REALM" --fields name --format csv --noquotes)"
-    if grep -qx "$WEB_MAPPER_NAME" <<<"$mappers"; then
-        info "wba-web audience mapper already present — nothing to do"
+    if grep -qx "$mapper_name" <<<"$mappers"; then
+        info "${client_id_name} audience mapper already present — nothing to do"
         return 0
     fi
 
     kcadm update "clients/${client_id}" -r "$REALM" \
-        -s 'protocolMappers=[{"name":"wba-web-audience","protocol":"openid-connect","protocolMapper":"oidc-audience-mapper","consentRequired":false,"config":{"included.client.audience":"wba-web","id.token.claim":"false","access.token.claim":"true"}}]' >/dev/null
+        -s "protocolMappers=[{\"name\":\"${mapper_name}\",\"protocol\":\"openid-connect\",\"protocolMapper\":\"oidc-audience-mapper\",\"consentRequired\":false,\"config\":{\"included.client.audience\":\"${client_id_name}\",\"id.token.claim\":\"false\",\"access.token.claim\":\"true\"}}]" >/dev/null
 
-    info "Added ${WEB_MAPPER_NAME} to client ${WEB_CLIENT_ID}"
+    info "Added ${mapper_name} to client ${client_id_name}"
 }
 
 reconcile_web_post_logout_uri() {
-    local client_id="$1"
+    local client_id
+    client_id="$(client_uuid "$WEB_CLIENT_ID")"
 
     local current
     current="$(kcadm get "clients/${client_id}" -r "$REALM" --format json \
@@ -149,6 +156,6 @@ require_admin_password
 require_app_public_base_url
 authenticate
 
-WEB_CLIENT_UUID="$(web_client_id)"
-reconcile_web_audience "$WEB_CLIENT_UUID"
-reconcile_web_post_logout_uri "$WEB_CLIENT_UUID"
+reconcile_audience_mapper "$WEB_CLIENT_ID" "$WEB_MAPPER_NAME"
+reconcile_audience_mapper "$INTERNAL_CLIENT_ID" "$INTERNAL_MAPPER_NAME"
+reconcile_web_post_logout_uri

@@ -21,6 +21,14 @@
 - **Planned at**: commit `94b57de3`, 2026-10-31
 - **Design reference**: `docs/design/authn-authz-design.md`, "Service accounts"
 - **This is step 3 of 9** in the Plan C sequence.
+- **Status**: **DONE** — executed 2026-10-31 in the live tree on
+  `feature/plan-c-keycloak`, left **uncommitted** at the operator's instruction.
+  Three execution rounds (a plan-defect STOP, the scoped-test fix, and the
+  operator's import-policy reversal). Gates: 2457 unit passed / 0 failed /
+  2 skipped, mypy exit 0, pylint 9.68, bandit exit 0, `docker compose config -q`
+  exit 0. **One criterion is operator-gated and still outstanding** — the live
+  token check (see Done criteria). Nothing is enforced yet; `/api/health` and
+  every `/api/v1` route remain open, which is 057's job.
 
 ## Why this matters
 
@@ -167,6 +175,7 @@ rule stands.
 - `src/common/auth/__init__.py` (create)
 - `src/common/auth/service_token.py` (create) — the cached client-credentials helper.
 - `src/common/runtime_settings/client.py` — attach a token, keep the fallback.
+- `Dockerfile.ui` — add `COPY src/common/auth/ ./common/auth/` (step 5b).
 - `src/connectors/producers/daemon_common.py` — one authed-request helper, three call sites.
 - `src/connectors/producers/{github/github_config,jira/jira_config,confluence/confluence_config}.py` — send the token.
 - `src/connectors/consumers/main.py` — verify no code change is needed.
@@ -176,6 +185,9 @@ rule stands.
 - `requirements.jira-producer.txt`, `requirements.confluence-producer.txt` — pin `requests`.
 - `tests/test_service_token.py`, `tests/test_runtime_settings_client_auth.py`, `tests/test_daemon_common_auth.py` (create)
 - `tests/producers/{github,jira,confluence}/test_*_main.py` — update the config-fetch call assertion.
+- `tests/test_settings_client.py` — **added to scope after the first execution
+  round** (see "Scope correction" below): the 5 degrade tests must tolerate the
+  new token warning without weakening their assertion.
 
 **Out of scope** (do NOT touch):
 - Any router or dependency — enforcement is plan 057.
@@ -255,9 +267,15 @@ def invalidate_service_token() -> None:
 
 ### 3. `src/common/runtime_settings/client.py`
 
-- Import `get_service_token` / `ServiceTokenError` **lazily inside the function**
-  (`# pylint: disable=import-outside-toplevel`), matching the module's existing
-  style of staying importable without heavy dependencies.
+- Import `get_service_token` / `ServiceTokenError` at **module level**, with
+  `from common.auth import ServiceTokenError, get_service_token`, placed with the
+  other first-party imports (next to `from common.logger import logger`). **No**
+  `import-outside-toplevel`, **no** lazy import, **no** `ModuleNotFoundError`
+  guard — see "Import policy" under step 5. `common.auth` imports only
+  `requests`, `os`, `threading`, `time`, `dataclasses` and `common.logger`, and
+  does not import back into this module, so there is no cycle.
+- **This makes `Dockerfile.ui` a hard dependency of this step** — see step 5b.
+  Without that COPY, the UI container dies at import of this module.
 - Fetch the token in its **own** `try`. On `ServiceTokenError`, log a distinct
   `logger.warning` naming the client id and send the request **without** the
   header. Do **not** short-circuit to `RuntimeConfig()` on a token failure: the
@@ -269,9 +287,49 @@ def invalidate_service_token() -> None:
   behaviour untouched. Do **not** print or log the token.
 - Exactly **one** `Authorization` occurrence in the file.
 
+> **Scope correction (added 2026-10-31, after the first execution round).**
+> `tests/test_settings_client.py` (`.venv`-visible, pre-existing, tracked since
+> `b0571c30`) was **omitted from this plan's scope list**. Its five
+> `TestFetchRuntimeSnapshot.test_falls_back_on_*` tests assert
+> `logger.warning` is called **exactly once**. With this step in place the
+> token-unavailable path emits a *second* warning, so all five fail on
+> `mock_warn.assert_called_once()`. This is a **plan defect**, not an executor
+> error: step 3 mandates the warning and this plan's own
+> `tests/test_runtime_settings_client_auth.py` asserts it, while a file the plan
+> never scoped forbids it. `tests/test_settings_client.py` is therefore **in
+> scope**. The fix must **strengthen**, not weaken, those tests: they must assert
+> the API-unreachable warning is among the calls **and** that the function still
+> degrades. Do **not** delete an assertion, switch to `assert_called()`, or
+> suppress the token warning. Recommended shape — `.env` is not guaranteed to
+> carry the service client id when the app test suite runs, so pin the
+> expectation explicitly:
+> ```python
+> with patch("common.runtime_settings.client.requests.get") as mock_get:
+>     ...
+>     with patch("common.runtime_settings.client.logger.warning") as mock_warn:
+>         config = fetch_runtime_snapshot("http://app:8000")
+>
+> assert isinstance(config, RuntimeConfig)
+> assert config.HTTP_REQUEST_TIMEOUT == 60
+> messages = [call.args[0] for call in mock_warn.call_args_list]
+> assert any("API unreachable" in message for message in messages)
+> ```
+> (`mock_warn.call_args_list` is the real `unittest.mock` attribute; do not
+> invent a `call_args_list`-looking helper.) `test_strips_trailing_slash` already
+> passes and must keep passing **without** modification — the executor achieved
+> that by attaching the header only when a token was obtained, which is the
+> behaviour this plan's step 3 wording mandates ("add `headers=…` when a token
+> was obtained"). Keep it that way.
+
 ### 4. `src/connectors/producers/daemon_common.py`
 
-Add one module-local pair rather than repeating headers and retry logic:
+Add `from common.auth import ServiceTokenError, get_service_token` and
+`from common.auth import invalidate_service_token` at **module level**, with the
+other `common.*` imports (next to `from common.logger import logger`). Remove the
+two `# pylint: disable=import-outside-toplevel` comments the first execution
+round added inside the helpers, and delete the in-function imports.
+
+Then add one module-local pair rather than repeating headers and retry logic:
 
 ```python
 def _auth_headers() -> dict[str, str]:
@@ -305,13 +363,23 @@ def _api_request(method: str, url: str, **kwargs: Any) -> httpx.Response:
 ### 5. The three producer config fetches
 
 In each of `github_config.py`, `jira_config.py`, `confluence_config.py`, keep the
-URL and params as they are and add the auth header via a **local import** of
-`common.auth` (these modules deliberately avoid heavy imports — `common.auth` pulls
-in only `requests`, `os`, `threading`, `time`):
+URL and params as they are and add the auth header via a **module-level import**.
+`common.auth` pulls in only `requests`, `os`, `threading`, `time` and
+`common.logger` — all already present in these modules' dependency closure — and
+it does **not** import back into `connectors` or `common.runtime_settings`, so
+there is no circular dependency and no reason to defer it.
 
 ```python
-    from common.auth import ServiceTokenError, get_service_token
+from common.auth import ServiceTokenError, get_service_token
+```
 
+Place it with the other module-level imports, in the repo's pylint import order
+(stdlib, third-party, then first-party `common.*` — `common.logger` is already
+there, put this next to it).
+
+Then, inside the function, keep the header construction:
+
+```python
     headers: dict[str, str] = {}
     try:
         headers = {"Authorization": f"Bearer {get_service_token()}"}
@@ -319,12 +387,70 @@ in only `requests`, `os`, `threading`, `time`):
         logger.warning("Service token unavailable — fetching connector config unauthenticated")
 ```
 
+**The `try`/`except ServiceTokenError` stays at the call site** — it is not a
+deferred-import workaround. It is the deliberate degradation policy: a Keycloak
+outage must not stop a scan. Only *import* failures must be allowed to surface
+loudly (see "Import policy" below).
+
 Pass `headers=headers` to the existing `requests.get`. Keep
 `params={"include_secrets": "true"}` and keep the existing
 `raise` on `requests.exceptions.RequestException`. Rationale for adding a
 credential to a route that is not yet enforced: the header is ignored today, so
 the change is inert until 057 — and it is exactly the change that keeps the
 producer working *at* 057.
+
+#### Import policy (applies to every import this plan adds)
+
+**No implicit-optional handling of imports.** A `ModuleNotFoundError` must
+propagate — it means the deployment is broken and the operator must see it, not
+a silently unauthenticated request. This is the opposite of the token-failure
+policy above, and the two must not be conflated:
+
+| Failure | Behaviour | Mechanism |
+|---|---|---|
+| `ServiceTokenError` (no secret, Keycloak down, bad response) | **degrade** — send unauthenticated, log one warning | `try`/`except ServiceTokenError` at the call site |
+| `ModuleNotFoundError` (file not deployed into the image) | **fail loudly** — propagate | nothing; a module-level import raises naturally |
+
+So: **no `import-outside-toplevel` for `common.auth` anywhere in this plan**, and
+no `try`/`except ModuleNotFoundError` / `ImportError` wrapper around it. The
+`# pylint: disable=import-outside-toplevel` comments the first execution round
+added to `daemon_common.py` and `client.py` are to be **removed** along with the
+comments that motivate them.
+
+### 5b. `Dockerfile.ui` — the UI image must carry `common.auth`
+
+`src/common/runtime_settings/client.py` is shared with the UI
+(`src/ui/runtime_settings.py` imports it via `common.runtime_settings`), and
+`Dockerfile.ui` copies `src/common/` **selectively**:
+
+```
+COPY src/common/__init__.py ./common/
+COPY src/common/logger.py ./common/
+COPY src/common/runtime_settings/ ./common/runtime_settings/
+```
+
+`src/common/auth/` is not in that list. With a module-level import in `client.py`
+this becomes fatal at import time in the UI container, which is the intended
+loud failure — but the fix is to **ship the module**, not to defer the import.
+Add to `Dockerfile.ui`, immediately after the `runtime_settings/` COPY:
+
+```dockerfile
+COPY src/common/auth/ ./common/auth/
+```
+
+Then update the explanatory comment block above those COPY lines if it enumerates
+what is deliberately excluded — `common/auth/` is now intentionally included, and
+the comment currently implies the list is exhaustive. Keep `command_n_control/`
+and `messaging/` excluded; do not widen this to `COPY src/common/ ./common/`.
+
+**Why this is safe:** the UI will never *hold* the service secret. `Dockerfile.ui`
+already does not copy `.env` and the UI service has no `KEYCLOAK_*` environment,
+so `common.auth.service_token` in that container can only ever raise
+`ServiceTokenError` ("no client credential configured") and degrade — which is
+exactly today's behaviour. Shipping the module makes the failure a *degrade*
+instead of a *crash*; it does not grant the UI a credential. The longer-term fix
+(routing the UI's snapshot fetch through `api_client` so it uses the user's
+bearer) remains plan 056's job — see the handoff below.
 
 ### 6. `deploy/keycloak/realm-wba.json.template`
 
@@ -456,6 +582,13 @@ Add the `headers=` argument to each expectation. This is a **legitimate
 signature change**, not accommodation of a broken test: the call site gained a
 parameter by design. Any *other* producer test that fails is a STOP condition.
 
+**Also update `tests/test_settings_client.py`** (in scope — see the Scope
+correction under step 3): the five `test_falls_back_on_*` degrade tests. Each
+must assert the API-unreachable warning is present in `mock_warn.call_args_list`
+**and** that the fallback still occurs. Do not weaken them to
+`assert_called()`, and do not suppress the new token warning. `test_strips_trailing_slash`
+stays untouched and must still pass.
+
 Then:
 
 | Command | Expected |
@@ -471,7 +604,11 @@ Then:
 | `grep -n "Authorization" src/common/runtime_settings/client.py` | exactly `1` match |
 | `grep -rn "Depends(require_" src/app/` | still **no** matches (enforcement is 057) |
 | `grep -rn "logger" src/common/auth/service_token.py src/connectors/producers/daemon_common.py src/connectors/producers/*/[a-z]*_config.py \| grep -i "bearer \|secret"` | **no** matches |
+| `grep -rn "from common.auth import" src/ --include='*.py'` | every match is at **column 0** — i.e. no indented (local) `common.auth` import survives anywhere |
+| `grep -rn "import-outside-toplevel" src/common/runtime_settings/client.py src/connectors/producers/daemon_common.py` | **no** matches |
+| `grep -c "COPY src/common/auth/" Dockerfile.ui` | `1` |
 | `PYTHONPATH=src python -c "import common.runtime_settings.client as c; print(c.fetch_runtime_snapshot('http://127.0.0.1:1').HTTP_REQUEST_TIMEOUT)"` | prints the default — the fallback survives with no network and no Keycloak |
+| `docker compose run --rm --no-deps --entrypoint python ui -c "import common.runtime_settings.client as c; print(c.fetch_runtime_snapshot('http://api:8000').HTTP_REQUEST_TIMEOUT)"` | prints a value (degraded) — **no `ModuleNotFoundError`**. This is the regression gate for step 5b; it fails today |
 
 **Live, after the Keycloak realm is re-imported** (step 6's note). Run in a
 **producer** container, not the API: the producers hold
@@ -552,16 +689,16 @@ a STOP condition.
 
 ## Done criteria
 
-- [ ] `pytest -m unit tests -q` exits 0, ≥ 2437 + new tests
-- [ ] `mypy src/` exits 0
-- [ ] `pylint src --score=y` ≥ 9.0
-- [ ] `bandit -c .bandit.yml -r src/ -lll` exits 0
-- [ ] `docker compose config -q` exits 0
-- [ ] `docker compose exec -T github-producer python -c "from common.auth.service_token import get_service_token; print(len(get_service_token()) > 0)"` prints `True`
-- [ ] No token or client secret appears in any log call: `grep -rn "logger" src/common/auth/service_token.py src/connectors/producers/daemon_common.py | grep -i "bearer \|secret"` → no matches
-- [ ] `grep -rn "Depends(require_" src/app/` → still no matches (enforcement is plan 057)
-- [ ] The "Required amendment to plan 057" section is carried into 057 (or reported to the operator if 057 is not to be edited yet)
-- [ ] `plans/README.md` status row updated
+- [x] `pytest -m unit tests -q` exits 0, ≥ 2437 + new tests — **2457 passed, 2 skipped, 0 failed**
+- [x] `mypy src/` exits 0 — no issues in 311 files
+- [x] `pylint src --score=y` ≥ 9.0 — **9.68**
+- [x] `bandit -c .bandit.yml -r src/ -lll` exits 0
+- [x] `docker compose config -q` exits 0
+- [ ] `docker compose exec -T github-producer python -c "from common.auth.service_token import get_service_token; print(len(get_service_token()) > 0)"` prints `True` — **OPERATOR-GATED, NOT YET RUN.** Blocked on (a) rebuilding a producer image so `common/auth/` is present (no source bind-mount for the connector services) and (b) re-importing the realm so the `oidc-audience-mapper` lands. Recipe: `plans/README.md`, "055 (execution record)". This is the one criterion that proves the token is real.
+- [x] No token or client secret appears in any log call: `grep -rn "logger" src/common/auth/service_token.py src/connectors/producers/daemon_common.py | grep -i "bearer \|secret"` → no matches
+- [x] `grep -rn "Depends(require_" src/app/` → still no matches (enforcement is plan 057)
+- [x] The "Required amendment to plan 057" section is carried into 057 (or reported to the operator if 057 is not to be edited yet) — carried in `plans/README.md`'s "Three amendments" list, which survives this file's deletion on merge
+- [x] `plans/README.md` status row updated
 
 ## STOP conditions
 
@@ -579,6 +716,8 @@ Stop and report if:
   and report, because the live verification cannot pass and the operator must
   generate a real secret first.
 - In-scope files have drifted from "Current state".
+- A sixth `tests/test_settings_client.py` failure appears beyond the five
+  `test_falls_back_on_*` tests — that file is scoped only for those five.
 
 ## Test plan
 

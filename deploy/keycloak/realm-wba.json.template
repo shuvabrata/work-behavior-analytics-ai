@@ -46,7 +46,20 @@
       "implicitFlowEnabled": false,
       "directAccessGrantsEnabled": false,
       "serviceAccountsEnabled": true,
-      "secret": "${KEYCLOAK_SERVICE_CLIENT_SECRET}"
+      "secret": "${KEYCLOAK_SERVICE_CLIENT_SECRET}",
+      "protocolMappers": [
+        {
+          "name": "wba-internal-audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "wba-internal",
+            "id.token.claim": "false",
+            "access.token.claim": "true"
+          }
+        }
+      ]
     }
   ],
   "users": [

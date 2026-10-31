@@ -132,7 +132,8 @@ class TestFetchRuntimeSnapshot:
         # All defaults.
         assert config.HTTP_REQUEST_TIMEOUT == 60
         assert config.TIMEZONE == "UTC"
-        mock_warn.assert_called_once()
+        messages = [call.args[0] for call in mock_warn.call_args_list]
+        assert any("API unreachable" in message for message in messages)
 
     def test_falls_back_on_timeout(self) -> None:
         """A timeout falls back to defaults and logs a warning."""
@@ -144,7 +145,8 @@ class TestFetchRuntimeSnapshot:
 
         assert isinstance(config, RuntimeConfig)
         assert config.HTTP_REQUEST_TIMEOUT == 60
-        mock_warn.assert_called_once()
+        messages = [call.args[0] for call in mock_warn.call_args_list]
+        assert any("API unreachable" in message for message in messages)
 
     def test_falls_back_on_http_error(self) -> None:
         """A non-200 status falls back to defaults and logs a warning."""
@@ -162,7 +164,8 @@ class TestFetchRuntimeSnapshot:
 
         assert isinstance(config, RuntimeConfig)
         assert config.HTTP_REQUEST_TIMEOUT == 60
-        mock_warn.assert_called_once()
+        messages = [call.args[0] for call in mock_warn.call_args_list]
+        assert any("API unreachable" in message for message in messages)
 
     def test_falls_back_on_invalid_json(self) -> None:
         """Invalid JSON response falls back to defaults and logs a warning."""
@@ -178,7 +181,8 @@ class TestFetchRuntimeSnapshot:
 
         assert isinstance(config, RuntimeConfig)
         assert config.HTTP_REQUEST_TIMEOUT == 60
-        mock_warn.assert_called_once()
+        messages = [call.args[0] for call in mock_warn.call_args_list]
+        assert any("invalid data" in message for message in messages)
 
     def test_falls_back_on_validation_error(self) -> None:
         """Response with invalid field values falls back to defaults."""
@@ -194,4 +198,5 @@ class TestFetchRuntimeSnapshot:
 
         assert isinstance(config, RuntimeConfig)
         assert config.HTTP_REQUEST_TIMEOUT == 60  # default
-        mock_warn.assert_called_once()
+        messages = [call.args[0] for call in mock_warn.call_args_list]
+        assert any("invalid data" in message for message in messages)

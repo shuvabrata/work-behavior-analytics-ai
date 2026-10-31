@@ -12,10 +12,12 @@ code.
 
 from __future__ import annotations
 
+import os
 from typing import Any
 
 import requests
 
+from common.auth import ServiceTokenError, get_service_token
 from common.logger import logger
 from common.runtime_settings.config import RuntimeConfig
 
@@ -45,8 +47,15 @@ def fetch_runtime_snapshot(
     """
     url = f"{api_base_url.rstrip('/')}/api/v1/settings/runtime-snapshot"
 
+    request_kwargs: dict[str, Any] = {"timeout": timeout}
     try:
-        resp = requests.get(url, timeout=timeout)
+        request_kwargs["headers"] = {"Authorization": f"Bearer {get_service_token()}"}
+    except ServiceTokenError:
+        client_id = os.environ.get("KEYCLOAK_SERVICE_CLIENT_ID", "wba-internal")
+        logger.warning(f"Service token unavailable for client_id={client_id} — fetching runtime snapshot unauthenticated")
+
+    try:
+        resp = requests.get(url, **request_kwargs)
         resp.raise_for_status()
         data: dict[str, Any] = resp.json()
         config = RuntimeConfig(**data)

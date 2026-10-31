@@ -1,19 +1,24 @@
 # Plan 054: Add the `Principal`, JWT validation, and the `auth_session` table
 
-> **Executor instructions**: Follow this plan step by step. Run every
-> verification command and confirm the expected result before moving to the
-> next step. If anything in the "STOP conditions" section occurs, stop and
-> report — do not improvise. When done, update the status row for this plan
-> in `plans/README.md` — unless a reviewer dispatched you and told you they
-> maintain the index.
+> **Executor instructions**: This plan is **one step with one manual gate**.
+> Work through the ordered parts (A–F) below in order, running each part's
+> verification commands and confirming the expected result as you go. When every
+> part is done and the full evidence block at the end of the step passes, stop
+> and hand back to the operator. Do not commit, push, or open a PR.
 >
-> **Every step ends with a MANUAL GATE.** After completing the step's automated
-> verification, stop and hand back to the operator for a human check. Do not
-> begin the next step until the operator replies `PASS`. If they reply `FAIL`,
-> treat it as a STOP condition.
+> If anything in the "STOP conditions" section occurs, stop and report — do not
+> improvise. When done, update the status row for this plan in `plans/README.md`
+> — unless a reviewer dispatched you and told you they maintain the index.
 >
 > **Drift check (run first)**: `git diff --stat 225d3639..HEAD -- src/app/api_main.py src/app/settings.py src/app/db/models/ src/app/alembic/versions/ requirements.api.txt`
-> Any mismatch against the "Current state" excerpts is a STOP condition.
+> Any mismatch against the "Current state" excerpts is a STOP condition **except**
+> the one expected, pre-verified drift below.
+>
+> *Expected drift (not a STOP)*: since `225d3639`, `src/app/settings.py` gained
+> `KEYCLOAK_CLIENT_SECRET: str = ""` and `KEYCLOAK_SERVICE_CLIENT_SECRET: str = ""`
+> (+7 lines, plan 053). Nothing else in the drift-check path changed. Those are
+> **client secrets minted in plan 056**, and this plan reads neither. Verify the
+> drift is *only* that, then proceed.
 
 ## Status
 
@@ -127,6 +132,7 @@ Run with the virtualenv active (`source .venv/bin/activate`).
 - `tests/test_auth_principal.py` (create)
 - `tests/test_auth_tokens.py` (create)
 - `tests/test_auth_session_model.py` (create)
+- `tests/test_auth_dependencies.py` (create)
 
 **Out of scope** (do NOT touch):
 - `src/app/api_main.py` — no router is wired to a dependency in this step.
@@ -136,32 +142,50 @@ Run with the virtualenv active (`source .venv/bin/activate`).
 - `src/common/` — service tokens are plan 055.
 - Any `catalog_metadata` / `graph_theme` change — ownership is plan 057.
 
-## Steps
+## Step 1: Build the `Principal`, token verification, dependencies, `auth_session`, and their tests
 
-### Step 1: Add `pyjwt[crypto]` to the API runtime
+One step, done in the six ordered parts below. Each part builds on the previous,
+but **do not hand back between parts** — work straight through to the single
+manual gate at the end of this step.
+
+### Part A — Add `pyjwt[crypto]` to the API runtime
 
 In `requirements.api.txt`, add, keeping the file's grouping:
 
 ```
-pyjwt[crypto]==2.12.0
+pyjwt[crypto]==2.15.1
 ```
 
 Do **not** add it to `requirements.ui.txt` — the UI never validates a token.
 
+**Why 2.15.1 and not an older pin.** This is a *security* dependency and the
+version is not a free choice. PyJWT 2.13.0 and 2.14.0 carry GitHub Security
+Advisories that touch exactly the code this plan relies on:
+
+| Release | Advisory | Relevance here |
+|---|---|---|
+| 2.13.0 | `GHSA-jq35-7prp-9v3f` | binds the JWT header `alg` to `PyJWK.algorithm_name` during verification — an algorithm-allowlist bypass |
+| 2.13.0 | `GHSA-993g-76c3-p5m4` | rejects non-`http(s)` URI schemes in `PyJWKClient` |
+| 2.13.0 | `GHSA-fhv5-28vv-h8m8` | preserves the cached JWK Set on fetch errors |
+| 2.14.0 | `GHSA-9v7f-9g4p-ffgj` | rejects automatic redirects when `PyJWKClient` fetches a JWKS |
+| 2.14.0 | `GHSA-2gx3-rcp4-g85q` | limits repeated JWKS refreshes triggered by unknown key IDs |
+| 2.14.0 | `GHSA-hxm8-2xgr-2p9m`, `GHSA-gvp8-978c-rx2q` | compact-JWS encoding rules; stops mutating the caller's `options` during decode |
+
+Pinning below 2.13.0 would ship a verifier with known advisories against its own
+JWKS path; pinning 2.13.0 would miss the 2.14.0 JWKS redirect and refresh-limit
+fixes. **2.15.1 is also what the API image already resolves to transitively**
+(`mcp[cli]==1.30.0` → `pyjwt[crypto]>=2.10.1`), so this pin makes an accidental
+cap on a security dependency explicit. Neither `mcp` nor `PyGithub` caps the
+upper bound.
+
 **Verify**: `grep -n '^pyjwt' requirements.api.txt` → the line
 **Verify**: `grep -c 'pyjwt' requirements.ui.txt` → `0`
-**Verify**: `pip install -r requirements.api.txt` → exit 0 (or
-`docker compose build api` if you cannot install locally)
+**Verify**: `python -c "import jwt; print(jwt.__version__)"` → prints the pinned
+version (the environment already has it; do **not** run a bare
+`pip install -r requirements.api.txt` — it would churn the shared venv for no
+gain, and `docker compose build api` is out of scope for this plan)
 
-> ### 🚦 MANUAL GATE 1 — dependency
->
-> Operator confirms `pyjwt[crypto]` is in the API file only, and that
-> `cryptography` is still pinned (it is `pyjwt[crypto]`'s backend).
-> Wait for `PASS`.
-
----
-
-### Step 2: Create the `Principal`
+### Part B — Create the `Principal`
 
 Create `src/app/auth/__init__.py`:
 
@@ -226,15 +250,7 @@ class Principal:
 **Verify**: `PYTHONPATH=src python -c "from app.auth import Principal; p=Principal('s','u',frozenset({'wba-admin'})); print(p.is_admin, p.has_role('wba-user'))"` → `True False`
 **Verify**: `mypy src/app/auth/` → exit 0
 
-> ### 🚦 MANUAL GATE 2 — principal
->
-> Operator confirms the dataclass is frozen, has all four attributes, and that
-> `is_admin` is derived rather than stored.
-> Wait for `PASS`.
-
----
-
-### Step 3: Implement JWKS-backed token verification and role mapping
+### Part C — Implement JWKS-backed token verification and role mapping
 
 Create `src/app/auth/tokens.py`. It must:
 
@@ -242,11 +258,33 @@ Create `src/app/auth/tokens.py`. It must:
    and **assert** `discovery["issuer"] == settings.KEYCLOAK_ISSUER`. On mismatch,
    log **one** ERROR line naming both strings and raise — a mismatch must never
    be silently tolerated.
-2. Build a `jwt.PyJWKClient` from the discovery document's `jwks_uri`. PyJWKClient
-   caches keys and refreshes on an unknown `kid`, so key rotation needs no restart.
-   Use a bounded `cache_keys=True` client; construct it lazily on first use (so a
-   Keycloak that is down at API startup does not block boot — the design requires
-   Keycloak's availability to affect only new logins).
+2. Build a `jwt.PyJWKClient` from the realm's **internal** JWKS URL. Do **not**
+   use the discovery document's `jwks_uri` directly: Keycloak builds it from
+   `KC_HOSTNAME`, which `docker-compose.yml` sets to the **public** origin
+   (`https://localhost/auth`), so discovery returns
+   `https://localhost/auth/realms/wba/protocol/openid-connect/certs`. Inside the
+   API container `localhost` is the API container itself, and the public URL is
+   answered only by the `nginx` service — a `PyJWKClient` pointed at it fails
+   every fetch (`ConnectionRefusedError`) and rejects every bearer token.
+   Derive the internal URL instead: take the discovery document's `jwks_uri` and
+   replace its origin with `KEYCLOAK_INTERNAL_URL`'s.
+
+   ```python
+   from urllib.parse import urlsplit, urlunsplit
+
+   internal = urlsplit(settings.KEYCLOAK_INTERNAL_URL)   # http://keycloak:8080/auth/realms/wba
+   public = urlsplit(discovery["jwks_uri"])              # https://localhost/auth/realms/wba/...
+   jwks_uri = urlunsplit((internal.scheme, internal.netloc, public.path, "", ""))
+   # → http://keycloak:8080/auth/realms/wba/protocol/openid-connect/certs
+   ```
+
+   This is the same public-vs-internal split the design records for the issuer
+   (`docs/design/authn-authz-design.md`, "Issuer URL"), applied to the one other
+   URL Keycloak hands back. PyJWKClient caches keys and refreshes on an unknown
+   `kid`, so key rotation needs no restart. Use a bounded `cache_keys=True`
+   client; construct it lazily on first use (so a Keycloak that is down at API
+   startup does not block boot — the design requires Keycloak's availability to
+   affect only new logins).
 3. Verify with an **explicit algorithm allowlist** (`["RS256"]`), plus
    `issuer=settings.KEYCLOAK_ISSUER`, `audience=settings.KEYCLOAK_CLIENT_ID`,
    `options={"require": ["exp", "iss", "aud", "sub"]}`.
@@ -285,18 +323,30 @@ Requirements that are easy to get wrong and that the tests check:
 **Verify**: `PYTHONPATH=src python -c "import app.auth.tokens"` → no error
 **Verify**: `mypy src/app/auth/` → exit 0
 **Verify**: `bandit -c .bandit.yml -r src/app/auth/ -lll` → exit 0
+**Verify** (live, against the running stack): from **inside the API container**,
+the internal JWKS URL actually resolves. This is the check that catches the
+`jwks_uri` host bug above:
 
-> ### 🚦 MANUAL GATE 3 — verification logic
->
-> Operator reads `tokens.py` and confirms: the issuer assertion is present,
-> algorithms are an explicit allowlist (not derived from the token header),
-> unknown roles are dropped, and an empty role set raises rather than
-> downgrading.
-> Wait for `PASS`.
+```bash
+docker compose exec -T api python -c "
+import json, urllib.request
+from app.settings import settings
+from app.auth.tokens import _internal_jwks_uri  # or however you named it
+d = json.load(urllib.request.urlopen(
+    settings.KEYCLOAK_INTERNAL_URL + '/.well-known/openid-configuration', timeout=10))
+uri = _internal_jwks_uri(d)
+print(uri)
+print(len(json.load(urllib.request.urlopen(uri, timeout=10))['keys']), 'keys')
+"
+```
 
----
+→ prints an `http://keycloak:8080/...` URL and `2 keys`. A `https://localhost/...`
+URL, or a `ConnectionRefusedError`, means step 2 was not applied. If running the
+stack is not possible, substitute a unit test that asserts
+`_internal_jwks_uri({"jwks_uri": "https://localhost/auth/realms/wba/protocol/openid-connect/certs"})`
+returns the `http://keycloak:8080/...` form — but prefer the live check.
 
-### Step 4: Create the role dependencies (defined, not yet wired)
+### Part D — Create the role dependencies (defined, not yet wired)
 
 Create `src/app/auth/dependencies.py`:
 
@@ -365,15 +415,7 @@ Behavioural contract the tests enforce:
 **Verify**: `PYTHONPATH=src python -c "from app.auth.dependencies import get_principal, require_user, require_admin, require_service; print('ok')"` → `ok`
 **Verify**: `mypy src/app/auth/` → exit 0
 
-> ### 🚦 MANUAL GATE 4 — dependencies
->
-> Operator confirms: 401 vs 403 are not conflated; a no-role token is 403;
-> every denial logs the required role and path.
-> Wait for `PASS`.
-
----
-
-### Step 5: Add the `auth_session` model and migration
+### Part E — Add the `auth_session` model and migration
 
 Create `src/app/db/models/auth_session.py`. Follow the style of
 `src/app/db/models/catalog_metadata.py` exactly (`Mapped` / `mapped_column`,
@@ -416,18 +458,9 @@ cd src/app && alembic upgrade head
 **Verify**: `cd src/app && alembic upgrade head --sql | grep -c 'CREATE TABLE auth_session'` → `1`
 **Verify**: `grep -c "AuthSession" src/app/db/models/__init__.py` → `1`
 
-> ### 🚦 MANUAL GATE 5 — migration
->
-> Operator runs `docker compose exec -T postgres psql -U "$POSTGRES_USER" -d
-> "$POSTGRES_DB" -c '\d auth_session'` and confirms every column above, the
-> unique index on `session_id_hash`, and that no existing table changed.
-> Wait for `PASS`.
+### Part F — Write the tests with real signed tokens
 
----
-
-### Step 6: Write the tests with real signed tokens
-
-Three new unit-test files. **No Keycloak, no mocks of signature validation** —
+Four new unit-test files. **No Keycloak, no mocks of signature validation** —
 generate an RSA keypair with `cryptography`, sign real JWTs, and point the JWKS
 client at the test key. This is what makes the absence of an `AUTH_ENABLED`
 switch tolerable.
@@ -471,22 +504,71 @@ route per dependency, using `httpx.ASGITransport`. Do **not** touch
 `app.api_main` to make these pass.
 
 **Verify**: `pytest -m unit tests/test_auth_principal.py tests/test_auth_tokens.py tests/test_auth_session_model.py tests/test_auth_dependencies.py -q` → all pass
-**Verify**: `pytest -m unit tests -q` → ≥ **2391 + N** pass, 0 fail
-**Verify**: `mypy src/` → exit 0
-**Verify**: `pylint src --score=y` → ≥ 9.0
 
-> ### 🚦 MANUAL GATE 6 — tests
+### Step 1 evidence — run every line and paste the output into your report
+
+```bash
+grep -n '^pyjwt' requirements.api.txt
+grep -c 'pyjwt' requirements.ui.txt
+PYTHONPATH=src python -c "from app.auth.dependencies import get_principal, require_user, require_admin, require_service; print('ok')"
+cd src/app && alembic heads && cd -
+cd src/app && alembic upgrade head --sql | grep -c 'CREATE TABLE auth_session' && cd -
+grep -c "AuthSession" src/app/db/models/__init__.py
+pytest -m unit tests/test_auth_principal.py tests/test_auth_tokens.py tests/test_auth_session_model.py tests/test_auth_dependencies.py -q
+pytest -m unit tests -q
+mypy src/
+pylint src --score=y
+bandit -c .bandit.yml -r src/ -lll
+grep -rn "Depends(require_" src/app/ || echo "no matches (expected)"
+grep -rn "logger.*token" src/app/auth/ || echo "no token logging (expected)"
+```
+
+Expected: `pyjwt` line present; `0`; `ok`; one head; `1`; `1`; the four auth
+files all pass; ≥ **2391 + N** passed/0 failed; mypy exit 0; pylint ≥ 9.0;
+bandit exit 0; no `Depends(require_` matches; no token in a log statement.
+
+> ### 🚦 MANUAL GATE — the whole step
 >
-> Operator confirms the auth tests use real signed tokens (no
-> `jwt.decode` monkeypatching), that `pytest -m unit tests -q` did not drop any
-> existing test, and that no route in `app.api_main` changed.
-> Wait for `PASS`.
+> Operator reviews the evidence block above plus the full `git diff`, and
+> confirms all of the following. Reply `PASS` to accept the step, or `FAIL`
+> (a STOP condition) with the specific item that failed.
+>
+> **Dependency**
+> - `pyjwt[crypto]` is in `requirements.api.txt` only, and `cryptography` is
+>   still pinned (it is `pyjwt[crypto]`'s backend).
+>
+> **Principal**
+> - The dataclass is frozen, has all four attributes, and `is_admin` is
+>   derived rather than stored.
+>
+> **Token verification**
+> - The issuer assertion is present; algorithms are an explicit allowlist (not
+>   derived from the token header); unknown roles are dropped; an empty role
+>   set raises rather than downgrading to `wba-user`.
+> - No token value reaches a log statement.
+>
+> **Dependencies**
+> - 401 vs 403 are not conflated; a no-role token is 403; every denial logs the
+>   required role and path.
+>
+> **Migration**
+> - `docker compose exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d
+>   "$POSTGRES_DB" -c "\d auth_session"'` shows every column in the table above,
+>   the unique index on `session_id_hash`, and no existing table changed. (The
+>   `sh -c` wrapper matters: `POSTGRES_USER` exists inside the `postgres`
+>   container, not in your shell — an unwrapped `-U "$POSTGRES_USER"` expands to
+>   empty and fails with `role does not exist`.)
+>
+> **Tests and blast radius**
+> - The auth tests use real signed tokens (no `jwt.decode` monkeypatching).
+> - `pytest -m unit tests -q` did not drop any existing test (≥ 2391 + N).
+> - No route in `app.api_main` changed — every route is still public.
 
 ---
 
 ## Test plan
 
-Covered in Step 6 above. The critical properties, in order of value:
+Covered in Part F above. The critical properties, in order of value:
 
 1. **Real signature verification** with a test keypair — the tests fail if
    verification is stubbed.
@@ -505,7 +587,12 @@ Covered in Step 6 above. The critical properties, in order of value:
 - [ ] `alembic heads` shows exactly one head
 - [ ] `grep -rn "Depends(require_" src/app/` → no matches (nothing wired yet)
 - [ ] `curl -sf https://localhost/api/health` still returns healthy with no `Authorization` header (the API is still open)
-- [ ] No token value appears in any log statement (`grep -rn "logger.*token" src/app/auth/` shows only role/subject/username fields)
+- [ ] The JWKS client is pointed at the **internal** URL. Read every
+      `logger.` call in `src/app/auth/` and confirm none interpolates the token,
+      an `Authorization` header, or a raw claim dict; allowed fields are `sub`,
+      `username`, the resolved roles, and the path. (`grep -c "logger.*token"`
+      will legitimately be ≥ 1 — a single `logger.error(...)` without a token
+      argument is correct — so read the lines rather than trusting the count.)
 - [ ] `plans/README.md` status row updated
 
 ## STOP conditions
@@ -518,6 +605,14 @@ Stop and report (do not improvise) if:
   imported in `__init__.py`.
 - PyJWT's `audience` handling cannot express the `azp` check you need without
   a custom decode — report rather than weakening the check.
+- The `wba-internal` (service-account) token's `aud` claim does not carry
+  `wba-web`. The realm template
+  (`deploy/keycloak/realm-wba.json.template`) declares no audience mapper on
+  either client, so this is **expected** — do **not** "fix" it by adding a
+  mapper or by loosening `audience=` to unverified. Record the observed `aud`
+  and `azp` values in your report and continue: plan 055 decides how the service
+  token is accepted. This plan's own tests mint tokens with `aud="wba-web"`, so
+  they pass regardless.
 - Any existing unit test starts failing. Nothing in this step changes a route,
   so a failure means a shared import (e.g. `db/models/__init__.py`) broke.
 - An in-scope file has drifted from "Current state".

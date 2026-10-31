@@ -13,7 +13,9 @@
  *                               true before it fires.
  *
      *   runStream(pendingData, sessionData, timeConfig) — returns a Promise that:
- *     1. Opens a fetch() POST to /api/v1/chats/{session_id}/stream
+ *     1. Opens a fetch() POST to /app/stream/{session_id} — the Dash SSE proxy,
+ *        which attaches the bearer token server-side. The browser must never
+ *        call /api/v1 directly: it holds a session cookie, not a token.
  *     2. Reads the SSE stream chunk-by-chunk, updating the DOM in real time:
  *          think-body-{client_id}  → thinking/progress text
  *          msg-{client_id}         → streamed response text
@@ -212,7 +214,7 @@ window.dash_clientside.stream = {
 
             /* ── Fetch ────────────────────────────────────────────────── */
 
-            fetch('/api/v1/chats/' + sessionId + '/stream', {
+            fetch('/app/stream/' + sessionId, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ message: message })

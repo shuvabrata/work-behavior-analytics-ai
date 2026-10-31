@@ -80,34 +80,50 @@ def test_ui_seed_does_not_clobber_a_populated_shared_cache() -> None:
     assert seed.HTTP_REQUEST_TIMEOUT == urs.settings.HTTP_REQUEST_TIMEOUT
 
 
-def test_refresh_is_wired_to_a_real_trigger_and_bounded() -> None:
+def test_refresh_is_wired_to_a_real_trigger_and_bounded(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """``refresh`` must be reachable, and ``refresh_if_stale`` must rate-limit it.
 
     ``refresh`` had no caller at Step 6b, so the UI's cache only ever held its
     import-time env seed and a runtime setting edited in the Settings UI never
     reached the UI. The Flask ``before_request`` hook drives it through
     ``refresh_if_stale``; 30 requests inside one TTL must cost one API fetch.
+
+    The fetch goes through ``ui.api_client`` (plan 056, Step 2d) rather than the
+    shared service-token helper, so the stub is the client's transport seam and
+    the token is stubbed alongside it.
     """
     from unittest.mock import patch
 
-    from common.runtime_settings import RuntimeConfig
+    from ui import api_client
     from ui import runtime_settings as urs
 
-    with patch(
-        "common.runtime_settings.fetch_runtime_snapshot",
-        return_value=RuntimeConfig(HTTP_REQUEST_TIMEOUT=999),
-    ):
-        urs._last_refresh = 0.0
-        calls = {"n": 0}
-        original = urs.refresh
+    class _FakeResponse:
+        status_code = 200
+        text = ""
 
-        def counted() -> None:
-            calls["n"] += 1
-            original()
+        @property
+        def ok(self) -> bool:
+            return True
 
-        with patch.object(urs, "refresh", counted):
-            for _ in range(30):
-                urs.refresh_if_stale()
+        def json(self) -> dict[str, Any]:
+            return {"HTTP_REQUEST_TIMEOUT": 999}
+
+    monkeypatch.setattr(api_client, "_transport", lambda *a, **k: _FakeResponse())
+    monkeypatch.setattr(api_client, "get_token", lambda: "tok")
+
+    urs._last_refresh = 0.0
+    calls = {"n": 0}
+    original = urs.refresh
+
+    def counted() -> None:
+        calls["n"] += 1
+        original()
+
+    with patch.object(urs, "refresh", counted):
+        for _ in range(30):
+            urs.refresh_if_stale()
 
     assert calls["n"] == 1, calls
     assert urs.runtime_settings.get_int("HTTP_REQUEST_TIMEOUT") == 999

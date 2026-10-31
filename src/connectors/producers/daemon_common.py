@@ -43,6 +43,7 @@ import aio_pika
 import httpx
 import pika
 
+from common.auth import ServiceTokenError, get_service_token, invalidate_service_token
 from common.command_n_control.models import CommandEnvelope, CommandStatusUpdate
 from common.logger import logger
 from common.runtime_settings import RuntimeConfigCache
@@ -176,6 +177,32 @@ def _api_base() -> str:
     return os.environ.get("API_SERVER", "http://localhost:8000").rstrip("/")
 
 
+def _auth_headers() -> dict[str, str]:
+    """Return an Authorization header for the app API, or {} if unavailable.
+
+    A token failure must not stop status reporting: the request then goes out
+    unauthenticated and the caller's existing ``except`` block handles the
+    result.
+    """
+    try:
+        return {"Authorization": f"Bearer {get_service_token()}"}
+    except ServiceTokenError:
+        client_id = os.environ.get("KEYCLOAK_SERVICE_CLIENT_ID", "wba-internal")
+        logger.warning(f"Service token unavailable for client_id={client_id} — sending daemon request unauthenticated")
+        return {}
+
+
+def _api_request(method: str, url: str, **kwargs: Any) -> httpx.Response:
+    """Send an authenticated request, retrying once with a fresh token on 401."""
+    with httpx.Client(timeout=10) as client:
+        send = getattr(client, method.lower())
+        resp: httpx.Response = send(url, headers=_auth_headers(), **kwargs)
+        if resp.status_code == 401:
+            invalidate_service_token()
+            resp = send(url, headers=_auth_headers(), **kwargs)
+    return resp
+
+
 def _reap_children(signum: int, frame: Any) -> None:  # pylint: disable=unused-argument
     """SIGCHLD handler — record finished children so the loop can reconcile them.
 
@@ -290,14 +317,13 @@ def _reconcile_startup_orphans(container_name: str) -> None:
     """
     url = f"{_api_base()}/api/v1/commands/"
     try:
-        with httpx.Client(timeout=10) as client:
-            resp = client.get(url, params={
-                "target": container_name,
-                "status": "running",
-                "limit": 100,
-            })
-            resp.raise_for_status()
-            commands = resp.json().get("commands", [])
+        resp = _api_request("GET", url, params={
+            "target": container_name,
+            "status": "running",
+            "limit": 100,
+        })
+        resp.raise_for_status()
+        commands = resp.json().get("commands", [])
     except (httpx.HTTPError, ValueError, AttributeError) as exc:
         logger.warning(f"Startup orphan reconciliation skipped — could not list commands: {exc}")
         return
@@ -324,10 +350,9 @@ def _update_status(command_id: uuid.UUID, update: CommandStatusUpdate) -> None:
     payload = update.model_dump(mode="json", exclude_none=True)
     logger.debug(f"PATCH {url} {payload}")
     try:
-        with httpx.Client(timeout=10) as client:
-            resp = client.patch(url, json=payload)
-            logger.debug(f"Response status={resp.status_code} body={resp.text}")
-            resp.raise_for_status()
+        resp = _api_request("PATCH", url, json=payload)
+        logger.debug(f"Response status={resp.status_code} body={resp.text}")
+        resp.raise_for_status()
     except httpx.HTTPError as exc:
         logger.warning(f"Failed to update command status ({url} → {payload.get('status')}): {exc}")
 
@@ -340,10 +365,9 @@ def _get_command_status(command_id: uuid.UUID) -> str | None:
     """
     url = f"{_api_base()}/api/v1/commands/{command_id}"
     try:
-        with httpx.Client(timeout=10) as client:
-            resp = client.get(url)
-            resp.raise_for_status()
-            return str(resp.json().get("status"))
+        resp = _api_request("GET", url)
+        resp.raise_for_status()
+        return str(resp.json().get("status"))
     except (httpx.HTTPError, ValueError, AttributeError) as exc:
         logger.warning(f"Failed to read command status ({url}): {exc}")
         return None

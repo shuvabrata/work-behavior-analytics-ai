@@ -1,0 +1,126 @@
+{
+  "realm": "wba",
+  "enabled": true,
+  "sslRequired": "external",
+  "accessTokenLifespan": 900,
+  "ssoSessionIdleTimeout": 3600,
+  "ssoSessionMaxLifespan": 28800,
+  "roles": {
+    "realm": [
+      { "name": "wba-admin", "description": "Full administrative access to WBA" },
+      { "name": "wba-user", "description": "Standard authenticated WBA user" },
+      { "name": "wba-service", "description": "Machine-to-machine service account role" }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "wba-web",
+      "name": "WBA Web (browser / BFF)",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "bearerOnly": false,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "secret": "${KEYCLOAK_CLIENT_SECRET}",
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "${APP_PUBLIC_BASE_URL}/app"
+      },
+      "protocolMappers": [
+        {
+          "name": "wba-web-audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "wba-web",
+            "id.token.claim": "false",
+            "access.token.claim": "true"
+          }
+        }
+      ],
+      "redirectUris": [
+        "${APP_PUBLIC_BASE_URL}/api/v1/auth/callback"
+      ],
+      "webOrigins": [
+        "${APP_PUBLIC_BASE_URL}"
+      ]
+    },
+    {
+      "clientId": "wba-internal",
+      "name": "WBA Internal (service account)",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "bearerOnly": false,
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": true,
+      "secret": "${KEYCLOAK_SERVICE_CLIENT_SECRET}",
+      "protocolMappers": [
+        {
+          "name": "wba-internal-audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "wba-internal",
+            "id.token.claim": "false",
+            "access.token.claim": "true"
+          }
+        }
+      ]
+    }
+  ],
+  "users": [
+    {
+      "username": "dev-admin",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "dev-admin@wba.invalid",
+      "firstName": "Dev",
+      "lastName": "Admin",
+      "realmRoles": [
+        "wba-admin",
+        "wba-user"
+      ],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "${DEV_WBA_ADMIN_PASSWORD}",
+          "temporary": false
+        }
+      ]
+    },
+    {
+      "username": "dev-user",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "dev-user@wba.invalid",
+      "firstName": "Dev",
+      "lastName": "User",
+      "realmRoles": [
+        "wba-user"
+      ],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "${DEV_WBA_USER_PASSWORD}",
+          "temporary": false
+        }
+      ]
+    },
+    {
+      "username": "service-account-wba-internal",
+      "enabled": true,
+      "serviceAccountClientId": "wba-internal",
+      "realmRoles": [
+        "wba-service"
+      ]
+    }
+  ]
+}

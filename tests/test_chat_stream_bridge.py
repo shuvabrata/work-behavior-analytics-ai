@@ -168,8 +168,9 @@ def test_stream_bridge_js_formats_time_using_iso_format():
     assert "toISOString" in content
 
 
-def test_stream_bridge_js_handles_stream_endpoint():
-    """stream-bridge.js calls the /stream endpoint."""
+def test_stream_bridge_calls_the_app_proxy_not_the_api_directly():
+    """The browser must call the cookie-authenticated Dash proxy, never /api/v1."""
     with open(_STREAM_BRIDGE, encoding="utf-8") as fh:
         content = fh.read()
-    assert "/stream" in content
+    assert "'/app/stream/' + sessionId" in content
+    assert "/api/v1/chats" not in content

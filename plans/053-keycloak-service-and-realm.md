@@ -40,9 +40,12 @@ written mid-session and is stale.
 | 2 — DB bootstrap | ✅ **PASS** (operator). Committed as `4257ad65`. |
 | 3 — existing-volume role/DB | ✅ **PASS** (operator). Committed as `96217cae`. |
 | 4 — realm as code | ✅ **PASS** (operator). Committed as `64bc5f2a`. |
-| 5 — compose service + nginx | ⛔ **STOPPED 2026-10-31**, then **re-scoped 2026-10-31** with five operator decisions (below). Edits are in the tree and correct; one re-run needed to apply the amended service block and verify. |
+| 5 — compose service + nginx | ✅ **PASS 2026-10-31** (operator validated the full runbook). Four defects found and fixed along the way — defective healthcheck, stale nginx inode, `KC_HOSTNAME_STRICT` no-op, and the missing `/auth/resources/` proxy. See the Gate 5 record. |
 | 5b — admin guide | ✅ **DONE 2026-10-31** — `ADMIN_GUIDE.md` written; all four Step 5b verify commands pass. The recovery command was tested verbatim against the real 26.8.1 image (`Created temporary admin user with username admin`, exit 0). Also deleted `deploy/keycloak/keycloak.env.example` (decision 8). |
-| 6–8 | ⬜ Not started. |
+| 6 — variables + issuer exactness | ✅ **DONE 2026-10-31** — `.env.example` carries all six `FIXME` credentials; `setup.sh` generates six. Issuer verified **identical from the host and from inside the container**: `issuer = https://localhost/auth/realms/wba` both ways. |
+| 7 — design doc "Issuer URL" | ✅ **DONE 2026-10-31** — open item replaced with the settled two-URL design, the image pin, and the `/auth/realms/*` + `/auth/resources/*` allowlist. Verifies: `"Open item for Plan C"` → `0`, `KEYCLOAK_INTERNAL_URL` → `2`. |
+| 8 — production checklist | ✅ **DONE 2026-10-31** — "Production checklist" added to Deployment Topologies (12 rows). Verifies: `"Production checklist"` → `1`, `KC_HOSTNAME_ADMIN` → `2`. |
+| — | Plan 053 is **complete** except the documented account-console `401` limitation (see Gate 5 record + the design doc's Future Considerations). Next in the Plan C sequence: **plan 054**. |
 
 **Five decisions taken on 2026-10-31 that amend Step 5** (all operator-approved):
 

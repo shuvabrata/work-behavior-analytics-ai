@@ -315,7 +315,7 @@ else
 fi
 
 # ── Keycloak credentials ────────────────────────────────────────────────────
-# All five are generated, never prompted: they are secrets the operator has no
+# All six are generated, never prompted: they are secrets the operator has no
 # reason to choose, and generating them keeps every one out of git (none has a
 # default in docker-compose.yml). Same idempotent pattern as the encryption
 # key — a re-run must NOT rotate these, because KEYCLOAK_DB_PASSWORD is the
@@ -329,8 +329,9 @@ KEYCLOAK_SECRET_KEYS=(
     "KEYCLOAK_DB_PASSWORD"
     "KEYCLOAK_CLIENT_SECRET"
     "KEYCLOAK_SERVICE_CLIENT_SECRET"
-    "DEV_ADMIN_PASSWORD"
-    "DEV_USER_PASSWORD"
+    "DEV_WBA_ADMIN_PASSWORD"
+    "DEV_WBA_USER_PASSWORD"
+    "DEV_KEYCLOAK_ADMIN_PASSWORD"
 )
 
 for KEY in "${KEYCLOAK_SECRET_KEYS[@]}"; do
@@ -397,7 +398,7 @@ echo "    • Neo4j:          ${NEO4J_USER} / ${NEO4J_PASS}  (bolt://neo4j:7687)
 echo "    • RabbitMQ:       ${RABBIT_USER} / ${RABBIT_PASS}      (mgmt UI: http://localhost:15672)"
 echo "    • LLM model:      ${LLM_MODEL_VAL}"
 echo "    • Encryption key: auto-generated"
-echo "    • Keycloak:       5 credentials auto-generated"
+echo "    • Keycloak:       6 credentials auto-generated"
 echo ""
 
 # ── Offer to start ──────────────────────────────────────────────────────────

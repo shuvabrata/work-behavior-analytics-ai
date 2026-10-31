@@ -26,40 +26,72 @@
 - **Category**: security
 - **Planned at**: commit `225d3639`, 2026-10-30
 
-### Execution progress — RESUME AT STEP 5
+### Execution progress — RESUME AT STEP 5 (re-run; five decisions now settled)
 
-Session paused **2026-10-30** after Gate 4 (Steps 1–4 complete and approved).
-Steps 1–3 are committed by the operator (`0baf39d5`, `4257ad65`, `96217cae`);
-Step 4's files are still untracked in the working tree on
-`feature/plan-c-keycloak`.
+Session paused **2026-10-30** after Gate 4, resumed **2026-10-31**.
+Steps 1–4 are all **committed** on `feature/plan-c-keycloak`; HEAD is
+`64bc5f2a` (`Step 4: Write the realm as code`). The working tree had been clean
+before Step 5 — the earlier note that Step 4's files were "still untracked" was
+written mid-session and is stale.
 
 | Step | State |
 |---|---|
-| 1 — settings fields | ✅ **PASS** (operator). Committed as `0baf39d5`. Split across `UISettings` (non-secrets) and `ApiSettings` (the two client secrets), after the operator rejected keeping secrets on `UISettings`. |
-| 2 — DB bootstrap | ✅ **PASS** (operator). Committed as `4257ad65`. Reworked from `.sql` to `.sh` after the operator rejected a committed password literal; the credential policy now covers all five Keycloak secrets, and `scripts/setup.sh` generates them. |
-| 3 — existing-volume role/DB | ✅ **PASS** (operator). Committed as `96217cae`. A security-relevant doc bug (silent passwordless role) was found and fixed. |
-| 4 — realm as code | ✅ **PASS** (operator). Three files created; realm proven to import and issue correct tokens. `envsubst` blocker found and fixed. |
-| 5 — compose service + nginx | ⬜ **NEXT.** Not started — operator paused here on 2026-10-30. |
+| 1 — settings fields | ✅ **PASS** (operator). Committed as `0baf39d5`. |
+| 2 — DB bootstrap | ✅ **PASS** (operator). Committed as `4257ad65`. |
+| 3 — existing-volume role/DB | ✅ **PASS** (operator). Committed as `96217cae`. |
+| 4 — realm as code | ✅ **PASS** (operator). Committed as `64bc5f2a`. |
+| 5 — compose service + nginx | ⛔ **STOPPED 2026-10-31**, then **re-scoped 2026-10-31** with five operator decisions (below). Edits are in the tree and correct; one re-run needed to apply the amended service block and verify. |
+| 5b — admin guide | ✅ **DONE 2026-10-31** — `ADMIN_GUIDE.md` written; all four Step 5b verify commands pass. The recovery command was tested verbatim against the real 26.8.1 image (`Created temporary admin user with username admin`, exit 0). Also deleted `deploy/keycloak/keycloak.env.example` (decision 8). |
 | 6–8 | ⬜ Not started. |
 
-**Before Step 5:** nothing outstanding. The realm imports cleanly and every
-credential path is proven. Step 5 is the first place the realm imports into the
-**real Compose stack with the real `.env` values** — until now the proof was a
-throwaway container against the template.
+**Five decisions taken on 2026-10-31 that amend Step 5** (all operator-approved):
 
-**Changed files not yet committed by the operator:**
-`deploy/keycloak/` (3 new files, untracked), `DEVELOPER_QUICK_START.md`,
-`plans/053-*.md`, `plans/061-*.md`, `docs/design/authn-authz-design.md`.
+| # | Decision | Detail |
+|---|---|---|
+| 1 | **Healthcheck fix approved** | `echo -e` → `printf`, plus an explicit `Host: localhost` header. Verified `PROBE_OK` on both 26.4.7 and 26.8.1. |
+| 2 | **Pin `26.8`, not `26.4`** | Registry evidence: 26.4 is 12 minors behind; **26.8.1** is current stable. The floating `26.4` tag had silently resolved to 26.4.7. |
+| 3 | **Console on, via `KC_HOSTNAME_ADMIN`** | The plan's `KC_HOSTNAME_STRICT="false"` was the wrong lever (it is a no-op when `KC_HOSTNAME` is set). `KC_HOSTNAME_ADMIN=http://127.0.0.1:8080/auth` gives the loopback console a working URL while the public issuer is unchanged. |
+| 4 | **Console port OFF by default; toggle documented in `ADMIN_GUIDE.md`** | No second compose file (operator: "hard to maintain"). Base `docker-compose.yml` publishes **no** console port; the toggle is a manual documented edit to the port to `127.0.0.1:8080:8080` + `docker compose up -d keycloak`. |
+| 5 | **Bootstrap admin: both vars added, generated** | `start-dev` creates **no** admin user without them (verified: grant → `401`). `KC_BOOTSTRAP_ADMIN_USERNAME` is a **literal** `admin` (an identifier, like the `keycloak` DB role name — not a secret); `KC_BOOTSTRAP_ADMIN_PASSWORD` is a generated `${VAR}` with no default. Takes the credential count from five to six. |
+| 6 | **Rename the app seed passwords (done 2026-10-31)** | `DEV_ADMIN_PASSWORD` → `DEV_WBA_ADMIN_PASSWORD`, `DEV_USER_PASSWORD` → `DEV_WBA_USER_PASSWORD`. Rationale: with `DEV_KEYCLOAK_ADMIN_PASSWORD` added (decision 5) there were two "admin" passwords meaning different things — the **wba-realm application** user vs the **Keycloak console** account. The `DEV_WBA_*` prefix makes the pairing explicit. **No migration script** — greenfield, operator's call; see the note below. |
+| 7 | **Recreate the `keycloak` database so the bootstrap admin actually seeds** | The existing Keycloak DB predates the bootstrap vars, so they would never take effect here and the console would stay unloggable-into. The DB is 100% template-derived (verified), so dropping and recreating it loses nothing and exercises the real fresh-clone path. See the caveat section above. |
+| 8 | **Delete `deploy/keycloak/keycloak.env.example` (done 2026-10-31)** | It was created in Step 4, when `.env.example` held no Keycloak variables at all. Step 6 closed that gap, making it a second source of truth — and it drifted immediately: it lists five of the six credentials, missing `DEV_KEYCLOAK_ADMIN_PASSWORD`. Nothing loads it (the `keycloak` service declares no `env_file`; it uses explicit `environment:` entries). `.env.example` is canonical because `setup.sh` copies *it* to build `.env`, and it documents the non-secret `KEYCLOAK_ISSUER`/`AUTH_*` settings too. Removing the duplicate also matches the repo's pattern — `deploy/postgres/` has no parallel file for `init-keycloak.sh`. |
 
-**Two decisions taken during execution that override the plan's original text:**
-1. The two client secrets live on `ApiSettings`, not `UISettings` (Step 1).
-2. No Keycloak credential is committed — all five are `${VAR}` with no default,
-   generated by `scripts/setup.sh`; the postgres init script is `.sh` for this
-   reason (Step 2).
+**Decision 6 needs no migration — this is a greenfield project (operator,
+2026-10-31).** The rename is a pure source-level change: nothing has been
+deployed and the rename is not applied anywhere, so there is no existing `.env`
+key to carry across and no migration script should exist. Do **not** add one.
+
+The only consequence is that a developer whose local `.env` still holds the old
+names will get **new** values for the two seed passwords on the next
+`./scripts/setup.sh` (the loop generates any key whose value is a placeholder,
+and `get_env_value` on an absent key returns empty). That is acceptable and
+self-healing: it just re-seeds `dev-admin` / `dev-user`, and the realm is
+re-imported from the template with the new values. There is no database to stay
+in sync with, because the realm is imported from the template on each fresh boot.
+
+**A reviewer should not "helpfully" reintroduce a migration script here.** Its
+absence is the decision, not an oversight.
+
+**Step 5 (first attempt) outcomes — all three defects found and now fixed in-plan:**
+- ✅ The `keycloak` service was added and runs; the realm imported into the real
+  stack; `issuer` = `https://localhost/auth/realms/wba`.
+- ✅ The nginx `/auth` block was written correctly and passes `nginx -t`.
+- ⛔ **The healthcheck YAML was defective** — no `Host` header → HTTP 500 on every
+  probe → permanently `unhealthy` while Keycloak itself was fine. Fixed (decision 1).
+- ⛔ **The running nginx serves a stale config** (bind-mount inode staleness) — no
+  `https://localhost/auth/...` check is meaningful until
+  `docker compose up -d --force-recreate nginx`. Amended into the step.
+- ⛔ **`KC_HOSTNAME_STRICT="false"` is a no-op** — fixed by decision 3.
+
+**Two earlier decisions (Steps 1–2) that still stand:**
+1. The two client secrets live on `ApiSettings`, not `UISettings`.
+2. No Keycloak credential is committed — every one is `${VAR}` with no default
+   (or a non-secret literal identifier), generated by `scripts/setup.sh`.
 
 **One item deferred, not forgotten:** the four connector services declare
-`env_file: - .env`, so they receive all five Keycloak credentials. Pre-existing,
-out of scope, belongs to **Plan E**.
+`env_file: - .env`, so they receive every Keycloak credential. Pre-existing, out
+of scope, belongs to **Plan E**.
 - **Design reference**: `docs/design/authn-authz-design.md`, "Keycloak" section
 - **This is step 1 of 9** in the Plan C sequence (053 → 061). No later step may
   start until this one's gate has passed.
@@ -162,11 +194,20 @@ is at line 88, `API_BASE_URL` at line 94, `CONNECTOR_ENCRYPTION_KEY` at line
   | `KEYCLOAK_DB_PASSWORD` | `.env` only; postgres service + Keycloak's `KC_DB_PASSWORD` |
   | `KEYCLOAK_CLIENT_SECRET` | `.env` only; `wba-web` confidential client |
   | `KEYCLOAK_SERVICE_CLIENT_SECRET` | `.env` only; `wba-internal` service account |
-  | `DEV_ADMIN_PASSWORD` | `.env` only; realm template seed |
-  | `DEV_USER_PASSWORD` | `.env` only; realm template seed |
+  | `DEV_WBA_ADMIN_PASSWORD` | `.env` only; realm template seed |
+  | `DEV_WBA_USER_PASSWORD` | `.env` only; realm template seed |
+  | `DEV_KEYCLOAK_ADMIN_PASSWORD` | `.env` only; `KC_BOOTSTRAP_ADMIN_PASSWORD` (added 2026-10-31, decision 5) |
+
+  **Six credentials** as of 2026-10-31 (was five; the bootstrap admin password
+  was added when it turned out `start-dev` creates no admin user without it).
 
   This matches the repo's existing convention for `POSTGRES_PASSWORD`, which also
   has no default. **Do not reintroduce `:-something` defaults.**
+
+  **Non-secret literals that are deliberately NOT variables** (do not "fix" these
+  into `.env` entries): `KC_DB_USERNAME: keycloak`, the Postgres role name
+  `keycloak`, and `KC_BOOTSTRAP_ADMIN_USERNAME: admin`. These are identifiers,
+  not credentials — an identifier in `.env` buys no secrecy and costs a variable.
 
   **`scripts/setup.sh` generates all five**, following the exact pattern it
   already uses for `CONNECTOR_ENCRYPTION_KEY`: `is_placeholder` → generate →
@@ -213,17 +254,24 @@ store on any machine that ran `mkcert -install`.
 - `docker-compose.yml` — add the `keycloak` service and the keycloak-DB bootstrap.
 - `deploy/keycloak/realm-wba.json.template` (create) — the realm as code.
 - `deploy/keycloak/entrypoint.sh` (create) — renders the template, then starts Keycloak.
-- `deploy/keycloak/keycloak.env.example` (create) — documents `DEV_ADMIN_PASSWORD` / `DEV_USER_PASSWORD`.
+- `.env.example` — the Keycloak credential block and the `AUTH_*` settings.
+  (`deploy/keycloak/keycloak.env.example` was deleted: `.env.example` is the
+  single source of truth and the duplicate had already drifted.)
 - `deploy/postgres/init-keycloak.sh` (create) — creates the `keycloak` role + DB on a **fresh** volume, reading the password from `$KEYCLOAK_DB_PASSWORD`.
 - `DEVELOPER_QUICK_START.md` — the Keycloak credential note and the idempotent
   existing-volume snippet (Step 3).
 - `scripts/setup.sh` — generate the five Keycloak credentials (Step 2).
 - `USER_GUIDE.md` — the *Keycloak credentials* subsection (Step 2).
 - `deploy/nginx/nginx.conf` — replace the reserved block with the real one.
+- `ADMIN_GUIDE.md` (create) — the console toggle, the bootstrap credential, and
+  the `kc.sh bootstrap-admin user` recovery (Step 5b).
 - `src/domain/settings.py` — add the non-secret `KEYCLOAK_*` and `AUTH_*` settings
   fields (including both client **IDs**).
 - `src/app/settings.py` — add the two client **secrets** to `ApiSettings`.
-- `.env.example` — document the new variables.
+- `.env.example` — document the new variables, including
+  `DEV_KEYCLOAK_ADMIN_PASSWORD=FIXME` (Step 6).
+- `scripts/setup.sh` — generate `DEV_KEYCLOAK_ADMIN_PASSWORD` alongside the
+  existing five (Step 6).
 - `docs/design/authn-authz-design.md` — **only** the "Issuer URL" open item
   (Step 7) and the "Production checklist" subsection (Step 8).
 
@@ -497,7 +545,7 @@ never hand-writes one and the "zero manual setup" property survives:
    then to `head -c 24 /dev/urandom | base64`. Print the value; return non-zero
    if all three fail.
 2. Add a loop over `KEYCLOAK_DB_PASSWORD`, `KEYCLOAK_CLIENT_SECRET`,
-   `KEYCLOAK_SERVICE_CLIENT_SECRET`, `DEV_ADMIN_PASSWORD`, `DEV_USER_PASSWORD`
+   `KEYCLOAK_SERVICE_CLIENT_SECRET`, `DEV_WBA_ADMIN_PASSWORD`, `DEV_WBA_USER_PASSWORD`
    that mirrors the `CONNECTOR_ENCRYPTION_KEY` block exactly: if
    `is_placeholder "$(get_env_value "$KEY" "$ENV_FILE")"`, generate and
    `set_env_value`; otherwise `info "${KEY} already set — preserving it"`.
@@ -585,7 +633,7 @@ all five. Verified after the fact (names and shape only — no value was read):
 
 | Check | Observed |
 |---|---|
-| All five present in `.env` | `KEYCLOAK_DB_PASSWORD`, `KEYCLOAK_CLIENT_SECRET`, `KEYCLOAK_SERVICE_CLIENT_SECRET`, `DEV_ADMIN_PASSWORD`, `DEV_USER_PASSWORD` — each exactly once |
+| All five present in `.env` | `KEYCLOAK_DB_PASSWORD`, `KEYCLOAK_CLIENT_SECRET`, `KEYCLOAK_SERVICE_CLIENT_SECRET`, `DEV_WBA_ADMIN_PASSWORD`, `DEV_WBA_USER_PASSWORD` — each exactly once |
 | None left as placeholder | 0 of the five contain `FIXME` |
 | Distinct values | 5 of 5 |
 | No duplicate keys | none (a `NEO`/`PERSON` reading was a reviewer grep bug — `[A-Z_]` drops the `4` in `NEO4J`) |
@@ -624,7 +672,7 @@ connector services (`github-producer`, `jira-producer`, `confluence-producer`,
 `signal-consumer`) declare `env_file: - .env` (`docker-compose.yml:260,283,306,330`
 — present in `HEAD`, not introduced here). Every variable in `.env` is therefore
 injected into those containers, so all five Keycloak credentials now appear in
-them too — including `DEV_ADMIN_PASSWORD` / `DEV_USER_PASSWORD`, which they have
+them too — including `DEV_WBA_ADMIN_PASSWORD` / `DEV_WBA_USER_PASSWORD`, which they have
 no use for. The `api` service does **not** do this; it lists explicit
 `environment:` entries, which is why it correctly receives none of them. This is
 unnecessary credential spread inside one trust boundary rather than a boundary
@@ -789,7 +837,7 @@ elements exactly (shape, not every line — keep it valid JSON):
     `"directAccessGrantsEnabled": false`, `"serviceAccountsEnabled": true`,
     `"secret": "${KEYCLOAK_SERVICE_CLIENT_SECRET}"`.
 - Two users, each with `"emailVerified": true`, `"enabled": true`, and a
-  `"credentials": [ { "type": "password", "value": "${DEV_ADMIN_PASSWORD}" } ]`:
+  `"credentials": [ { "type": "password", "value": "${DEV_WBA_ADMIN_PASSWORD}" } ]`:
   - `dev-admin` — `"realmRoles": ["wba-admin", "wba-user"]`
   - `dev-user`  — `"realmRoles": ["wba-user"]`
 - The `wba-internal` service account must carry `wba-service`. Do that with a
@@ -810,15 +858,15 @@ set -euo pipefail
 : "${APP_PUBLIC_BASE_URL:?APP_PUBLIC_BASE_URL must be set (e.g. https://wba.example.com)}"
 : "${KEYCLOAK_CLIENT_SECRET:?KEYCLOAK_CLIENT_SECRET must be set}"
 : "${KEYCLOAK_SERVICE_CLIENT_SECRET:?KEYCLOAK_SERVICE_CLIENT_SECRET must be set}"
-: "${DEV_ADMIN_PASSWORD:?DEV_ADMIN_PASSWORD must be set}"
-: "${DEV_USER_PASSWORD:?DEV_USER_PASSWORD must be set}"
+: "${DEV_WBA_ADMIN_PASSWORD:?DEV_WBA_ADMIN_PASSWORD must be set}"
+: "${DEV_WBA_USER_PASSWORD:?DEV_WBA_USER_PASSWORD must be set}"
 
 mkdir -p /opt/keycloak/data/import
 rm -f /opt/keycloak/data/import/*.json
 
 rendered=$(<"/opt/keycloak/realm-wba.json.template")
 for name in APP_PUBLIC_BASE_URL KEYCLOAK_CLIENT_SECRET \
-            KEYCLOAK_SERVICE_CLIENT_SECRET DEV_ADMIN_PASSWORD DEV_USER_PASSWORD; do
+            KEYCLOAK_SERVICE_CLIENT_SECRET DEV_WBA_ADMIN_PASSWORD DEV_WBA_USER_PASSWORD; do
   rendered=${rendered//"\${$name}"/"${!name}"}
 done
 
@@ -839,13 +887,14 @@ substitution — enumerated and confirmed. Do **not** add a Keycloak-native
 `${...}` expression to the template without extending the loop, or the guard
 above will abort the container (which is the intended failure, not a bug).
 
-Create `deploy/keycloak/keycloak.env.example` documenting the five variables
-`entrypoint.sh` requires — `DEV_ADMIN_PASSWORD`, `DEV_USER_PASSWORD`,
-`KEYCLOAK_CLIENT_SECRET`, `KEYCLOAK_SERVICE_CLIENT_SECRET`,
-`KEYCLOAK_DB_PASSWORD` — each as `FIXME` with a one-line note on what it is for
-and that it has no default. **No real values, and no example values either** —
-`admin`/`user`/`dev-web-secret` must not appear, since an example is what people
-copy. Cross-reference `.env.example`, which is where the real values live.
+Document the five variables `entrypoint.sh` requires — `DEV_WBA_ADMIN_PASSWORD`,
+`DEV_WBA_USER_PASSWORD`, `KEYCLOAK_CLIENT_SECRET`,
+`KEYCLOAK_SERVICE_CLIENT_SECRET`, `KEYCLOAK_DB_PASSWORD` — in the **existing**
+`.env.example` Keycloak block (Step 6), not in a separate file. Each stays a
+`FIXME` placeholder with a one-line note. **No real values, and no example
+values either** — `admin`/`user`/`dev-web-secret` must not appear, since an
+example is what people copy. A duplicate `deploy/keycloak/keycloak.env.example`
+was tried and deleted: it drifted within hours of being written.
 
 **Verify**: `python -c "import json,re,os,sys; t=open('deploy/keycloak/realm-wba.json.template').read(); r=re.sub(r'\\$\\{[A-Z_]+\\}','x',t); json.loads(r); print('valid')"` → `valid`
 **Verify**: `test -x deploy/keycloak/entrypoint.sh && echo executable` → `executable`
@@ -856,9 +905,9 @@ renderer the entrypoint uses, so this tests the shipped mechanism, not a
 different one:
 ```bash
 bash -c 'export APP_PUBLIC_BASE_URL=https://wba.example.com KEYCLOAK_CLIENT_SECRET=x \
-  KEYCLOAK_SERVICE_CLIENT_SECRET=x DEV_ADMIN_PASSWORD=x DEV_USER_PASSWORD=x
+  KEYCLOAK_SERVICE_CLIENT_SECRET=x DEV_WBA_ADMIN_PASSWORD=x DEV_WBA_USER_PASSWORD=x
   out=$(<deploy/keycloak/realm-wba.json.template)
-  for n in APP_PUBLIC_BASE_URL KEYCLOAK_CLIENT_SECRET KEYCLOAK_SERVICE_CLIENT_SECRET DEV_ADMIN_PASSWORD DEV_USER_PASSWORD; do
+  for n in APP_PUBLIC_BASE_URL KEYCLOAK_CLIENT_SECRET KEYCLOAK_SERVICE_CLIENT_SECRET DEV_WBA_ADMIN_PASSWORD DEV_WBA_USER_PASSWORD; do
     out=${out//"\${$n}"/"${!n}"}
   done
   printf "%s" "$out" | grep -o "https://wba.example.com[^\"]*" | sort -u'
@@ -867,9 +916,9 @@ bash -c 'export APP_PUBLIC_BASE_URL=https://wba.example.com KEYCLOAK_CLIENT_SECR
 **Verify** (renderer survives meta-characters — the `sed` trap):
 ```bash
 bash -c 'export APP_PUBLIC_BASE_URL=https://h.example KEYCLOAK_CLIENT_SECRET="a&b" \
-  KEYCLOAK_SERVICE_CLIENT_SECRET="c|d" DEV_ADMIN_PASSWORD="e/f=g" DEV_USER_PASSWORD="h+i"
+  KEYCLOAK_SERVICE_CLIENT_SECRET="c|d" DEV_WBA_ADMIN_PASSWORD="e/f=g" DEV_WBA_USER_PASSWORD="h+i"
   out=$(<deploy/keycloak/realm-wba.json.template)
-  for n in APP_PUBLIC_BASE_URL KEYCLOAK_CLIENT_SECRET KEYCLOAK_SERVICE_CLIENT_SECRET DEV_ADMIN_PASSWORD DEV_USER_PASSWORD; do
+  for n in APP_PUBLIC_BASE_URL KEYCLOAK_CLIENT_SECRET KEYCLOAK_SERVICE_CLIENT_SECRET DEV_WBA_ADMIN_PASSWORD DEV_WBA_USER_PASSWORD; do
     out=${out//"\${$n}"/"${!n}"}
   done
   printf "%s" "$out" | grep -o "\"secret\": \"[^\"]*\""'
@@ -924,7 +973,7 @@ from a trailing newline. Verified with:
 ```bash
 out=$(<"/opt/keycloak/realm-wba.json.template")
 for n in APP_PUBLIC_BASE_URL KEYCLOAK_CLIENT_SECRET KEYCLOAK_SERVICE_CLIENT_SECRET \
-         DEV_ADMIN_PASSWORD DEV_USER_PASSWORD; do
+         DEV_WBA_ADMIN_PASSWORD DEV_WBA_USER_PASSWORD; do
   out=${out//"\${$n}"/"${!n}"}
 done
 printf '%s\n' "$out" > /opt/keycloak/data/import/realm-wba.json
@@ -988,57 +1037,36 @@ Add this service to `docker-compose.yml`, after `postgres` and before `api`:
 
 ```yaml
   keycloak:
-    # Pinned to the current stable line (26.x) — a minor tag, not a digest, so
-    # pulls can drift inside 26.x. Match this repo's nginx pinning convention.
-    image: quay.io/keycloak/keycloak:26.4
+    image: quay.io/keycloak/keycloak:26.8
     container_name: wba-ai-keycloak
     restart: unless-stopped
-    # start-dev (not `start`) because this is a dev/CI identity provider:
-    # it needs no external TLS and allows the loopback admin console below.
     command: ["start-dev", "--import-realm"]
     entrypoint: ["/opt/keycloak/entrypoint.sh"]
     environment:
       KC_DB: postgres
       KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
       KC_DB_USERNAME: keycloak
-      # Same value the postgres init script used to create the role. No
-      # default: an unset value fails loudly rather than connecting with a
-      # committed literal.
       KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD}
-      # The public frontend URL. Pinning it keeps `iss` identical no matter how
-      # the request reached Keycloak, which exact `iss` matching requires.
       KC_HOSTNAME: ${EXTERNAL_BASE_URL:-https://localhost}/auth
-      # The public origin, passed to the realm template so redirectUris and
-      # webOrigins track EXTERNAL_BASE_URL instead of being hardcoded.
+      KC_HOSTNAME_ADMIN: http://127.0.0.1:8080/auth
       APP_PUBLIC_BASE_URL: ${EXTERNAL_BASE_URL:-https://localhost}
-      # Dev only: allow the loopback admin console to answer on the requested
-      # host instead of redirecting to KC_HOSTNAME. See Step 5 notes.
-      KC_HOSTNAME_STRICT: "false"
-      # Derive scheme/host from nginx's X-Forwarded-* headers.
       KC_PROXY_HEADERS: xforwarded
       KC_HTTP_ENABLED: "true"
       KC_HTTP_RELATIVE_PATH: /auth
-      # Secrets and seed passwords, rendered into the realm by entrypoint.sh.
-      # Deliberately NO `:-default`: a committed fallback would put the
-      # credential in git, which is the thing this policy exists to prevent.
-      # entrypoint.sh has `:?` guards, so an unset value fails loudly.
-      DEV_ADMIN_PASSWORD: ${DEV_ADMIN_PASSWORD}
-      DEV_USER_PASSWORD: ${DEV_USER_PASSWORD}
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${DEV_KEYCLOAK_ADMIN_PASSWORD}
+      DEV_WBA_ADMIN_PASSWORD: ${DEV_WBA_ADMIN_PASSWORD}
+      DEV_WBA_USER_PASSWORD: ${DEV_WBA_USER_PASSWORD}
       KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET}
       KEYCLOAK_SERVICE_CLIENT_SECRET: ${KEYCLOAK_SERVICE_CLIENT_SECRET}
     volumes:
       - ./deploy/keycloak/realm-wba.json.template:/opt/keycloak/realm-wba.json.template:ro
       - ./deploy/keycloak/entrypoint.sh:/opt/keycloak/entrypoint.sh:ro
-    # Loopback only: the admin console is for the operator on this host.
-    # 127.0.0.1 binding means it is NOT reachable from the network. There is
-    # deliberately no `8080:8080` mapping.
-    ports:
-      - "127.0.0.1:8080:8080"
+    # Admin console not published. See ADMIN_GUIDE.md to enable on 127.0.0.1:8080.
     networks:
       - wba-ai-network
     healthcheck:
-      # The realm endpoint answers only after the realm is imported.
-      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/8080 && echo -e 'GET /auth/realms/wba/.well-known/openid-configuration HTTP/1.0\\r\\n\\r\\n' >&3 && head -1 <&3 | grep -q '200'"]
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/8080 && printf 'GET /auth/realms/wba/.well-known/openid-configuration HTTP/1.0\\r\\nHost: localhost\\r\\n\\r\\n' >&3 && head -1 <&3 | grep -q '200'"]
       interval: 10s
       timeout: 5s
       retries: 30
@@ -1050,27 +1078,64 @@ Add this service to `docker-compose.yml`, after `postgres` and before `api`:
 
 Notes you must understand before editing:
 
-- **`--http-relative-path=/auth` is passed both as a `command` flag and as
-  `KC_HTTP_RELATIVE_PATH`.** That is deliberate belt-and-braces; if Keycloak
-  warns about a duplicate, keep the env var and drop the flag, and record it.
-- **`KC_HOSTNAME_STRICT=false` is dev-only** and exists so
-  `http://127.0.0.1:8080/auth/admin` serves instead of redirecting to
-  `https://localhost/auth/admin` (which nginx does not proxy). If the pinned
-  image rejects the flag, **STOP** — the documented fallback is a second nginx
-  listener bound to `127.0.0.1`, which is an operator decision, not something to
-  improvise.
+- ~~`--http-relative-path=/auth` is passed both as a `command` flag and as
+  `KC_HTTP_RELATIVE_PATH`.~~ **Superseded 2026-10-31.** The flag was never
+  actually in the `command` list, so there was nothing to deduplicate and Keycloak
+  emitted no warning. Only `KC_HTTP_RELATIVE_PATH` is set. Do not add the flag.
+- ~~`KC_HOSTNAME_STRICT=false` is dev-only…~~ **Superseded 2026-10-31 —
+  replaced by `KC_HOSTNAME_ADMIN`.** The original text is kept here only so the
+  old reasoning is traceable: it was wrong on two counts. `KC_HOSTNAME_STRICT` is
+  a **documented no-op on 26.x whenever `KC_HOSTNAME` is set** (the startup log
+  says so), and the "second nginx listener" fallback it names turned out to be
+  unnecessary — `KC_HOSTNAME_ADMIN` solves it on the same loopback port. See the
+  service block's `KC_HOSTNAME_ADMIN` comment.
 - The `healthcheck` uses bash `/dev/tcp` because the image may not ship `curl`.
+- **The healthcheck MUST send a `Host:` header, and MUST use `printf`, not
+  `echo -e`.** Found the hard way on 2026-10-31 (see the Gate 5 record): the
+  original `echo -e '…HTTP/1.0\r\n\r\n'` produced a request with no `Host`, and
+  Keycloak's `RealmsResource.checkSsl` → `UriInfoImpl.getBaseUri` throws
+  `java.net.URISyntaxException: Expected authority at index 7: http://` →
+  **HTTP 500 on every probe**, so the container sat `unhealthy` forever while
+  Keycloak itself was perfectly healthy. `printf` with an explicit
+  `Host: localhost` returns `200`. Verified verbatim under `/bin/sh -c` (the
+  shell `CMD-SHELL` uses; the image's `/bin/sh` has `printf`) on both 26.4.7 and
+  26.8.1.
+- **There is no `ports:` block, and that is the decision — do not add one.**
+  The console port is off by default; `ADMIN_GUIDE.md` documents the toggle.
+  Tempting alternatives that were **tested and rejected**: a `${ADMIN_BIND}`
+  env var does **not** work (an empty value falls back to the default, so
+  `ADMIN_BIND= docker compose config` still publishes the port), and a compose
+  overlay with `ports: []` does **not** either (compose merges lists). Only
+  `!reset []` removes it, which needs a second compose file the operator
+  explicitly rejected.
+- **`KC_HOSTNAME_ADMIN` is what makes the console work** — not
+  `KC_HOSTNAME_STRICT`. Do not "simplify" by removing it: without it the console
+  redirects to `https://localhost/auth/admin/...`, which nginx 404s. And do not
+  set `KC_HOSTNAME_STRICT=false` (as the original plan did) — on 26.x it is a
+  documented no-op whenever `KC_HOSTNAME` is set.
 
 Replace the reserved nginx block with **only the realm subtree**:
 
 ```nginx
         # ── Keycloak OIDC realm endpoints (Plan C) ───────────────────────
-        # ONLY /auth/realms/* is proxied. The admin console and admin REST
-        # (/auth/admin*) are deliberately NOT routed: they are the highest-
-        # privilege surface in the stack, and nothing in the app needs them
-        # from a browser. The operator reaches the console on the loopback
-        # port 127.0.0.1:8080 published by the keycloak service.
+        # Only /auth/realms/* and /auth/resources/* are proxied. The admin
+        # console and admin REST (/auth/admin*) are deliberately NOT routed:
+        # they are the highest-privilege surface in the stack, and nothing in
+        # the app needs them from a browser. The operator reaches the console
+        # on the loopback port 127.0.0.1:8080 published by the keycloak service.
         location /auth/realms/ {
+            proxy_pass http://keycloak:8080;
+            proxy_set_header Host              $host;
+            proxy_set_header X-Real-IP         $remote_addr;
+            proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_set_header X-Forwarded-Host  $host;
+        }
+
+        # Keycloak theme assets (login page, account console). Their CSS/JS
+        # live here, not under /auth/realms/. Longest-prefix match keeps this
+        # ahead of the /auth catch-all below.
+        location /auth/resources/ {
             proxy_pass http://keycloak:8080;
             proxy_set_header Host              $host;
             proxy_set_header X-Real-IP         $remote_addr;
@@ -1086,24 +1151,376 @@ Replace the reserved nginx block with **only the realm subtree**:
         }
 ```
 
+**`/auth/resources/` is not optional — this plan originally omitted it and that
+was a defect.** Found 2026-10-31: the account console and the **login page** both
+load their HTML from `/auth/realms/...` but fetch every CSS/JS/image from
+`/auth/resources/...`. With only `/auth/realms/` proxied, those 404 through nginx
+(they return `200` direct from Keycloak), so the pages render a bare shell —
+"Loading the Account Console" forever, and an unstyled login form. That would
+have broken Plan 056's login flow. Verified before/after with:
+
+```bash
+curl -s https://localhost/auth/realms/wba/account | grep -oE '(src|href)="/[^"]+"' \
+  | sed 's/.*="//; s/"//' \
+  | while read -r p; do printf '%s -> %s\n' "$p" "$(curl -s -o /dev/null -w '%{http_code}' "https://localhost$p")"; done
+```
+
+Every asset must be `200`. `/auth/js/`, `/auth/welcome` and `/auth/robots.txt` do
+**not** exist in Keycloak 26 (they 404 at Keycloak itself), so do not proxy them
+"for completeness".
+
 **Verify**: `docker compose config -q` → exit 0
 **Verify**: `docker run --rm --network work-behavior-analytics-ai_wba-ai-network -v "$PWD/deploy/nginx/nginx.conf:/etc/nginx/nginx.conf:ro" -v "$PWD/deploy/certs:/etc/nginx/certs:ro" nginx:1.30-alpine nginx -t` → `syntax is ok` / `test is successful`
 **Verify**: `grep -c 'location /auth' deploy/nginx/nginx.conf` → `2` (the prefix location and the catch-all)
-**Verify**: `docker compose up -d postgres keycloak` then `docker compose ps keycloak` → `healthy`
+**Verify**: `docker compose up -d --force-recreate nginx keycloak` then `docker compose ps keycloak` → `healthy`
+
+**You MUST `--force-recreate nginx` as well, and here is why.** A running nginx
+mounts `deploy/nginx/nginx.conf` read-only. Editing the file on the host replaces
+its inode, but the **container keeps the old inode open and serves the old
+config** — see the inode-staleness trap recorded in the Gate 5 record. A plain
+`docker compose up -d nginx` will silently do nothing. Until nginx is recreated,
+`https://localhost/auth/realms/wba/...` returns **404** (the old reserved block
+is still commented out) and every `https://localhost/...` check below is testing
+a stale proxy. Run:
+
+```bash
+docker compose up -d --force-recreate nginx
+docker exec wba-ai-nginx grep -c 'location /auth' /etc/nginx/nginx.conf   # → 2
+docker exec wba-ai-nginx grep -c 'RESERVED' /etc/nginx/nginx.conf         # → 0
+```
+
+Only when that in-container grep shows `2` and `0` is the new upstream in effect.
+
+**Do NOT name `postgres` in this command.** Step 5 does not change the postgres
+service, and the first attempt's `docker compose up -d postgres keycloak`
+unnecessarily recreated the Postgres container. Only `nginx` (stale config) and
+`keycloak` (the new service) need recreating.
+
+**ORDERING DEPENDENCY — the operator must run `./scripts/setup.sh` before the
+service is recreated.** The compose file names three variables that are not yet
+in `.env` under their final names: `DEV_KEYCLOAK_ADMIN_PASSWORD` (new) and the two
+renamed `DEV_WBA_*` keys. Each has no default, so compose would substitute an
+empty string and Keycloak would start with blank passwords. The order is:
+
+1. **Operator runs `./scripts/setup.sh`** — generates
+   `DEV_KEYCLOAK_ADMIN_PASSWORD` (genuinely new) plus fresh values for the two
+   renamed seed keys, and preserves the rest. No migration step is needed: this
+   is a greenfield project, so the old key names simply cease to exist.
+2. Then `docker compose up -d --force-recreate nginx keycloak`.
+
+An executor must NOT run `setup.sh` — it writes credentials into `.env`, which is
+blocked by the harness classifier as `[Credential Materialization]` and is the
+operator's step, exactly as in Step 2. If the executor reaches step 2 and any of
+the three variables is still absent from `.env`, **STOP and report** — do not
+invent a value and do not add a `:-default` to route around it.
+
+**Verify** (the new image actually landed): `docker inspect wba-ai-keycloak --format '{{.Config.Image}}'` → `quay.io/keycloak/keycloak:26.8` and
+`docker exec wba-ai-keycloak /opt/keycloak/bin/kc.sh --version` → `Keycloak 26.8.1`
+**Verify** (no console port published): `docker compose config 2>/dev/null | grep -c 'target: 8080'` → `0`
+**Verify** (the console responds on loopback via KC_HOSTNAME_ADMIN, once the port is enabled):
+`docker compose exec -T keycloak bash -c "curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/auth/admin/master/console/"` → `200`.
+Note this works **from inside the container regardless of the port mapping** — the
+`ports:` block only affects the host. If `curl` is absent, use the `/dev/tcp` form
+with a `Host` header.
+
+### Step 5b: Document the console toggle in `ADMIN_GUIDE.md`
+
+Create `ADMIN_GUIDE.md` at the repo root (operator decision 4: a doc, not a second
+compose file). Match the tone and heading style of `DEVELOPER_QUICK_START.md`.
+It must cover, and only cover:
+
+1. **What the Keycloak admin console is** and that it is **off by default** —
+   the `keycloak` service publishes no port, deliberately.
+2. **How to enable it** — the exact two lines to add to the `keycloak` service's
+   comment block in `docker-compose.yml`, then `docker compose up -d keycloak`,
+   then browse to `http://127.0.0.1:8080/auth/admin/`. State the `127.0.0.1`
+   binding is required and that `"8080:8080"` must never be used.
+3. **How to disable it again** — remove those lines and `docker compose up -d
+   keycloak`.
+4. **Signing in** — username `admin`; the password is
+   `DEV_KEYCLOAK_ADMIN_PASSWORD` in `.env`. **Do not print a value.** (An
+   earlier draft of this step said `KC_BOOTSTRAP_ADMIN_PASSWORD` — that is the
+   name *inside the container*, which compose fills from
+   `DEV_KEYCLOAK_ADMIN_PASSWORD`. `.env` holds the latter.)
+5. **The bootstrap caveat, prominently.** The bootstrap admin is created **only
+   on the first boot against an empty Keycloak database**. This repository's
+   Keycloak DB was initialised on 2026-10-31, so the bootstrap will **not** run
+   again here. If the console cannot be logged into, the recovery is:
+
+   ```bash
+   docker compose exec keycloak /opt/keycloak/bin/kc.sh bootstrap-admin user \
+     --username admin --password:env KC_BOOTSTRAP_ADMIN_PASSWORD --no-prompt
+   ```
+
+   Verified available on 26.8.1 (`kc.sh bootstrap-admin user` is a real
+   subcommand). Never write a literal password into the guide.
+6. **A note that the console is never reachable through nginx** — only
+   `/auth/realms/*` is proxied and `/auth/admin*` is refused with 404.
+
+**Verify**: `test -f ADMIN_GUIDE.md && echo exists` → `exists`
+**Verify** (no credential literal): `grep -cE '(PASSWORD|SECRET)[^=]*[:=] *["'"'"']?[A-Za-z0-9]' ADMIN_GUIDE.md` → `0`
+**Verify** (the toggle is documented): `grep -c '127.0.0.1:8080:8080' ADMIN_GUIDE.md` → at least `1`
+**Verify** (the recovery is documented): `grep -c 'bootstrap-admin' ADMIN_GUIDE.md` → at least `1`
 
 > ### 🚦 MANUAL GATE 5 — stack up
 >
 > Operator verifies in a browser:
-> 1. `http://127.0.0.1:8080/auth/admin/` loads the console login page.
-> 2. Signing in as the Keycloak bootstrap admin (`KC_BOOTSTRAP_ADMIN_USERNAME`/
->    `_PASSWORD` if configured, otherwise the image's documented default) shows
->    realm `wba`, the three roles, and both clients.
+> 1. Add the two `ports:` lines per `ADMIN_GUIDE.md`, `docker compose up -d keycloak`,
+>    and `http://127.0.0.1:8080/auth/admin/` **loads the console login page**.
+> 2. Signing in as `admin` (password = `DEV_KEYCLOAK_ADMIN_PASSWORD` in `.env`)
+>    shows realm `wba`, the three roles, and both clients.
 > 3. `https://localhost/auth/admin/` returns **404** — the admin surface is not
 >    proxied.
-> 4. Signing in as `dev-admin` at `http://127.0.0.1:8080/auth/realms/wba/account`
->    works, and the token shown there (Account → Personal info → or the account
->    console's token viewer) lists `wba-admin`.
+> 4. Signing in as `dev-admin` at `https://localhost/auth/realms/wba/account`
+>    works, and the token shown there lists `wba-admin`.
+> 5. Then **remove the port lines again** and `docker compose up -d keycloak`,
+>    confirming `docker compose config | grep -c 'target: 8080'` → `0`.
 > Wait for `PASS`.
+
+#### Gate 5 record — 2026-10-31 — ✅ PASS (operator validated) — originally ⛔ STOPPED
+
+**Final outcome: all checks pass.** The operator ran the full runbook (`.env`
+populated by `setup.sh`, keycloak DB dropped and recreated, `nginx` + `keycloak`
+force-recreated) and every check passed. One apparent failure — `dev-admin`
+login — was **operator error, not a defect**: it was attempted at the *admin*
+console (`/auth/admin/`), which authenticates against the **`master`** realm,
+where `dev-admin` does not exist. The correct URL, per Gate 5 check 4, is the
+*account* console at `/auth/realms/wba/account`. Verified directly against the
+live stack (password expanded from the container's own env; no value printed):
+
+| Test | Result |
+|---|---|
+| `dev-admin` + `DEV_WBA_ADMIN_PASSWORD` → realm `wba` | **token issued** ✅ |
+| `dev-user` + `DEV_WBA_USER_PASSWORD` → realm `wba` | **token issued** ✅ |
+| `dev-admin` → realm `master` (the admin console's realm) | `invalid_grant` — correct, not present there |
+| Realm membership, all users | `master`: `admin` only. `wba`: `dev-admin`, `dev-user`, `service-account-wba-internal` |
+| `dev-admin` required actions / enabled / verified | none / `true` / `true` — nothing blocking |
+
+`ADMIN_GUIDE.md` now carries an explicit callout so this trap does not recur.
+
+**KNOWN LIMITATION, unresolved — the account console's data calls return `401`.**
+Found 2026-10-31 while validating Gate 5, and deliberately **not** blocking the
+gate. Signing in succeeds and the SPA renders, but its API calls fail:
+
+```
+GET /auth/realms/wba/account/supportedLocales           401  {"error":"HTTP 401 Unauthorized"}
+GET /auth/realms/wba/account/?userProfileMetadata=true  401
+```
+
+Diagnosis (all reproduced against Keycloak 26.8.1, both through nginx and
+against `keycloak:8080` directly from inside the container, so nginx is not
+involved):
+
+- The request carries a valid `Authorization: Bearer` header; the token decodes
+  with the correct `iss` and is not expired.
+- The differentiator is **`Content-Type: application/json` on the GET**, which
+  routes it to the account REST API instead of the HTML shell. Without that
+  header the same URL returns `200` — but that is the *public SPA shell*, not
+  data, so a `200` there proves nothing. **This misled the reviewer for several
+  exchanges; do not repeat the mistake.**
+- The token has **no `aud` claim**, and realm `wba` has **no audience mapper**.
+  Verified the Keycloak-created `master` realm has none either, so this is **not**
+  caused by importing `realm-wba.json.template`.
+- **Root cause not established.** Candidate fix, unproven: an
+  `oidc-audience-mapper` (included client audience `account`) on the
+  `account-console` client in the realm template.
+
+**Why this does not block Gate 5:** nothing in the repo calls
+`/realms/wba/account`. The application's login is Plan 056's BFF flow. The
+account console is a Keycloak developer UI used here only to eyeball a session;
+that is now done via the admin console and by decoding a token instead.
+Recorded in `ADMIN_GUIDE.md` as a known limitation.
+
+**A second trap, found the same way: the account console must NOT be opened on
+the loopback port.** This plan's Gate 5 check 4 originally said
+`http://127.0.0.1:8080/auth/realms/wba/account`; that URL loads, then fails in
+the browser with *"Timeout when waiting for 3rd party check iframe message"*.
+The reason is the `KC_HOSTNAME` / `KC_HOSTNAME_ADMIN` split: the **account**
+console is served on the public origin (`KC_HOSTNAME` = `https://localhost/auth`)
+and builds its 3rd-party-cookie iframe from that origin, while the **admin**
+console is the only thing on the loopback origin (`KC_HOSTNAME_ADMIN`). Opening
+the account console on the loopback port puts the page and its iframe on
+different origins, so the `postMessage` handshake never completes. Verified: the
+account console HTML references `https://localhost/auth` four times **however it
+is fetched**. Corrected to `https://localhost/auth/realms/wba/account`, which
+returns `200` (`<title>Account Management</title>`) and needs **no published
+port** — nginx proxies `/auth/realms/*`. All occurrences of the old URL in this
+plan were replaced. **The loopback port is for the admin console only.**
+
+**A third defect, found the same way: nginx did not proxy `/auth/resources/`.**
+The plan's nginx block proxied only `/auth/realms/` and 404'd everything else
+under `/auth`. Keycloak serves **all theme static assets** — the login page's and
+the account console's CSS/JS/images — from `/auth/resources/`, so both pages
+loaded their HTML and then never initialised: the account console showed
+*"Loading the Account Console"* forever, and the login form rendered unstyled.
+The assets return `200` direct from Keycloak, confirming nginx was the problem.
+
+Blast radius was larger than the symptom: **the login page was broken too**, and
+plans 056/057 depend on it. Caught here rather than three steps later.
+
+Fixed by adding a `location /auth/resources/` block (12 lines) after the
+`/auth/realms/` block in `deploy/nginx/nginx.conf`; longest-prefix matching keeps
+it ahead of the `location /auth { return 404; }` catch-all, so `/auth/admin*`
+stays refused. Verified after `--force-recreate nginx` (the stale-inode trap
+again — a plain `up -d` would not have picked it up):
+
+| Check | Before | After |
+|---|---|---|
+| Account console assets (`.js`, `.css`, `.svg`) | `404` | **`200`** |
+| Login page assets (patternfly, theme css/js) | `404` | **`200`** |
+| `/auth/admin/` | `404` | `404` ✅ still refused |
+| `/auth/admin/realms/wba/users` | `404` | `404` ✅ still refused |
+| `issuer` | correct | correct, unchanged |
+| `/api/health` | `200` | `200` — app still unauthenticated |
+
+`ADMIN_GUIDE.md`, this plan's Step 5 and Step 7 text, and plan 056 were all
+corrected; none of them had said `/auth/resources/` must be proxied.
+
+**The two-origin rule, stated once and for all** (this is the model that makes
+the whole design work):
+
+| Surface | Origin | URL | Port needed |
+|---|---|---|---|
+| Admin console | `KC_HOSTNAME_ADMIN` | `http://127.0.0.1:8080/auth/admin/` | yes |
+| Account console, login, token, JWKS | `KC_HOSTNAME` | `https://localhost/auth/...` | no (nginx) |
+| `/auth/admin` on the public origin | — | `https://localhost/auth/admin/` → `404` | n/a (refused) |
+
+**Earlier in the same run (superseded): STOPPED (executor)** — the three defects
+below, all since fixed and re-verified.
+
+Executor dispatched in the **live working tree** on `feature/plan-c-keycloak`
+(no worktree — the operator's standing instruction), Step 5 only, no commit.
+Base was `64bc5f2a`, which already contains Steps 1–4 (the earlier "Step 4 files
+untracked" note in this plan's progress block was stale — `deploy/keycloak/` is
+tracked at `64bc5f2a`).
+
+**Both in-scope edits were made and are verbatim correct.** `git diff --stat` →
+`docker-compose.yml` **+60 / −0** (the `keycloak` service, exactly as specified,
+between `postgres` and `api`) and `deploy/nginx/nginx.conf` **+20 / −14** (the
+RESERVED block replaced by the `/auth/realms/` + catch-all pair). No file outside
+Step 5's scope was touched; the tree had been clean beforehand.
+
+**STOP condition fired: "the `keycloak` service fails to become healthy."** The
+container reports `unhealthy` with `FailingStreak` climbing past 60. The
+executor correctly did not improvise a fix.
+
+**Root cause — the plan's own healthcheck YAML was defective.** Its `echo -e
+'…HTTP/1.0\r\n\r\n'` sent a request with **no `Host` header**. Keycloak's
+`RealmsResource.checkSsl` → `UriInfoImpl.getBaseUri` → `LocationUtil.getUri`
+parses the request base URI and throws
+`java.net.URISyntaxException: Expected authority at index 7: http://` →
+**HTTP 500 on every probe**, so `grep -q '200'` always failed. Reproduced
+independently by the reviewer, inside the container:
+
+| Probe (via `/dev/tcp` on 127.0.0.1:8080) | Observed |
+|---|---|
+| No `Host` — exactly the plan's original request | `HTTP/1.0 500 Internal Server Error` |
+| With `Host: localhost` | `HTTP/1.0 200 OK` |
+| Proposed fix, run verbatim under `/bin/sh -c` | `PROBE_OK` |
+
+`Keycloak 26.4.7` is otherwise healthy — the only error in its log is this one
+trace, once per 10s probe (timestamps line up exactly with the healthchecks).
+
+**Second, independent defect found by the executor: the running nginx serves a
+stale config.** `wba-ai-nginx` mounts `deploy/nginx/nginx.conf` read-only; the
+host edit changed the inode (host `176885`/6232 bytes vs container `82362`/5912
+bytes), so the container kept the **old** file — in-container
+`grep -c 'location /auth'` = **1** and `RESERVED` is still present at line 122,
+while the host file has **2**. Consequence: **every `https://localhost/auth/...`
+check in this plan passes or fails for the wrong reason until nginx is
+recreated**, and Gate 6's issuer comparison is meaningless against it. A plain
+`docker compose up -d nginx` is not enough — it must be `--force-recreate`.
+Step 5's instructions have been amended above to include this.
+
+**What is already proven about Keycloak itself** (reviewer-verified, read-only):
+
+| Check | Observed |
+|---|---|
+| Realm import | `Realm 'wba' imported` / `Import finished successfully` |
+| Started | `Keycloak 26.4.7 on JVM (powered by Quarkus 3.27.1)`, listening on `http://0.0.0.0:8080` |
+| No DB problem | no `connection refused` / `could not connect` in the log |
+| `issuer` | `https://localhost/auth/realms/wba` — matches `KC_HOSTNAME`, exactly what Step 6 asserts |
+| `https://localhost/auth/admin/` | `404` (deliberate; see the third defect below) |
+| Loopback admin | `302 → https://localhost/auth/admin/master/console/` |
+| No duplicate relative-path warning | none emitted; the step's prose warning about a duplicate flag does not apply (the YAML never put the flag in `command`) |
+| Stack otherwise undisturbed | api/ui/neo4j/rabbitmq/elasticsearch/github-mcp/producers/consumer all Up |
+
+**Third defect: `KC_HOSTNAME_STRICT="false"` is a no-op on this image**, so the
+browser admin console is unreachable by design of the plan's own nginx block.
+The log states it: `HostnameV2ProviderFactory: If hostname is specified,
+hostname-strict is effectively ignored`. The plan predicted `200 or 303` for the
+loopback console; the actual `302 → https://localhost/...` (which nginx 404s) is
+the correct behaviour of the wrong assumption. MANUAL GATE 5 above now records
+this and lays out the three operator options.
+
+**All decisions RESOLVED on 2026-10-31** — see the "Five decisions" table in the
+progress block. The plan's Step 5 has been rewritten to carry them, and the three
+mechanisms were re-verified on the **26.8.1** image in throwaway containers
+(no credentials, H2 store, all removed afterwards; the operator's stack was not
+touched):
+
+| Mechanism | Verified on 26.8.1 |
+|---|---|
+| `KC_HOSTNAME_ADMIN` console routing | `/auth/admin/` → `302` → `/auth/admin/master/console/` → **`200`**, `<title>Keycloak Administration Console</title>` |
+| Public issuer unaffected | `issuer` = `https://localhost/auth/realms/master` while `KC_HOSTNAME_ADMIN` points at loopback |
+| Bootstrap admin usable | password grant as the bootstrap user → **`200`** (vs `401` with no bootstrap vars) |
+| Healthcheck fix | `printf` + `Host: localhost` → **`PROBE_OK`** |
+
+**Version evidence (decision 2).** `quay.io` registry tag listing for
+`keycloak/keycloak` shows `26.4.0 … 26.4.7` then `26.5.* … 26.7.*` then
+**`26.8.0`, `26.8.1`** — `26.8.1` is the highest release tag, and
+`keycloak.org/downloads` confirms it. The pin `26.4` had silently floated to
+**26.4.7**, i.e. 12 minors behind. `26.4.3` does not exist, so minor tags do not
+map cleanly onto patch sequences and the drift is real. The image was bumped to
+`26.8` (operator chose a minor tag over a patch pin, matching the repo's nginx
+convention).
+
+**Bootstrap-admin caveat — and the operator's resolution (decision 7).** This
+repository's Keycloak DB was **already initialised** on 2026-10-31
+(`master` and `wba` realms exist in the `keycloak` database, 3 users). The
+`KC_BOOTSTRAP_ADMIN_*` bootstrap therefore **will not run** on this volume — it
+only fires against an empty Keycloak DB.
+
+**Resolution: drop and recreate the `keycloak` database.** Verified safe because
+that database is **100% reproducible from the templates in this repo**: it holds
+only `master` (Keycloak's built-in realm) and `wba` (imported from
+`deploy/keycloak/realm-wba.json.template`), its 3 users are exactly the three
+template entries (`dev-admin`, `dev-user`, `service-account-wba-internal`), and
+all 89 tables are Keycloak's own schema. Nothing hand-made lives there, so
+nothing is lost. The operator runs:
+
+```bash
+docker compose stop keycloak
+docker compose exec -T postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
+  -c 'DROP DATABASE keycloak;'
+docker compose exec -T postgres createdb -U "$POSTGRES_USER" -O keycloak keycloak
+docker compose up -d keycloak   # bootstrap admin seeds; realm re-imports
+```
+
+This touches **only the `keycloak` database**. The application database
+(`POSTGRES_DB` in `pgdata`) is untouched — different database, same server.
+
+**Why not the `kc.sh` recovery?** `docker compose exec keycloak
+/opt/keycloak/bin/kc.sh bootstrap-admin user …` also works (verified present in
+26.8.1) and remains documented in `ADMIN_GUIDE.md` as the recovery path for
+someone whose console login is missing. But it would leave the bootstrap
+variables **untested**, so a fresh clone could still be broken in a way this
+environment never caught. Recreating the DB exercises the real seeded path, which
+is what a fresh clone does.
+
+**Also worth recording:** the plan's Step 5 verify command
+`docker compose up -d postgres keycloak` **recreated the `postgres` container**
+(the volume was preserved, postgres is `healthy`). That contradicts this run's
+brief, which had fenced `postgres` off. The plan's own command was followed over
+the brief; harmless here, but the plan should not name `postgres` in a step that
+does not change it. Amended above to `--force-recreate postgres keycloak` only
+because it is in the same command; **neither service actually needs recreating**
+— `postgres` is untouched by Step 5 and `keycloak` is new.
+
+**Scope**: ` M docker-compose.yml`, ` M deploy/nginx/nginx.conf`. Nothing
+committed. Nothing untracked.
+
+---
 
 ---
 
@@ -1144,9 +1561,18 @@ KEYCLOAK_CLIENT_SECRET=FIXME
 # Secret for the `wba-internal` service-account client (producers/consumer).
 KEYCLOAK_SERVICE_CLIENT_SECRET=FIXME
 # Seed passwords for the two realm users, rendered in by entrypoint.sh.
-DEV_ADMIN_PASSWORD=FIXME
-DEV_USER_PASSWORD=FIXME
+DEV_WBA_ADMIN_PASSWORD=FIXME
+DEV_WBA_USER_PASSWORD=FIXME
+# Password for the Keycloak master-realm bootstrap admin (username is the
+# literal `admin`). Created ONLY on the first boot against an empty Keycloak
+# database; see ADMIN_GUIDE.md for the recovery command if it is missing.
+DEV_KEYCLOAK_ADMIN_PASSWORD=FIXME
 ```
+
+Then add `DEV_KEYCLOAK_ADMIN_PASSWORD` to the `scripts/setup.sh` generation loop,
+so it joins the other secrets and is generated on first run and preserved on
+re-run (the same `is_placeholder` → generate → `set_env_value` pattern). The loop
+becomes six keys, not five.
 
 Note `KEYCLOAK_ISSUER`, `KEYCLOAK_INTERNAL_URL`, `APP_PUBLIC_BASE_URL` and the
 `AUTH_*` values keep real defaults — they are configuration, not credentials, and
@@ -1186,8 +1612,10 @@ item paragraph (it begins **"Open item for Plan C:"**) with the settled design:
   request failing.
 - The image is pinned (minor tag) because the hostname env var differs between
   Quarkus and legacy WildFly images.
-- nginx exposes **only** `/auth/realms/*`; the admin console and admin REST are
-  not proxied and are reached only on the loopback port.
+- nginx exposes **only** `/auth/realms/*` and `/auth/resources/*` (the latter is
+  the theme/console static assets — without it the login page and account console
+  load but never initialise); the admin console and admin REST are not proxied
+  and are reached only on the loopback port.
 
 **Verify**: `grep -c "Open item for Plan C" docs/design/authn-authz-design.md` → `0`
 **Verify**: `grep -c "KEYCLOAK_INTERNAL_URL" docs/design/authn-authz-design.md` → at least `1`
@@ -1212,8 +1640,9 @@ deployment does not rely on someone remembering. Add a short
 | `APP_PUBLIC_BASE_URL` | `https://localhost` | the real origin, e.g. `https://wba.example.com` |
 | `KEYCLOAK_ISSUER` | `https://localhost/auth/realms/wba` | `<APP_PUBLIC_BASE_URL>/auth/realms/wba` (startup validator enforces the prefix) |
 | Realm `redirectUris` / `webOrigins` | templated from `APP_PUBLIC_BASE_URL` | same template, different value — **no realm edit** |
-| `KC_HOSTNAME_STRICT` | `"false"` | **removed** (defaults to strict) |
-| Keycloak loopback port `127.0.0.1:8080` | admin console access | **removed**; no admin surface published |
+| `KC_HOSTNAME_ADMIN` | `http://127.0.0.1:8080/auth` | **removed**; the console is not published at all |
+| Keycloak loopback port `127.0.0.1:8080` | off in the repo; the operator enables it per `ADMIN_GUIDE.md` | **removed**; no admin surface published |
+| `KC_BOOTSTRAP_ADMIN_USERNAME` / `_PASSWORD` | literal `admin` / `${DEV_KEYCLOAK_ADMIN_PASSWORD}` | **removed**; bind to an external IdP or an operator-managed admin, never a seeded one |
 | `deploy/certs/*` (mkcert) | local CA | a real certificate, or TLS terminated at a load balancer / API Gateway |
 | `AUTH_COOKIE_SECURE` | `true` | `true` (never false behind HTTPS) |
 | Keycloak DB password (`keycloak`) | dev default | a secret-store value (Plan E owns broader credential handling) |
@@ -1225,7 +1654,7 @@ repository's deployment config, and it is the sole `listen 443` server, so it
 answers any Host header; parameterise it when a second vhost is added."*
 
 **Verify**: `grep -c "Production checklist" docs/design/authn-authz-design.md` → `1`
-**Verify**: `grep -n "KC_HOSTNAME_STRICT" docs/design/authn-authz-design.md` → present in the checklist
+**Verify**: `grep -n "KC_HOSTNAME_ADMIN" docs/design/authn-authz-design.md` → present in the checklist
 
 > ### 🚦 MANUAL GATE 8 — production readiness
 >
@@ -1254,14 +1683,17 @@ the settings block fails the whole suite loudly.
 
 - [ ] `docker compose config -q` exits 0
 - [ ] `docker compose ps` shows `keycloak` as `healthy`
-- [ ] `curl -sf https://localhost/auth/realms/wba/.well-known/openid-configuration` returns a document whose `issuer` is exactly `https://localhost/auth/realms/wba`
+- [ ] `docker inspect wba-ai-keycloak --format '{{.Config.Image}}'` prints `quay.io/keycloak/keycloak:26.8`; `docker exec wba-ai-keycloak /opt/keycloak/bin/kc.sh --version` prints `Keycloak 26.8.1`
+- [ ] `docker compose config 2>/dev/null | grep -c 'target: 8080'` prints `0` — **the console port is off by default**
+- [ ] `curl -sf https://localhost/auth/realms/wba/.well-known/openid-configuration` returns a document whose `issuer` is exactly `https://localhost/auth/realms/wba` (issuer unchanged by `KC_HOSTNAME_ADMIN`)
 - [ ] `curl -s -o /dev/null -w '%{http_code}' https://localhost/auth/admin/` prints `404`
 - [ ] `docker compose exec -T postgres psql -U "$POSTGRES_USER" -lqt | cut -d'|' -f1 | grep -cw keycloak` prints `1`
+- [ ] `test -f ADMIN_GUIDE.md && grep -c '127.0.0.1:8080:8080' ADMIN_GUIDE.md` ≥ `1`, and `grep -c 'bootstrap-admin' ADMIN_GUIDE.md` ≥ `1`
 - [ ] `pytest -m unit tests -q` exits 0 with the same pass count as before this plan
 - [ ] `mypy src/` exits 0
 - [ ] No `KEYCLOAK_*` / `AUTH_*` value in `.env.example` is a real credential (`grep -n 'FIXME' .env.example` shows them)
-- [ ] **No credential literal anywhere in committed files.** `grep -rnE "(PASSWORD|SECRET)[^=]*[:=] *['\"]?[A-Za-z0-9]" docker-compose.yml deploy/` returns **only** `${VAR}` references and `FIXME` placeholders — no `keycloak`, `admin`, `user`, `dev-web-secret` or `dev-internal-secret` as a value
-- [ ] All five credentials have **no default** in `docker-compose.yml`: `grep -cE '(KEYCLOAK_DB_PASSWORD|KEYCLOAK_CLIENT_SECRET|KEYCLOAK_SERVICE_CLIENT_SECRET|DEV_ADMIN_PASSWORD|DEV_USER_PASSWORD): \$\{[A-Z_]+\}$' docker-compose.yml` → `5` (each matched line ends at `}` with no `:-`)
+- [ ] **No credential literal anywhere in committed files.** `grep -rnE "(PASSWORD|SECRET)[^=]*[:=] *['\"]?[A-Za-z0-9]" docker-compose.yml deploy/ ADMIN_GUIDE.md` returns **only** `${VAR}` references and `FIXME` placeholders. `KC_BOOTSTRAP_ADMIN_USERNAME: admin` is expected and correct — the username is an identifier, not a secret
+- [ ] All **six** credentials have **no default** in `docker-compose.yml`: `grep -cE '(KEYCLOAK_DB_PASSWORD|KEYCLOAK_CLIENT_SECRET|KEYCLOAK_SERVICE_CLIENT_SECRET|DEV_WBA_ADMIN_PASSWORD|DEV_WBA_USER_PASSWORD|DEV_KEYCLOAK_ADMIN_PASSWORD): \$\{[A-Z_]+\}$' docker-compose.yml` → `6` (each matched line ends at `}` with no `:-`)
 - [ ] The application is **still unauthenticated**: `curl -sf https://localhost/api/health` returns `{"status":"healthy"}` with no `Authorization` header
 - [ ] `plans/README.md` status row updated
 
@@ -1269,8 +1701,12 @@ the settings block fails the whole suite loudly.
 
 Stop and report (do not improvise) if:
 
-- The image rejects `KC_HOSTNAME_STRICT` or `--http-relative-path` in a way the
-  notes above do not cover.
+- ~~The image rejects `KC_HOSTNAME_STRICT` or `--http-relative-path`.~~
+  **RESOLVED 2026-10-31** — `KC_HOSTNAME_STRICT` is gone and `KC_HOSTNAME_ADMIN`
+  replaces it; `--http-relative-path` was never actually passed as a CLI flag.
+- The 26.8 image behaves differently from 26.4 for `KC_HOSTNAME_ADMIN`. It was
+  pre-verified working on 26.8.1, so a failure here means something else changed
+  — report rather than patching around it.
 - The `issuer` differs between the host and the container in Step 6.
 - ~~`envsubst` is missing from the Keycloak image.~~ **RESOLVED — it is missing,
   confirmed on 2026-10-30, and Step 4 now uses a pure-bash renderer instead.** Do
@@ -1278,6 +1714,11 @@ Stop and report (do not improvise) if:
 - A credential has to be written as a literal to make something work. Stop and
   report instead — the policy is that every Keycloak credential is a `${VAR}`
   with no default, and reintroducing a literal defeats the point of this plan.
+  (The two declared exceptions are the non-secret identifiers
+  `KC_DB_USERNAME: keycloak` and `KC_BOOTSTRAP_ADMIN_USERNAME: admin`.)
+- You feel the need to add a `ports:` block to make the healthcheck or a verify
+  command pass. The console port is off by default **by decision**; the
+  healthcheck runs inside the container and needs no published port.
 - The service account `wba-internal` cannot be given `wba-service` with the
   template shape you wrote.
 - Keycloak cannot connect to the `keycloak` database after Step 3 (the role/DB
@@ -1286,9 +1727,26 @@ Stop and report (do not improvise) if:
 
 ## Maintenance notes
 
-- **`KC_HOSTNAME_STRICT=false` is dev-only.** A real deployment must remove it
-  and front the console differently. The AWS topology in the design doc removes
-  nginx entirely, at which point the admin console must not be published at all.
+- **`KC_HOSTNAME_ADMIN` is the console mechanism, not `KC_HOSTNAME_STRICT`.**
+  Do not revert to `KC_HOSTNAME_STRICT=false` — on 26.x it is a documented no-op
+  whenever `KC_HOSTNAME` is set, and it was the original plan's bug. A real
+  deployment removes `KC_HOSTNAME_ADMIN` and does not publish the console at all.
+- **The console port is off by default and toggled by hand.** The operator
+  explicitly rejected a second compose file / override as hard to maintain, so
+  the toggle is a documented edit to `docker-compose.yml` per `ADMIN_GUIDE.md`.
+  Tested and rejected alternatives: an `${ADMIN_BIND}` env var (empty falls back
+  to the default, so it cannot disable a mapping) and a compose overlay with
+  `ports: []` (compose merges lists; only `!reset []` removes it, which needs the
+  second file the operator rejected).
+- **`KC_BOOTSTRAP_ADMIN_*` runs only against an empty Keycloak database.** It is
+  a one-shot seed, not an idempotent reconciler. Changing
+  `DEV_KEYCLOAK_ADMIN_PASSWORD` in `.env` later does **not** change the existing
+  admin's password — use `kc.sh bootstrap-admin user` (or the console). Any
+  reviewer who assumes this is declarative config will be wrong. To re-seed from
+  the variable, drop and recreate the `keycloak` database (decision 7); that is
+  safe only because the DB is entirely template-derived. **If a future change
+  makes that database hold non-reproducible state, this shortcut stops being
+  safe** — at that point export the realm first.
 - **No Keycloak credential is committed, including in development.** All five are
   `${VAR}` references with no default, populated in the gitignored `.env`. This
   deliberately costs the "zero manual setup" property: a fresh clone must set

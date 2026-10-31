@@ -14,8 +14,11 @@ done
 
  Make a copy of .env.example to .env and update the values.
 
- **Keycloak credentials.** `./scripts/setup.sh` generates the five required
+ **Keycloak credentials.** `./scripts/setup.sh` generates the six required
  values. See *Keycloak credentials* in `USER_GUIDE.md` for what each one is.
+
+ **Keycloak admin console.** Not published by default. See `ADMIN_GUIDE.md` to
+ open it on `127.0.0.1:8080`.
 
 ### Keycloak database on an existing Postgres volume
 

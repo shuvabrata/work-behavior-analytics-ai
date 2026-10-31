@@ -105,19 +105,24 @@ already set; each prompt re-offers the current value as the default.
 
 #### Keycloak credentials
 
-The wizard generates five credentials, which you do not need to choose:
+The wizard generates six credentials, which you do not need to choose:
 
 | Variable | What it is |
 |---|---|
 | `KEYCLOAK_DB_PASSWORD` | Password for the `keycloak` Postgres role |
 | `KEYCLOAK_CLIENT_SECRET` | Secret for the `wba-web` browser client |
 | `KEYCLOAK_SERVICE_CLIENT_SECRET` | Secret for the `wba-internal` service-account client |
-| `DEV_ADMIN_PASSWORD` | Password for the seeded `dev-admin` login |
-| `DEV_USER_PASSWORD` | Password for the seeded `dev-user` login |
+| `DEV_WBA_ADMIN_PASSWORD` | Password for the seeded `dev-admin` **application** login (roles `wba-admin` + `wba-user`) |
+| `DEV_WBA_USER_PASSWORD` | Password for the seeded `dev-user` **application** login (role `wba-user`) |
+| `DEV_KEYCLOAK_ADMIN_PASSWORD` | Password for the Keycloak **admin console** account (`admin`, master realm) — not an application login |
 
 Sign in as `dev-admin` or `dev-user` with the value in `.env`. That file is
 gitignored — never commit it, and never paste these values into a committed file
 or a bug report.
+
+The `DEV_WBA_*` names are the **application** users in the `wba` realm;
+`DEV_KEYCLOAK_ADMIN_PASSWORD` is the **Keycloak console** account, a different
+realm with no application roles. See `ADMIN_GUIDE.md` for the console.
 
 The browser-facing URL comes from `EXTERNAL_BASE_URL`, which already defaults to
 `https://localhost`. Leave it alone for a local install — set it only if you

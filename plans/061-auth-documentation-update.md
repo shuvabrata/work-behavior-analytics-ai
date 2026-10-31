@@ -245,7 +245,7 @@ Place it near the other security/architecture docs (e.g. after
 paragraph listing `KEYCLOAK_ISSUER`, `KEYCLOAK_INTERNAL_URL`, `KEYCLOAK_REALM`,
 `KEYCLOAK_CLIENT_ID`/`_SECRET`, `KEYCLOAK_SERVICE_CLIENT_ID`/`_SECRET`,
 `AUTH_COOKIE_SECURE`, `AUTH_SESSION_IDLE_MINUTES`, `AUTH_SESSION_MAX_HOURS`, and
-the dev seed passwords `DEV_ADMIN_PASSWORD` / `DEV_USER_PASSWORD` — with one
+the dev seed passwords `DEV_WBA_ADMIN_PASSWORD` / `DEV_WBA_USER_PASSWORD` — with one
 sentence on the `KEYCLOAK_ISSUER` vs `KEYCLOAK_INTERNAL_URL` distinction, since
 that is the single most error-prone setting.
 
@@ -311,8 +311,8 @@ setup/first-run material:
 
 - `docker compose up -d` brings up Keycloak with the `wba` realm.
 - Sign in at `https://localhost/app` as `dev-admin` (administrator) or
-  `dev-user` (standard user); the passwords come from `DEV_ADMIN_PASSWORD` /
-  `DEV_USER_PASSWORD` in `.env`.
+  `dev-user` (standard user); the passwords come from `DEV_WBA_ADMIN_PASSWORD` /
+  `DEV_WBA_USER_PASSWORD` in `.env`.
 - The standard user can read everything except connector secrets and cannot
   save shared configuration; the admin can.
 - The Keycloak admin console is at **`http://127.0.0.1:8080/auth/admin/`** —

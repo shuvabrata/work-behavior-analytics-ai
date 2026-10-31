@@ -62,8 +62,8 @@ idiom). Use it as the structural model for HTTP-level tests.
 `ui`, `nginx` are all required by this plan.
 
 **Dev users** (from plan 053's realm template): `dev-admin` (roles `wba-admin`,
-`wba-user`) and `dev-user` (`wba-user`), passwords from `DEV_ADMIN_PASSWORD` /
-`DEV_USER_PASSWORD` in `.env` (defaults `admin` / `user` if unset).
+`wba-user`) and `dev-user` (`wba-user`), passwords from `DEV_WBA_ADMIN_PASSWORD` /
+`DEV_WBA_USER_PASSWORD` in `.env` (defaults `admin` / `user` if unset).
 
 **Baseline**: `pytest -m unit tests -q` → 2391 passed + plans 054-059's tests.
 That number must not change: **this plan adds no unit tests**.
@@ -76,7 +76,7 @@ That number must not change: **this plan adds no unit tests**.
   existing `server` tests deliberately **fail** when the stack is down, so a
   broken environment is visible.
 - Credentials come from the environment, never hard-coded in the test. Read
-  `DEV_ADMIN_PASSWORD` / `DEV_USER_PASSWORD` with the compose defaults.
+  `DEV_WBA_ADMIN_PASSWORD` / `DEV_WBA_USER_PASSWORD` with the compose defaults.
 - Do **not** commit or push unless asked.
 
 ## Commands you will need

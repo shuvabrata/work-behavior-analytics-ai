@@ -312,6 +312,15 @@ and add the import beside the existing router imports.
 
 **Verify**: `curl -s -o /dev/null -w '%{http_code}' 'https://localhost/api/v1/auth/login?next=/app/graph'` → `302`
 **Verify**: `curl -s -o /dev/null -w '%{redirect_url}' 'https://localhost/api/v1/auth/login?next=/app/graph'` → starts with `https://localhost/auth/realms/wba/protocol/openid-connect/auth`
+
+**Dependency, do not skip:** the login page's CSS/JS come from
+`/auth/resources/...`, which nginx must proxy — plan 053 originally proxied only
+`/auth/realms/` and that made the login form render unstyled (all assets 404).
+That is fixed in 053; if login works but looks broken, check
+`curl -s https://localhost/auth/realms/wba/account | grep -oE '(src|href)="/[^"]+"'`
+returns paths that fetch `200` through nginx. **Also note the login page must be
+reached on `https://localhost`, not the keycloak loopback port** — the port serves
+only the admin console (`KC_HOSTNAME_ADMIN`).
 **Verify**: `curl -s -o /dev/null -w '%{http_code}' 'https://localhost/api/v1/auth/login?next=https://evil.example'` then follow the redirect target and confirm `redirect_uri` is unchanged and `next` would land on `/app/graph` (the sanitiser). The **state cookie** is what carries `next`; inspect it in the callback test instead of by hand.
 **Verify**: `curl -s -o /dev/null -w '%{http_code}' -X POST https://localhost/api/v1/auth/token` → `401`
 

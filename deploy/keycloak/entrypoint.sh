@@ -7,15 +7,15 @@ set -euo pipefail
 : "${APP_PUBLIC_BASE_URL:?APP_PUBLIC_BASE_URL must be set (e.g. https://wba.example.com)}"
 : "${KEYCLOAK_CLIENT_SECRET:?KEYCLOAK_CLIENT_SECRET must be set}"
 : "${KEYCLOAK_SERVICE_CLIENT_SECRET:?KEYCLOAK_SERVICE_CLIENT_SECRET must be set}"
-: "${DEV_ADMIN_PASSWORD:?DEV_ADMIN_PASSWORD must be set}"
-: "${DEV_USER_PASSWORD:?DEV_USER_PASSWORD must be set}"
+: "${DEV_WBA_ADMIN_PASSWORD:?DEV_WBA_ADMIN_PASSWORD must be set}"
+: "${DEV_WBA_USER_PASSWORD:?DEV_WBA_USER_PASSWORD must be set}"
 
 mkdir -p /opt/keycloak/data/import
 rm -f /opt/keycloak/data/import/*.json
 
 rendered=$(<"/opt/keycloak/realm-wba.json.template")
 for name in APP_PUBLIC_BASE_URL KEYCLOAK_CLIENT_SECRET \
-            KEYCLOAK_SERVICE_CLIENT_SECRET DEV_ADMIN_PASSWORD DEV_USER_PASSWORD; do
+            KEYCLOAK_SERVICE_CLIENT_SECRET DEV_WBA_ADMIN_PASSWORD DEV_WBA_USER_PASSWORD; do
   rendered=${rendered//"\${$name}"/"${!name}"}
 done
 

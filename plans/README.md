@@ -27,7 +27,7 @@ ordered so the stack runs after it.
 
 | Plan | Title | Priority | Effort | Risk | Depends on | Status |
 |------|-------|----------|--------|------|------------|--------|
-| 053  | [Keycloak service and realm `wba` as code](053-keycloak-service-and-realm.md) | **P1** | M | MED | 052 | TODO |
+| 053  | [Keycloak service and realm `wba` as code](053-keycloak-service-and-realm.md) | **P1** | M | MED | 052 | **IN PROGRESS** — Steps 1–4 ✅ (HEAD `64bc5f2a`); Step 5 + 5b edits landed (`ADMIN_GUIDE.md` written, compose block trimmed, `DEV_KEYCLOAK_ADMIN_PASSWORD` wired through compose/`.env.example`/`setup.sh`); `keycloak.env.example` deleted. **Remaining: the operator's `.env` run + keycloak-DB recreate, then Gate 5's browser check.** See the plan's Gate 5 record |
 | 054  | [Principal, JWT validation, and `auth_session`](054-principal-jwt-validation-and-session-model.md) | **P1** | M | MED | 053 | TODO |
 | 055  | [Service tokens for producers and consumer](055-service-tokens-for-producers-and-consumer.md) | **P1** | M | MED | 054 | TODO |
 | 056  | [Login flow, BFF token exchange, UI guard, SSE proxy](056-auth-flow-bff-and-sse-proxy.md) | **P1** | L | **HIGH** | 055 | TODO |

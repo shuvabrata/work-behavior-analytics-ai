@@ -64,7 +64,7 @@
       "credentials": [
         {
           "type": "password",
-          "value": "${DEV_ADMIN_PASSWORD}",
+          "value": "${DEV_WBA_ADMIN_PASSWORD}",
           "temporary": false
         }
       ]
@@ -82,7 +82,7 @@
       "credentials": [
         {
           "type": "password",
-          "value": "${DEV_USER_PASSWORD}",
+          "value": "${DEV_WBA_USER_PASSWORD}",
           "temporary": false
         }
       ]

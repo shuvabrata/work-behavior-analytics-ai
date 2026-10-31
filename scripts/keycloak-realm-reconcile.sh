@@ -69,6 +69,17 @@ require_admin_password() {
     export KC_CLI_PASSWORD
 }
 
+require_app_public_base_url() {
+    APP_PUBLIC_BASE_URL="$(sed -n 's|^APP_PUBLIC_BASE_URL=||p' "$ENV_FILE" | head -n 1)"
+    APP_PUBLIC_BASE_URL="${APP_PUBLIC_BASE_URL%/}"
+    if [[ -z "$APP_PUBLIC_BASE_URL" ]]; then
+        error "APP_PUBLIC_BASE_URL is not set in ${ENV_FILE}."
+        error "It must match the app, which derives its redirect URIs from it."
+        exit 1
+    fi
+    WEB_POST_LOGOUT_URI="${APP_PUBLIC_BASE_URL}/app"
+}
+
 authenticate() {
     # kcadm.sh has no `--password:env` flag (verified against Keycloak 26.8:
     # it rejects one with "Unknown options: '--password:env'"). What it does
@@ -87,13 +98,18 @@ kcadm() {
     docker exec "$CONTAINER" "$KCADM" "$@"
 }
 
-reconcile_web_audience() {
+web_client_id() {
     local client_id
     client_id="$(kcadm get clients -r "$REALM" -q clientId="$WEB_CLIENT_ID" --fields id --format csv --noquotes)"
     if [[ -z "$client_id" ]]; then
         error "Client ${WEB_CLIENT_ID} not found in realm ${REALM}."
         exit 1
     fi
+    printf '%s' "$client_id"
+}
+
+reconcile_web_audience() {
+    local client_id="$1"
 
     local mappers
     mappers="$(kcadm get "clients/${client_id}/protocol-mappers/models" -r "$REALM" --fields name --format csv --noquotes)"
@@ -108,8 +124,31 @@ reconcile_web_audience() {
     info "Added ${WEB_MAPPER_NAME} to client ${WEB_CLIENT_ID}"
 }
 
+reconcile_web_post_logout_uri() {
+    local client_id="$1"
+
+    local current
+    current="$(kcadm get "clients/${client_id}" -r "$REALM" --format json \
+        | tr -d '\n' | sed -n 's/.*"post\.logout\.redirect\.uris"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')"
+    if [[ "$current" == "$WEB_POST_LOGOUT_URI" ]]; then
+        info "wba-web post-logout redirect URI already present — nothing to do"
+        return 0
+    fi
+
+    # The key is quoted because its name contains dots, which --set would
+    # otherwise read as nesting separators. Merge mode is on by default, so this
+    # sets the one attribute without disturbing the rest of the client.
+    kcadm update "clients/${client_id}" -r "$REALM" \
+        -s "attributes.\"post.logout.redirect.uris\"=${WEB_POST_LOGOUT_URI}" >/dev/null
+
+    info "Set post-logout redirect URI on client ${WEB_CLIENT_ID}"
+}
+
 require_container_running
 require_admin_password
+require_app_public_base_url
 authenticate
 
-reconcile_web_audience
+WEB_CLIENT_UUID="$(web_client_id)"
+reconcile_web_audience "$WEB_CLIENT_UUID"
+reconcile_web_post_logout_uri "$WEB_CLIENT_UUID"

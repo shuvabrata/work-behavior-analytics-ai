@@ -26,7 +26,8 @@
       "serviceAccountsEnabled": false,
       "secret": "${KEYCLOAK_CLIENT_SECRET}",
       "attributes": {
-        "pkce.code.challenge.method": "S256"
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "${APP_PUBLIC_BASE_URL}/app"
       },
       "protocolMappers": [
         {

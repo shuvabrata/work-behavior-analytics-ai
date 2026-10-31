@@ -5,8 +5,13 @@
 > anything in "STOP conditions" occurs, stop and report — do not improvise.
 > When done, update the status row in `plans/README.md`.
 >
-> **Every step ends with a MANUAL GATE.** Hand back to the operator and wait for
-> `PASS`. A `FAIL` is a STOP condition.
+> **Gate policy**: Steps 1–3 are **automated-only** — run their verification
+> commands, paste the output in your report, and continue without waiting. There
+> is **one MANUAL GATE**, at the end of Step 4, and it covers only what no
+> automated check can see: that the chat answer streams incrementally through the
+> proxy rather than arriving in one buffered chunk, that the account bar renders,
+> and that login/logout round-trips in a real browser. A `FAIL` at that gate is a
+> STOP condition.
 >
 > **Drift check (run first)**: `git diff --stat 225d3639..HEAD -- src/app/api_main.py src/ui/api_client.py src/ui/layout.py src/ui_main.py src/ui/assets/stream-bridge.js src/ui/request_logging.py deploy/nginx/nginx.conf tests/test_chat_stream_bridge.py`
 > Any mismatch against "Current state" is a STOP condition.
@@ -93,7 +98,7 @@ runs both in registration order (it does, but one hook is simpler to reason abou
 
 **`tests/test_chat_stream_bridge.py:171-176`** — the only guard on that URL,
 and it is **vacuous**: it asserts `"/stream" in content`, which stays true for
-`/app/stream/`. Step 7 replaces it with an exact assertion.
+`/app/stream/`. Step 3 replaces it with an exact assertion.
 
 **`deploy/nginx/nginx.conf`** — has `location /api/v1/chats/` with
 `proxy_buffering off` for the stream. After this change the browser calls
@@ -125,10 +130,16 @@ set `X-Accel-Buffering: no` itself.
 | Typecheck | `mypy src/` | exit 0 |
 | Lint | `pylint src --score=y` | ≥ 9.0 |
 | Security scan | `bandit -c .bandit.yml -r src/ -lll` | exit 0 |
-| Compose | `docker compose config -q` | exit 0 |
+| Compose config | `docker compose config -q` | exit 0 |
+| Rebuild a runtime | `docker compose up -d --build api ui` | both healthy |
 | Nginx syntax | `docker run --rm --network work-behavior-analytics-ai_wba-ai-network -v "$PWD/deploy/nginx/nginx.conf:/etc/nginx/nginx.conf:ro" -v "$PWD/deploy/certs:/etc/nginx/certs:ro" nginx:1.30-alpine nginx -t` | syntax ok |
-| Rebuild stack | `docker compose up -d --build api ui` | healthy |
 | Login redirect | `curl -s -o /dev/null -w '%{http_code} %{redirect_url}' 'https://localhost/api/v1/auth/login?next=/app/graph'` | `302` to Keycloak |
+
+**The API and UI images have no source bind-mount.** Every `curl https://localhost`
+verification below runs against the container, so run
+`docker compose up -d --build api ui` at the start of each step that changes
+container code (Step 1 → `api`, Steps 2–3 → `ui`) and wait for `healthy` before
+running that step's curls. A green curl against a stale image proves nothing.
 
 ## Scope
 
@@ -138,11 +149,13 @@ set `X-Accel-Buffering: no` itself.
 - `src/app/auth/session_cookie.py` (create) — cookie name, hashing, PKCE state cookie.
 - `src/ui/auth.py` (create) — per-worker token cache and session-cookie helpers.
 - `src/ui/api_client.py` — attach the bearer header.
+- `src/ui/runtime_settings.py` — route the snapshot fetch through `api_client`.
 - `src/ui/request_logging.py` — the session guard (or a new `src/ui/session_guard.py` registered there).
 - `src/ui/stream_proxy.py` (create) — the SSE proxy Flask route.
 - `src/ui_main.py` — register the stream proxy route.
 - `src/ui/assets/stream-bridge.js` — the one-line URL change.
-- `src/ui/components/account_bar.py` (create) — username, role badge, logout.
+- `src/ui/components/account_bar.py` (create) — username and logout (no role
+  badge; see Step 3b).
 - `src/ui/layout.py` — render the account bar in the topbar.
 - `tests/test_auth_flow.py`, `tests/test_auth_session_service.py`,
   `tests/test_ui_auth.py`, `tests/test_stream_proxy.py` (create)
@@ -159,7 +172,11 @@ set `X-Accel-Buffering: no` itself.
 
 ## Steps
 
-### Step 1: Session-cookie primitives in the API
+### Step 1: The API side — cookie primitives, session service, and the auth endpoints
+
+Three parts, all API-side. Write the tests for this step in the same step.
+
+#### 1a. Session-cookie primitives
 
 Create `src/app/auth/session_cookie.py`:
 
@@ -180,20 +197,7 @@ Create `src/app/auth/session_cookie.py`:
   **`path="/"` is required** — the UI mounts at `/app` and the auth endpoints
   at `/api`, so a narrower path would make one side unable to see the cookie.
 
-**Verify**: `PYTHONPATH=src python -c "
-from app.auth.session_cookie import hash_session_id, new_session_id, encode_pkce_cookie, decode_pkce_cookie
-s=new_session_id(); c=encode_pkce_cookie('st','vf'); print(len(hash_session_id(s))==64, decode_pkce_cookie(c))"` → `True ('st', 'vf')`
-**Verify**: `mypy src/app/auth/` → exit 0
-
-> ### 🚦 MANUAL GATE 1 — cookie primitives
->
-> Operator confirms the session id is hashed before storage, the PKCE cookie is
-> encrypted (not merely signed), and cookie `path` is `/`.
-> Wait for `PASS`.
-
----
-
-### Step 2: The `auth_session` service and query layer
+#### 1b. The `auth_session` service and query layer
 
 Create `src/app/api/auth/` following the repo's four-file layering.
 
@@ -238,8 +242,8 @@ Create `src/app/api/auth/` following the repo's four-file layering.
   session row with `refresh_token_encrypted = encrypt(refresh_token)`,
   `expires_at = now + settings.AUTH_SESSION_MAX_HOURS`;
   return the raw session id and the redirect target.
-- `async def exchange_token(db, *, session_id) -> TokenResponse` —
-  see Step 3.
+- `async def exchange_token(db, *, session_id) -> TokenResponse` — the BFF
+  mechanism, specified below.
 - `async def logout(db, *, session_id) -> str` — revoke the row, build the
   Keycloak `end_session_endpoint` URL from discovery with `id_token_hint` (or
   `client_id` when no id_token is retained) and
@@ -249,22 +253,10 @@ Create `src/app/api/auth/` following the repo's four-file layering.
 refresh token (encrypted) is persisted; the access token is returned to the
 caller and never written down.
 
-**Verify**: `mypy src/app/api/auth/` → exit 0
-**Verify**: `pytest -m unit tests/test_auth_session_service.py -q` → passes after Step 6
+#### 1c. The token-exchange endpoint
 
-> ### 🚦 MANUAL GATE 2 — service layer
->
-> Operator confirms: `next` is sanitised against open redirect; `state` is
-> compared in constant time; the access token is never persisted; the refresh
-> token is encrypted.
-> Wait for `PASS`.
-
----
-
-### Step 3: The token-exchange endpoint (the BFF mechanism)
-
-This is the one endpoint that reads the session cookie. Implement
-`exchange_token` in `service.py`:
+This is the one endpoint that reads the session cookie, and the security core
+of the plan. Implement `exchange_token`:
 
 1. `hash_session_id(session_id)` → look up an active row. Missing/revoked → 401.
 2. **Enforce the app caps** against the row and runtime settings:
@@ -310,8 +302,42 @@ app.include_router(auth_v1_router, prefix="/api/v1")
 
 and add the import beside the existing router imports.
 
-**Verify**: `curl -s -o /dev/null -w '%{http_code}' 'https://localhost/api/v1/auth/login?next=/app/graph'` → `302`
-**Verify**: `curl -s -o /dev/null -w '%{redirect_url}' 'https://localhost/api/v1/auth/login?next=/app/graph'` → starts with `https://localhost/auth/realms/wba/protocol/openid-connect/auth`
+#### 1d. Tests for this step
+
+**`tests/test_auth_flow.py`** — `pytestmark = pytest.mark.unit`
+Through `httpx.ASGITransport` against the real `app`, with the **token
+endpoint's Keycloak calls stubbed** (no network):
+- `/auth/login` returns 302 with `code_challenge_method=S256`, `state`, and the
+  exact `redirect_uri`.
+- `/auth/login?next=https://evil.example` results in a `next` that is `/app/graph`.
+- `/auth/callback` with a mismatched `state` → 400 and **no** session row.
+- `/auth/callback` happy path → sets `wba_session` with `HttpOnly`, `Secure`,
+  `SameSite=Lax`, `Path=/`, and creates exactly one row.
+- `/auth/token` with no cookie → 401; with a revoked row → 401; with an expired
+  idle row → 401 **and** the row is revoked.
+- **`/auth/token` twice returns a refreshed token and the row's
+  `refresh_token_encrypted` changes each time** — the rotation-persistence test.
+- Keycloak returning 500 on refresh → **503**, and the row is **not** revoked.
+- `/auth/logout` revokes the row and clears the cookie.
+
+**`tests/test_auth_session_service.py`** — `pytestmark = pytest.mark.unit`
+- idle/max comparisons at the boundary (exactly at the limit vs one second past).
+- `username`/`roles` snapshot written at creation.
+- `next` sanitiser table: `/app/graph` ok; `//evil`, `https://evil`,
+  `/app/../x`, and a newline all fall back.
+
+**Verify** (all automated — no hand-back):
+- `PYTHONPATH=src python -c "
+from app.auth.session_cookie import hash_session_id, new_session_id, encode_pkce_cookie, decode_pkce_cookie
+s=new_session_id(); c=encode_pkce_cookie('st','vf'); print(len(hash_session_id(s))==64, decode_pkce_cookie(c))"` → `True ('st', 'vf')`
+- `mypy src/app/auth/ src/app/api/auth/` → exit 0
+- `pytest -m unit tests/test_auth_flow.py tests/test_auth_session_service.py -q` → all pass
+- `docker compose up -d --build api` → healthy
+- `curl -s -o /dev/null -w '%{http_code}' 'https://localhost/api/v1/auth/login?next=/app/graph'` → `302`
+- `curl -s -o /dev/null -w '%{redirect_url}' 'https://localhost/api/v1/auth/login?next=/app/graph'` → starts with `https://localhost/auth/realms/wba/protocol/openid-connect/auth`
+- `curl -s -o /dev/null -w '%{http_code}' -X POST https://localhost/api/v1/auth/token` → `401`
+- `curl -s https://localhost/api/v1/auth/me -H 'Cookie: wba_session=bogus'` → `401`
+- `grep -rn "access_token\|refresh_token" src/app/api/auth/ | grep -i logger` → no matches (no token is ever logged)
 
 **Dependency, do not skip:** the login page's CSS/JS come from
 `/auth/resources/...`, which nginx must proxy — plan 053 originally proxied only
@@ -321,19 +347,18 @@ That is fixed in 053; if login works but looks broken, check
 returns paths that fetch `200` through nginx. **Also note the login page must be
 reached on `https://localhost`, not the keycloak loopback port** — the port serves
 only the admin console (`KC_HOSTNAME_ADMIN`).
-**Verify**: `curl -s -o /dev/null -w '%{http_code}' 'https://localhost/api/v1/auth/login?next=https://evil.example'` then follow the redirect target and confirm `redirect_uri` is unchanged and `next` would land on `/app/graph` (the sanitiser). The **state cookie** is what carries `next`; inspect it in the callback test instead of by hand.
-**Verify**: `curl -s -o /dev/null -w '%{http_code}' -X POST https://localhost/api/v1/auth/token` → `401`
 
-> ### 🚦 MANUAL GATE 3 — endpoints exist
->
-> Operator confirms: login 302s to Keycloak with PKCE and the exact
-> `redirect_uri`; `/auth/token` with no cookie is 401; the open-redirect
-> sanitiser rejects an absolute `next`.
-> Wait for `PASS`.
+The open-redirect sanitiser is covered by the unit test's `next` table and by the
+`/auth/login?next=https://evil.example` case above — the **state cookie** carries
+`next`, so assert it in the callback test rather than by hand.
 
 ---
 
-### Step 4: The UI token cache
+### Step 2: The UI credential path — token cache, bearer header, session guard
+
+Three parts, all UI-side, plus their tests. Nothing here requires a browser.
+
+#### 2a. The UI token cache
 
 Create `src/ui/auth.py`:
 
@@ -354,20 +379,10 @@ Create `src/ui/auth.py`:
 - On a 401 from `/auth/token`, raise `SessionMissingError`; on 503/transport
   failure raise `TokenExchangeUnavailable`.
 
-**Verify**: `PYTHONPATH=src python -c "import ui.auth"` → no error
-**Verify**: `grep -n "wba_session" src/ui/auth.py` → present (reads it)
-**Verify**: `grep -c "access_token" src/ui/layout.py src/ui/assets/*.js` → `0` (the token never reaches the page)
-**Verify**: `mypy src/ui/auth.py` → exit 0
+**Do not import `ui.api_client` from this module** — `api_client` imports
+`ui.auth`, and the reverse edge is an import cycle.
 
-> ### 🚦 MANUAL GATE 4 — token cache
->
-> Operator confirms the token is memory-only, keyed by the hashed cookie id, and
-> that `api_client` is not imported by `ui.auth` (no recursion).
-> Wait for `PASS`.
-
----
-
-### Step 5: Attach the bearer header in the shared client
+#### 2b. Attach the bearer header in the shared client
 
 In `src/ui/api_client.py`, in `_call()` add the header **when a session cookie is
 present**, and leave the client working unchanged when it is not (tests and the
@@ -390,22 +405,7 @@ the `ApiError` contract **exactly** as they are — 47 handlers depend on them.
 A `401`-triggered single retry belongs to plan 058 (where the redirect lives).
 Do not add it here.
 
-**Verify**: `grep -n "Authorization" src/ui/api_client.py` → exactly one occurrence
-**Verify**: `pytest -m unit tests -q` → ≥ baseline (the existing client tests
-pass a stub transport and no cookie, so the header path is not taken)
-**Verify**: `mypy src/` → exit 0
-**Verify**: `pylint src --score=y` → ≥ 9.0
-
-> ### 🚦 MANUAL GATE 5 — client
->
-> Operator confirms `ApiError` is unchanged (still one type carrying
-> `status_code`), `set_transport` still works, and an import cycle between
-> `ui.api_client` and `ui.auth` does not exist.
-> Wait for `PASS`.
-
----
-
-### Step 6: The UI session guard
+#### 2c. The UI session guard
 
 Add a guard to `src/ui/request_logging.py` (or a new `src/ui/session_guard.py`
 imported and registered from there) inside the existing `before_request`:
@@ -435,37 +435,142 @@ Behaviour, in order:
 
 Exclude the health/asset paths that gunicorn or nginx probe; the existing
 `/app/` health check is a navigation and will 302 when logged out, which is
-acceptable (nginx treats `302` as a healthy response). **Confirm this** in the
-gate rather than assuming: `docker compose ps ui` must stay `healthy`.
+acceptable (nginx treats `302` as a healthy response). **Confirm this**, do not
+assume it: `docker compose ps ui` must stay `healthy`.
 
-**Verify**: `curl -s -o /dev/null -w '%{http_code} %{redirect_url}' https://localhost/app/graph` (no cookie jar) → `302` to `/api/v1/auth/login?next=/app/graph`
-**Verify**: `curl -s -o /dev/null -w '%{http_code}' -X POST -H 'X-Requested-With: XMLHttpRequest' -H 'Content-Type: application/json' -d '{}' https://localhost/app/_dash-update-component` → `401`
-**Verify**: `curl -s -o /dev/null -w '%{http_code}' https://localhost/app/assets/executive-dashboard.css` → `200`
-**Verify**: `docker compose ps ui` → `healthy` after a minute
+#### 2d. Route the UI's runtime-settings fetch through the client
 
-> ### 🚦 MANUAL GATE 6 — guard
->
-> Operator confirms in a browser: opening `https://localhost/app` while logged
-> out lands on Keycloak's login page; logging in as `dev-user` returns to
-> `/app/graph` (not a bare host root); CSS loads; and the container stays
-> healthy.
-> Wait for `PASS`.
+The UI keeps a runtime-settings cache and refreshes it from the API's
+`GET /api/v1/settings/runtime-snapshot` via `refresh_if_stale()`. Today
+`src/ui/runtime_settings.py:96-98` reaches that endpoint with
+`common.runtime_settings.client.fetch_runtime_snapshot`, which authenticates with
+a **service** token — and the UI container holds no `KEYCLOAK_*` env, so
+`get_service_token()` there always raises and the request goes out
+unauthenticated.
+
+That is harmless **today only because the snapshot route has no auth dependency
+yet** (`src/app/api/settings/v1/router.py:41` takes just `db`). Plan 057's Step 4a
+promotes it to `require_any("user", "admin", "service")`. From that moment the
+UI's credential-free fetch 401s; `fetch_runtime_snapshot` treats any non-200 as
+"API unreachable", logs a warning, and returns bare `RuntimeConfig()` defaults;
+`refresh()` sees an all-defaults snapshot and returns early keeping current
+values. The result is a **silent** failure — the UI stops picking up runtime
+settings edits, with no error and no broken page:
+
+```python
+# src/ui/runtime_settings.py — current behaviour after 057
+snapshot = fetch_runtime_snapshot(settings.API_BASE_URL)
+if snapshot == RuntimeConfig():
+    logger.warning("UI runtime-settings snapshot was empty — keeping current values")
+    return
+```
+
+**Do this here, not in 057.** This step is where the UI first acquires a
+credential; before it, the shared helper is the only option, and after 057 the
+window is already broken. Change `refresh()` in `src/ui/runtime_settings.py` to
+fetch through `ui.api_client` (`get_json("/api/v1/settings/runtime-snapshot")`),
+so the call rides the user's bearer token from 2b.
+
+Two constraints:
+
+- **Keep the degrade.** `refresh()` is called from `before_request` and must
+  never raise into the request cycle. Catch `ApiError` — including
+  `STATUS_NO_RESPONSE` for a down API — and return early, preserving the values
+  the cache already holds, exactly as the current helper's fallback does. Logging
+  stays at WARNING.
+- **Keep the import edge one-way.** `api_client` imports `ui.runtime_settings`
+  at module level (`src/ui/api_client.py:33`), so importing `api_client` at the
+  top of `ui/runtime_settings.py` is an **import cycle**. Import it lazily
+  inside `refresh()`, the way the shared helper is imported today:
+
+  ```python
+  # Imported lazily: ui.api_client imports this module at module level, so a
+  # top-level import here is a cycle.
+  # pylint: disable=import-outside-toplevel
+  from ui import api_client
+  ```
+
+**Do not remove the `common.runtime_settings` / `common.auth` imports.**
+`src/domain/timezone.py:24` still imports `RuntimeConfigCache` from that package,
+and `src/common/runtime_settings/__init__.py:11` re-exports
+`fetch_runtime_snapshot`, which pulls in `common.auth` at import. So the UI's
+import closure keeps `common.runtime_settings` — and therefore `common.auth` and
+the `COPY src/common/auth/ ./common/auth/` line in `Dockerfile.ui:37` — **even
+after this change**. Removing that `COPY` breaks the UI image at import. Dropping
+it would mean reworking `common/runtime_settings/__init__.py`'s eager re-export
+first; if you want that follow-up, write it as a separate plan, not a line in
+this step.
+
+#### 2e. Tests for this step
+
+**`tests/test_ui_auth.py`** — `pytestmark = pytest.mark.unit`
+- with no cookie, `get_token()` raises `SessionMissingError`.
+- with a stub transport, the second `get_token()` reuses the cache.
+- a token within 60 s of expiry is re-fetched.
+- `invalidate_token()` forces a re-fetch.
+
+**`tests/test_ui_runtime_snapshot_auth.py`** — `pytestmark = pytest.mark.unit`
+Drive `ui.runtime_settings.refresh()` with a stub transport (the
+`ui.api_client.set_transport` seam) and assert:
+- the request goes to `/api/v1/settings/runtime-snapshot` **through
+  `api_client`**, so it carries the `Authorization` header 2b attaches — stub
+  `get_token` and assert the header is present. Asserting only "headers exist"
+  is too weak: pin that the service-token path is gone by also asserting
+  `common.runtime_settings.client.fetch_runtime_snapshot` is **not called**
+  (patch it and assert `call_count == 0`).
+- an `ApiError` (both a 401 and a `STATUS_NO_RESPONSE` transport failure) leaves
+  the cache's existing values untouched and does **not** raise.
+- a 200 with a populated payload does update the cache.
+
+**Verify** (all automated — no hand-back):
+- `grep -n "fetch_runtime_snapshot" src/ui/runtime_settings.py` → no match in
+  `refresh()` (the docstring may still name it historically — the call must be gone)
+- `grep -n "from ui import api_client" src/ui/runtime_settings.py` → present, and
+  **inside** `refresh()`, not at module level
+- `pytest -m unit tests/test_ui_runtime_snapshot_auth.py -q` → all pass
+- `PYTHONPATH=src python -c "import ui.auth"` → no error
+- `grep -n "wba_session" src/ui/auth.py` → present (reads it)
+- `grep -c "access_token" src/ui/layout.py src/ui/assets/*.js` → `0` (the token never reaches the page)
+- `grep -n "Authorization" src/ui/api_client.py` → exactly one occurrence
+- `grep -n "import.*api_client" src/ui/auth.py` → **no match** (no import cycle)
+- `mypy src/ui/auth.py` → exit 0
+- `pytest -m unit tests -q` → ≥ baseline (the existing client tests pass a stub transport and no cookie, so the header path is not taken)
+- `mypy src/` → exit 0
+- `pylint src --score=y` → ≥ 9.0
+- `docker compose up -d --build ui` → healthy
+- `curl -s -o /dev/null -w '%{http_code} %{redirect_url}' https://localhost/app/graph` (no cookie jar) → `302` to `/api/v1/auth/login?next=/app/graph`
+- `curl -s -o /dev/null -w '%{http_code}' -X POST -H 'X-Requested-With: XMLHttpRequest' -H 'Content-Type: application/json' -d '{}' https://localhost/app/_dash-update-component` → `401`
+- `curl -s -o /dev/null -w '%{http_code}' https://localhost/app/assets/executive-dashboard.css` → `200`
+- `docker compose ps ui` → `healthy` after a minute
 
 ---
 
-### Step 7: The SSE proxy route
+### Step 3: The SSE proxy, the account bar, and the strengthened bridge test
+
+#### 3a. The SSE proxy route
 
 Create `src/ui/stream_proxy.py` with a registration function
 `register_stream_proxy(server: Flask) -> None` that adds:
 
 ```python
-    @server.route("/stream/<session_id>", methods=["POST"])
+    @server.route("/app/stream/<session_id>", methods=["POST"])
     def stream_proxy(session_id: str) -> Response:
         ...
 ```
 
-Because both Dash prefixes are `/app/`, this is browser-reachable at
-`/app/stream/<session_id>` and is covered by the guard from Step 6.
+**CORRECTED during execution (2026-10-31).** This plan originally specified
+`@server.route("/stream/<session_id>")` and claimed it would be "browser-reachable
+at `/app/stream/<session_id>` because both Dash prefixes are `/app/`". **That is
+false.** Dash's `requests_pathname_prefix` governs Dash's *own* routes; it does
+not prefix a route registered directly on the Flask server. With the bare path,
+`POST /app/stream/<id>` is answered by Dash's `/app/<path:path>` catch-all with
+**405 Method Not Allowed**, and chat streaming fails in the browser. The route
+must carry the `/app` prefix itself.
+
+This defect survived every automated gate because a cookie-less `curl` to
+`/app/stream/<id>` returns **401 from the session guard**, which runs before
+routing — so the plan's own Step 3 verification (`→ 401`) passed for the wrong
+reason. See the execution record at the bottom of this file.
 
 Handler behaviour:
 
@@ -506,29 +611,9 @@ In `src/ui/assets/stream-bridge.js` change the URL to the proxy:
 **Do not** change anything else in that file — the SSE parsing, error display,
 and resolve contract are all still correct.
 
-**Verify**: `grep -n "fetch('/app/stream/'" src/ui/assets/stream-bridge.js` → exactly one match
-**Verify**: `grep -c "api/v1/chats" src/ui/assets/stream-bridge.js` → `0`
-**Verify**: `curl -s -o /dev/null -w '%{http_code}' -X POST -H 'Content-Type: application/json' -d '{"message":"hi"}' https://localhost/app/stream/does-not-exist` → `401` (no cookie) — proves the route exists and is guarded
+#### 3b. The account bar
 
-> ### 🚦 MANUAL GATE 7 — stream proxy (browser, mandatory)
->
-> This is the gate that catches what curl cannot. As `dev-user`, in Chat:
-> 1. Send a message. The answer must **stream word by word**, not appear all at
->    once at the end. If it arrives at once, buffering is on — check
->    `X-Accel-Buffering` and that `stream=True` is set.
-> 2. In DevTools → Network, the request is `POST /app/stream/<id>` and **no**
->    request goes to `/api/v1/chats/...`.
-> 3. The response's `Content-Type` is `text/event-stream`.
-> 4. Log out and confirm the chat page redirects to login rather than erroring.
-> Wait for `PASS`.
-
----
-
-### Step 8: The account bar
-
-Two halves.
-
-**API**: `/auth/me` is already in Step 3. Confirm it returns
+**API**: `/auth/me` is already in Step 1. Confirm it returns
 `{"subject", "username", "roles"}` and uses `require_user`.
 
 **UI**: create `src/ui/components/account_bar.py` exposing
@@ -543,6 +628,11 @@ Two halves.
   `clientside_callback` that submits a form, or a `dcc.Location` update after a
   `POST` through a Python callback). Choose the simplest that works and record
   which.
+- **CORRECTED during execution (2026-10-31): no role badge is rendered.** This
+  plan specified "username + role badge". The operator removed the badge while
+  testing Step 4 — the role is an authorization detail the API enforces per
+  request, not something the top bar needs to advertise. The Step 4 gate
+  criterion that asked for it was wrong; see the execution record.
 - **No `ConfirmDialog`** — logout is not destructive data loss (the repo's
   ConfirmDialog rule is for destructive actions).
 - On `ApiError`, render nothing rather than an error; a missing account bar is
@@ -553,53 +643,7 @@ with `__all__`, and render `get_account_bar_layout()` in the topbar in
 `src/ui/layout.py` (find `TOPBAR_STYLE` / the brand element and add it to that
 row).
 
-**Verify**: `grep -n "account_bar" src/ui/layout.py` → present
-**Verify**: `curl -s https://localhost/api/v1/auth/me -H 'Cookie: wba_session=bogus'` → `401`
-**Verify**: `python - <<'PY'
-import ast, pathlib
-p = pathlib.Path('src/ui/components/account_bar.py')
-ast.parse(p.read_text()); print('parsed')
-PY` → `parsed`
-
-> ### 🚦 MANUAL GATE 8 — account bar
->
-> Operator confirms in the browser: the top bar shows `dev-user` with a `User`
-> badge; `dev-admin` shows `Admin`; clicking logout lands back on the Keycloak
-> login page, and then signing in again works (proving the row was revoked and
-> a new session was created).
-> Wait for `PASS`.
-
----
-
-### Step 9: Tests
-
-**`tests/test_auth_flow.py`** — `pytestmark = pytest.mark.unit`
-Through `httpx.ASGITransport` against the real `app`, with the **token
-endpoint's Keycloak calls stubbed** (no network):
-- `/auth/login` returns 302 with `code_challenge_method=S256`, `state`, and the
-  exact `redirect_uri`.
-- `/auth/login?next=https://evil.example` results in a `next` that is `/app/graph`.
-- `/auth/callback` with a mismatched `state` → 400 and **no** session row.
-- `/auth/callback` happy path → sets `wba_session` with `HttpOnly`, `Secure`,
-  `SameSite=Lax`, `Path=/`, and creates exactly one row.
-- `/auth/token` with no cookie → 401; with a revoked row → 401; with an expired
-  idle row → 401 **and** the row is revoked.
-- **`/auth/token` twice returns a refreshed token and the row's
-  `refresh_token_encrypted` changes each time** — the rotation-persistence test.
-- Keycloak returning 500 on refresh → **503**, and the row is **not** revoked.
-- `/auth/logout` revokes the row and clears the cookie.
-
-**`tests/test_auth_session_service.py`** — `pytestmark = pytest.mark.unit`
-- idle/max comparisons at the boundary (exactly at the limit vs one second past).
-- `username`/`roles` snapshot written at creation.
-- `next` sanitiser table: `/app/graph` ok; `//evil`, `https://evil`,
-  `/app/../x`, and a newline all fall back.
-
-**`tests/test_ui_auth.py`** — `pytestmark = pytest.mark.unit`
-- with no cookie, `get_token()` raises `SessionMissingError`.
-- with a stub transport, the second `get_token()` reuses the cache.
-- a token within 60 s of expiry is re-fetched.
-- `invalidate_token()` forces a re-fetch.
+#### 3c. Tests for this step
 
 **`tests/test_stream_proxy.py`** — `pytestmark = pytest.mark.unit`
 Use Flask's `test_client`. Stub the upstream with `responses`-style injection or
@@ -619,27 +663,115 @@ def test_stream_bridge_calls_the_app_proxy_not_the_api_directly():
     assert "/api/v1/chats" not in content
 ```
 
-**Verify**: `pytest -m unit tests/test_auth_flow.py tests/test_auth_session_service.py tests/test_ui_auth.py tests/test_stream_proxy.py tests/test_chat_stream_bridge.py -q` → all pass
-**Verify**: `pytest -m unit tests -q` → ≥ baseline + new, 0 fail
-**Verify**: `mypy src/` and `pylint src --score=y` and `bandit -c .bandit.yml -r src/ -lll` → all exit 0 / ≥ 9.0
+#### 3d. Prove the two new assertions are non-vacuous
 
-> ### 🚦 MANUAL GATE 9 — tests
+The old bridge test passed for the wrong reason; two of the new tests are the
+kind that can pass without testing anything, so prove each one **fails** when the
+behaviour is removed. This replaces the former manual review of those tests.
+
+**Bridge test** — temporarily point the JS back at the API and confirm the test
+fails:
+
+```bash
+cp src/ui/assets/stream-bridge.js /tmp/sb.bak
+sed -i "s#'/app/stream/' + sessionId#'/api/v1/chats/' + sessionId + '/stream'#" src/ui/assets/stream-bridge.js
+pytest -m unit tests/test_chat_stream_bridge.py -q   # MUST FAIL
+cp /tmp/sb.bak src/ui/assets/stream-bridge.js
+pytest -m unit tests/test_chat_stream_bridge.py -q   # MUST PASS
+```
+
+**Refresh-rotation test** — temporarily stop persisting the rotated refresh
+token (`touch_session(..., refresh_token_encrypted=None)` in `exchange_token`)
+and confirm the rotation test fails:
+
+```bash
+cp src/app/api/auth/service.py /tmp/auth-service.bak
+# edit exchange_token's touch_session call to pass refresh_token_encrypted=None
+pytest -m unit tests/test_auth_flow.py -q            # MUST FAIL on the rotation test
+cp /tmp/auth-service.bak src/app/api/auth/service.py
+pytest -m unit tests/test_auth_flow.py -q            # MUST PASS
+```
+
+Confirm both mutated runs failed for the **expected** assertion, not for an
+unrelated import or syntax error.
+
+**Verify** (all automated — no hand-back):
+- `grep -n "fetch('/app/stream/'" src/ui/assets/stream-bridge.js` → exactly one match
+- `grep -c "api/v1/chats" src/ui/assets/stream-bridge.js` → `0`
+- `grep -n "account_bar" src/ui/layout.py` → present
+- `grep -n "X-Accel-Buffering" src/ui/stream_proxy.py` → present
+- the two mutation runs above behaved as stated
+- `pytest -m unit tests/test_stream_proxy.py tests/test_chat_stream_bridge.py -q` → all pass
+- `pytest -m unit tests -q` → ≥ baseline + new, 0 fail
+- `mypy src/` exit 0; `pylint src --score=y` ≥ 9.0; `bandit -c .bandit.yml -r src/ -lll` exit 0
+- `docker compose config -q` exit 0; the `nginx -t` command from the Commands table → syntax ok
+- `docker compose up -d --build ui` → healthy
+- `curl -s -o /dev/null -w '%{http_code}' -X POST -H 'Content-Type: application/json' -d '{"message":"hi"}' https://localhost/app/stream/does-not-exist` → `401` (no cookie) — proves the route exists and is guarded
+- `python - <<'PY'
+import ast, pathlib
+p = pathlib.Path('src/ui/components/account_bar.py')
+ast.parse(p.read_text()); print('parsed')
+PY` → `parsed`
+
+---
+
+### Step 4: THE MANUAL GATE — the browser walkthrough
+
+Everything before this is green by automated check. This gate exists for the
+three things no command in this plan can observe: **incremental delivery over the
+proxy**, **rendered UI**, and **the real login/logout round trip**. Do not treat
+it as a restatement of Step 3.
+
+> ### 🚦 MANUAL GATE 1 — browser end-to-end (mandatory)
 >
-> Operator confirms the refresh-rotation test genuinely asserts the stored
-> ciphertext changes (not merely that a token came back), and that the stream
-> bridge test would fail on the old URL.
-> Wait for `PASS`.
+> Sign in as `dev-user` at `https://localhost/app`, then confirm:
+>
+> **1. Login and navigation**
+> - Logged out, opening `https://localhost/app` lands on Keycloak's login page.
+> - After signing in you return to `/app/graph` — not a bare host root.
+> - The page is **styled** (CSS and JS loaded from `/auth/resources/...`
+>   through nginx; unstyled means audit assets 404 and nginx's `/auth` proxy).
+>
+> **2. Chat streaming — the gate that catches what curl cannot**
+> - In Chat, send a message. The answer must **stream word by word**, not appear
+>   all at once at the end. If it arrives in one chunk, buffering is on — check
+>   `X-Accel-Buffering: no` is on the response and that `stream=True` is set.
+> - DevTools → Network: the request is `POST /app/stream/<id>`, its
+>   `Content-Type` is `text/event-stream`, and **no** request goes to
+>   `/api/v1/chats/...`.
+>
+> **3. Account bar**
+> - The top bar shows `dev-user` with a **Sign out** button and **no role badge**.
+>   The badge this gate originally asked for was removed during execution — see
+>   the "account bar" correction in Step 3b.
+> - The browser holds no access token — `document.cookie` and every Dash store
+>   show only `wba_session`.
+>
+> **4. Logout round trip**
+> - Clicking logout lands on the Keycloak login page, and signing in again works
+>   (proving the row was revoked and a new session was created).
+> - Logged out, the chat page redirects to login rather than erroring.
+>
+> **5. Containers stay healthy**
+> - `docker compose ps` shows `api` and `ui` `healthy` after the whole walkthrough
+>   (the logged-out health probe may 302 — nginx counts that as healthy).
+>
+> Wait for `PASS`. A `FAIL` is a STOP condition.
 
 ---
 
 ## Test plan
 
-Covered in Step 9. The three tests that matter most:
+Covered in Steps 1–3, with Step 3d proving the two assertions that could
+otherwise pass vacuously. The three tests that matter most:
 
 1. **Refresh-token rotation persistence** — the single most likely silent bug.
 2. **503 (not 401) when Keycloak is down on refresh** — preserves sessions.
 3. **The stream bridge calls `/app/stream/`** — replaces a vacuous assertion
    that could never have failed.
+
+The browser walkthrough in Step 4 covers what none of these can: incremental SSE
+delivery through the proxy, rendered account bar, and the login/logout round trip.
 
 ## Done criteria
 
@@ -650,7 +782,13 @@ Covered in Step 9. The three tests that matter most:
 - [ ] `curl -s -o /dev/null -w '%{http_code}' -X POST https://localhost/api/v1/auth/token` → `401`
 - [ ] `curl -s -o /dev/null -w '%{http_code}' https://localhost/app/graph` → `302` (no cookie)
 - [ ] `grep -c "/api/v1/chats" src/ui/assets/stream-bridge.js` → `0`
-- [ ] Chat streams word-by-word through `/app/stream/<id>` in the browser
+- [ ] The UI snapshot fetch goes through `api_client` and carries a bearer:
+      `pytest -m unit tests/test_ui_runtime_snapshot_auth.py -q` passes, and
+      `grep -c "fetch_runtime_snapshot" src/ui/runtime_settings.py` counts no
+      *call* site (README handoff 3 — without this, 057 silently stops the UI
+      picking up runtime-settings edits)
+- [ ] The Step 3d mutation runs both failed on the expected assertion
+- [ ] **MANUAL GATE 1 passed** — chat streams word-by-word through `/app/stream/<id>` in the browser
 - [ ] No log line contains a token: `grep -rn "access_token\|refresh_token" src/app/api/auth/service.py | grep -i logger` → no matches
 - [ ] **No route gained a role dependency**: `grep -rn "Depends(require_" src/app/api/` shows only `src/app/api/auth/v1/router.py`
 - [ ] `plans/README.md` status row updated
@@ -685,5 +823,105 @@ Stop and report if:
   token in the realm, not the cache margin.
 - **`X-Accel-Buffering: no` is load-bearing.** A reviewer should confirm it and
   that `stream=True` is set; without both, chat appears frozen then dumps.
-- **Plan D** adds `subject` ownership to themes; the account bar's role badge is
-  the natural place to show a "your themes" affordance later.
+- **The UI's snapshot fetch now rides the user's bearer, not a service token.**
+  A consequence worth knowing: while logged out, the UI's runtime-settings cache
+  stops refreshing entirely (every `refresh()` 401s and degrades). That is
+  correct — there is no user to configure for — and it self-heals on the next
+  request after login, at most `REFRESH_TTL_SECONDS` later. Do not "fix" it by
+  adding a service credential to the UI: the UI is deliberately credential-free
+  apart from the session cookie.
+- **Plan D** adds `subject` ownership to themes. The account bar is the natural
+  place to show a "your themes" affordance later, if one is wanted.
+
+---
+
+## Execution record — 2026-10-31
+
+Executed in the live tree on `feature/plan-c-keycloak`, **uncommitted**. Steps 1–3
+were dispatched to an executor under this plan's automated-only gate policy;
+Step 4 has been driven by the operator.
+
+### Step 4 gate progress
+
+| Gate item | Status | Evidence |
+|---|---|---|
+| 1. Login and navigation | ✅ PASS | Operator signed in as `dev-user`, returned to `/app/graph`, page styled |
+| 2. Chat streaming | ✅ PASS | Operator observed the answer arriving incrementally, not in one chunk |
+| 3. Account bar | ✅ PASS (amended) | `dev-user` + Sign out rendered; **badge removed by request** |
+| 4. Logout round trip | ✅ PASS | Sign out reached Keycloak's login page and signing back in worked (after the post-logout URI fix below) |
+| 5. Containers healthy | ✅ PASS | `docker compose ps` — `api`, `ui`, `nginx`, `keycloak`, `postgres`, `neo4j`, `rabbitmq`, `elasticsearch` all up; every service with a healthcheck reports `healthy` |
+
+**MANUAL GATE 1: ✅ PASSED** — all five items, 2026-10-31.
+
+### Three defects found during execution — all plan errors, not executor errors
+
+**1. The SSE proxy route needed an explicit `/app` prefix (Step 3a).** Fixed in
+`src/ui/stream_proxy.py`; see the correction in Step 3a. The browser showed
+`HTTP 405: Method Not Allowed` on `POST /app/stream/<id>`. The plan's premise —
+that Dash's `requests_pathname_prefix` makes a bare `/stream/<id>` route reachable
+at `/app/stream/<id>` — is false. The route now registers
+`/app/stream/<session_id>` directly, verified: the URL map lists it, and
+`POST /app/stream/x` with a session cookie reaches the handler (200).
+
+**2. Login failed on a realm gap (Step 1/2 boundary).** `wba-web` tokens carried
+no `aud` claim while `src/app/auth/tokens.py:123` required one, so
+`/auth/callback` failed with `login_failed` and the API logged
+`Token is missing the "aud" claim`. Root cause was a 054/055 gap, not this plan's
+code: 054 built a strict validator, 055 gave `wba-internal` an audience mapper and
+explicitly declined to give `wba-web` one. Fixed by **plan 062** (realm mapper +
+the `kcadm.sh` reconcile mechanism this repo lacked).
+
+**3. Logout failed with `Invalid redirect uri` (Step 1).** `service.py:408` sends
+`post_logout_redirect_uri = {APP_PUBLIC_BASE_URL}/app`, but nothing ever
+registered that URI in the realm — `deploy/keycloak/realm-wba.json.template` had
+no `post.logout.redirect.uris` attribute, and a grep across every Plan C plan and
+the design doc found the parameter mentioned **only** here at 056:250. Keycloak
+rejects an unregistered post-logout redirect. Note the asymmetry that caused it:
+`redirectUris` *was* templated so login would work; the logout equivalent was
+never added. Fixed by adding the attribute to the template **and** a second
+check-and-update block to `scripts/keycloak-realm-reconcile.sh` — the first use of
+plan 062's reconcile mechanism for a change it was not originally written for,
+which is exactly the pattern 062 claimed would work. Operator decision: logout
+lands on `/app`, which sits behind the session guard, so the user ends at the
+login page rather than a settled logged-out page. That is intended.
+
+### Why the automated gates could not catch these defects
+
+Worth recording, because the same shape recurs:
+
+- **The cookie-less curl is blind to routing.** `POST /app/stream/<id>` without a
+  cookie returns **401** from the session guard, which runs *before* routing. This
+  plan's own Step 3 verification (`→ 401`) and the reviewer's re-run both passed
+  while the route was unreachable. A 401 here proves the guard works, not that the
+  route exists.
+- **Stubbing the validator hides a realm that cannot produce a valid token.** The
+  flow tests replace `validate_bearer_token` (`tests/test_auth_flow.py:138-143`),
+  so no test ever feeds it a real token; and the live curl only asserted that
+  `/auth/login` returns 302. The callback and token exchange were never exercised
+  by any automated check.
+- **Nothing tested the logout redirect end to end.** No automated check follows a
+  logout through Keycloak and back, and no unit test could — the failure is realm
+  configuration the app cannot see. The third defect was reachable only by
+  clicking Sign out in a browser.
+- Plan 062 narrows the second gap with a realm-shaped token test. The first and
+  third are closed only by a real browser run, which is what Step 4 is for.
+
+**The pattern across all three:** every one of these passed its own automated
+check while being broken. A check that does not exercise the failing path is not
+evidence — it is the appearance of evidence. Two of the three were also found by
+the operator in a browser, not by any gate or review, including the reviewer's.
+
+### Scope amendments
+
+- **No role badge** in the account bar. Requested by the operator during Step 4;
+  `_role_badge`, `_ADMIN_BADGE` and `_USER_BADGE` were removed from
+  `src/ui/components/account_bar.py`. The Step 4 gate criterion that asked for a
+  badge was corrected above.
+- `tests/test_stream_proxy.py` — its four request paths were updated to the real
+  `/app/stream/...` URL. They had been written against `/stream/...`, which would
+  have kept passing against a route that does not exist in production.
+
+### Verified totals at this record
+
+`pytest -m unit tests` → 2519 passed, 2 skipped; `mypy src/` exit 0 (322 files);
+`pylint src --score=y` 9.69; `bandit -c .bandit.yml -r src/ -lll` exit 0.

@@ -28,8 +28,8 @@ ordered so the stack runs after it.
 | Plan | Title | Priority | Effort | Risk | Depends on | Status |
 |------|-------|----------|--------|------|------------|--------|
 | 053  | [Keycloak service and realm `wba` as code](053-keycloak-service-and-realm.md) | **P1** | M | MED | 052 | **COMPLETE** 2026-10-31 — all 8 steps + 5b. Keycloak 26.8 healthy, realm as code, issuer exact, admin console on loopback only. One documented limitation: the account console's data calls return `401` (unresolved, off the critical path — see the design doc's Future Considerations). **Next: 054** |
-| 054  | [Principal, JWT validation, and `auth_session`](054-principal-jwt-validation-and-session-model.md) | **P1** | M | MED | 053 | TODO |
-| 055  | [Service tokens for producers and consumer](055-service-tokens-for-producers-and-consumer.md) | **P1** | M | MED | 054 | TODO |
+| 054  | [Principal, JWT validation, and `auth_session`](054-principal-jwt-validation-and-session-model.md) | **P1** | M | MED | 053 | **DONE** 2026-10-31 — all gates pass: 46 auth tests, 2437 unit total (nothing dropped), mypy exit 0, pylint 9.68, bandit exit 0, one alembic head. Migration `fc1b240aeecb` applied; `auth_session` live with the unique index on `session_id_hash` and no other table changed. Nothing wired — `/api/health` still open (enforcement is 057). Verified live against real Keycloak: discovery→issuer assertion→internal JWKS→signature verification all exercised; no Keycloak fetch at API boot (lazy client). One revision round (2 vacuous tests fixed). **Carry into 055: the real `wba-internal` token has no `aud` claim, so `require: ["aud"]` rejects it — 055 must decide the service-token audience.** **Next: 055** |
+| 055  | [Service tokens for producers and consumer](055-service-tokens-for-producers-and-consumer.md) | **P1** | M | MED | 054 | TODO — rewritten 2026-10-31 at `94b57de3` as a **single step**. Three scope corrections versus the original: the three producer connector-config fetches (`/{type}/configs?include_secrets=true`) are **in scope** (057's admin-only gating would have 403'd them, so 057 needs an amendment — carried in the plan); the `wba-internal` **audience decision** 054 deferred is taken here (audience mapper on `wba-internal`, validator accepts either configured client via `azp`); and the connector containers already get the service secret through their existing `env_file: .env`, so compose needs only the two non-secret `KEYCLOAK_*` vars |
 | 056  | [Login flow, BFF token exchange, UI guard, SSE proxy](056-auth-flow-bff-and-sse-proxy.md) | **P1** | L | **HIGH** | 055 | TODO |
 | 057  | [Enforce bearer auth and the role matrix](057-enforce-bearer-auth-and-role-matrix.md) | **P1** | L | **HIGH** | 056 | TODO |
 | 058  | [Per-user ownership of chats and favourites](058-per-user-ownership-of-chats-and-favourites.md) | **P1** | M | MED | 057 | TODO |
@@ -96,6 +96,25 @@ follows:
   the plans: a container's `localhost` is itself, so the API needs a second
   setting (`KEYCLOAK_INTERNAL_URL`) for discovery/JWKS/token, with
   `KEYCLOAK_ISSUER` used only for exact `iss` matching.
+
+  **Two amendments carried into later plans by 055** (recorded here so they
+  survive 055's own deletion on merge):
+  1. **057 must allow `include_secrets=true` for admin *or* service.** Its current
+     decision table and expected-status matrix say admin-only / `403` for service.
+     That would permanently break the three producer connector-config fetches, which
+     are the producers' only source of connector credentials
+     (`CONFIGURATION_SOURCE=SERVER` is the shipped `.env` default). The router row
+     and `tests/test_connectors_secrets_gating.py` change with it.
+  2. **057 must accept the service token's audience.** 054's validator requires
+     `aud ⊇ wba-web` and `azp == wba-web`, but the real `wba-internal` token has no
+     `aud` and `azp=wba-internal`. 055 adds an `oidc-audience-mapper` giving that
+     client `aud=["wba-internal"]`; 057 must accept **either** configured client
+     with `azp` matching the matched audience.
+  3. **056 must route the UI's runtime-snapshot fetch through `api_client`**, not
+     `common.runtime_settings.client.fetch_runtime_snapshot`. The shared helper
+     sends no credential (055) and the snapshot becomes user+admin+service (057),
+     so the UI's fallback would silently serve defaults. The UI holds no
+     `KEYCLOAK_*` env and must not be given a service credential.
 
 - **051**: Planned at `6f1eb0e` on 2026-10-26. Not an audit finding — it is
   Plan A of the AuthN/AuthZ programme, so it was written on request rather than

@@ -1,14 +1,14 @@
 # Plan 055: Give producers, the consumer, and the runtime-settings client a service token
 
-> **Executor instructions**: Follow this plan step by step. Run every
-> verification command and confirm the expected result before moving on. If
-> anything in "STOP conditions" occurs, stop and report — do not improvise.
+> **Executor instructions**: This plan is a **single step** — every code change is
+> described in "The step" below, and you make them all before running anything.
+> Then run **Automated verification** to completion. Only then hand back for the
+> **Manual gates**, which are all at the end.
+>
+> Do not improvise. If anything under "STOP conditions" occurs, stop and report.
 > When done, update the status row in `plans/README.md`.
 >
-> **Every step ends with a MANUAL GATE.** Hand back to the operator and wait for
-> `PASS`. A `FAIL` is a STOP condition.
->
-> **Drift check (run first)**: `git diff --stat 225d3639..HEAD -- src/common/ src/connectors/producers/daemon_common.py src/connectors/consumers/main.py docker-compose.yml requirements.*.txt`
+> **Drift check (run first)**: `git diff --stat 94b57de3..HEAD -- src/common/ src/connectors/producers/ src/connectors/consumers/main.py docker-compose.yml deploy/keycloak/realm-wba.json.template requirements.*.txt tests/producers/`
 > Any mismatch against "Current state" is a STOP condition.
 
 ## Status
@@ -18,7 +18,7 @@
 - **Risk**: MED
 - **Depends on**: plans/054
 - **Category**: security
-- **Planned at**: commit `225d3639`, 2026-10-30
+- **Planned at**: commit `94b57de3`, 2026-10-31
 - **Design reference**: `docs/design/authn-authz-design.md`, "Service accounts"
 - **This is step 3 of 9** in the Plan C sequence.
 
@@ -26,19 +26,18 @@
 
 The API will accept **bearer tokens only** (plan 057). Producers and the signal
 consumer call `/api/v1` over HTTP today with **no credentials at all** — so the
-moment enforcement switches on, command polling, command-status reporting, and
-runtime-settings fetches all start returning `401`. Command-status reporting is
-what feeds the Recent Actions UI, and the design says explicitly it does **not**
-degrade gracefully, which is why this must land **before** enforcement.
+moment enforcement switches on, command polling, command-status reporting,
+connector-config fetching, and runtime-settings fetches all start returning
+`401` (or `403`). Command-status reporting is what feeds the Recent Actions UI,
+and the design says explicitly it does **not** degrade gracefully, which is why
+this must land **before** enforcement.
 
-This step adds one shared client-credentials helper and wires it into every
-machine call site. **Nothing is enforced yet**, so the work is additive and
-provable: the helper fetches a real token from the running Keycloak (plan 053)
-and the callers start sending it. A `401` cannot occur until plan 057.
-
-What improves when this lands: the producers and consumer authenticate as
-`wba-internal`, and their runtime-settings fetch (which today fails silently to
-defaults on any error) carries a token too.
+This step adds one shared client-credentials helper, wires it into every machine
+call site, and resolves the two questions 054 deliberately left open (the service
+token's `aud`/`azp` and its authorization). **Nothing is enforced yet**, so the
+work is additive and provable: the helper fetches a real token from the running
+Keycloak (plan 053) and the callers start sending it. A `401` cannot occur until
+plan 057.
 
 ## Current state
 
@@ -60,62 +59,107 @@ fallback **stays** — a transient token failure must not break a scan.
 **`src/connectors/producers/daemon_common.py`** — three API helpers, each
 opening a fresh `httpx.Client` with no auth header:
 
-- `_reconcile_startup_orphans` (~line 291): `GET {_api_base()}/api/v1/commands/`
-- `_update_status` (~line 323): `PATCH {_api_base()}/api/v1/commands/{id}/status`
-- `_get_command_status` (~line 341): `GET {_api_base()}/api/v1/commands/{id}`
+- `_reconcile_startup_orphans` (`:291`): `GET {_api_base()}/api/v1/commands/`
+- `_update_status` (`:323`): `PATCH {_api_base()}/api/v1/commands/{id}/status`
+- `_get_command_status` (`:341`): `GET {_api_base()}/api/v1/commands/{id}`
 
-Base URL comes from `_api_base()`:
+Plus one runtime-settings call at `:137`,
+`runtime_cache.refresh(fetch_runtime_snapshot(_api_base()))`. Base URL comes from
+`_api_base()` (`:174`), which reads `API_SERVER` lazily.
 
-```python
-def _api_base() -> str:
-    """Return the base URL of the app API (lazy, respects env changes)."""
-    return os.environ.get("API_SERVER", "http://localhost:8000").rstrip("/")
-```
+**Three more machine call sites the original plan missed** — verified live, all
+unauthenticated, all requesting secrets:
 
-**`src/connectors/consumers/main.py`** — at startup (`~line 206`) and on every
-settings event (`~line 217`):
+- `src/connectors/producers/github/github_config.py:19-29`
+- `src/connectors/producers/jira/jira_config.py:21-29`
+- `src/connectors/producers/confluence/confluence_config.py:16-24`
 
-```python
-    api_base = os.environ.get("API_SERVER", "http://api:8000")
-    runtime_cache.refresh(fetch_runtime_snapshot(api_base))
-    ...
-        runtime_cache.refresh(fetch_runtime_snapshot(api_base))
-```
+Each does `requests.get(f"{api_server}/api/v1/connectors/{type}/configs",
+params={"include_secrets": "true"}, timeout=10)`. Enabled in practice:
+`CONFIGURATION_SOURCE=SERVER` is set in `.env:108` and reaches the producer
+containers through their `env_file` (confirmed in-process:
+`docker compose exec -T github-producer printenv CONFIGURATION_SOURCE` → `SERVER`).
 
-**The four connector images** (`Dockerfile.github-producer`,
-`Dockerfile.jira-producer`, `Dockerfile.confluence-producer`,
-`Dockerfile.signal-consumer`) each do:
+**`src/connectors/consumers/main.py`** — at `:206` (startup) and `:217` (every
+settings event) it calls `fetch_runtime_snapshot(api_base)`; no credential path.
 
-```dockerfile
-COPY src/connectors/ /app/connectors
-COPY src/common/ /app/common
-```
+**The four connector images** each `COPY src/connectors/` + `COPY src/common/`
+(`Dockerfile.github-producer:17-18`, `.jira-producer:16-17`,
+`.confluence-producer:16-17`, `.signal-consumer:17-18`). So anything added under
+`src/common/` is already in every image — **no Dockerfile change is needed**.
 
-So anything added under `src/common/` is already in every image — **no
-Dockerfile change is needed**. They receive no `KEYCLOAK_*` environment today.
+**Each of those four services already has `env_file: .env`**
+(`docker-compose.yml:299-300, 322-323, 345-346, 369-370`), so they already
+receive `KEYCLOAK_SERVICE_CLIENT_SECRET` (present, non-placeholder, in `.env`).
+They do **not** receive `KEYCLOAK_INTERNAL_URL`: it is absent from `.env`, and
+`docker compose config | grep -c 'keycloak:8080/auth/realms/wba'` → **0**. The
+API gets that value from `domain/settings.py`'s default, not from compose.
 
-**Baseline**: `pytest -m unit tests -q` → 2391 passed (plus plan 054's new
-tests).
+**`deploy/keycloak/realm-wba.json.template`** — `wba-internal` (`:39-52`) declares
+**no `protocolMappers`**, and `service-account-wba-internal` (`:91-95`) holds only
+`wba-service`. Consequently the real token carries **no `aud` claim** and
+`azp=wba-internal`, which `src/app/auth/tokens.py:121-128` rejects (it requires
+`aud ⊇ wba-web` and `azp == wba-web`). 054 recorded this and handed the decision
+to this plan — see "Decisions taken".
+
+**`requirements.jira-producer.txt` / `requirements.confluence-producer.txt`** do
+not list `requests`; both images resolve it transitively via
+`atlassian-python-api` (`requests 2.34.2` importable in all four images today —
+verified live).
+
+**Baseline** (verified on `94b57de3`): `pytest -m unit tests -q` → **2437 passed,
+2 skipped**; `pylint src --score=y` → 9.68.
 
 ### Repo conventions that apply
 
-- Type hints everywhere; `mypy src/` strict.
-- `from common.logger import logger`; never `print()`.
+- Type hints everywhere; `mypy src/` strict. `from common.logger import logger`;
+  never `print()`.
 - New shared code goes in `src/common/` (already copied into all four images).
-- **Never log a token or a client secret.** Log the client id and expiry only.
+- **Never log a token or a client secret.** Log the client id and status only.
 - Tests carry `pytestmark = pytest.mark.unit`.
 - Do **not** commit or push unless asked.
+
+## Decisions taken (do not re-litigate)
+
+| Subject | Decision |
+|---|---|
+| Service-token audience | Add an `oidc-audience-mapper` to `wba-internal` so its token carries `aud=["wba-internal"]`, and record that the validator must accept **either** configured client. Rejecting a token with no `aud` stays correct; the fix is to make the token carry one. |
+| `azp` policy | The validator must accept `azp ∈ {wba-web, wba-internal}` and require the matched audience to equal `azp`. The `src/app/auth/tokens.py` edit itself is **plan 057's** (it owns that file); this plan pins the policy in a test and in the amendment below. |
+| Producer config fetches | **In scope.** All three send the service token. `include_secrets=true` must become admin-**or-service** — see "Required amendment to plan 057". |
+| Required env vars | `KEYCLOAK_INTERNAL_URL` and `KEYCLOAK_SERVICE_CLIENT_ID` are added to compose explicitly; `KEYCLOAK_SERVICE_CLIENT_SECRET` rides the existing `env_file: .env`. **No secret is ever given a default value.** |
+| `depends_on: keycloak` | **Not added** to any connector. The helper is lazy and a Keycloak that is not up must degrade, not block startup. |
+| 401 retry | One retry, **uniformly** for all three daemon helpers (the original plan's two-of-three split was arbitrary). Never a loop. |
+| Failed-token behaviour | A failed fetch is cached for 30s (see "The step"), so a Keycloak outage costs at most one attempt per 30s per process rather than one per API call. |
+
+## Required amendment to plan 057 (carry this forward)
+
+`plans/057` currently decides `include_secrets=true` → **admin only**, and its
+expected-status matrix asserts `403` for the service token. That makes the three
+producer config fetches fail permanently once enforcement lands. **057 must be
+amended in the same change that enforces:**
+
+- Decision table row `include_secrets` → "admin **and service**; every other
+  principal is rejected".
+- Router `connectors` row → `/test` and writes stay admin-only;
+  `include_secrets=true` accepts `require_any("admin", "service")`.
+- `tests/test_connectors_secrets_gating.py` → service token + `include_secrets=true`
+  expects **200**, not 403.
+
+Rationale: the producers legitimately need the credentials of the connectors they
+serve, and a machine credential that already holds `POST`-free graph writes is the
+right holder. It does **not** widen `wba-service` anywhere else — the four-endpoint
+rule stands.
 
 ## Commands you will need
 
 | Purpose | Command | Expected on success |
 |---|---|---|
-| Unit tests | `pytest -m unit tests -q` | ≥ baseline, 0 fail |
+| Unit tests | `pytest -m unit tests -q` | ≥ 2437 + new, 0 fail |
 | Typecheck | `mypy src/` | exit 0 |
 | Lint | `pylint src --score=y` | ≥ 9.0 |
 | Security scan | `bandit -c .bandit.yml -r src/ -lll` | exit 0 |
 | Compose syntax | `docker compose config -q` | exit 0 |
-| Token fetch (live) | `docker compose exec -T api python -c "from common.auth.service_token import get_service_token; print(len(get_service_token()))"` | a number > 0 |
+| Token fetch (live) | `docker compose exec -T github-producer python -c "from common.auth.service_token import get_service_token; print(len(get_service_token()))"` | a number > 0 |
 
 ## Scope
 
@@ -123,59 +167,78 @@ tests).
 - `src/common/auth/__init__.py` (create)
 - `src/common/auth/service_token.py` (create) — the cached client-credentials helper.
 - `src/common/runtime_settings/client.py` — attach a token, keep the fallback.
-- `src/connectors/producers/daemon_common.py` — attach a token in the three helpers.
-- `src/connectors/consumers/main.py` — pass credentials through.
-- `docker-compose.yml` — add `KEYCLOAK_*` env to `github-producer`, `jira-producer`, `confluence-producer`, `signal-consumer`.
-- `src/domain/settings.py` — **only if** a connector needs a new field; prefer reading `os.environ` in the helper as `_api_base()` already does.
-- `tests/test_service_token.py` (create)
-- `tests/test_runtime_settings_client_auth.py` (create)
+- `src/connectors/producers/daemon_common.py` — one authed-request helper, three call sites.
+- `src/connectors/producers/{github/github_config,jira/jira_config,confluence/confluence_config}.py` — send the token.
+- `src/connectors/consumers/main.py` — verify no code change is needed.
+- `deploy/keycloak/realm-wba.json.template` — the `wba-internal` audience mapper.
+- `docker-compose.yml` — `KEYCLOAK_INTERNAL_URL` + `KEYCLOAK_SERVICE_CLIENT_ID` on the four connector services.
+- `.env.example` — document `KEYCLOAK_INTERNAL_URL` for connector processes.
+- `requirements.jira-producer.txt`, `requirements.confluence-producer.txt` — pin `requests`.
+- `tests/test_service_token.py`, `tests/test_runtime_settings_client_auth.py`, `tests/test_daemon_common_auth.py` (create)
+- `tests/producers/{github,jira,confluence}/test_*_main.py` — update the config-fetch call assertion.
 
 **Out of scope** (do NOT touch):
 - Any router or dependency — enforcement is plan 057.
-- `src/ui/` — the UI uses the BFF, not a service account.
-- `src/app/scheduler.py` — it calls `create_and_publish_command()` **in-process**
-  and never crosses HTTP. It needs no token.
+- `src/app/auth/tokens.py` — 057 owns it. This plan *pins the policy in a test* only.
+- `src/ui/` — the UI has no service credential and must never take this path (see
+  "Cross-plan handoff to 056").
+- `src/app/scheduler.py` — calls `create_and_publish_command()` in-process, never
+  over HTTP. No token needed.
 - `src/app/api_main.py`.
 - `.env` — never write real secrets into the working tree; document names only.
 
-## Steps
+## The step
 
-### Step 1: Create the shared service-token helper
+Make **all** of the following changes, then move to Automated verification.
 
-Create `src/common/auth/__init__.py`:
+### 1. `src/common/auth/__init__.py` (create)
 
 ```python
 """Machine-to-machine authentication for connector processes."""
 
-from common.auth.service_token import get_service_token
+__all__ = ["ServiceTokenError", "get_service_token", "invalidate_service_token"]
 
-__all__ = ["get_service_token"]
+from common.auth.service_token import (
+    ServiceTokenError,
+    get_service_token,
+    invalidate_service_token,
+)
 ```
 
-Create `src/common/auth/service_token.py`:
+### 2. `src/common/auth/service_token.py` (create)
 
 Contract:
 
-- `get_service_token() -> str` returns a valid access token, using a **process-wide
-  cache** and fetching a new one only when the cached token is within 60 seconds
-  of expiry. Refresh is lazy, so importing the module performs no I/O.
-- `invalidate_service_token() -> None` drops the cache, so a `401` from the API
-  can force one immediate retry with a fresh token.
-- Reads `KEYCLOAK_INTERNAL_URL` (realm base), `KEYCLOAK_SERVICE_CLIENT_ID`,
-  `KEYCLOAK_SERVICE_CLIENT_SECRET` from the environment, with the same
-  `os.environ.get(..., default)` style `_api_base()` uses. The defaults must be
-  the compose dev values so a process started outside Compose still works.
-- Token request: `POST {KEYCLOAK_INTERNAL_URL}/protocol/openid-connect/token`
-  with `grant_type=client_credentials`, form-encoded, using `requests`.
-  Read `expires_in` and store `expires_at = monotonic() + expires_in`.
-- On any failure: log one WARNING naming the client id and the HTTP status
-  (**never the secret or the response body, which may contain the token**) and
-  raise a dedicated `ServiceTokenError`. Callers decide whether to degrade.
-- Thread safety: a `threading.Lock` around the fetch path, so a burst of
-  calls does not cause a burst of token requests. The producer daemons are
-  multi-threaded.
-- `KEYCLOAK_INTERNAL_URL` already ends with `/auth/realms/wba`; the token path
-  is appended to it. Do **not** re-derive it from `KEYCLOAK_ISSUER`.
+- `get_service_token() -> str` returns a valid access token from a **process-wide
+  cache**, fetching only when the cached token is within 60s of expiry. Refresh is
+  lazy: importing the module performs no I/O.
+- `invalidate_service_token() -> None` drops the cache **and the failure backoff**,
+  so a `401` can force one immediate retry with a fresh token.
+- `ServiceTokenError(Exception)` is the only failure type callers catch. Callers
+  decide whether to degrade.
+- Configuration comes from `os.environ` using the `os.environ.get(name, default)`
+  style `_api_base()` already uses:
+  - `KEYCLOAK_INTERNAL_URL` — default `http://keycloak:8080/auth/realms/wba`
+    (the realm base; the token path is appended — do **not** re-derive it from
+    `KEYCLOAK_ISSUER`, which is the browser-facing URL).
+  - `KEYCLOAK_SERVICE_CLIENT_ID` — default `wba-internal`.
+  - `KEYCLOAK_SERVICE_CLIENT_SECRET` — **no default.** Empty ⇒ `ServiceTokenError`
+    naming the client id. A committed default would ship a credential in git and,
+    worse, would fail as a Keycloak `401` that looks like a network problem.
+- Token request: `POST {KEYCLOAK_INTERNAL_URL}/protocol/openid-connect/token`,
+  `grant_type=client_credentials`, form-encoded, via `requests`, `timeout=10`.
+  Store `expires_at = time.monotonic() + expires_in - 60`.
+- **Failure backoff (30s):** on failure, record `expires_at = monotonic() + 30`
+  with no token, so a Keycloak outage costs one attempt per 30s per process
+  instead of one 10s-timeout attempt per command-status PATCH. This is the
+  mitigation for the producer daemons being multi-threaded and chatty.
+- **Thread safety:** a `threading.Lock` with a double-checked fast path, so a
+  burst of calls issues one request. Hold module state in a small dataclass
+  instance rather than module globals — `mypy` strict and `pylint`'s
+  `global-statement` both object to the alternative.
+- **Logging:** one WARNING per failed fetch, naming the client id and, for an HTTP
+  failure, the status code. **Never** the secret and **never** `resp.text` — the
+  body may echo the request.
 
 Target shape:
 
@@ -187,266 +250,356 @@ def get_service_token() -> str:
     """Return a cached, unexpired ``wba-internal`` access token."""
 
 def invalidate_service_token() -> None:
-    """Discard the cached token so the next call fetches a new one."""
+    """Discard the cached token and failure backoff, so the next call re-fetches."""
 ```
 
-**Verify**: `PYTHONPATH=src python -c "import common.auth.service_token as m; print(callable(m.get_service_token), callable(m.invalidate_service_token))"` → `True True`
-**Verify**: `grep -n "logger" src/common/auth/service_token.py | grep -ci "token\s*=\|secret"` → `0` (no token/secret interpolated into a log call)
-**Verify**: `mypy src/common/auth/` → exit 0
+### 3. `src/common/runtime_settings/client.py`
 
-> ### 🚦 MANUAL GATE 1 — helper
->
-> Operator reads the module and confirms: lazy fetch, 60s refresh margin, a
-> lock, `expires_at` from `expires_in`, no secret or token in any log call, and
-> a dedicated exception type.
-> Wait for `PASS`.
-
----
-
-### Step 2: Prove the helper against the running Keycloak
-
-The helper must work against the real realm before anything depends on it.
-
-**Verify** (from inside the API container, which joins the network — the helper
-only needs `requests`, present in every image):
-```bash
-docker compose exec -T api python -c "
-from common.auth.service_token import get_service_token
-t = get_service_token()
-print('len', len(t))
-print('reused', t == get_service_token())
-"
-```
-→ prints `len <positive>` and `reused True` (the cache works).
-
-Then decode the claims **without validating** (dev only, to confirm the role):
-```bash
-docker compose exec -T api python -c "
-import base64, json
-from common.auth.service_token import get_service_token
-p = get_service_token().split('.')[1]
-p += '=' * (-len(p) % 4)
-c = json.loads(base64.urlsafe_b64decode(p))
-print(c['iss']); print(sorted(c['realm_access']['roles']))
-"
-```
-→ `iss` is `https://localhost/auth/realms/wba`; roles include `wba-service`.
-
-**If `wba-service` is missing, STOP.** Plan 053's realm template must grant it
-to the `wba-internal` service account; do not paper over it by widening another
-role.
-
-**Verify**: `mypy src/` → exit 0
-
-> ### 🚦 MANUAL GATE 2 — live token
->
-> Operator verifies the token decodes with the right issuer and `wba-service`,
-> and that a second consecutive call returns the **same** token (cache).
-> Wait for `PASS`.
-
----
-
-### Step 3: Make `fetch_runtime_snapshot` send a token
-
-Edit `src/common/runtime_settings/client.py`. Add an `Authorization: Bearer`
-header when a token is available, and **keep** the existing degrade-to-defaults
-behaviour.
-
-Rules:
-
-- Call `get_service_token()` inside the `try`. If it raises
-  `ServiceTokenError`, fall through to the existing warning-and-defaults path —
-  do **not** raise out of this function (a scan must still start).
-- Add a `headers={"Authorization": f"Bearer {token}"}` to the `requests.get`.
-- **Import lazily** inside the function
+- Import `get_service_token` / `ServiceTokenError` **lazily inside the function**
   (`# pylint: disable=import-outside-toplevel`), matching the module's existing
   style of staying importable without heavy dependencies.
-- Keep the existing exception handling intact; add `ServiceTokenError` to the
-  caught tuple so the warning path covers it.
-- Do **not** print or log the token.
+- Fetch the token in its **own** `try`. On `ServiceTokenError`, log a distinct
+  `logger.warning` naming the client id and send the request **without** the
+  header. Do **not** short-circuit to `RuntimeConfig()` on a token failure: the
+  request still has a real chance pre-057, and post-057 the resulting `401` is
+  already covered by the existing `RequestException` path. This keeps today's
+  behaviour byte-identical.
+- Add `headers={"Authorization": f"Bearer {token}"}` when a token was obtained.
+- Leave the existing `except` clauses and the degrade-to-`RuntimeConfig()`
+  behaviour untouched. Do **not** print or log the token.
+- Exactly **one** `Authorization` occurrence in the file.
 
-**Verify**: `grep -n "Authorization" src/common/runtime_settings/client.py` → exactly one match
-**Verify**: `PYTHONPATH=src python -c "import common.runtime_settings.client as c; print(c.fetch_runtime_snapshot('http://127.0.0.1:1').HTTP_REQUEST_TIMEOUT)"` → prints the default (proves the fallback still works with no network)
-**Verify**: `pytest -m unit tests -q` → ≥ baseline
+### 4. `src/connectors/producers/daemon_common.py`
 
-> ### 🚦 MANUAL GATE 3 — snapshot client
->
-> Operator confirms the fallback path still returns defaults when the token
-> cannot be fetched, and that the token is not logged.
-> Wait for `PASS`.
-
----
-
-### Step 4: Attach the token in the producer daemons
-
-In `src/connectors/producers/daemon_common.py`, the three helpers each build a
-URL and open a client. Add a small local helper rather than repeating the
-header, e.g.:
+Add one module-local pair rather than repeating headers and retry logic:
 
 ```python
 def _auth_headers() -> dict[str, str]:
     """Return an Authorization header for the app API, or {} if unavailable.
 
     A token failure must not stop status reporting: the request then goes out
-    unauthenticated and the API's 401 is handled by the caller's existing
-    ``except`` block.
+    unauthenticated and the caller's existing ``except`` block handles the
+    result.
     """
-    try:
-        return {"Authorization": f"Bearer {get_service_token()}"}
-    except ServiceTokenError:
-        logger.warning("Service token unavailable — sending request unauthenticated")
-        return {}
+
+def _api_request(method: str, url: str, **kwargs: Any) -> httpx.Response:
+    """Send an authenticated request, retrying once with a fresh token on 401."""
 ```
 
-Pass `headers=_auth_headers()` to the existing `client.get` / `client.patch`
-calls in `_reconcile_startup_orphans`, `_update_status`, and
-`_get_command_status`. **Do not change their error handling** — they already
-catch `httpx.HTTPError` and log-and-continue, which now also covers a 401.
+- `_auth_headers()` catches `ServiceTokenError`, logs one WARNING, returns `{}`.
+- `_api_request` opens one `httpx.Client(timeout=10)`, sends with
+  `headers=_auth_headers()`, and **on a 401 only** calls
+  `invalidate_service_token()` and repeats the request **once**. No loop, and no
+  third attempt.
+- Route all three helpers through it, replacing their inline `httpx.Client`
+  blocks: `_reconcile_startup_orphans` (`client.get(url, params=...)`),
+  `_update_status` (`client.patch(url, json=...)`), `_get_command_status`
+  (`client.get(url)`).
+- **Do not change their error handling.** Each keeps its existing
+  `except (httpx.HTTPError, ValueError, AttributeError)` log-and-continue (or
+  return-`None`) shape, and `resp.raise_for_status()` stays in the caller. The
+  `logger.debug` lines in `_update_status` stay as they are.
+- The `fetch_runtime_snapshot(_api_base())` call at `:137` needs no edit — step 3
+  handles it.
 
-Additionally, in `_update_status` and `_get_command_status`, on a **401**
-response specifically, call `invalidate_service_token()` once and retry the
-request a single time. This is the expiry-mid-run case, and a single retry is
-the whole mitigation. Do not add a retry loop.
+### 5. The three producer config fetches
 
-**Verify**: `grep -c "get_service_token" src/connectors/producers/daemon_common.py` → at least `1`
-**Verify**: `grep -c "headers=_auth_headers()" src/connectors/producers/daemon_common.py` → `3`
-**Verify**: `mypy src/` → exit 0
-**Verify**: `pylint src --score=y` → ≥ 9.0
+In each of `github_config.py`, `jira_config.py`, `confluence_config.py`, keep the
+URL and params as they are and add the auth header via a **local import** of
+`common.auth` (these modules deliberately avoid heavy imports — `common.auth` pulls
+in only `requests`, `os`, `threading`, `time`):
 
-> ### 🚦 MANUAL GATE 4 — daemons
->
-> Operator confirms all three call sites send the header, the existing
-> log-and-continue behaviour is unchanged, and the 401 retry happens at most
-> once.
-> Wait for `PASS`.
+```python
+    from common.auth import ServiceTokenError, get_service_token
 
----
+    headers: dict[str, str] = {}
+    try:
+        headers = {"Authorization": f"Bearer {get_service_token()}"}
+    except ServiceTokenError:
+        logger.warning("Service token unavailable — fetching connector config unauthenticated")
+```
 
-### Step 5: Pass credentials to the consumer
+Pass `headers=headers` to the existing `requests.get`. Keep
+`params={"include_secrets": "true"}` and keep the existing
+`raise` on `requests.exceptions.RequestException`. Rationale for adding a
+credential to a route that is not yet enforced: the header is ignored today, so
+the change is inert until 057 — and it is exactly the change that keeps the
+producer working *at* 057.
 
-`src/connectors/consumers/main.py` calls `fetch_runtime_snapshot(api_base)`
-twice. Since Step 3 makes that function attach a token itself, **no change to
-the call sites is required** — but the consumer process must have the
-`KEYCLOAK_*` environment (Step 6) or the token fetch fails and it silently
-falls back to defaults, which is a real regression in behaviour without an
-error.
+### 6. `deploy/keycloak/realm-wba.json.template`
 
-Confirm by inspection that:
-- no call site in the consumer needs editing;
-- the consumer still starts and logs a successful snapshot fetch.
+Add to the **`wba-internal`** client only (`:39-52`), not `wba-web`:
 
-**Verify**: `grep -c "fetch_runtime_snapshot" src/connectors/consumers/main.py` → `2` (unchanged)
-**Verify**: `mypy src/` → exit 0
+```json
+      "protocolMappers": [
+        {
+          "name": "wba-internal-audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "wba-internal",
+            "id.token.claim": "false",
+            "access.token.claim": "true"
+          }
+        }
+      ],
+```
 
-> ### 🚦 MANUAL GATE 5 — consumer
->
-> Operator confirms the consumer needed no code change and will receive the env
-> in Step 6.
-> Wait for `PASS`.
+This makes the service token's `aud` exactly `["wba-internal"]`, so the validator
+has a real audience to check instead of a missing claim. Do **not** add a mapper
+to `wba-web`, and do **not** change the `service-account-wba-internal` role grant.
 
----
+Note for the operator: `--import-realm` does not update an already-imported realm.
+Applying this requires recreating the `keycloak` database — the recipe is in
+`ADMIN_GUIDE.md` ("To re-seed from the variable instead") and it drops **only**
+the derived `keycloak` database. Re-import renders the template with the same
+`.env` secret, so no credential changes.
 
-### Step 6: Give the four connector services `KEYCLOAK_*` environment
+### 7. `docker-compose.yml`
 
-In `docker-compose.yml`, add to **each** of `github-producer`, `jira-producer`,
-`confluence-producer`, and `signal-consumer`:
+Add to **each** of `github-producer`, `jira-producer`, `confluence-producer`,
+`signal-consumer`, under their existing `environment:` block:
 
 ```yaml
-      KEYCLOAK_INTERNAL_URL: http://keycloak:8080/auth/realms/wba
+      KEYCLOAK_INTERNAL_URL: ${KEYCLOAK_INTERNAL_URL:-http://keycloak:8080/auth/realms/wba}
       KEYCLOAK_SERVICE_CLIENT_ID: ${KEYCLOAK_SERVICE_CLIENT_ID:-wba-internal}
-      KEYCLOAK_SERVICE_CLIENT_SECRET: ${KEYCLOAK_SERVICE_CLIENT_SECRET:-dev-internal-secret}
 ```
 
-Do **not** mount `.env` into these containers — that would hand them the LLM
-keys and `CONNECTOR_ENCRYPTION_KEY` for one client secret.
+- Do **not** add `KEYCLOAK_SERVICE_CLIENT_SECRET` with a default. It already
+  arrives through each service's `env_file: .env`; a `${VAR:-...}` fallback here
+  would put a credential in git.
+- Do **not** add `keycloak` to any `depends_on`; leave the existing `api`
+  dependency as is.
+- `.env.example:181` already declares
+  `KEYCLOAK_INTERNAL_URL=http://keycloak:8080/auth/realms/wba`; only its comment
+  needs widening from "the API container" to "the API and the connector
+  processes". Change no value — in particular, do not add a
+  `KEYCLOAK_SERVICE_CLIENT_SECRET` example line with a real-looking default.
 
-If a producer currently `depends_on: api`, leave that as is; do **not** add
-`keycloak` to `depends_on` — the helper is lazy and a Keycloak that is not up
-yet must degrade, not block startup.
+### 8. `requirements.jira-producer.txt` and `requirements.confluence-producer.txt`
 
-**Verify**: `docker compose config -q` → exit 0
-**Verify**: `grep -c "KEYCLOAK_SERVICE_CLIENT_ID" docker-compose.yml` → at least `4`
-**Verify**: `docker compose config | grep -c "keycloak:8080/auth/realms/wba"` → at least `5` (four services plus the API once plan 057 adds it)
+Add `requests==2.34.2` (the version already resolved in both images). The helper
+now depends on it directly; leaving it transitive means a future
+`atlassian-python-api` upgrade silently breaks both producers.
 
-> ### 🚦 MANUAL GATE 6 — compose env
->
-> Operator confirms the four services have the three variables and that no
-> secret beyond the service client secret is present in them.
-> Wait for `PASS`.
+### 9. `src/connectors/consumers/main.py`
 
----
+**No edit.** Confirm by inspection that both call sites pass through step 3, and
+that `pytest`/`grep` agree — see Automated verification.
 
-### Step 7: Tests
+## Cross-plan handoff to 056 (record, do not implement here)
 
-**`tests/test_service_token.py`** — `pytestmark = pytest.mark.unit`
-Stub the HTTP transport (do not hit Keycloak):
-- first call performs a request; second call reuses the cache (assert the
-  transport was called **once**).
-- a token expiring within 60s is refreshed.
+`src/ui/runtime_settings.py:87` reuses `common...fetch_runtime_snapshot`, which
+bypasses `src/ui/api_client.py`. The UI container has **no** `KEYCLOAK_*`
+environment and no `.env` mount (deliberate — `docker-compose.yml:143-146`), so
+post-055 the UI's token fetch fails, logs one warning, and proceeds
+unauthenticated. Post-**057** that unauthenticated call meets
+`require_any("user","admin","service")` → `401` → silent fall back to defaults,
+i.e. the Settings UI would show wrong values.
+
+**Plan 056 must route the UI's snapshot fetch through `api_client` (which carries
+the user's bearer) instead of the shared helper.** Add that sentence to 056 when
+it is next touched. The UI must **not** be given a service credential.
+
+## Cross-plan observations (record only, fix elsewhere)
+
+- The four connector containers already receive the whole `.env` via `env_file`
+  (`OPENAI_API_KEY`, `CONNECTOR_ENCRYPTION_KEY`, … — confirmed in
+  `docker compose config`). That predates this plan and is broader than the one
+  service secret this plan needs. **Not fixed here** — it belongs to Plan E
+  ("Infrastructure surface hardening"). Do not "tidy" it in this change.
+
+## Automated verification
+
+Run every command and confirm the expected result before handing back.
+
+**New test files** (all `pytestmark = pytest.mark.unit`; stub
+`common.auth.service_token.requests.post` — never hit Keycloak):
+
+`tests/test_service_token.py`
+- first call issues one request; a second call reuses the cache — assert the
+  transport was called **exactly once** (not merely that a token came back).
+- a token whose `expires_in` puts it inside the 60s margin is refreshed.
 - `invalidate_service_token()` forces a re-fetch.
-- a non-200 response raises `ServiceTokenError` and does **not** log the body.
-- a missing `realm_access` / non-JSON response raises `ServiceTokenError`.
-- concurrent calls from two threads issue one request (the lock).
+- a non-200 raises `ServiceTokenError`, and with `caplog` at WARNING the response
+  body text and the secret appear in **no** log record.
+- a non-JSON body, and a JSON body without `access_token`, each raise
+  `ServiceTokenError`.
+- an empty `KEYCLOAK_SERVICE_CLIENT_SECRET` raises `ServiceTokenError` without
+  issuing a request.
+- a failure is backed off: two consecutive calls after a failure issue **one**
+  request; `invalidate_service_token()` clears the backoff.
+- two threads calling concurrently issue **one** request (the lock).
 
-**`tests/test_runtime_settings_client_auth.py`** — `pytestmark = pytest.mark.unit`
-- with a working token, `fetch_runtime_snapshot` sends an `Authorization` header
-  (capture the request through a stub).
-- with `ServiceTokenError`, it returns `RuntimeConfig()` defaults and logs a
-  warning — the existing degrade contract, unchanged.
+`tests/test_runtime_settings_client_auth.py`
+- with a working token, the request carries `Authorization: Bearer <token>`
+  (capture through the stub).
+- with `ServiceTokenError`, the request is **still sent**, with no `Authorization`
+  header, and a warning naming the client id is logged.
+- the existing degrade contract is unchanged: an unreachable API still returns
+  `RuntimeConfig()` defaults.
 
-**Verify**: `pytest -m unit tests/test_service_token.py tests/test_runtime_settings_client_auth.py -q` → all pass
-**Verify**: `pytest -m unit tests -q` → ≥ baseline + new, 0 fail
-**Verify**: `bandit -c .bandit.yml -r src/ -lll` → exit 0
+`tests/test_daemon_common_auth.py`
+- `_auth_headers()` returns the bearer header, and `{}` plus one warning when the
+  token raises.
+- `_api_request` on a 401 calls `invalidate_service_token` and retries **once** —
+  assert the transport saw exactly two calls.
+- `_api_request` on a 200 does **not** retry and does **not** invalidate.
+- a second 401 is returned, not retried again (three calls never happen).
 
-> ### 🚦 MANUAL GATE 7 — tests
+**Updated test files**: `tests/producers/github/test_github_main.py:50`,
+`tests/producers/jira/test_jira_main.py:48`,
+`tests/producers/confluence/test_confluence_main.py:63` each assert
+`assert_called_once_with(url, params={"include_secrets": "true"}, timeout=10)`.
+Add the `headers=` argument to each expectation. This is a **legitimate
+signature change**, not accommodation of a broken test: the call site gained a
+parameter by design. Any *other* producer test that fails is a STOP condition.
+
+Then:
+
+| Command | Expected |
+|---|---|
+| `pytest -m unit tests/test_service_token.py tests/test_runtime_settings_client_auth.py tests/test_daemon_common_auth.py -q` | all pass |
+| `pytest -m unit tests -q` | ≥ 2437 + new, 0 fail |
+| `mypy src/` | exit 0 |
+| `pylint src --score=y` | ≥ 9.0 |
+| `bandit -c .bandit.yml -r src/ -lll` | exit 0 |
+| `docker compose config -q` | exit 0 |
+| `grep -c "KEYCLOAK_SERVICE_CLIENT_ID" docker-compose.yml` | `4` |
+| `docker compose config \| grep -c "keycloak:8080/auth/realms/wba"` | `4` — four connector services. The API is **not** counted: it takes the value from `domain/settings.py`, not compose. |
+| `grep -n "Authorization" src/common/runtime_settings/client.py` | exactly `1` match |
+| `grep -rn "Depends(require_" src/app/` | still **no** matches (enforcement is 057) |
+| `grep -rn "logger" src/common/auth/service_token.py src/connectors/producers/daemon_common.py src/connectors/producers/*/[a-z]*_config.py \| grep -i "bearer \|secret"` | **no** matches |
+| `PYTHONPATH=src python -c "import common.runtime_settings.client as c; print(c.fetch_runtime_snapshot('http://127.0.0.1:1').HTTP_REQUEST_TIMEOUT)"` | prints the default — the fallback survives with no network and no Keycloak |
+
+**Live, after the Keycloak realm is re-imported** (step 6's note). Run in a
+**producer** container, not the API: the producers hold
+`KEYCLOAK_SERVICE_CLIENT_SECRET` via `env_file`, the API container does not have
+it in `os.environ` (it reads the mounted `.env` through pydantic only).
+
+```bash
+docker compose exec -T github-producer python -c "
+from common.auth.service_token import get_service_token
+t = get_service_token()
+print('len', len(t))
+print('reused', t == get_service_token())
+"
+```
+→ prints `len <positive>` and `reused True`.
+
+```bash
+docker compose exec -T github-producer python -c "
+import base64, json
+from common.auth.service_token import get_service_token
+p = get_service_token().split('.')[1]
+p += '=' * (-len(p) % 4)
+c = json.loads(base64.urlsafe_b64decode(p))
+print(c['iss']); print(c.get('aud')); print(c.get('azp')); print(sorted(c['realm_access']['roles']))
+"
+```
+→ `iss` is `https://localhost/auth/realms/wba`; `aud` is `['wba-internal']`;
+`azp` is `wba-internal`; roles include `wba-service`.
+
+**If `wba-service` is missing, STOP.** Plan 053's realm template must grant it to
+the `wba-internal` service account; do not paper over it by widening another role.
+
+## Manual gates
+
+All gates are here, at the end. Hand back and wait for `PASS` on each; a `FAIL` is
+a STOP condition.
+
+> ### 🚦 GATE 1 — the helper
 >
-> Operator confirms the cache test asserts a single transport call (not just
-> that a token was returned), and that the degrade path is covered.
+> Operator reads `src/common/auth/service_token.py` and confirms: lazy fetch, 60s
+> refresh margin, a 30s failure backoff, double-checked locking with no module
+> `global`, `expires_at` from `expires_in`, **no secret or token in any log call**,
+> no default for the secret, and a dedicated exception type.
 > Wait for `PASS`.
 
----
+> ### 🚦 GATE 2 — live token and the audience decision
+>
+> Operator confirms the two live commands above: the token decodes with `iss` =
+> `https://localhost/auth/realms/wba`, `aud` = `["wba-internal"]`, `azp` =
+> `wba-internal`, roles include `wba-service`; and a second consecutive call
+> returns the **same** token (cache). Then confirms the recorded policy — the
+> realm now carries the mapper, and 057 is obliged to accept **either** configured
+> client with `azp` matching the matched audience, and to allow
+> `include_secrets=true` for admin **or** service.
+> Wait for `PASS`.
 
-## Test plan
+> ### 🚦 GATE 3 — every machine call site
+>
+> Operator confirms **seven** credential-bearing call sites in three groups:
+> the three daemon helpers `_reconcile_startup_orphans`, `_update_status`,
+> `_get_command_status`; `fetch_runtime_snapshot`, which covers both the consumer
+> and the daemon's runtime cache; and the three producer config fetches (one each
+> in `github_config.py` / `jira_config.py` / `confluence_config.py`). Confirms each
+> degrades to its pre-existing behaviour when the token is unavailable, that the
+> existing log-and-continue handling is unchanged, that the 401 retry happens at
+> most once, and that the consumer needed no code change.
+> Wait for `PASS`.
 
-Covered in Step 7. The highest-value assertions are the **single-fetch cache**
-(so a busy daemon does not hammer Keycloak) and the **unchanged degrade
-contract** (so a Keycloak outage does not stop scans).
+> ### 🚦 GATE 4 — env, secrets and tests
+>
+> Operator confirms: the four connector services have `KEYCLOAK_INTERNAL_URL` and
+> `KEYCLOAK_SERVICE_CLIENT_ID` and **no** secret default anywhere in
+> `docker-compose.yml`; no `keycloak` entry was added to any `depends_on`; the
+> cache test asserts a single transport call; the failure-backoff and single-retry
+> assertions are non-vacuous; the degrade path is covered; and no test other than
+> the three named `headers=` expectations was edited to accommodate a failure.
+> Wait for `PASS`.
 
 ## Done criteria
 
-- [ ] `pytest -m unit tests -q` exits 0, ≥ baseline + new tests
+- [ ] `pytest -m unit tests -q` exits 0, ≥ 2437 + new tests
 - [ ] `mypy src/` exits 0
 - [ ] `pylint src --score=y` ≥ 9.0
 - [ ] `bandit -c .bandit.yml -r src/ -lll` exits 0
 - [ ] `docker compose config -q` exits 0
-- [ ] `docker compose exec -T api python -c "from common.auth.service_token import get_service_token; print(len(get_service_token()) > 0)"` prints `True`
+- [ ] `docker compose exec -T github-producer python -c "from common.auth.service_token import get_service_token; print(len(get_service_token()) > 0)"` prints `True`
 - [ ] No token or client secret appears in any log call: `grep -rn "logger" src/common/auth/service_token.py src/connectors/producers/daemon_common.py | grep -i "bearer \|secret"` → no matches
 - [ ] `grep -rn "Depends(require_" src/app/` → still no matches (enforcement is plan 057)
+- [ ] The "Required amendment to plan 057" section is carried into 057 (or reported to the operator if 057 is not to be edited yet)
 - [ ] `plans/README.md` status row updated
 
 ## STOP conditions
 
 Stop and report if:
 
-- The live token (Step 2) lacks `wba-service`.
+- The live token lacks `wba-service`, or `aud` is still absent after the realm is
+  re-imported (i.e. the mapper did not take effect — check the realm was actually
+  re-created, not just restarted).
 - `fetch_runtime_snapshot`'s fallback cannot be retained without catching
   `ServiceTokenError` in a way that hides real errors — report rather than
   broadening a bare `except`.
-- A connector test now fails because it monkeypatches `requests.get` globally;
+- A connector test other than the three named `headers=` expectations fails —
   report the test rather than editing it to accommodate the helper.
+- `KEYCLOAK_SERVICE_CLIENT_SECRET` turns out to be a placeholder in `.env`: stop
+  and report, because the live verification cannot pass and the operator must
+  generate a real secret first.
 - In-scope files have drifted from "Current state".
+
+## Test plan
+
+Covered in Automated verification. The highest-value assertions are the
+**single-fetch cache** and the **failure backoff** (so a busy or Keycloak-less
+daemon does not hammer Keycloak or stall on a 10s timeout per PATCH), the
+**single 401 retry** (expiry mid-run), and the **unchanged degrade contract** (so
+a Keycloak outage does not stop scans).
 
 ## Maintenance notes
 
 - **The helper lives in `src/common/`** precisely because all four images copy
   that tree. Putting it under `src/app/` would force a Dockerfile change in four
-  images (see `plans/README.md`'s note on file moves needing COPY updates).
-- **A leaked `wba-internal` secret can trigger scans** (service holds
-  `POST /commands/`). Rotating it is a Keycloak admin-console operation plus a
-  compose env change; Plan E owns broader credential handling.
-- **Token expiry mid-scan** is the case the single 401 retry covers. If scans
-  ever become long-lived enough to need more, extend the retry here, not in each
-  daemon.
+  images.
+- **A leaked `wba-internal` secret can trigger scans** (the service holds the
+  connector-config read path, and 057 grants it `POST`-free commands access).
+  Rotating it is a Keycloak admin-console operation plus a compose env change;
+  Plan E owns broader credential handling.
+- **Token expiry mid-scan** is what the single 401 retry covers. If scans ever
+  become long-lived enough to need more, extend the retry in `_api_request`, not
+  in each daemon.
 - **A reviewer should scrutinize**: that no secret is logged, that the fallback
-  still degrades rather than raising, and that no `.env` was mounted into the
-  connector containers.
+  still degrades rather than raising, that the realm mapper applies to
+  `wba-internal` only, and that 057's amendment lands with 057.

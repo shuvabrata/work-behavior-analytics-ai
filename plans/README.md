@@ -42,6 +42,7 @@ ordered so the stack runs after it.
 | 060  | [Integration tests and full-stack smoke](060-integration-tests-and-full-stack-smoke.md) | **P1** | M | LOW | 059 | TODO |
 | 061  | [Auth documentation update](061-auth-documentation-update.md) | **P1** | M | LOW | 060 | TODO |
 | 062  | [Deliver realm changes without dropping the database, and give `wba-web` an audience](062-realm-change-delivery-and-wba-web-audience.md) | **P1** | M | MED | 056 | **BLOCKS 056's Step 4** — without it no browser login can succeed. Found by the operator testing Step 4 on 2026-10-31: `wba-web` tokens carry no `aud` while `tokens.py:123` requires one, so the callback's token validation fails with `login_failed` and the API logs `Token is missing the "aud" claim`. Root cause is a 054/055 gap, not a 056 defect: 054 built a strict validator, 055 gave `wba-internal` an audience and explicitly declined to give `wba-web` one (`plans/055:134`), and 056 is where the human login path was first exercised. Also establishes the realm-change delivery mechanism (idempotent `kcadm.sh` reconcile) the repo never had. **Must run before/with 056's Step 4 and before 057.** **Steps 1, 2, 4, 5 DONE 2026-10-31, uncommitted** — template mapper added, `scripts/keycloak-realm-reconcile.sh` created, ADMIN_GUIDE section written, 2 regression tests added (2519 unit passed, mypy/pylint 9.69/bandit all green). The new test's anti-vacuity was proven by disabling `aud` verification: the aud-less test fails on `DID NOT RAISE TokenValidationError`. **Step 3 DONE 2026-10-31 — browser login PASSES.** The operator ran the reconcile and signed in as `dev-user`, landing on `/app/graph` with the account bar rendered. Observed evidence: first run `✓ Added wba-web-audience to client wba-web` (exit 0); **second run `✓ already present — nothing to do`, exit 0, no write** (the idempotency proof); `kcadm get clients -r wba -q clientId=wba-web` shows the mapper for `oidc-audience-mapper`; `kcadm get users` still lists `dev-admin` and `dev-user` — **no user was lost**. **The script needed two fixes before it ran** (both were errors in the version this plan prescribed, found only by executing it): `kcadm config credentials` has **no `--password:env` flag** in Keycloak 26.8 (use `KC_CLI_PASSWORD`, which the CLI documents in its own `--help`), and the first repair forwarded `KC_CLI_PASSWORD` while the function still exported `DEV_KEYCLOAK_ADMIN_PASSWORD`, so kcadm got no password and reported the misleading `Console is not active, but password is required` — the admin console is healthy (200) and was a red herring. Static checks (`bash -n`, flag greps) passed throughout while the script was still broken; only running it found either fault. |
+| 063  | [Reconcile the whole realm declaratively, and report drift instead of hiding it](063-declarative-realm-reconciliation.md) | **P2** | **L** | MED | 062 | TODO — **run after 057.** Supersedes 062's kcadm script, which reconciles **3 of the template's 21 declarative facts** (it grew one hand-written block per bug: `wba-web` mapper, post-logout URI, `wba-internal` mapper). The other 18 can drift silently while the script prints three green ticks — and its mapper detection is name-only, so editing `included.client.audience` in the template reports "already present" while the realm keeps the old value. Four "template says X, realm says Y" defects surfaced in 054–056 and **every one passed its own check**. Proposes a profiles-gated `keycloak-config-cli` service (inert on `up -d` — a continuously-running reconciler would silently revert console changes), a `realm-drift.sh` report with exit codes, extraction of the realm renderer shared with `entrypoint.sh`, an ADMIN_GUIDE rewrite, and a coverage test that fails when a template fact is neither reconciled nor exempted. **Step 1 is evidence-gathering only** — the tool's compatible tag, credential handling and dry-run semantics must be established, not assumed; STOP if they cannot be. |
 
 **Two orderings are load-bearing and must not be "optimised":**
 
@@ -71,6 +72,42 @@ follows:
 | F | Per-person data scoping | undesigned |
 
 ## Notes
+
+- **⚠️ The realm template is NOT the realm — and this bit us four times.** Read
+  this before executing 057 or any later Plan C step.
+
+  `--import-realm` is **create-only**. Keycloak's log says it plainly on every
+  boot after the first: `Realm 'wba' already exists. Import skipped`. So editing
+  `deploy/keycloak/realm-wba.json.template` changes **nothing** on a running
+  stack, and nothing errors to tell you. The template describes the realm; a
+  separate, manual step delivers it.
+
+  Four gaps of exactly this shape were found in the 054–056 sequence, and **all
+  four passed whatever check was supposed to cover them**:
+
+  | # | Missing from the realm | How it was found | What it broke |
+  |---|---|---|---|
+  | 1 | `wba-web` audience mapper | Browser login | Every login: `login_failed` |
+  | 2 | `post.logout.redirect.uris` | Clicking Sign out | Logout: `Invalid redirect uri` |
+  | 3 | `wba-internal` audience mapper | Reviewer decoding a token | Would have broken **every producer + the consumer** at 057 |
+  | 4 | (this note) The delivery step itself | The pattern, after three | — |
+
+  **The rule:** after changing the template, run
+  `./scripts/keycloak-realm-reconcile.sh` and verify against the **running
+  realm**, not the file. `ADMIN_GUIDE.md` → "Applying a realm change" documents
+  this. The script prints "already present — nothing to do" when a change is
+  in place and "Added …" when it applies one; **run it twice** and confirm the
+  second run is all no-ops, which is what proves idempotency.
+
+  **The deeper lesson, which cost most of a session to learn:** in this codebase
+  a green check is often not evidence. Four times, a gate passed while the thing
+  it covered was broken — a cookie-less `curl` returns 401 from the session guard
+  *before* routing, so it proves the guard works and nothing about the route; the
+  flow tests stub `validate_bearer_token`, so they never see a real token; and no
+  test follows a logout through Keycloak. **A check that does not exercise the
+  failing path is the appearance of evidence.** When a step claims something
+  works, ask which assertion would fail if it didn't — and if the answer is
+  "none", that step has no coverage regardless of what it printed.
 
 - **053–061 (Plan C)**: Planned at `225d3639` on 2026-10-30 from a structured
   interview with the operator; the 30 decisions taken are recorded in each
@@ -153,17 +190,21 @@ follows:
     `try`/`except ServiceTokenError` blocks are the second, not a workaround for
     the first — do not widen them to catch `ImportError`.
 
-  **Two operator-gated items remain; neither blocks 056:**
-  1. **The live token checks were not run.** `src/common/auth/` reaches a running
-     producer container only after its image is rebuilt (there is no source
-     bind-mount for the four connector services), and the realm must be re-imported
-     for the `oidc-audience-mapper` to land on `wba-internal` (the recipe is in
-     `ADMIN_GUIDE.md`, "To re-seed from the variable instead" — it drops only the
-     derived `keycloak` database). After both, run the two `docker compose exec -T
-     github-producer` blocks in the plan; they must print a positive token length,
-     `reused True`, and decode to `aud=["wba-internal"]`, `azp=wba-internal`, roles
-     including `wba-service`. **If `wba-service` is absent, 053's realm template is
-     at fault — do not widen another role.**
+  **Two operator-gated items remained; item 1 is now CLOSED (2026-10-31):**
+  1. ~~**The live token checks were not run.**~~ **RESOLVED 2026-10-31 — and it was
+     not merely unrun, it was BROKEN.** `wba-internal`'s audience mapper had never
+     been delivered to the running realm: Keycloak's log shows
+     `Realm 'wba' already exists. Import skipped` on every boot since the realm was
+     created (17:09), so the mapper existed only in the template. A live token
+     decoded as `aud=<MISSING>`, `azp=wba-internal`, `roles=['wba-service']` — so
+     **every producer and the consumer would have failed bearer validation the
+     moment 057 switched enforcement on.** Delivered with
+     `scripts/keycloak-realm-reconcile.sh` (a second mapper block, generalized to
+     `reconcile_audience_mapper <client> <mapper>`). Post-fix decode:
+     `aud=wba-internal`, `azp=wba-internal`, `roles=['wba-service']`,
+     `iss=https://localhost/auth/realms/wba`. No database drop, no re-import, no
+     user loss. **This was the fourth "templated but never delivered" gap in the
+     Plan C sequence** — see the note below.
   2. **`KEYCLOAK_SERVICE_CLIENT_ID` is not set in `.env`.** The helper falls back to
      its `wba-internal` default, so this is harmless today, but an operator who
      changes the client id in Keycloak without adding the variable gets a

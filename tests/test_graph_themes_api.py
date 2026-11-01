@@ -23,7 +23,9 @@ from __future__ import annotations
 import httpx
 import pytest
 
-pytestmark = [pytest.mark.integration, pytest.mark.server]
+from tests.auth_helpers import admin_headers
+
+pytestmark = [pytest.mark.integration, pytest.mark.server, pytest.mark.authenticated]
 
 BASE_URL = "https://localhost"
 
@@ -40,7 +42,7 @@ def themes_snapshot() -> dict:
     present at setup (i.e. created during the run) and re-sets each base mode's
     original default. Uses the same ``BASE_URL`` for both phases.
     """
-    with httpx.Client(base_url=BASE_URL, timeout=10) as client:
+    with httpx.Client(base_url=BASE_URL, timeout=10, headers=admin_headers()) as client:
         resp = client.get("/api/v1/graph-themes/")
         resp.raise_for_status()
         themes = resp.json()
@@ -52,7 +54,7 @@ def themes_snapshot() -> dict:
     yield snapshot
 
     # --- teardown ---
-    with httpx.Client(base_url=BASE_URL, timeout=10) as client:
+    with httpx.Client(base_url=BASE_URL, timeout=10, headers=admin_headers()) as client:
         current = client.get("/api/v1/graph-themes/").json()
         for theme in current:
             if theme["id"] not in snapshot["ids"]:

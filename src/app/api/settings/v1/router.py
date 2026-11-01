@@ -23,6 +23,7 @@ from app.api.settings.v1.models import SettingResponse, SingleUpdateRequest
 from app.api.settings.v1.models import SingleResetRequest
 from app.api.settings.v1 import service as settings_service
 from app.api.settings.v1.service import ConflictError
+from app.auth.dependencies import require_admin
 from app.db.session import get_async_db
 
 router = APIRouter(prefix="/settings", tags=["settings"])
@@ -46,7 +47,7 @@ async def get_runtime_snapshot(
     return RuntimeSnapshotResponse(**config.model_dump())
 
 
-@router.patch("/", response_model=BulkUpdateResponse)
+@router.patch("/", response_model=BulkUpdateResponse, dependencies=[Depends(require_admin)])
 async def bulk_update_settings(
     payload: BulkUpdateRequest,
     db: AsyncSession = Depends(get_async_db),
@@ -72,7 +73,7 @@ async def bulk_update_settings(
         raise HTTPException(status_code=422, detail=exc.errors()) from exc
 
 
-@router.patch("/{key}", response_model=SettingResponse)
+@router.patch("/{key}", response_model=SettingResponse, dependencies=[Depends(require_admin)])
 async def update_single_setting(
     key: str,
     payload: SingleUpdateRequest,
@@ -99,7 +100,7 @@ async def update_single_setting(
         raise HTTPException(status_code=422, detail=exc.errors()) from exc
 
 
-@router.post("/reset", response_model=list[SettingResponse])
+@router.post("/reset", response_model=list[SettingResponse], dependencies=[Depends(require_admin)])
 async def reset_all_settings(
     body: BulkResetRequest,
     db: AsyncSession = Depends(get_async_db),
@@ -121,7 +122,7 @@ async def reset_all_settings(
         ) from exc
 
 
-@router.post("/{key}/reset", response_model=SettingResponse)
+@router.post("/{key}/reset", response_model=SettingResponse, dependencies=[Depends(require_admin)])
 async def reset_single_setting(
     key: str,
     body: SingleResetRequest,

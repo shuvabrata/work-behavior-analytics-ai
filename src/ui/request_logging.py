@@ -16,6 +16,7 @@ from flask import Flask, Response, g, request
 
 from common.logger import LogContext, logger
 from ui.runtime_settings import refresh_if_stale
+from ui.session_guard import session_guard
 
 
 def _request_id() -> str:
@@ -31,14 +32,10 @@ def register_request_logging(server: Flask) -> None:
     """
 
     @server.before_request
-    def _before_request() -> None:
-        # Drive the UI's runtime-settings refresh from a real request, bounded by
-        # a TTL so a page load with many callbacks still costs at most one API
-        # fetch per REFRESH_TTL_SECONDS. Without this trigger the UI's cache
-        # would only ever hold its import-time env seed, and a runtime setting
-        # edited in the Settings UI would never reach the UI.
-        refresh_if_stale()
-
+    def _before_request() -> Response | None:
+        # Populate the logging context before the guard so a guarded response is
+        # still timed and correlated; Flask runs ``after_request`` even when a
+        # ``before_request`` hook short-circuits.
         request_id = _request_id()
         g.request_id = request_id
         g.request_start = time.perf_counter()
@@ -47,6 +44,20 @@ def register_request_logging(server: Flask) -> None:
         stack = ExitStack()
         stack.enter_context(LogContext(request_id=request_id))
         g.log_context_stack = stack
+
+        # The session guard runs before the settings refresh: a logged-out
+        # request must not trigger an API fetch it has no credential for.
+        guard_response = session_guard()
+        if guard_response is not None:
+            return guard_response
+
+        # Drive the UI's runtime-settings refresh from a real request, bounded by
+        # a TTL so a page load with many callbacks still costs at most one API
+        # fetch per REFRESH_TTL_SECONDS. Without this trigger the UI's cache
+        # would only ever hold its import-time env seed, and a runtime setting
+        # edited in the Settings UI would never reach the UI.
+        refresh_if_stale()
+        return None
 
     @server.after_request
     def _after_request(response: Response) -> Response:

@@ -7,10 +7,12 @@ services:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
+      KEYCLOAK_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD}
       TZ: Asia/Kolkata
     ports:
       - "5432:5432"
     volumes:
+      - ./deploy/postgres/init-keycloak.sh:/docker-entrypoint-initdb.d/10-keycloak.sh:ro
       - pgdata:/var/lib/postgresql/data
     networks:
       - wba-ai-network
@@ -19,6 +21,45 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.8
+    container_name: wba-ai-keycloak
+    restart: unless-stopped
+    command: ["start-dev", "--import-realm"]
+    entrypoint: ["/opt/keycloak/entrypoint.sh"]
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD}
+      KC_HOSTNAME: ${EXTERNAL_BASE_URL:-https://localhost}/auth
+      KC_HOSTNAME_ADMIN: http://127.0.0.1:8080/auth
+      APP_PUBLIC_BASE_URL: ${EXTERNAL_BASE_URL:-https://localhost}
+      KC_PROXY_HEADERS: xforwarded
+      KC_HTTP_ENABLED: "true"
+      KC_HTTP_RELATIVE_PATH: /auth
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${DEV_KEYCLOAK_ADMIN_PASSWORD}
+      DEV_WBA_ADMIN_PASSWORD: ${DEV_WBA_ADMIN_PASSWORD}
+      DEV_WBA_USER_PASSWORD: ${DEV_WBA_USER_PASSWORD}
+      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET}
+      KEYCLOAK_SERVICE_CLIENT_SECRET: ${KEYCLOAK_SERVICE_CLIENT_SECRET}
+    volumes:
+      - ./deploy/keycloak/realm-wba.json.template:/opt/keycloak/realm-wba.json.template:ro
+      - ./deploy/keycloak/entrypoint.sh:/opt/keycloak/entrypoint.sh:ro
+    # Admin console not published. See ADMIN_GUIDE.md to enable on 127.0.0.1:8080.
+    networks:
+      - wba-ai-network
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/8080 && printf 'GET /auth/realms/wba/.well-known/openid-configuration HTTP/1.0\\r\\nHost: localhost\\r\\n\\r\\n' >&3 && head -1 <&3 | grep -q '200'"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
+    depends_on:
+      postgres:
+        condition: service_healthy
 
   api:
     build:
@@ -264,6 +305,8 @@ services:
       PYTHONPATH: /app
       LOG_DIR: /var/log/github-producer
       CONTAINER_NAME: github-producer
+      KEYCLOAK_INTERNAL_URL: ${KEYCLOAK_INTERNAL_URL:-http://keycloak:8080/auth/realms/wba}
+      KEYCLOAK_SERVICE_CLIENT_ID: ${KEYCLOAK_SERVICE_CLIENT_ID:-wba-internal}
     volumes:
       - ./logs/github-producer:/var/log/github-producer
     depends_on:
@@ -287,6 +330,8 @@ services:
       PYTHONPATH: /app
       LOG_DIR: /var/log/jira-producer
       CONTAINER_NAME: jira-producer
+      KEYCLOAK_INTERNAL_URL: ${KEYCLOAK_INTERNAL_URL:-http://keycloak:8080/auth/realms/wba}
+      KEYCLOAK_SERVICE_CLIENT_ID: ${KEYCLOAK_SERVICE_CLIENT_ID:-wba-internal}
     volumes:
       - ./logs/jira-producer:/var/log/jira-producer
     depends_on:
@@ -310,6 +355,8 @@ services:
       PYTHONPATH: /app
       LOG_DIR: /var/log/confluence-producer
       CONTAINER_NAME: confluence-producer
+      KEYCLOAK_INTERNAL_URL: ${KEYCLOAK_INTERNAL_URL:-http://keycloak:8080/auth/realms/wba}
+      KEYCLOAK_SERVICE_CLIENT_ID: ${KEYCLOAK_SERVICE_CLIENT_ID:-wba-internal}
     volumes:
       - ./logs/confluence-producer:/var/log/confluence-producer
     depends_on:
@@ -337,6 +384,8 @@ services:
       LISTEN_QUEUES: github_queue,jira_queue,confluence_queue
       PYTHONPATH: /app
       LOG_DIR: /var/log/signal-consumer
+      KEYCLOAK_INTERNAL_URL: ${KEYCLOAK_INTERNAL_URL:-http://keycloak:8080/auth/realms/wba}
+      KEYCLOAK_SERVICE_CLIENT_ID: ${KEYCLOAK_SERVICE_CLIENT_ID:-wba-internal}
       ELASTICSEARCH_URL: http://elasticsearch:9200
       ELASTIC_PASSWORD: ${ELASTIC_PASSWORD:-}
       # Override DATABASE_URL to use 'postgres' service name instead of 'localhost'

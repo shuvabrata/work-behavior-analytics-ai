@@ -23,14 +23,18 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY src/ui/ ./ui/
 COPY src/ui_main.py ./ui_main.py
 
-# Copy only the reachable parts of the shared common package: the logger and
-# the pure runtime-settings client. common/messaging/ (aio-pika) and
+# Copy only the reachable parts of the shared common package: the logger, the
+# pure runtime-settings client, and the service-token client. common/auth/ is
+# included because common/runtime_settings/client.py imports it at module level;
+# the UI holds no KEYCLOAK_* environment, so get_service_token() there can only
+# raise ServiceTokenError and degrade. common/messaging/ (aio-pika) and
 # common/command_n_control/ are transport code the UI must not hold, so they are
 # deliberately not copied — a stray import fails loudly instead of silently
 # working in a container that was never meant to have a transport.
 COPY src/common/__init__.py ./common/
 COPY src/common/logger.py ./common/
 COPY src/common/runtime_settings/ ./common/runtime_settings/
+COPY src/common/auth/ ./common/auth/
 
 # Copy the pure shared domain package
 COPY src/domain/ ./domain/

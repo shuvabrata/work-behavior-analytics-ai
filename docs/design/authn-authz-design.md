@@ -251,10 +251,29 @@ difference rejects every token.
 
 Keycloak's public hostname must be pinned so `iss` does not vary with how the request arrived.
 
-**Open item for Plan C:** the app container must be able to *fetch* discovery and JWKS from that
-URL, not merely validate against it. Either one URL is reachable from both browser and container
-(nginx by service name), or a second internal URL setting is needed. Pin the Keycloak image
-version too, since the hostname env var differs between the Quarkus and legacy WildFly images.
+**Settled in Plan C (053).** The app container must be able to *fetch* discovery and JWKS from that
+URL, not merely validate against it — and inside a container `localhost` is the container itself,
+so **one URL cannot serve both**. There are two settings:
+
+| Setting | Value | Used for |
+|---|---|---|
+| `KEYCLOAK_ISSUER` | `https://localhost/auth/realms/wba` | exact `iss` matching only — the URL the **browser** uses |
+| `KEYCLOAK_INTERNAL_URL` | `http://keycloak:8080/auth/realms/wba` | the API's own discovery, token and JWKS fetches over the Docker network |
+
+At first use the API asserts that the discovery document's `issuer` equals `KEYCLOAK_ISSUER`, so a
+mismatch is one clear log line rather than every request failing. `APP_PUBLIC_BASE_URL` carries the
+public origin, and a startup validator fails the process if it and `KEYCLOAK_ISSUER`'s origin
+disagree.
+
+The Keycloak image is **pinned to a minor tag** (`26.8`), because the hostname environment variable
+differs between the Quarkus and legacy WildFly images.
+
+**Only `/auth/realms/*` and `/auth/resources/*` are proxied.** `/auth/resources/*` is the theme and
+console static assets — without it the login page and account console load their HTML but never
+initialise. Everything else under `/auth` (including `/auth/admin`, the admin console and the admin
+REST API) returns `404`; the operator reaches the console on the loopback port the `keycloak`
+service publishes only when asked, and the admin console uses a **separate** loopback origin
+(`KC_HOSTNAME_ADMIN`) from the public one (`KC_HOSTNAME`).
 
 ### Enterprise SSO integration
 
@@ -587,8 +606,9 @@ where they are user-tunable, and as startup-only `Settings` fields where they ar
 | `KEYCLOAK_ISSUER` | startup-only | Public issuer URL; must match the `iss` claim exactly |
 | `KEYCLOAK_REALM` | startup-only | Realm name (`wba`) |
 | `KEYCLOAK_CLIENT_ID` | startup-only | `wba-web` |
-| `KEYCLOAK_CLIENT_SECRET` | startup-only, sensitive | Confidential client secret |
-| `KEYCLOAK_SERVICE_CLIENT_ID` / `_SECRET` | startup-only, sensitive | `wba-internal` credentials for producers/consumer |
+| `KEYCLOAK_CLIENT_SECRET` | startup-only, sensitive, **`ApiSettings` only** | Confidential client secret |
+| `KEYCLOAK_SERVICE_CLIENT_ID` | startup-only | `wba-internal` |
+| `KEYCLOAK_SERVICE_CLIENT_SECRET` | startup-only, sensitive, **`ApiSettings` only** | `wba-internal` credential for producers/consumer |
 | `AUTH_COOKIE_SECURE` | startup-only | `Secure` flag; **must** be true wherever TLS terminates |
 | `AUTH_SESSION_IDLE_MINUTES` | runtime-tunable | Idle timeout enforced by the application |
 | `AUTH_SESSION_MAX_HOURS` | runtime-tunable | Absolute session cap |
@@ -677,6 +697,31 @@ Two constraints to plan for:
 API Gateway's native JWT authorizer can validate Keycloak-issued tokens directly. That is an
 option for the AWS topology, not a requirement, and is deliberately not designed here — the
 application keeps validating tokens itself so the Docker and AWS topologies behave identically.
+
+### Production checklist
+
+Nothing in Plan C is localhost-only *by construction*, but several settings are **dev
+conveniences that must change for a real domain**. Recorded here so a deployment does not depend
+on someone remembering.
+
+| Setting / item | Dev value | Production |
+|---|---|---|
+| `APP_PUBLIC_BASE_URL` | `https://localhost` | the real origin, e.g. `https://wba.example.com` |
+| `KEYCLOAK_ISSUER` | `https://localhost/auth/realms/wba` | `<APP_PUBLIC_BASE_URL>/auth/realms/wba` (the startup validator enforces the prefix) |
+| Realm `redirectUris` / `webOrigins` | templated from `APP_PUBLIC_BASE_URL` | same template, different value — **no realm edit** |
+| `KEYCLOAK_INTERNAL_URL` | `http://keycloak:8080/auth/realms/wba` | the internal service address of the IdP |
+| `KC_HOSTNAME` | `${EXTERNAL_BASE_URL}/auth` | unchanged in shape; the value follows the real origin |
+| `KC_HOSTNAME_ADMIN` | `http://127.0.0.1:8080/auth` | **removed** — the console is not published at all |
+| Keycloak loopback port `127.0.0.1:8080` | off by default; the operator enables it per `ADMIN_GUIDE.md` | **removed**; no admin surface published |
+| `KC_BOOTSTRAP_ADMIN_USERNAME` / `_PASSWORD` | literal `admin` / `${DEV_KEYCLOAK_ADMIN_PASSWORD}` | **removed**; an operator-managed admin or an external IdP, never a seeded one |
+| `deploy/certs/*` (mkcert) | local CA | a real certificate, or TLS terminated at a load balancer / API Gateway |
+| `AUTH_COOKIE_SECURE` | `true` | `true` (never false behind HTTPS) |
+| Keycloak DB password (`keycloak`) | generated into `.env` | a secret-store value (Plan E owns broader credential handling) |
+| Compose vs ECS | Compose | Plan A's proxy-awareness makes this a configuration change, not a code change — see the AWS section above |
+
+No application code branches on host or scheme. `nginx server_name` is the only remaining literal
+hostname in the repository's deployment config, and it is the sole `listen 443` server, so it
+answers any Host header; parameterise it when a second vhost is added.
 
 ---
 
@@ -870,6 +915,29 @@ The application validating Keycloak-issued bearer tokens with audience and resou
 second credential source resolving to the same object. Keycloak's Dynamic Client Registration
 is **off by default** and requires an explicit policy, and audience mapping must be configured
 per client; both need verification against the pinned Keycloak version.
+
+### Keycloak account console returns 401 on its data calls
+
+Found while building Plan C (053), **unresolved**, and deliberately not blocking it. Signing in
+succeeds and the page renders, but the console's own API calls fail with `401`:
+
+```
+GET /auth/realms/wba/account/supportedLocales            401
+GET /auth/realms/wba/account/?userProfileMetadata=true   401
+```
+
+The token is valid and sent; the determining factor is `Content-Type: application/json` on the
+GET, which routes the request to the account **REST API** rather than the public HTML shell —
+so the same URL without that header answers `200` with the SPA shell, which is not data and
+proves nothing. The token carries **no `aud` claim**, realm `wba` has no audience mapper, and
+the Keycloak-created `master` realm has none either, so this is not an artifact of importing the
+realm template.
+
+This is the same class of concern as the MCP note above — an audience that the resource server
+requires and the client does not emit — and the candidate fix is the same shape: an
+`oidc-audience-mapper` (included client audience `account`) on the `account-console` client in
+`deploy/keycloak/realm-wba.json.template`. Unproven. **No impact on the application**: nothing in
+this repo calls `/realms/wba/account`, and the app's login is the BFF flow, not this console.
 
 ---
 

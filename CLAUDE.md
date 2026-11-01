@@ -189,7 +189,10 @@ Some suites (e.g. connector validation) live in their own `tests/<suite>/` direc
 - **Type hints on all parameters and returns.** Built-in generics (`list[str]`, `dict[str, int]`) and `X | None`, not `typing.List`/`Optional`. Avoid `Any` unless unavoidable. Use `collections.abc.Callable` / `Iterable` / `Sequence` where it keeps signatures flexible. Third-party types where apt (`pydantic.BaseModel`, `pandas.DataFrame`).
 - `from common.logger import logger` — never `print()`.
 - f-strings for interpolation; PEP 8; mind pylint import order.
-- Docstrings on modules, classes, and public functions.
+- Default to NO comments in the code.
+- Write self-documenting code. Never add comments that describe "what" the code does or narrate the process.
+- Only use comments to explain the "why" (e.g., non-obvious constraints, critical workarounds, or hidden gotchas).
+- Absolutely no change-logs, narration, or past-tense comments (e.g., "Added feature X"). 
 - Note: changing an existing function to add annotations must be **non-destructive** — no behavior, name, or logic changes.
 
 ## UI design standards (mandatory, not suggestions)

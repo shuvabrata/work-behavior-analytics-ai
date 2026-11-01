@@ -551,6 +551,7 @@ class TestDaemonRouting:
 
 
 @pytest.mark.server
+@pytest.mark.authenticated(role="service")
 class TestScanEndToEnd:
     """Full flow: API POST → RabbitMQ → daemon → child → status completed.
 

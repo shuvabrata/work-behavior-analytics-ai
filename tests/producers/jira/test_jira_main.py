@@ -49,6 +49,7 @@ def test_load_config_from_server_success(mock_get, monkeypatch):
     mock_get.assert_called_once_with(
         "http://mock-server:8000/api/v1/connectors/jira/configs",
         params={'include_secrets': 'true'},
+        headers={},
         timeout=10
     )
 

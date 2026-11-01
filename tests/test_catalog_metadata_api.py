@@ -26,8 +26,9 @@ import psycopg2
 import pytest
 
 from app.settings import settings
+from tests.auth_helpers import admin_headers
 
-pytestmark = [pytest.mark.integration, pytest.mark.server]
+pytestmark = [pytest.mark.integration, pytest.mark.server, pytest.mark.authenticated]
 
 BASE_URL = "https://localhost"
 
@@ -65,7 +66,7 @@ def metadata_snapshot() -> set[str]:
     deletes any row whose ``catalog_id`` was not present at setup (i.e. created
     during the run). Uses the same ``BASE_URL`` for both phases.
     """
-    with httpx.Client(base_url=BASE_URL, timeout=10) as client:
+    with httpx.Client(base_url=BASE_URL, timeout=10, headers=admin_headers()) as client:
         resp = client.get("/api/v1/queries/catalog-metadata")
         resp.raise_for_status()
         snapshot = {item["catalog_id"] for item in resp.json()["items"]}
@@ -77,7 +78,7 @@ def metadata_snapshot() -> set[str]:
     # The API has no DELETE endpoint, so removal goes through psycopg2. The
     # PUT flip is best-effort (a failed test may leave the server degraded);
     # a PUT failure must not prevent the direct DB deletion.
-    with httpx.Client(base_url=BASE_URL, timeout=10) as client:
+    with httpx.Client(base_url=BASE_URL, timeout=10, headers=admin_headers()) as client:
         current = client.get("/api/v1/queries/catalog-metadata").json()
         for item in current["items"]:
             if item["catalog_id"] not in snapshot:

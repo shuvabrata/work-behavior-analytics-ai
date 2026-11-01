@@ -15,7 +15,12 @@ BASE_URL = "https://localhost"
 EXECUTE_URL = "/api/v1/graph/execute"
 
 
-pytestmark = [pytest.mark.integration, pytest.mark.server, pytest.mark.neo4j]
+pytestmark = [
+    pytest.mark.integration,
+    pytest.mark.server,
+    pytest.mark.neo4j,
+    pytest.mark.authenticated,
+]
 
 
 def raw_execute_payload(query: str) -> dict:

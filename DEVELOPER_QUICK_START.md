@@ -14,6 +14,35 @@ done
 
  Make a copy of .env.example to .env and update the values.
 
+ **Keycloak credentials.** `./scripts/setup.sh` generates the six required
+ values. See *Keycloak credentials* in `USER_GUIDE.md` for what each one is.
+
+ **Keycloak admin console.** Not published by default. See `ADMIN_GUIDE.md` to
+ open it on `127.0.0.1:8080`.
+
+### Keycloak database on an existing Postgres volume
+
+A fresh `docker compose down -v` creates it automatically. An existing `pgdata`
+volume needs this once against a running stack:
+
+```bash
+KEYCLOAK_DB_PASSWORD=$(sed -n 's/^KEYCLOAK_DB_PASSWORD=//p' .env | head -1)
+: "${KEYCLOAK_DB_PASSWORD:?KEYCLOAK_DB_PASSWORD missing from .env}"
+
+docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U postgres -d postgres \
+  -c "DO \$\$ BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'keycloak') THEN
+          CREATE ROLE keycloak WITH LOGIN PASSWORD '${KEYCLOAK_DB_PASSWORD}';
+        END IF;
+      END \$\$;"
+
+docker compose exec -T postgres psql -U postgres -d postgres \
+  -tc "SELECT 1 FROM pg_database WHERE datname='keycloak'" | grep -q 1 || \
+  docker compose exec -T postgres createdb -U postgres -O keycloak keycloak
+```
+
+Safe to re-run.
+
 **TLS certificate prerequisite (Docker Compose workflow).** The Compose stack
 serves the app over HTTPS through an `nginx` reverse proxy, which needs a
 certificate at `deploy/certs/wba.pem` (+ `wba-key.pem`). Generate it once per

@@ -13,6 +13,7 @@ import requests
 from pathlib import Path
 from typing import Any, Dict, List, Tuple, cast
 
+from common.auth import ServiceTokenError, get_service_token
 from common.logger import logger
 
 
@@ -22,9 +23,15 @@ def load_config_from_server() -> Dict[str, Any]:
     config_url = f"{api_server.rstrip('/')}/api/v1/connectors/github/configs"
     params = {"include_secrets": "true"}
 
+    headers: Dict[str, str] = {}
+    try:
+        headers = {"Authorization": f"Bearer {get_service_token()}"}
+    except ServiceTokenError:
+        logger.warning("Service token unavailable — fetching connector config unauthenticated")
+
     logger.info(f"Fetching configuration from {config_url} with params: {params}")
     try:
-        response = requests.get(config_url, params=params, timeout=10)
+        response = requests.get(config_url, params=params, headers=headers, timeout=10)
         response.raise_for_status()
 
         raw_configs = response.json()

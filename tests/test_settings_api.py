@@ -19,7 +19,9 @@ from datetime import datetime, timezone
 import httpx
 import pytest
 
-pytestmark = [pytest.mark.integration, pytest.mark.server]
+from tests.auth_helpers import admin_headers
+
+pytestmark = [pytest.mark.integration, pytest.mark.server, pytest.mark.authenticated]
 
 BASE_URL = "https://localhost"
 
@@ -35,7 +37,7 @@ def settings_snapshot() -> dict[str, object | None]:
     session-scoped async fixtures.
     """
     # --- setup: snapshot current values ---
-    with httpx.Client(base_url=BASE_URL, timeout=10) as client:
+    with httpx.Client(base_url=BASE_URL, timeout=10, headers=admin_headers()) as client:
         resp = client.get("/api/v1/settings/")
         resp.raise_for_status()
         snapshot: dict[str, object | None] = {
@@ -45,7 +47,7 @@ def settings_snapshot() -> dict[str, object | None]:
     yield snapshot
 
     # --- teardown: restore original values ---
-    with httpx.Client(base_url=BASE_URL, timeout=10) as client:
+    with httpx.Client(base_url=BASE_URL, timeout=10, headers=admin_headers()) as client:
         # Reset all to clear any overrides left by tests.
         client.post("/api/v1/settings/reset", json={})
         # Re-apply any original non-None values.

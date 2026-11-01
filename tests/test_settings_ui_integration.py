@@ -26,8 +26,9 @@ from ui.pages.settings.runtime import (
     get_runtime_layout,
     render_settings,
 )
+from tests.auth_helpers import admin_headers, session_cookies
 
-pytestmark = [pytest.mark.integration, pytest.mark.server]
+pytestmark = [pytest.mark.integration, pytest.mark.server, pytest.mark.authenticated]
 
 BASE_URL = "https://localhost"
 APP_BASE = f"{BASE_URL}/app"
@@ -60,7 +61,7 @@ def settings_snapshot() -> Iterator[dict[str, object | None]]:
     Uses a synchronous ``httpx.Client`` to avoid event-loop issues with
     session-scoped async fixtures.
     """
-    with httpx.Client(base_url=BASE_URL, timeout=10) as client:
+    with httpx.Client(base_url=BASE_URL, timeout=10, headers=admin_headers()) as client:
         resp = client.get("/api/v1/settings/")
         resp.raise_for_status()
         snapshot: dict[str, object | None] = {
@@ -69,7 +70,7 @@ def settings_snapshot() -> Iterator[dict[str, object | None]]:
 
     yield snapshot
 
-    with httpx.Client(base_url=BASE_URL, timeout=10) as client:
+    with httpx.Client(base_url=BASE_URL, timeout=10, headers=admin_headers()) as client:
         client.post("/api/v1/settings/reset", json={})
         overrides = {k: v for k, v in snapshot.items() if v is not None}
         if overrides:
@@ -91,8 +92,14 @@ class TestSettingsDashboardRenders:
     """Verify the settings page layout produces the correct component tree."""
 
     def test_settings_page_returns_200(self) -> None:
-        """The Dash runtime settings page returns HTTP 200."""
-        resp = httpx.get(f"{APP_BASE}/settings/runtime", timeout=10)
+        """The Dash runtime settings page returns HTTP 200.
+
+        The UI guard authenticates on the session cookie, not on a bearer, so
+        this page request carries the cookie a signed-in browser would hold.
+        """
+        resp = httpx.get(
+            f"{APP_BASE}/settings/runtime", timeout=10, cookies=session_cookies()
+        )
         assert resp.status_code == 200
 
     def test_settings_page_contains_runtime_settings_header(self) -> None:

@@ -55,7 +55,7 @@ def fetch_runtime_snapshot(
         logger.warning(f"Service token unavailable for client_id={client_id} — fetching runtime snapshot unauthenticated")
 
     try:
-        resp = requests.get(url, **request_kwargs, timeout=timeout)
+        resp = requests.get(url, **request_kwargs)
         resp.raise_for_status()
         data: dict[str, Any] = resp.json()
         config = RuntimeConfig(**data)

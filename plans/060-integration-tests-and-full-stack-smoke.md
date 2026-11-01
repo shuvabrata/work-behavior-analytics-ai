@@ -97,9 +97,29 @@ duplicating it.
 
 ## Scope
 
+**Already landed (added 2026-11-01 during plan 057's execution — do NOT re-create)**:
+- `tests/test_authz_live_401_sweep.py` — sweeps every operation in the live
+  `/openapi.json` with no credential and asserts only the four intended paths
+  answer something other than `401` (`/api/health`, `/api/v1/auth/login`,
+  `/api/v1/auth/callback`, `/api/v1/auth/logout`, allowlisted **by path, not
+  status**). It prints the full list of non-401 operations before asserting.
+  Three tests: the sweep, an allowlist-staleness guard, and a direct
+  `/api/health` 200 check. Non-vacuity proven by adding an unauthenticated
+  `@app.get` probe route to a scratch copy of the app: the sweep reported 59
+  operations and failed, naming the probe. **`/openapi.json` is the inventory
+  source deliberately** — it is generated from the app's real route table, so a
+  route registered directly on `app` is visible to it, whereas the
+  `_IncludedRouter`-walking enumerator in `tests/test_authz_matrix.py` cannot see
+  such a route (measured: adding one leaves that enumerator's count unchanged).
+  This overlaps Step 4 below only in spirit; the sweep covers *authentication*,
+  Step 4 covers *authorization* per role. **Do not duplicate the sweep in
+  `test_auth_integration.py`.**
+
 **In scope**:
 - `tests/test_auth_integration.py` (create)
 - `tests/conftest.py` — extend the CA setup to `integration` tests if needed.
+  Note: `tests/test_authz_live_401_sweep.py` already carries `server`, so it
+  inherits the existing CA handling and needed no conftest change.
 - `docs/design/authn-authz-design.md` — add a "How to run" note for this suite
   (one short paragraph; the rest of the docs work is plan 061).
 

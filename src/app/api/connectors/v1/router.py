@@ -1,10 +1,12 @@
 from typing import Any, Dict, List, Union
 from common.logger import logger
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
+from app.auth.dependencies import require_admin, require_user
+from app.auth.principal import Principal
 from app.db.session import get_async_db
 from . import service
 from .model import (
@@ -37,6 +39,29 @@ ConfigItemRequest = Union[
 ]
 
 
+async def _require_secret_privilege(
+    request: Request,
+    include_secrets: bool = False,
+    principal: Principal = Depends(require_user),
+) -> None:
+    """403 when a caller without admin or service asks for connector secrets."""
+    if include_secrets and not (
+        principal.has_role("wba-admin") or principal.has_role("wba-service")
+    ):
+        logger.warning(
+            f"403 denied: connector secrets requested without privilege "
+            f"subject={principal.subject!r} username={principal.username!r} "
+            f"path={request.url.path!r}"
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "error": "forbidden",
+                "message": "Exposing connector secrets requires the wba-admin or wba-service role.",
+            },
+        )
+
+
 def _status_for_connector_error(exc: ValueError) -> int:
     if isinstance(exc, service.UnknownConnectorError):
         return 404
@@ -60,7 +85,11 @@ async def list_connectors(db: AsyncSession = Depends(get_async_db)) -> list[Conn
         raise
 
 
-@router.get("/{connector_type}", response_model=ConnectorStatus)
+@router.get(
+    "/{connector_type}",
+    response_model=ConnectorStatus,
+    dependencies=[Depends(_require_secret_privilege)],
+)
 async def get_connector(
     connector_type: str,
     include_secrets: bool = False,
@@ -72,7 +101,9 @@ async def get_connector(
         raise HTTPException(status_code=_status_for_connector_error(exc), detail=str(exc)) from exc
 
 
-@router.patch("/{connector_type}", response_model=ConnectorStatus)
+@router.patch(
+    "/{connector_type}", response_model=ConnectorStatus, dependencies=[Depends(require_admin)]
+)
 async def update_connector_config(
     connector_type: str,
     payload: ConnectorConfigUpdateRequest,
@@ -90,7 +121,11 @@ async def update_connector_config(
         raise HTTPException(status_code=_status_for_connector_error(exc), detail=str(exc)) from exc
 
 
-@router.delete("/{connector_type}/config", response_model=ConnectorStatus)
+@router.delete(
+    "/{connector_type}/config",
+    response_model=ConnectorStatus,
+    dependencies=[Depends(require_admin)],
+)
 async def clear_connector_config(
     connector_type: str,
     db: AsyncSession = Depends(get_async_db),
@@ -101,10 +136,13 @@ async def clear_connector_config(
         raise HTTPException(status_code=_status_for_connector_error(exc), detail=str(exc)) from exc
 
 
-@router.get("/{connector_type}/configs", response_model=List[Dict[str, Any]])
+@router.get(
+    "/{connector_type}/configs",
+    response_model=List[Dict[str, Any]],
+    dependencies=[Depends(_require_secret_privilege)],
+)
 async def list_config_items(
     connector_type: str,
-    # TODO: This should be based on user permissions, not an explicit query parameter.
     include_secrets: bool = False,
     db: AsyncSession = Depends(get_async_db),
 ) -> list[dict[str, Any]]:
@@ -114,7 +152,11 @@ async def list_config_items(
         raise HTTPException(status_code=_status_for_connector_error(exc), detail=str(exc)) from exc
 
 
-@router.post("/{connector_type}/configs", response_model=Dict[str, Any])
+@router.post(
+    "/{connector_type}/configs",
+    response_model=Dict[str, Any],
+    dependencies=[Depends(require_admin)],
+)
 async def create_config_item(
     connector_type: str,
     item: ConfigItemRequest,
@@ -126,7 +168,11 @@ async def create_config_item(
         raise HTTPException(status_code=_status_for_connector_error(exc), detail=str(exc)) from exc
 
 
-@router.put("/{connector_type}/configs/{item_id}", response_model=Dict[str, Any])
+@router.put(
+    "/{connector_type}/configs/{item_id}",
+    response_model=Dict[str, Any],
+    dependencies=[Depends(require_admin)],
+)
 async def update_config_item(
     connector_type: str,
     item_id: int,
@@ -139,7 +185,11 @@ async def update_config_item(
         raise HTTPException(status_code=_status_for_connector_error(exc), detail=str(exc)) from exc
 
 
-@router.patch("/{connector_type}/configs/{item_id}/status", response_model=Dict[str, Any])
+@router.patch(
+    "/{connector_type}/configs/{item_id}/status",
+    response_model=Dict[str, Any],
+    dependencies=[Depends(require_admin)],
+)
 async def update_config_item_status(
     connector_type: str,
     item_id: int,
@@ -152,7 +202,7 @@ async def update_config_item_status(
         raise HTTPException(status_code=_status_for_connector_error(exc), detail=str(exc)) from exc
 
 
-@router.delete("/{connector_type}/configs/{item_id}")
+@router.delete("/{connector_type}/configs/{item_id}", dependencies=[Depends(require_admin)])
 async def delete_config_item(
     connector_type: str,
     item_id: int,
@@ -165,7 +215,7 @@ async def delete_config_item(
     return {"ok": True}
 
 
-@router.delete("/{connector_type}")
+@router.delete("/{connector_type}", dependencies=[Depends(require_admin)])
 async def delete_all_configs(
     connector_type: str, db: AsyncSession = Depends(get_async_db)
 ) -> dict[str, bool]:
@@ -176,7 +226,11 @@ async def delete_all_configs(
     return {"ok": True}
 
 
-@router.post("/{connector_type}/test", response_model=TestConnectionResponse)
+@router.post(
+    "/{connector_type}/test",
+    response_model=TestConnectionResponse,
+    dependencies=[Depends(require_admin)],
+)
 async def test_connector(
     connector_type: str,
     db: AsyncSession = Depends(get_async_db),

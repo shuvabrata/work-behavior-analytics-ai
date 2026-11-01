@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.logger import logger
+from app.auth.dependencies import require_admin
 from app.db.session import get_async_db
 from app.query_catalog import CatalogLoadError, CatalogQuery, CatalogQueryWrite
 
@@ -94,7 +95,12 @@ async def get_catalog_query(
     return catalog_query
 
 
-@router.put("/catalog/{namespace}/{slug}", response_model=CatalogQuery, response_model_exclude_none=True)
+@router.put(
+    "/catalog/{namespace}/{slug}",
+    response_model=CatalogQuery,
+    response_model_exclude_none=True,
+    dependencies=[Depends(require_admin)],
+)
 async def put_catalog_query(
     namespace: str, slug: str, payload: CatalogQueryWrite
 ) -> CatalogQuery:
@@ -107,7 +113,11 @@ async def put_catalog_query(
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
-@router.delete("/catalog/{namespace}/{slug}", response_model=None)
+@router.delete(
+    "/catalog/{namespace}/{slug}",
+    response_model=None,
+    dependencies=[Depends(require_admin)],
+)
 async def delete_catalog_query(namespace: str, slug: str) -> dict[str, str] | Response:
     """Delete a user-defined query override, if one exists."""
     try:

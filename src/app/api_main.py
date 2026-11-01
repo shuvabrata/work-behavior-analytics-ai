@@ -7,8 +7,9 @@ from typing import AsyncGenerator, Callable, Awaitable
 
 from app.scheduler import scheduler_loop
 import aio_pika
-from fastapi import FastAPI, Request, Response
+from fastapi import Depends, FastAPI, Request, Response
 from app.api import endpoints
+from app.auth.dependencies import require_user
 from app.api.chats.v1.router import router as chats_v1_router
 from app.api.graph.v1.router import router as graph_v1_router
 from app.api.connectors.v1.router import router as connectors_v1_router
@@ -179,14 +180,16 @@ async def add_request_context(request: Request, call_next: Callable[[Request], A
         return response
 
 app.include_router(endpoints.router, prefix="/api")
-app.include_router(chats_v1_router, prefix="/api/v1")
-app.include_router(graph_v1_router, prefix="/api/v1")
-app.include_router(connectors_v1_router, prefix="/api/v1")
-app.include_router(queries_v1_router, prefix="/api/v1")
-app.include_router(search_v1_router, prefix="/api/v1")
-app.include_router(persons_v1_router, prefix="/api/v1")
-app.include_router(commands_v1_router, prefix="/api/v1")
-app.include_router(settings_v1_router, prefix="/api/v1")
-app.include_router(graph_themes_v1_router, prefix="/api/v1")
-app.include_router(activity_v1_router, prefix="/api/v1")
+app.include_router(chats_v1_router, prefix="/api/v1", dependencies=[Depends(require_user)])
+app.include_router(graph_v1_router, prefix="/api/v1", dependencies=[Depends(require_user)])
+app.include_router(connectors_v1_router, prefix="/api/v1", dependencies=[Depends(require_user)])
+app.include_router(queries_v1_router, prefix="/api/v1", dependencies=[Depends(require_user)])
+app.include_router(search_v1_router, prefix="/api/v1", dependencies=[Depends(require_user)])
+app.include_router(persons_v1_router, prefix="/api/v1", dependencies=[Depends(require_user)])
+app.include_router(commands_v1_router, prefix="/api/v1", dependencies=[Depends(require_user)])
+app.include_router(settings_v1_router, prefix="/api/v1", dependencies=[Depends(require_user)])
+app.include_router(graph_themes_v1_router, prefix="/api/v1", dependencies=[Depends(require_user)])
+app.include_router(activity_v1_router, prefix="/api/v1", dependencies=[Depends(require_user)])
+# The auth router declares its own per-route roles; /me carries require_user,
+# while login/callback are public and logout/token read the session cookie.
 app.include_router(auth_v1_router, prefix="/api/v1")

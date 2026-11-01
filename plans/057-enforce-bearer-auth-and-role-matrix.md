@@ -15,7 +15,70 @@
 > verification; step 4 is the running-system gate. Do not hand back between
 > steps 1 and 3 — that is deliberate (see "Why this plan has one gate").
 
+## Execution record
+
+**Steps 1–3 executed 2026-11-01** from `fd4c28e8` on `feature/plan-c-keycloak`,
+uncommitted. All automated gates pass: **2586 unit passed / 0 failed / 2 skipped**
+(delta **+67** over the 2519 baseline), mypy exit 0, pylint 9.69, bandit exit 0
+(High: 0), `len(AUTHZ_MATRIX) == 58`, enumerator finds 58.
+
+### Two plan-text defects found during execution (both were wrong in *this file*, not in the code)
+
+1. **`require_roles` cannot be the literal `async def` this plan specifies.**
+   `Depends(require_roles("admin", "service"))` calls the function at import
+   time; on an `async def` that produces a coroutine, and FastAPI asserts
+   *"A parameter-less dependency must have a callable dependency"* (plus
+   `RuntimeWarning: coroutine 'require_roles' was never awaited`). It is
+   implemented as a **factory** returning an inner async dependency named
+   `require_roles`, which preserves every call site in step 2b verbatim.
+   Semantics, 403 detail shape and log shape are as specified.
+
+2. **The enumerator's `d.call` is wrong for router-level dependencies.** On
+   FastAPI 0.161.1, `include_context.dependencies` holds `fastapi.params.Depends`
+   objects (attribute `.dependency`), while `route.dependant.dependencies` holds
+   `Dependant` (attribute `.call`). The recipe above only appeared to work
+   because **every router-level dependency list was empty before this plan's
+   wiring** — the bug was invisible until step 2 attached one. The test's
+   `_dependency_name` handles both shapes. The enumerator still yields exactly 58.
+
+Neither was catchable by the plan's own automated gates, and the 58-row matrix in
+step 1a was nonetheless **correct** — verified by diffing it against the live app
+before dispatch.
+
+### One deviation in `tests/conftest.py`, judged and approved
+
+The plan's literal fixture overrides `get_principal` with an admin principal
+unconditionally. That broke two **pre-existing** tests —
+`tests/test_auth_flow.py::TestMe::test_bogus_cookie_is_401` and
+`::test_valid_bearer_returns_identity` — which deliberately assert the *real*
+verifier on `/api/v1/auth/me`, and editing them is forbidden by this plan's STOP
+conditions. The fixture therefore delegates to the real `get_principal` when a
+request carries its own `Authorization` header or `wba_session` cookie, and
+supplies the admin default otherwise. No other test in the repo sends either.
+`Request` is imported at module scope, not in the fixture body: under
+`from __future__ import annotations` FastAPI's `get_type_hints` cannot resolve a
+function-local import and turns the dependency into a required query parameter
+(`422: {"loc": ["query", "request"]}`).
+
+### Anti-vacuity, both probes
+
+- **Probe 1** (throwaway `@router.get("/__matrix_probe")`): three assertions fail,
+  naming `('GET', '/api/v1/chats/__matrix_probe')`. Reverted.
+- **Probe 2** (`("POST", "/api/v1/commands/")` set to `"user"`): fails with
+  `expected require_user alone, got ['require_user', 're...']`. Reverted. Note the
+  `"user"` check is deliberately **exact** (presents `require_user` and no
+  stricter dependency): written as plain containment it *passed* probe 2, because
+  the router-level `require_user` is always present — a genuine vacuity, now closed.
+- **Wiring non-vacuity**, re-verified by the reviewer: stripping the router-level
+  dependency from `settings` flips `GET /api/v1/settings/` from `401` to `500`
+  (the handler's stubbed DB), proving the 401 is the dependency and not a 404 or a
+  DB error. Restoration returns it to `401`. The executor observed the same 500;
+  the strip must also invalidate `_IncludedRouter._effective_candidates`, because
+  FastAPI rebuilds and caches the effective routes at match time
+  (`routing.py:1544` merges `include_context.dependencies`).
+
 ## Status
+
 
 - **Priority**: P1
 - **Effort**: L
@@ -26,6 +89,8 @@
 - **Design reference**: `docs/design/authn-authz-design.md`, "Endpoint matrix",
   "Enforcement points", "Testing Strategy"
 - **This is step 5 of 9** in the Plan C sequence.
+- **Status**: steps 1–3 DONE 2026-11-01 (see "Execution record" below); **step 4
+  (the live switch) PENDING** — it needs a stack rebuild and the operator checklist.
 
 ## Why this matters
 

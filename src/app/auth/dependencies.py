@@ -7,6 +7,8 @@ a design decision taken during the switch.
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
+
 from fastapi import Depends, HTTPException, Request, status
 
 from app.auth.principal import Principal
@@ -91,3 +93,44 @@ async def require_service(
 ) -> Principal:
     """Require ``wba-service``; 403 otherwise."""
     return _require_role(principal, "wba-service", request.url.path)
+
+
+def _internal_role(role: str) -> str:
+    """Map a short role label (``"admin"``) to its internal name (``"wba-admin"``)."""
+    return role if role.startswith("wba-") else f"wba-{role}"
+
+
+def require_roles(*roles: str) -> Callable[..., Awaitable[Principal]]:
+    """Return a dependency requiring at least one of *roles*; 403 otherwise.
+
+    FastAPI runs every declared dependency, so stacking ``require_admin`` and
+    ``require_service`` would demand both roles at once. This factory expresses
+    the union they cannot.
+
+    It is a factory rather than a bare ``async def`` because ``Depends`` takes a
+    callable, not a call: ``Depends(require_roles("admin", "service"))`` must
+    produce the dependency, not a coroutine. The returned dependency is named
+    ``require_roles`` so the route-enumeration test can identify it.
+    """
+    internal = [_internal_role(role) for role in roles]
+
+    async def _dependency(
+        request: Request, principal: Principal = Depends(get_principal)
+    ) -> Principal:
+        if not any(principal.has_role(role) for role in internal):
+            logger.warning(
+                f"Access denied for sub={principal.subject!r} "
+                f"username={principal.username!r}: requires one of roles={sorted(roles)!r} "
+                f"path={request.url.path!r}"
+            )
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={
+                    "error": "insufficient_role",
+                    "message": f"One of roles {sorted(roles)!r} is required.",
+                },
+            )
+        return principal
+
+    _dependency.__name__ = "require_roles"
+    return _dependency

@@ -89,6 +89,15 @@ def _get_jwks_client() -> jwt.PyJWKClient:
     return _jwks_client
 
 
+def _service_client_ids() -> frozenset[str]:
+    """Return the interactive and service client ids a bearer may belong to.
+
+    Read from ``settings`` per call rather than frozen at import so the value
+    tracks the configured realm clients.
+    """
+    return frozenset({settings.KEYCLOAK_CLIENT_ID, settings.KEYCLOAK_SERVICE_CLIENT_ID})
+
+
 def _mapped_roles(claims: dict[str, object]) -> frozenset[str]:
     """Intersect the token's realm roles with the mapped role set."""
     realm_access = claims.get("realm_access")
@@ -111,6 +120,8 @@ def validate_bearer_token(token: str) -> Principal:
     if not token:
         raise TokenValidationError("No bearer token supplied")
 
+    client_ids = _service_client_ids()
+
     try:
         signing_key = _get_jwks_client().get_signing_key_from_jwt(token)
         claims: dict[str, object] = jwt.decode(
@@ -118,15 +129,25 @@ def validate_bearer_token(token: str) -> Principal:
             signing_key.key,
             algorithms=_ALGORITHMS,
             issuer=settings.KEYCLOAK_ISSUER,
-            audience=settings.KEYCLOAK_CLIENT_ID,
+            audience=sorted(client_ids),
             leeway=30,
             options={"require": ["exp", "iss", "aud", "sub"]},
         )
     except jwt.PyJWTError as exc:
         raise TokenValidationError(f"Bearer token rejected: {exc}") from exc
 
-    if claims.get("azp") != settings.KEYCLOAK_CLIENT_ID:
-        raise TokenValidationError("Bearer token azp does not match the expected client")
+    # The azp/aud pairing is the point: a token minted for one client must not be
+    # acceptable merely because it was signed with another client's audience.
+    audience = claims.get("aud")
+    if isinstance(audience, str):
+        aud_values = {audience}
+    elif isinstance(audience, list):
+        aud_values = {str(item) for item in audience}
+    else:
+        aud_values = set()
+    azp = claims.get("azp")
+    if azp not in client_ids or azp not in aud_values:
+        raise TokenValidationError("Bearer token azp/aud does not match a known client")
 
     roles = _mapped_roles(claims)
     subject = str(claims["sub"])

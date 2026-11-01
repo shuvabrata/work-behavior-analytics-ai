@@ -15,6 +15,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_async_db
+from app.auth.dependencies import require_roles, require_service
 from . import service
 from .models import (
     CommandListResponse,
@@ -26,7 +27,10 @@ from .models import (
 router = APIRouter(prefix="/commands", tags=["commands"])
 
 
-@router.post("/", response_model=CommandResponse, status_code=201)
+@router.post(
+    "/", response_model=CommandResponse, status_code=201,
+    dependencies=[Depends(require_roles("wba-admin", "wba-service"))],
+)
 async def create_command(
     payload: CreateCommandRequest,
     db: AsyncSession = Depends(get_async_db),
@@ -71,7 +75,9 @@ async def get_command(
     return CommandResponse.model_validate(cmd)
 
 
-@router.patch("/{command_id}/status", response_model=CommandResponse)
+@router.patch(
+    "/{command_id}/status", response_model=CommandResponse, dependencies=[Depends(require_service)]
+)
 async def patch_command_status(
     command_id: uuid.UUID,
     payload: CommandStatusUpdateRequest,

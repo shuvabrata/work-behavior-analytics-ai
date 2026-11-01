@@ -406,9 +406,6 @@ async def get_connector(
     connector_type: str,
     include_secrets: bool = False,
 ) -> Dict[str, Any]:
-    # TODO: The 'include_secrets' flag is a temporary measure. This should be
-    # replaced with a proper role-based access control check based on the
-    # authenticated user's permissions. Exposing secrets via a query parameter is not secure.
     meta = _validate_connector_type(connector_type)
     connector = await query.get_connector(db, connector_type)
     if not connector:
@@ -474,9 +471,6 @@ async def clear_connector_config(
 async def list_config_items(
     db: AsyncSession, connector_type: str, include_secrets: bool = False
 ) -> List[Dict[str, Any]]:
-    # TODO: The 'include_secrets' flag is a temporary measure. This should be
-    # replaced with a proper role-based access control check based on the
-    # authenticated user's permissions. Exposing secrets via a query parameter is not secure.
     _require_config_items_support(connector_type)
     rows = await query.get_configs(db, connector_type)
     encrypted_map = SENSITIVE_FIELDS.get(connector_type, {})

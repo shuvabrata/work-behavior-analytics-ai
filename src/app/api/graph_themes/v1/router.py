@@ -33,6 +33,7 @@ from app.api.graph_themes.v1.service import (
     InvalidBaseThemeError,
     ThemeNotFoundError,
 )
+from app.auth.dependencies import require_admin
 from app.db.session import get_async_db
 
 router = APIRouter(prefix="/graph-themes", tags=["graph-themes"])
@@ -57,7 +58,10 @@ async def list_graph_themes(
     return [GraphThemeResponse.model_validate(t) for t in themes]
 
 
-@router.post("/", response_model=GraphThemeResponse, status_code=201)
+@router.post(
+    "/", response_model=GraphThemeResponse, status_code=201,
+    dependencies=[Depends(require_admin)],
+)
 async def create_graph_theme(
     payload: GraphThemeCreate,
     db: AsyncSession = Depends(get_async_db),
@@ -98,7 +102,9 @@ async def get_graph_theme(
     return GraphThemeResponse.model_validate(theme)
 
 
-@router.patch("/{theme_id}", response_model=GraphThemeResponse)
+@router.patch(
+    "/{theme_id}", response_model=GraphThemeResponse, dependencies=[Depends(require_admin)]
+)
 async def update_graph_theme(
     theme_id: int,
     payload: GraphThemeUpdate,
@@ -122,7 +128,7 @@ async def update_graph_theme(
     return GraphThemeResponse.model_validate(theme)
 
 
-@router.delete("/{theme_id}", status_code=204)
+@router.delete("/{theme_id}", status_code=204, dependencies=[Depends(require_admin)])
 async def delete_graph_theme(
     theme_id: int,
     db: AsyncSession = Depends(get_async_db),
@@ -138,7 +144,11 @@ async def delete_graph_theme(
         raise _conflict(str(exc)) from exc
 
 
-@router.post("/{theme_id}/set-default", response_model=SetDefaultResponse)
+@router.post(
+    "/{theme_id}/set-default",
+    response_model=SetDefaultResponse,
+    dependencies=[Depends(require_admin)],
+)
 async def set_default_graph_theme(
     theme_id: int,
     db: AsyncSession = Depends(get_async_db),
@@ -151,7 +161,12 @@ async def set_default_graph_theme(
     return SetDefaultResponse.model_validate(theme)
 
 
-@router.post("/{theme_id}/clone", response_model=CloneResponse, status_code=201)
+@router.post(
+    "/{theme_id}/clone",
+    response_model=CloneResponse,
+    status_code=201,
+    dependencies=[Depends(require_admin)],
+)
 async def clone_graph_theme(
     theme_id: int,
     db: AsyncSession = Depends(get_async_db),

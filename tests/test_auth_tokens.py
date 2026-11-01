@@ -320,3 +320,63 @@ class TestRealmShapedToken:
         )
         with pytest.raises(tokens.TokenValidationError, match="aud"):
             tokens.validate_bearer_token(token)
+
+
+class TestServiceShapedToken:
+    """Pin the claim shape a ``wba-internal`` client-credentials token has.
+
+    The producers and the consumer authenticate as ``wba-internal``, whose
+    audience mapper emits ``aud=["wba-internal"]``. The validator must accept
+    that pair as well as ``wba-web``'s, and reject a mismatched pair.
+    """
+
+    _SERVICE_CLIENT_ID = "wba-internal"
+
+    @pytest.fixture(autouse=True)
+    def _pin_service_client_id(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(settings, "KEYCLOAK_SERVICE_CLIENT_ID", self._SERVICE_CLIENT_ID)
+
+    def test_service_shaped_token_validates(
+        self, private_pem: bytes, jwks: Any
+    ) -> None:
+        """A ``wba-internal`` token carrying a service role validates."""
+        token = _sign(
+            private_pem,
+            sub="service-client",
+            username="service-account-wba-internal",
+            roles=("wba-service",),
+            aud=[self._SERVICE_CLIENT_ID],
+            azp=self._SERVICE_CLIENT_ID,
+            iss=_ISSUER,
+        )
+        principal = tokens.validate_bearer_token(token)
+        assert principal.subject == "service-client"
+        assert principal.roles == frozenset({"wba-service"})
+
+    def test_web_aud_with_service_azp_is_rejected(
+        self, private_pem: bytes, jwks: Any
+    ) -> None:
+        """The azp/aud pair must match — a crossed pair is rejected."""
+        token = _sign(
+            private_pem,
+            roles=("wba-service",),
+            aud=[_CLIENT_ID],
+            azp=self._SERVICE_CLIENT_ID,
+            iss=_ISSUER,
+        )
+        with pytest.raises(tokens.TokenValidationError):
+            tokens.validate_bearer_token(token)
+
+    def test_service_token_without_aud_is_rejected(
+        self, private_pem: bytes, jwks: Any
+    ) -> None:
+        """An ``aud``-less service token is rejected, naming the claim."""
+        token = _sign(
+            private_pem,
+            roles=("wba-service",),
+            azp=self._SERVICE_CLIENT_ID,
+            iss=_ISSUER,
+            include_aud=False,
+        )
+        with pytest.raises(tokens.TokenValidationError, match="aud"):
+            tokens.validate_bearer_token(token)

@@ -2,10 +2,12 @@
 import asyncio
 from typing import AsyncIterator, Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 
 from common.logger import logger
+from app.auth.dependencies import require_user
+from app.auth.principal import Principal
 from .model import  (
     ChatCreate,
     ChatSession,
@@ -19,25 +21,38 @@ router = APIRouter(prefix="/chats", tags=["chats"])
 
 
 @router.post("/", response_model=ChatSession, status_code=201)
-async def create_chat(chat: ChatCreate) -> ChatSession:
+async def create_chat(
+    chat: ChatCreate,
+    principal: Principal = Depends(require_user),
+) -> ChatSession:
     """
     Create a new chat session with an optional system prompt.
     Returns a unique session_id to be used for subsequent messages.
     """
-    return service.create_chat_session(chat)
+    return service.create_chat_session(chat, owner_subject=principal.subject)
 
 
 @router.get("/{session_id}", response_model=ChatSessionStatus)
-async def get_chat_session(session_id: str) -> ChatSessionStatus:
+async def get_chat_session(
+    session_id: str,
+    principal: Principal = Depends(require_user),
+) -> ChatSessionStatus:
     """
     Check if a chat session exists.
     Returns session status without processing any messages.
     """
-    return service.get_chat_session_status(session_id)
+    try:
+        return service.get_chat_session_status(session_id, subject=principal.subject)
+    except service.ChatSessionNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Session not found.") from exc
 
 
 @router.post("/{session_id}/stream")
-async def stream_message(session_id: str, message: StreamMessageCreate) -> StreamingResponse:
+async def stream_message(
+    session_id: str,
+    message: StreamMessageCreate,
+    principal: Principal = Depends(require_user),
+) -> StreamingResponse:
     """
     Stream a chat response as Server-Sent Events (SSE).
 
@@ -45,17 +60,17 @@ async def stream_message(session_id: str, message: StreamMessageCreate) -> Strea
     message_start, message_chunk(s), message_end.  On error yields an error event.
     """
     try:
-        # Validate session exists before returning a StreamingResponse.
+        # Validate ownership before returning a StreamingResponse.
         # Raising here produces a normal JSON 404 rather than a broken SSE stream.
-        session_status = service.get_chat_session_status(session_id)
-        if not session_status.exists:
-            raise HTTPException(status_code=404, detail="Session not found.")
+        service.get_chat_session_status(session_id, subject=principal.subject)
 
         logger.info(f"[stream_message] Starting stream: session_id={session_id} message={message.message[:80]}")
 
         async def event_generator() -> AsyncIterator[str]:
             try:
-                async for chunk in service.stream_chat_response(session_id, message.message):
+                async for chunk in service.stream_chat_response(
+                    session_id, message.message, subject=principal.subject
+                ):
                     yield chunk
             except asyncio.CancelledError:
                 logger.warning(f"[stream_message] Client disconnected: session_id={session_id}")
@@ -66,6 +81,8 @@ async def stream_message(session_id: str, message: StreamMessageCreate) -> Strea
 
         return StreamingResponse(event_generator(), media_type="text/event-stream")
 
+    except service.ChatSessionNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Session not found.") from exc
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
     except RuntimeError as e:
@@ -82,8 +99,14 @@ async def stream_metrics() -> dict[str, Any]:
 
 
 @router.delete("/{session_id}", response_model=ChatDeleteResponse)
-async def delete_chat(session_id: str) -> ChatDeleteResponse:
+async def delete_chat(
+    session_id: str,
+    principal: Principal = Depends(require_user),
+) -> ChatDeleteResponse:
     """
     End and delete a chat session.
     """
-    return service.delete_chat_session(session_id)
+    try:
+        return service.delete_chat_session(session_id, subject=principal.subject)
+    except service.ChatSessionNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Session not found.") from exc

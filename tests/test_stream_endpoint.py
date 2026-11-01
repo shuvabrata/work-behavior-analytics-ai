@@ -69,6 +69,7 @@ class TestStreamEndpointContentType:
 
         session_id = "ct-test-session"
         ai_agent._chat_sessions[session_id] = [{"role": "system", "content": "System."}]
+        ai_agent._chat_session_owners[session_id] = "test-admin"
         monkeypatch.setattr(ai_agent, "_provider", _make_mock_provider())
         monkeypatch.setattr(ai_agent, "augment_message_stream", _passthrough_augment)
 
@@ -89,6 +90,7 @@ class TestStreamEndpointContentType:
                         pass
         finally:
             ai_agent._chat_sessions.pop(session_id, None)
+            ai_agent._chat_session_owners.pop(session_id, None)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -104,6 +106,7 @@ class TestStreamEndpointEventSequence:
 
         session_id = "seq-test-session"
         ai_agent._chat_sessions[session_id] = [{"role": "system", "content": "System."}]
+        ai_agent._chat_session_owners[session_id] = "test-admin"
         monkeypatch.setattr(ai_agent, "_provider", _make_mock_provider(["tok1", "tok2"]))
         monkeypatch.setattr(ai_agent, "augment_message_stream", _passthrough_augment)
 
@@ -121,6 +124,7 @@ class TestStreamEndpointEventSequence:
                     events = await _collect_sse_lines(response)
         finally:
             ai_agent._chat_sessions.pop(session_id, None)
+            ai_agent._chat_session_owners.pop(session_id, None)
 
         types = [e["type"] for e in events]
         assert types[0] == "thinking_start"
@@ -134,6 +138,7 @@ class TestStreamEndpointEventSequence:
 
         session_id = "chunk-test-session"
         ai_agent._chat_sessions[session_id] = [{"role": "system", "content": "System."}]
+        ai_agent._chat_session_owners[session_id] = "test-admin"
         tokens = ["Hello", " world"]
         monkeypatch.setattr(ai_agent, "_provider", _make_mock_provider(tokens))
         monkeypatch.setattr(ai_agent, "augment_message_stream", _passthrough_augment)
@@ -151,6 +156,7 @@ class TestStreamEndpointEventSequence:
                     events = await _collect_sse_lines(response)
         finally:
             ai_agent._chat_sessions.pop(session_id, None)
+            ai_agent._chat_session_owners.pop(session_id, None)
 
         chunks = [e["content"] for e in events if e["type"] == "message_chunk"]
         assert chunks == tokens
@@ -161,6 +167,7 @@ class TestStreamEndpointEventSequence:
 
         session_id = "history-test-session"
         ai_agent._chat_sessions[session_id] = [{"role": "system", "content": "System."}]
+        ai_agent._chat_session_owners[session_id] = "test-admin"
         monkeypatch.setattr(ai_agent, "_provider", _make_mock_provider(["hi"]))
         monkeypatch.setattr(ai_agent, "augment_message_stream", _passthrough_augment)
 
@@ -183,6 +190,7 @@ class TestStreamEndpointEventSequence:
             assert "assistant" in roles
         finally:
             ai_agent._chat_sessions.pop(session_id, None)
+            ai_agent._chat_session_owners.pop(session_id, None)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -222,6 +230,7 @@ class TestStreamEndpointDisconnect:
 
         session_id = "disconnect-ep-session"
         ai_agent._chat_sessions[session_id] = [{"role": "system", "content": "System."}]
+        ai_agent._chat_session_owners[session_id] = "test-admin"
 
         async def _slow_stream(messages, model=None):
             for i in range(50):
@@ -252,6 +261,7 @@ class TestStreamEndpointDisconnect:
                             break
         finally:
             ai_agent._chat_sessions.pop(session_id, None)
+            ai_agent._chat_session_owners.pop(session_id, None)
 
         await asyncio.sleep(0.15)
 
@@ -289,6 +299,7 @@ class TestStreamMetricsEndpoint:
 
         session_id = "metrics-starts-session"
         ai_agent._chat_sessions[session_id] = [{"role": "system", "content": "System."}]
+        ai_agent._chat_session_owners[session_id] = "test-admin"
         monkeypatch.setattr(ai_agent, "_provider", _make_mock_provider(["a"]))
         monkeypatch.setattr(ai_agent, "augment_message_stream", _passthrough_augment)
 
@@ -309,4 +320,5 @@ class TestStreamMetricsEndpoint:
             after = (await client.get("/api/v1/chats/metrics/stream")).json()["starts"]
 
         ai_agent._chat_sessions.pop(session_id, None)
+        ai_agent._chat_session_owners.pop(session_id, None)
         assert after == before + 1

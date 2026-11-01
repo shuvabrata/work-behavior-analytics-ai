@@ -25,7 +25,7 @@ Execute **strictly in order**. Each is a self-contained plan file with automated
 | 055  | [Service tokens for producers and consumer](055-service-tokens-for-producers-and-consumer.md) | **P1** | M | MED | 054 | **DONE** 2026-10-31 — uncommitted |
 | 056  | [Login flow, BFF token exchange, UI guard, SSE proxy](056-auth-flow-bff-and-sse-proxy.md) | **P1** | L | **HIGH** | 055 | **DONE** — all gates pass, incl. manual gate 1. Uncommitted |
 | 057  | [Enforce bearer auth and the role matrix](057-enforce-bearer-auth-and-role-matrix.md) | **P1** | L | **HIGH** | 056 | **STEPS 1–3 DONE; STEP 4 MANUAL GATE IN PROGRESS** — uncommitted. Remaining checklist: items 2 (chat streaming), 3 (dev-admin writes), 4 (dev-user refusals), 5 (producer scan completes; needs the current tree deployed to the running stack) |
-| 058  | [Scope chat sessions to their owner](058-per-user-ownership-of-chat-sessions.md) | **P1** | S | LOW-MED | 057 | TODO — first half of the old 058 |
+| 058  | [Scope chat sessions to their owner](058-per-user-ownership-of-chat-sessions.md) | **P1** | S | LOW-MED | 057 | **DONE** 2026-11-01 — all gates + Gate 1 PASS; uncommitted |
 | —    | [Scope catalog favourites to their owner](065-per-user-catalog-favourites.md) | **P1** | M | MED | 057 | TODO — **run immediately after 058**, before 059. Second half of the old 058; its file number is appended (065), not sequential, because 059-064 were already written. Row placed here to keep execution order visible |
 | 059  | [UI 401/403 error handling](059-ui-auth-error-handling.md) | **P1** | M | MED | 058 | TODO |
 | 060  | [Integration tests and full-stack smoke](060-integration-tests-and-full-stack-smoke.md) | **P1** | M | LOW | 059 | TODO |

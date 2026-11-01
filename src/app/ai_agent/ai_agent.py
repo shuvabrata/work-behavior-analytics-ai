@@ -29,6 +29,11 @@ from app.settings import settings
 # In-memory session store: {session_id: [messages]}
 _chat_sessions: dict[str, list[dict[str, Any]]] = {}
 
+# Owning Keycloak `sub` per session. A session with no entry here is unowned
+# and is not reachable through the API. Kept parallel to _chat_sessions so that
+# dict's value type stays a plain message list.
+_chat_session_owners: dict[str, str] = {}
+
 # In-memory streaming metrics counters.
 # Keys: starts, completions, errors, disconnects, total_duration_seconds
 _streaming_metrics: dict[str, Any] = {
@@ -120,19 +125,31 @@ def _build_and_log_stream_metadata(
     return normalized_payload
 
 
-def new_chat(system_prompt: str = "You are a helpful AI assistant.") -> str:
+def new_chat(
+    system_prompt: str = "You are a helpful AI assistant.",
+    *,
+    owner_subject: str | None = None,
+) -> str:
     """Create a new chat session and return its session_id (GUID).
-    
+
     Args:
         system_prompt: Initial system prompt for the conversation
-        
+        owner_subject: Keycloak ``sub`` of the session's owner, if any
+
     Returns:
         session_id: UUID string identifying the new chat session
     """
     session_id = str(uuid.uuid4())
     _chat_sessions[session_id] = [{"role": "system", "content": system_prompt}]
+    if owner_subject is not None:
+        _chat_session_owners[session_id] = owner_subject
     logger.info(f"New chat session created: {session_id}")
     return session_id
+
+
+def get_chat_owner(session_id: str) -> str | None:
+    """Return the owning subject, or ``None`` when unowned/unknown."""
+    return _chat_session_owners.get(session_id)
 
 
 async def _augument_user_message(session_id: str, user_message: str) -> AsyncIterator[tuple[str, Any]]:
@@ -333,4 +350,5 @@ def end_chat(session_id: str) -> None:
         session_id: UUID of the chat session to end
     """
     _chat_sessions.pop(session_id, None)
+    _chat_session_owners.pop(session_id, None)
     logger.info(f"Chat session ended: {session_id}")

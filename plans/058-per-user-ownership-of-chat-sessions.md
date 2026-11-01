@@ -31,6 +31,36 @@
   **Its sibling is `plans/065-per-user-catalog-favourites.md`** — the favourites
   half of the original 058, split out because the two halves share no files and
   the favourites half carries a destructive migration. Run 058 first.
+- **Status: DONE 2026-11-01.** Steps 1–2 approved; Step 3 (Gate 1) PASS. All
+  gates green at HEAD `7698f1e7`; changes uncommitted in the working tree.
+- **Gate 1 was run scripted, not by hand.** The plan's claim that no script can
+  obtain a `dev-user` bearer is **wrong** — `tests/auth_helpers.py` completes the
+  real Keycloak login form and the BFF cookie→bearer exchange for both roles.
+  Observed against the real stack, two genuinely different subjects: dev-user
+  `POST /chats/` → 201; dev-user `GET` own → 200; **dev-admin `GET` dev-user's →
+  404** (not 403); dev-admin `POST /stream` → 404 with a JSON body and no
+  `text/event-stream`; dev-admin `DELETE` → 404 and the owner's subsequent `GET`
+  still 200; unknown id → 404; anonymous → 401. The browser path was verified
+  too: dev-admin's **session cookie** through the Dash proxy
+  `POST /app/stream/<dev-user id>` → 404 `{"detail":"Session not found."}` — the
+  route `src/ui/assets/stream-bridge.js` actually calls. The running `api`
+  container was confirmed to carry this tree's code before the result was
+  accepted.
+- **Steps 1–2**: APPROVED 2026-11-01 (reviewer re-ran all done criteria;
+  working tree at HEAD `7698f1e7`, uncommitted). **Step 3 (manual browser gate)
+  not run.**
+- **Review deviation from this plan's text**: Step 1.2 specified
+  `stream_chat_response` re-checks ownership. That places a `ChatSessionNotFoundError`
+  raise inside an async generator that the router has already entered, so it would
+  surface as a mid-stream SSE `error` event rather than a JSON 404. The executor
+  removed the re-check from `stream_chat_response` and left the route's
+  pre-stream `get_chat_session_status` probe as the single enforcement point.
+  Reviewer verified the route still 404s a foreign stream
+  (`tests/test_chat_ownership.py::test_foreign_stream_is_404_and_does_not_stream`),
+  the deletion is safe (every call site is handled in-router), and the check is
+  load-bearing (patched to a no-op in memory, foreign stream/read/delete flip to
+  200). If the service is ever called outside this router, reinstate a check that
+  raises **before** the generator is created.
 
 ## Why this matters
 

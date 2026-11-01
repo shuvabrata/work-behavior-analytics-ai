@@ -12,10 +12,12 @@ The ``ids`` list passes through whole as a JSON array.
 """
 
 from typing import Any
-from dash import Input, Output, State, callback, clientside_callback
+from dash import Input, Output, State, callback, clientside_callback, no_update
 from dash.exceptions import PreventUpdate
 
 from ui import api_client
+from ui.api_client import AuthExpiredError, PermissionDeniedError
+from ui.components.permission_errors import handle_api_error
 from common.logger import logger
 from ..utils import is_node_data
 
@@ -126,6 +128,11 @@ def update_spotlight(query: str | None, elements: list[dict[str, Any]] | None) -
         response = api_client.post_json(
             "/api/v1/search/scoped", json={"q": q, "ids": graph_wba_ids}
         )
+    except (AuthExpiredError, PermissionDeniedError) as exc:
+        # A dead session must reach login rather than silently clearing the
+        # spotlight; the handler has no alert slot, so both outputs stay put.
+        handle_api_error(exc, "run the spotlight search")
+        return no_update, no_update
     except Exception as exc:
         logger.warning(f"[Spotlight] Search failed for query {q!r}: {exc}")
         raise PreventUpdate

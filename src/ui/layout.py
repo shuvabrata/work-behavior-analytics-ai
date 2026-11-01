@@ -9,6 +9,7 @@ from urllib.parse import quote
 
 from ui.pages import analytics, chat, collaboration_network, collaboration_network_ego, connectors, graph, search, settings, timeline, catalog
 from ui.components.account_bar import get_account_bar_layout
+from ui.components.permission_errors import register_auth_redirect
 from ui.components.setup_banner import get_banner_layout
 from ui.settings import settings as app_settings
 from .styles import (
@@ -119,6 +120,8 @@ def create_dash_app() -> dash.Dash:
         dcc.Store(id="search-theme-store", storage_type="memory", data=None),
         dcc.Store(id="date-format-store", data=app_settings.UI_DATE_FORMAT),
         dcc.Store(id="datetime-format-store", data=app_settings.UI_DATETIME_FORMAT),
+        dcc.Store(id="auth-redirect"),
+        dcc.Location(id="auth-redirect-location"),
         html.Div(id="format-init-dummy", style={"display": "none"}),
         top_menu,
         get_banner_layout(),
@@ -311,6 +314,10 @@ def create_dash_app() -> dash.Dash:
         Input("datetime-format-store", "data"),
         prevent_initial_call=False
     )
+
+    # A 401 handler writes the redirect store (see ui.components.permission_errors);
+    # this callback turns that write into a top-level navigation to login.
+    register_auth_redirect(app)
 
     # No custom CSS or sidebar collapse for now; Bootstrap handles layout and theme
 

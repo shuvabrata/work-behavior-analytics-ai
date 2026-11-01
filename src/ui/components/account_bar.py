@@ -12,9 +12,13 @@ top-level navigation that redirect needs — a ``dcc.Location`` update would iss
 a ``GET`` the endpoint does not accept. No ``ConfirmDialog``: signing out is not
 destructive data loss, so the repo's ConfirmDialog rule does not apply.
 
-A missing account bar is not user-facing breakage: on ``ApiError`` this renders
-nothing rather than an error, and the render is driven off the URL so it
-reappears on the next navigation once the session is back.
+A missing account bar is not user-facing breakage for unrelated failures: a
+transport error or a role-less session renders nothing, and the render is driven
+off the URL so it reappears on the next navigation once the session is back. A
+*dead* session (401) is different — it must offer the way back in, or the user is
+left on a rendered page with no identity and no in-app route to login. The
+``AuthExpiredError`` branch renders a **Sign in** link in the slot the Sign out
+button occupies.
 """
 
 from __future__ import annotations
@@ -25,7 +29,8 @@ import dash_bootstrap_components as dbc
 from dash import Input, Output, callback, html
 
 from ui import api_client
-from ui.api_client import ApiError
+from ui.api_client import ApiError, AuthExpiredError
+from ui.auth import login_url
 from ui.styles import (
     COLOR_GRAY_MEDIUM,
     FONT_SANS,
@@ -78,6 +83,27 @@ def _account_children(payload: dict[str, Any]) -> list[Any]:
     ]
 
 
+def _signed_out_children(pathname: str | None) -> list[Any]:
+    """Return the Sign in control for a dead session.
+
+    A plain ``<a>`` rather than a ``dcc.Location`` update: the login flow needs
+    a top-level navigation to reach Keycloak. Styled from the same tokens as the
+    Sign out button so the pair reads as a pair.
+    """
+    return [
+        html.A(
+            "Sign in",
+            href=login_url(pathname or "/app/"),
+            className="ms-2",
+            style={
+                "fontFamily": FONT_SANS,
+                "fontSize": FONT_SIZE_XSMALL,
+                "color": COLOR_GRAY_MEDIUM,
+            },
+        )
+    ]
+
+
 @callback(
     Output(ACCOUNT_BAR_ID, "children"),
     Input("url", "pathname"),
@@ -86,9 +112,14 @@ def render_account_bar(_pathname: str | None) -> Any:
     """Fetch the caller's identity and render the bar, or nothing on failure."""
     try:
         payload = api_client.get_json("/api/v1/auth/me")
+    except AuthExpiredError:
+        # The session is gone: offer the way back in, in the slot the Sign out
+        # button occupies. Previously this returned nothing, which left no
+        # in-app route to login.
+        return _signed_out_children(_pathname)
     except ApiError:
-        # Unauthenticated or unreachable: render nothing. The account bar is a
-        # convenience, never a user-facing error surface.
+        # Unreachable API or any other failure: render nothing, as before. A
+        # transport error must not advertise a login the user may not need.
         return None
 
     if not isinstance(payload, dict) or not payload.get("username"):

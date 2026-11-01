@@ -19,7 +19,9 @@ import dash_bootstrap_components as dbc
 
 from domain.timezone import humanize_duration, to_app_timezone
 from ui import api_client
+from ui.api_client import AuthExpiredError, PermissionDeniedError
 from ui.components.common import create_alert, create_page_header
+from ui.components.permission_errors import handle_api_error
 from ui.pages.graph.utils import fetch_effective_theme
 from ui.styles import (
     COLOR_BORDER,
@@ -1171,6 +1173,12 @@ def execute_search(
     # ── Call search API ────────────────────────────────────────────────────
     try:
         data = api_client.get("/api/v1/search", params=params).json()
+    except (AuthExpiredError, PermissionDeniedError) as exc:
+        alert = handle_api_error(exc, "run this search")
+        return (
+            alert, "", _empty_header, _empty_pagination,
+            "Page 1", True, True, 1, last_query_params or {},
+        )
     except Exception as exc:
         logger.warning(f"Search API call failed: {exc}")
         error_content = create_alert(
@@ -1286,6 +1294,12 @@ def paginate_search(
 
     try:
         data = api_client.get("/api/v1/search", params=params).json()
+    except (AuthExpiredError, PermissionDeniedError) as exc:
+        alert = handle_api_error(exc, "load this page of results")
+        return (
+            alert, "", _empty_header, _empty_pagination,
+            f"Page {page}", True, True, page, last_query_params,
+        )
     except Exception as exc:
         logger.warning(f"Pagination API call failed: {exc}")
         error_content = create_alert(

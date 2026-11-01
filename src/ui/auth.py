@@ -23,6 +23,7 @@ import hashlib
 import threading
 import time
 from typing import Any
+from urllib.parse import quote
 
 import requests
 from flask import request
@@ -183,6 +184,22 @@ def invalidate_token() -> None:
         _cache.pop(_cache_key(raw), None)
 
 
+def login_url(next_path: str) -> str:
+    """Return the login URL that returns the user to *next_path* afterwards.
+
+    ``next`` travels through the rest of the login flow in the PKCE cookie (plan
+    056), not in a query string surviving two redirects, so this only has to
+    start the flow with the right target; ``safe=''`` keeps a nested path such
+    as ``/app/catalog/team/review`` intact.
+
+    The Dash wiring that consumes this (``register_auth_redirect`` /
+    ``set_auth_redirect``) deliberately lives in
+    ``ui.components.permission_errors``: this module must not import
+    ``ui.api_client`` (import cycle) and holds no Dash code.
+    """
+    return f"/api/v1/auth/login?next={quote(next_path, safe='')}"
+
+
 def clear_cache() -> None:
     """Drop every cached token. Test seam — never called on a request path."""
     with _lock:
@@ -197,4 +214,5 @@ __all__ = [
     "current_session_id",
     "get_token",
     "invalidate_token",
+    "login_url",
 ]

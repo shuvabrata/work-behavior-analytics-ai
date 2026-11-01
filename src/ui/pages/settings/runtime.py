@@ -31,8 +31,9 @@ from dash import (
 from dash.exceptions import PreventUpdate
 
 from ui import api_client
-from ui.api_client import ApiError
+from ui.api_client import ApiError, AuthExpiredError, PermissionDeniedError
 from ui.components.common import create_alert, create_page_header
+from ui.components.permission_errors import handle_api_error
 from ui.styles import (
     CARD_CONTAINER_STYLE,
     COLOR_BACKGROUND_LIGHT,
@@ -518,6 +519,9 @@ def save_all_settings(
             duration=5000,
         )
         return new_data, feedback
+    # PATCH /api/v1/settings/ — admin-only (runtime settings write).
+    except (AuthExpiredError, PermissionDeniedError) as exc:
+        return no_update, handle_api_error(exc, "change runtime settings")
     except ApiError as exc:
         if exc.status_code == 422:
             msg: Any = exc.detail
@@ -586,6 +590,9 @@ def reset_single_setting(
             class_name="mb-3",
             duration=5000,
         )
+    # POST /api/v1/settings/{key}/reset — admin-only (runtime settings write).
+    except (AuthExpiredError, PermissionDeniedError) as exc:
+        return no_update, handle_api_error(exc, "reset this setting")
     except ApiError as exc:
         if exc.status_code == 422:
             return no_update, create_alert(
@@ -653,6 +660,9 @@ def reset_all_settings(
             class_name="mb-3",
             duration=5000,
         )
+    # POST /api/v1/settings/reset — admin-only (runtime settings write).
+    except (AuthExpiredError, PermissionDeniedError) as exc:
+        return no_update, handle_api_error(exc, "reset all settings")
     except ApiError as exc:
         if exc.status_code == 409:
             detail = exc.detail if isinstance(exc.detail, dict) else {}

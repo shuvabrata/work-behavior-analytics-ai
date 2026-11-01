@@ -27,7 +27,7 @@ import pytest
 
 from domain.collaboration.errors import CollaborationDataUnavailable
 from ui import api_client
-from ui.api_client import ApiError
+from ui.api_client import ApiError, AuthExpiredError, PermissionDeniedError
 from ui.collaboration_params import translate_api_error
 
 pytestmark = pytest.mark.unit
@@ -208,6 +208,68 @@ def test_timeout_is_read_per_call(monkeypatch: pytest.MonkeyPatch) -> None:
         api_client.runtime_settings.refresh(previous)
 
     assert captured == [111, 222]
+
+
+# ---------------------------------------------------------------------------
+# Half 1c — the auth subclasses, and the single-type contract they extend
+# ---------------------------------------------------------------------------
+
+
+def test_401_raises_auth_expired_which_is_an_api_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A 401 is a distinct type *and* still an ``ApiError``.
+
+    Every one of the 49 existing handlers catches ``ApiError``, so the subclass
+    must not escape them; only the redirect wiring needs the narrower type.
+    """
+    _install_transport(monkeypatch, _StubResponse(401, {"detail": {"message": "expired"}}))
+    with pytest.raises(AuthExpiredError) as excinfo:
+        api_client.get_json("/api/v1/anything")
+    assert isinstance(excinfo.value, ApiError)
+    assert excinfo.value.status_code == 401
+
+
+def test_403_raises_permission_denied_which_is_an_api_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _install_transport(monkeypatch, _StubResponse(403, {"detail": {"message": "forbidden"}}))
+    with pytest.raises(PermissionDeniedError) as excinfo:
+        api_client.get_json("/api/v1/anything")
+    assert isinstance(excinfo.value, ApiError)
+    assert excinfo.value.status_code == 403
+
+
+@pytest.mark.parametrize("status", [400, 404, 422, 500])
+def test_non_auth_status_raises_the_base_type_only(
+    monkeypatch: pytest.MonkeyPatch, status: int
+) -> None:
+    """Only 401 and 403 are narrowed; every other status is the base class."""
+    _install_transport(monkeypatch, _StubResponse(status, {"detail": {"message": "boom"}}))
+    with pytest.raises(ApiError) as excinfo:
+        api_client.get_json("/api/v1/anything")
+    assert type(excinfo.value) is ApiError
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"detail": {"error": "x", "message": "dict detail"}},
+        {"detail": "string detail"},
+        {"detail": [{"msg": "list detail"}]},
+    ],
+)
+def test_every_describe_branch_narrows_a_401(
+    monkeypatch: pytest.MonkeyPatch, payload: dict[str, Any]
+) -> None:
+    """All three construction branches must produce the subclass.
+
+    ``_describe`` builds an ``ApiError`` three ways; narrowing must happen once,
+    after the base is built, or the types would drift apart per branch.
+    """
+    _install_transport(monkeypatch, _StubResponse(401, payload, text="raw"))
+    with pytest.raises(AuthExpiredError):
+        api_client.get_json("/api/v1/anything")
 
 
 # ---------------------------------------------------------------------------

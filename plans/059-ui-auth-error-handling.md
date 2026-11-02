@@ -22,10 +22,10 @@
 - **Depends on**: plans/058
 - **Category**: security | dx
 - **Planned at**: commit `225d3639`, 2026-10-30
-- **Executed**: 2026-11-01 at commit `cfbb6ca2`, in the working tree on
-  `feature/ui-auth-error-handling`, **uncommitted**. Parts A–G done; the
-  automated verification block passed in full (see the Execution record below).
-  **The manual gate has NOT been run** — it is outstanding.
+- **Executed**: 2026-11-01 at commit `cfbb6ca2`, committed as **`0ebb241d`** on
+  `feature/ui-auth-error-handling`. Parts A–G done; the automated verification
+  block passed in full (see the Execution record below).
+- **Closed**: 2026-11-02 as **DONE**, at the operator's direction.
 - **Deviations approved** (see Execution record): the redirect store is written
   with `set_props` rather than a declared `Output`; `spotlight.py` calls
   `handle_api_error` for its side effect and returns `no_update, no_update` (the
@@ -1000,7 +1000,51 @@ Documented deviations from the executor (judged on merit, not reflex):
    correct). A future change that breaks a page's return tuple will not be
    caught by the unit suite — only by the manual gate.
 
-**Outstanding: the manual gate (items 1–7) has not been run.**
+### Manual gate outcome (2026-11-02)
+
+Run against the live stack. Results, recorded accurately rather than as a clean sweep:
+
+- **Test 4 — PASS.** All five read-only pages (Search, Timeline, Graph, Collaboration
+  Network, Analytics) rendered with **no** danger alert. The failure Part E exists to
+  prevent — a dead session reported as *"Search failed. Check that the application
+  server is running."* — did not occur.
+- **Page-load redirect — PASS.** Proven from the server side rather than visually:
+  **7 × 302** on `/app/` document requests in the nginx log during the tests, each
+  matched by a `/api/v1/auth/login` hit on the API, plus a direct `curl` with a bogus
+  cookie returning `302 → /api/v1/auth/login?next=/app/`.
+- **Not independently exercised:**
+  - **The 403 warning path (Parts C/D).** No admin-only action was performed as a
+    standard user, so the new warning alert is unverified in the browser.
+  - **The callback-path redirect (Part B.2).** Never reached: every attempt was
+    resolved by the page-load guard first, because restarting the UI forces a
+    reload.
+  - **The Sign in control (Part F).** Requires `/auth/me` to 401 *with the cookie
+    present*; not reachable by hand.
+- **Gate 2 of this plan is mis-specified — do not run it as written.** It says to
+  revoke the session row and reload, expecting the login page. That outcome is
+  **unobservable** while the Keycloak SSO cookie is alive: the guard *does* 302 to
+  login (verified), but Keycloak silently re-authenticates in ~100 ms and the user
+  lands on a working page. To see the login form the operator must also clear the
+  Keycloak session (or use a fresh private window). Assert on the 302 + `Set-Cookie`
+  clearing in the server log instead of on what the browser shows.
+- **The rejected-alternative tradeoff was confirmed in practice, not just on paper.**
+  A `docker compose restart` does **not** log the user out, and should not: Keycloak
+  runs against postgres (`KC_DB: postgres`), so realm signing keys and the session
+  row both survive, and no clock has run. Session lifetimes are
+  `AUTH_SESSION_IDLE_MINUTES=60` / `AUTH_SESSION_MAX_HOURS=8`, so a short outage
+  expires nothing. The redirect path becomes observable only after the **idle**
+  lifetime elapses (>60 min) or the row is revoked with a cold bearer cache.
+
+### Known gap, out of this plan's scope
+
+The operator's original report — a rendered page with no username, no sign-out, and
+*"A bearer token is required."* — is the **token-exchange-503** case, not the revoked-row
+case. When Keycloak is still warming up, `get_token` raises
+`TokenExchangeUnavailableError` (a base `ApiError`), `_session_is_rejected()` returns
+`False`, and the guard deliberately lets the page through — the behaviour this plan
+preserves on purpose so an outage cannot become a login loop. **This plan therefore does
+not fix that specific symptom.** Nothing here should be read as claiming otherwise. It
+needs its own plan if the operator wants the dead-page-during-warmup window closed.
 
 ## Maintenance notes
 

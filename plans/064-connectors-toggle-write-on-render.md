@@ -10,6 +10,13 @@
 > If `src/ui/pages/connectors/callbacks.py` changed since this plan was written,
 > compare the "Current state" excerpts against the live code before proceeding;
 > on a mismatch, treat it as a STOP condition.
+>
+> **Reconciled 2026-11-02 at `8395a9e5`.** The drift check fires, but the drift is
+> **line numbers only** (+3 to +27 in `callbacks.py`); every excerpted code shape
+> is unchanged and the bug is still present. Current anchors: `render_items_list`
+> `:499-502`, `is_active = item.get("enabled", True)` `:547`, the switch id `:702`,
+> the toggle callback `:1373-1384`, the `PATCH` `:1409-1412`. **Locate by content,
+> not by line number**, and do not stop on the non-empty diff.
 
 ## Status
 
@@ -321,6 +328,54 @@ ALL must hold:
 - [ ] The anti-vacuity revert was performed and test 1 failed as required
 - [ ] No files outside the Scope list are modified (`git status`)
 - [ ] `plans/README.md` status row updated
+
+## Execution record — 2026-11-02
+
+Executor: one `general-purpose` subagent, working in the **current tree on `main`,
+uncommitted** at the operator's instruction (not an isolated worktree). Reviewer:
+this session.
+
+**Result — approved.** Guard added to `handle_inline_toggle` exactly as specified;
+`tests/test_connectors_toggle.py` created. Reviewer re-ran every gate
+independently and reproduced: 6 passed (new file), 79 passed (connectors
+regression), **2627 passed / 0 failed / 2 skipped** (full unit suite), `mypy src/`
+clean, `pylint src` 9.69.
+
+**Two plan errors surfaced and corrected during execution:**
+
+1. **The 403 path does not produce the alert this plan predicted.** Step 2's case 4
+   expected the danger alert "Failed to update configuration: …" for a 403. That
+   path does not produce it: `PermissionDeniedError` subclasses `ApiError`
+   (`src/ui/api_client.py:99`) and the `except (AuthExpiredError,
+   PermissionDeniedError)` branch catches it *first* (`callbacks.py:1424`), routing
+   through `handle_api_error` to a **warning** permission alert. The danger alert is
+   reachable only via the plain `ApiError` branch. Both paths are now covered.
+2. **The plan's literal test 1 cannot discriminate.** "Call `render_items_list` and
+   assert `api_client.patch` was never called" passes against the *broken* code as
+   well — `render_items_list` performs no write in either version. The write lives
+   in `handle_inline_toggle`, fired by Dash's MATCH-id re-instantiation, which a
+   direct function call does not reproduce. The plan's "anti-vacuity" instruction
+   (revert the fix, confirm test 1 fails) therefore could not be satisfied as
+   written. The executor kept the literal test as a contract pin and added
+   **`test_render_echo_performs_no_write`**, which drives the toggle callback with
+   the store's own value — exactly what Dash does — and *is* the discriminating
+   regression test: it fails (5 passed / 1 failed) without the guard and passes
+   with it.
+
+**Stale numbers in this plan, corrected at dispatch:** the unit baseline was
+**2621** at `8395a9e5`, not the stated 2590; the 6 new tests bring it to 2627.
+All cited line numbers had drifted +3 to +27 (the plan's own reconcile note covers
+this); the executor located everything by content.
+
+**Not verified — operator action required.** Step 3 (zero `configs/*/status`
+requests on page load) needs an authenticated Keycloak SSO browser session, which
+neither the executor nor the reviewer could drive — credential lookup was blocked
+by the permission classifier, correctly. Partial evidence obtained: `ui` image
+rebuilt, `wba-ai-ui` healthy, and the running container's copy of `callbacks.py`
+contains the guard (`docker exec wba-ai-ui grep -c "current == new_enabled_state"
+…` → 1). The operator should log in at `https://localhost/app`, open Connectors,
+select the GitHub connector, wait ~10s without touching a switch, and confirm the
+API log count is unchanged; then click one switch and confirm exactly one PATCH.
 
 ## STOP conditions
 

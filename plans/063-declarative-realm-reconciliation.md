@@ -11,6 +11,15 @@
 > If any in-scope file changed since this plan was written, compare the
 > "Current state" excerpts against the live code before proceeding; on a
 > mismatch, treat it as a STOP condition.
+>
+> **Reconciled 2026-11-02 at `8395a9e5`.** The drift check fires on
+> `scripts/keycloak-realm-reconcile.sh`, but that is **not drift**: the plan's
+> stamp `459cf85b` pre-dates the `7698f1e7` (#362) merge that introduced the
+> `client_uuid` refactor and the `wba-internal` audience mapper. The "Current
+> state" excerpts — `reconcile_audience_mapper` / `reconcile_web_post_logout_uri`
+> and the three calls at `:159-161` — match the committed script exactly. Proceed
+> without a refresh; the finding (3 of 21 facts reconciled, no drift detection)
+> is unchanged.
 
 ## Status
 

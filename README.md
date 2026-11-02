@@ -44,7 +44,7 @@ The system analyzes project data from various enterprise productivity tools (suc
 
 ## Documentation Links
 
-- [User Guide](USER_GUIDE.md)
+- [Install Guide](INSTALL_GUIDE.md)
 - [Developer Quick Start Guide](DEVELOPER_QUICK_START.md)
 - [High Level Design](docs/design/high-level-design.md)
 - [Activity Signal Spec](docs/design/spec-activity-signal.md)

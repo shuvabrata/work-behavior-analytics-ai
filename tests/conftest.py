@@ -254,7 +254,7 @@ def pytest_runtest_setup(item: pytest.Item) -> None:
         pytest.fail(
             "Could not locate the mkcert local CA, so https://localhost cannot be "
             "verified. Run `mkcert -install` and generate the certificate per "
-            "USER_GUIDE.md, or ensure the mkcert binary is on PATH. These tests "
+            "INSTALL_GUIDE.md, or ensure the mkcert binary is on PATH. These tests "
             "require the Compose stack to be running (docker compose up -d).",
             pytrace=False,
         )

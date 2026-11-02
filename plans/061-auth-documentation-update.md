@@ -10,6 +10,17 @@
 >
 > **Drift check (run first)**: `git diff --stat 225d3639..HEAD -- docs/design/authn-authz-design.md CLAUDE.md .env.example DEVELOPER_QUICK_START.md src/ui/pages/settings`
 > Any mismatch against "Current state" is a STOP condition.
+>
+> **Reconciled 2026-11-02 at `8395a9e5`.** The drift check fires for real:
+> `docs/design/authn-authz-design.md` is now **966 lines** (the plan cites 898)
+> and its Roles-table wording has already been reworded by the working-tree edits
+> — including the uncommitted `wba-service` row change. Where a step targets
+> text that no longer exists (Step 1a's `exactly four endpoints` phrasing), reword
+> against the **current** text; do **not** restore the old phrasing to match this
+> plan. `src/ui/pages/settings/graph_styling/callbacks.py` also changed (plan
+> 059's work) — that is expected, not drift. The documentation staleness the plan
+> targets is still present: `CLAUDE.md` still lacks `KEYCLOAK_INTERNAL_URL` and
+> `src/app/auth/matrix.py`, and `DEVELOPER_QUICK_START.md` still lacks `dev-admin`.
 
 ## Status
 

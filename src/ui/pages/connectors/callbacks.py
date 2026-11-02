@@ -1403,7 +1403,14 @@ def handle_inline_toggle(
             "Active" if not new_enabled_state else "Disabled",
             no_update,
         )
-        
+
+    current = next(
+        (item.get("enabled", True) for item in store.get("items", []) if item.get("id") == config_id),
+        None,
+    )
+    if current is None or current == new_enabled_state:
+        return no_update, no_update, no_update, no_update
+
     try:
         # Dedicated status endpoint for a clean atomic update, avoiding full payload PUT
         api_client.patch(

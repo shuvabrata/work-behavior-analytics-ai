@@ -652,6 +652,14 @@ services** — there is no Keycloak in CI. The strategy follows from that:
 3. **A small `integration`-marked suite** runs against the Compose Keycloak for the full
    redirect-and-callback flow, excluded from CI exactly as the existing integration suites are
    (`pytest.ini` markers; CI runs `-m unit` only).
+
+   **How to run** `tests/test_auth_integration.py`: bring the stack up (`docker compose up -d`),
+   then `pytest -m integration tests/test_auth_integration.py -v`. It drives the real Keycloak
+   login form (no direct-access grant), the refresh rotation, logout, per-role authorization and
+   a Keycloak-outage case; the `server` marker supplies the local mkcert CA and the suite fails
+   rather than skips when the stack is down. It stops and restarts the Keycloak container for the
+   outage case and writes `HTTP_REQUEST_TIMEOUT` once, restoring it in a `finally`, so it is for a
+   local Compose environment only.
 4. **Authorization is tested as a matrix.** A parametrized test asserts the endpoint matrix above
    for each role, so a route added later without a role dependency fails loudly rather than
    defaulting open. This is the single highest-value test in the change.

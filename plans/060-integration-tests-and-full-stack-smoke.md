@@ -387,6 +387,141 @@ curl -sf https://localhost/api/health
 
 ---
 
+### Gate 1 record — 2026-11-02 (Step 1)
+
+Executed in the **current working tree** on `feature/connector-page-render`, left
+**uncommitted** (no commit/branch/worktree). `HEAD` moved mid-run: the operator
+committed the six pre-existing uncommitted files as `ae40dc93`; the drift check
+was therefore judged by content, not by emptiness (see the stamp note above).
+
+**Deliverables**: `tests/test_auth_integration.py` (new, 8 tests),
+`docs/design/authn-authz-design.md` (+8 lines — one "How to run" paragraph under
+Testing Strategy item 3). No other file modified. `docker-compose.yml` untouched.
+`plans/README.md` not edited by the executor.
+
+**Reviewer re-ran every criterion in the live tree** (not the executor's report):
+
+| Criterion | Command | Observed |
+|---|---|---|
+| Suite passes | `pytest -m integration tests/test_auth_integration.py -q` | **8 passed**, exit 0 |
+| Unit baseline unchanged | `pytest -m unit tests -q` | **2627 passed, 2 skipped, 0 failed** — matches the corrected baseline |
+| New file excluded from unit runs | `pytest -m unit tests/test_auth_integration.py --collect-only` | No tests collected (markers correct) |
+| Typecheck | `mypy src/` | No issues found, exit 0 |
+| Lint | `pylint src --score=y` | **9.69** (≥ 9.0) |
+| Style | `flake8 tests/test_auth_integration.py` | clean |
+| Stack healthy after suite | `docker compose ps` | all 13 services healthy; Keycloak `Up (healthy)` |
+| Settings restored | `psycopg2` on `127.0.0.1:5432` | `HTTP_REQUEST_TIMEOUT` `value IS NULL`; **0** non-null override rows |
+| Compose unchanged | `git diff --stat -- docker-compose.yml` | empty |
+
+**MANUAL GATE 1 evidence:**
+
+1. **The login goes through the actual Keycloak form** — `_submit_credentials`
+   calls `tests/auth_helpers.py::_parse_login_form` and asserts the scraped
+   `action` is under `/auth/realms/wba/`; the test additionally asserts
+   `'<form' in page.text`. No direct-access grant
+   (`directAccessGrantsEnabled` is disabled on `wba-web` by design).
+   Cookie flags asserted from the callback's raw `Set-Cookie` list: `HttpOnly`,
+   `Secure`, `SameSite=Lax`, `Path=/`, plus the PKCE cookie cleared with
+   `Max-Age=0`. **PASS**
+2. **The triple-refresh test exists** —
+   `TestRefreshRotation::test_triple_refresh_rotates_and_persists` posts
+   `/api/v1/auth/token` three times, asserts the three access tokens are
+   pairwise distinct, and asserts `refresh_token_encrypted` changed after each
+   refresh (read via `psycopg2`, comparing ciphertext for inequality). This is
+   the invalid_grant-on-reuse case that would otherwise present as a logout after
+   ~30 minutes. **PASS**
+3. **Keycloak is healthy after the suite** — `TestKeycloakDownResilience` is
+   defined last and restores in a `finally`
+   (`docker compose start keycloak` + poll `docker inspect` until `healthy`);
+   `docker compose ps keycloak` → `Up 2 minutes (healthy)`. Nothing was left
+   stopped. **PASS**
+4. **The suite restored `HTTP_REQUEST_TIMEOUT`** — the test prints
+   `before: value=None source='env' effective_value=60` and
+   `after: value=None source='env' effective_value=60`, takes the restore path
+   for a `None` original (`POST /settings/HTTP_REQUEST_TIMEOUT/reset`, not a
+   PATCH-back), and asserts `value`/`effective_value` unchanged and
+   `source != "db"`. Independently confirmed in the DB: `value IS NULL`, 0
+   override rows. **PASS**
+
+**Non-vacuity of the credential-less assertions.** The module carries
+`pytestmark = [pytest.mark.integration, pytest.mark.server]` with **no**
+`authenticated` marker — the correct choice, and there is no class- or
+function-level override either (verified by reading the file). Had
+`authenticated` been present anywhere on the 401-asserting test,
+`tests/conftest.py::_bearer_for_authenticated_tests` would monkeypatch
+`httpx.Client.send` and attach an admin bearer, silently erasing the `401`. Run
+in isolation, `TestRealLoginSequence::test_login_form_callback_and_token_exchange`
+still **1 passed**, so the `401` on the credential-less `/api/v1/search` call is
+observed for real, not inferred.
+
+**Plan errors corrected at dispatch** (reality, not drift):
+`TestRotation` does not exist (it is
+`TestTokenExchange::test_rotation_persists_each_new_refresh_token`,
+`tests/test_auth_flow.py:303`); the unit baseline was `2627`, not `2621`;
+`HTTP_REQUEST_TIMEOUT` had no DB override, so restore is a **reset**, not a
+PATCH-back; the host cannot resolve the compose service name `postgres`, so the
+DB read goes through `psycopg2` on `127.0.0.1:5432`.
+
+**Known deviation, judged on merit:** the executor imported
+`app.auth.session_cookie` at module scope, which `mypy` (strict) cannot resolve
+for a `tests/` file — 2 errors, in a file outside CI's `mypy src/` gate, which is
+clean. Accepted; `flake8` is clean and no `src/` file is affected.
+
+**Operator verdict on Gate 1: PASS** on all four items (2026-11-02).
+
+**Comment revision (operator-requested).** The first submission was rejected on
+comment hygiene: the module docstring opened with `Plans 053-059 …` and the five
+section banners carried `1.1`–`1.5` step numbers. Both are process narration that
+rots — plan numbers mean nothing outside `plans/`, and step numbers mean nothing
+once the plan is deleted. The executor reworded the docstring to state the
+durable invariant ("unit suites stub Keycloak, so nothing there can prove the
+real sequence; this file is that proof") and reduced the banners to plain titles.
+No test logic, assertion or behaviour changed; the suite still passes 8/8 and
+`flake8` is clean. Verified by `grep -nE "plan|Plan|1\.[1-5]"` → no hits.
+
+**Pre-existing plan references left alone (reported, not edited):**
+`docs/design/authn-authz-design.md` carries many `Plan A`–`Plan F` references and
+one `Plan C (053)` at line 254. Those are the design document's own vocabulary and
+predate this plan; the executor's added "How to run" paragraph contains none.
+
+### Gate 2 record — full-stack browser smoke, 2026-11-02
+
+Executed by the operator against the live stack. **All 17 lines PASS.**
+
+| # | Check | Result |
+|---|---|---|
+| 1 | `https://localhost/app` → Keycloak login page | PASS |
+| 2 | `https://localhost/api/health` → healthy (public) | PASS |
+| 3 | `https://localhost/app/assets/executive-dashboard.css` → 200 | PASS |
+| 4 | `https://localhost/auth/admin/` → 404 (console not proxied) | PASS |
+| 5 | `http://127.0.0.1:8080/auth/admin/` → console loads | PASS |
+| 6 | All sidebar pages load with real data (Chat, Search, Graph, Timeline, Analytics, Connectors, Settings) | PASS |
+| 7 | Deep links work (catalog, connectors, Collaboration Network org + ego, Timeline→Graph) | PASS |
+| 8 | Chat streams word by word; `POST /app/stream/<id>` present, no `/api/v1/chats/...` | PASS |
+| 9 | Admin-only actions render a warning alert naming the action | PASS |
+| 10 | Account bar shows username + `User` badge | PASS |
+| 11 | The three admin actions succeed as `dev-admin` | PASS |
+| 12 | Connector configs show secret fields | PASS |
+| 13 | Scan reaches a terminal state and appears in Recent Actions | PASS |
+| 14 | Account bar shows `Admin` badge | PASS |
+| 15 | Log out → login page; log back in → returns to the same page | PASS |
+| 16 | Revoked row → redirect to login → returns to the same page after signing in | PASS |
+| 17 | Keycloak stopped → cached-token page still works; restarted | PASS |
+
+**Line 5 prerequisite, applied and reverted.** The operator added
+`ports: ["127.0.0.1:8080:8080"]` under the `keycloak:` service, recreated the
+container, ran line 5, then removed the lines and recreated again. Verified after
+the fact: `git diff --stat docker-compose.yml` is **empty** and
+`docker inspect` reports `"8080/tcp": null` — the console is unpublished again.
+The `127.0.0.1:` prefix was used, so it was never exposed on other interfaces.
+
+**Transient failure during review, not a defect.** A reviewer re-run of the suite
+immediately after the container recreate produced 8 × `502 Bad Gateway` from
+nginx. Cause: Keycloak was still `health: starting` (40s old) and nginx had no
+healthy upstream. Once Keycloak reached `healthy` the suite passed 8/8. Worth
+knowing for future runs: **recreating Keycloak requires waiting for `healthy`
+before any suite that logs in** — a 502 here is readiness, not a broken proxy.
+
 ## Test plan
 
 A single new integration file plus the manual checklist. Priorities:
@@ -405,8 +540,9 @@ sequence tests, not restatements of the unit cases.
 ## Done criteria
 
 - [ ] `pytest -m integration tests/test_auth_integration.py -q` exits 0
-- [ ] `pytest -m unit tests -q` → `2621 passed, 2 skipped`, i.e. **unchanged**
-      (this plan adds no unit tests)
+- [ ] `pytest -m unit tests -q` → `2627 passed, 2 skipped`, i.e. **unchanged**
+      (this plan adds no unit tests; `2621` as originally written was stale — it
+      predated plan 064's `tests/test_connectors_toggle.py`)
 - [ ] `docker compose ps` shows every service healthy after the suite
 - [ ] `HTTP_REQUEST_TIMEOUT` has its pre-test value
 - [ ] No `ports:` entry for Keycloak remains in `docker-compose.yml` (`git diff docker-compose.yml` is empty after Gate 2)

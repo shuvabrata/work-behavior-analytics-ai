@@ -13,8 +13,9 @@ from dash.exceptions import PreventUpdate
 from domain.connector_registry import CONNECTOR_REGISTRY
 from domain.timezone import humanize_duration, to_app_timezone
 from ui import api_client
-from ui.api_client import ApiError
+from ui.api_client import ApiError, AuthExpiredError, PermissionDeniedError
 from ui.components.common import create_alert
+from ui.components.permission_errors import handle_api_error
 from ui.runtime_settings import runtime_settings
 from ui.styles import (
     COLOR_BACKGROUND_LIGHT,
@@ -824,6 +825,10 @@ def handle_item_save(
             create_alert("Item saved successfully.", color="success", class_name="mb-0"),
             False,
         )
+    # POST/PUT /api/v1/connectors/{type}/configs* — admin-only (config write).
+    except (AuthExpiredError, PermissionDeniedError) as exc:
+        alert = handle_api_error(exc, "save this configuration item")
+        return (no_update, no_update, alert, no_update)
     except ApiError as exc:
         return (
             no_update,
@@ -891,6 +896,10 @@ def handle_item_delete(
             create_alert("Item deleted.", color="success", class_name="mb-0"),
             False,
         )
+    # DELETE /api/v1/connectors/{type}/configs/{item_id} — admin-only.
+    except (AuthExpiredError, PermissionDeniedError) as exc:
+        alert = handle_api_error(exc, "delete this configuration item")
+        return (no_update, no_update, alert, False)
     except ApiError as exc:
         return (
             no_update,
@@ -976,6 +985,10 @@ def handle_item_test_connection(_clicks: List[int | None]) -> tuple[dbc.Alert | 
             ),
             True,  # expand Recent Actions so the result appears
         )
+    # POST /api/v1/commands/ (command_type=test) — admin/service only.
+    except (AuthExpiredError, PermissionDeniedError) as exc:
+        alert = handle_api_error(exc, "test this connector")
+        return (alert, no_update)
     except ApiError as exc:
         return (
             create_alert(
@@ -1017,6 +1030,9 @@ def handle_mcp_test_connection(_clicks: List[int | None]) -> dbc.Alert | Any:
         message = data.get("message", "Connection test completed.")
         color = "success" if data.get("success") else "danger"
         return create_alert(message, color=color, class_name="mb-0")
+    # POST /api/v1/connectors/{type}/test — admin-only (connector test).
+    except (AuthExpiredError, PermissionDeniedError) as exc:
+        return handle_api_error(exc, "test this connector")
     except ApiError as exc:
         return create_alert(
             f"Test failed: {exc}",
@@ -1074,6 +1090,9 @@ def handle_cancel_scan(n_clicks: List[int | None], pathname: str | None) -> dbc.
             color="warning",
             class_name="mb-0",
         )
+    # POST /api/v1/commands/ (command_type=cancel) — admin/service only.
+    except (AuthExpiredError, PermissionDeniedError) as exc:
+        return handle_api_error(exc, "cancel this scan")
     except ApiError as exc:
         return create_alert(
             f"Failed to cancel scan: {exc}",
@@ -1129,6 +1148,10 @@ def handle_connector_save(
             {"status": "ok", "connector_type": connector_type, "data": updated},
             create_alert("Configuration saved.", color="success", class_name="mb-0"),
         )
+    # PATCH /api/v1/connectors/{type} — admin-only (config write).
+    except (AuthExpiredError, PermissionDeniedError) as exc:
+        alert = handle_api_error(exc, "save this connector configuration")
+        return (no_update, alert)
     except ApiError as exc:
         return (
             no_update,
@@ -1188,6 +1211,10 @@ def handle_connector_delete(
             "/app/connectors",
             False,
         )
+    # DELETE /api/v1/connectors/{type} — admin-only (delete all configs).
+    except (AuthExpiredError, PermissionDeniedError) as exc:
+        alert = handle_api_error(exc, "delete this connector's configuration")
+        return (no_update, no_update, alert, no_update, False)
     except ApiError as exc:
         return (
             no_update,
@@ -1393,6 +1420,10 @@ def handle_inline_toggle(
                 
         return no_update, no_update, "Active" if new_enabled_state else "Disabled", updated_store
         
+    # PATCH /api/v1/connectors/{type}/configs/{id}/status — admin-only.
+    except (AuthExpiredError, PermissionDeniedError) as exc:
+        error_alert = handle_api_error(exc, "update this configuration")
+        return error_alert, not new_enabled_state, "Active" if not new_enabled_state else "Disabled", no_update
     except ApiError as exc:
         error_alert = create_alert(f"Failed to update configuration: {str(exc)}", color="danger", class_name="mb-0")
         return error_alert, not new_enabled_state, "Active" if not new_enabled_state else "Disabled", no_update
@@ -1477,6 +1508,10 @@ def handle_run_scan(n_clicks: List[int | None]) -> tuple[dbc.Alert | Any, bool |
             True,  # expand Recent Actions so the new scan is visible
             scans_children,
         )
+    # POST /api/v1/commands/ (command_type=scan) — admin/service only.
+    except (AuthExpiredError, PermissionDeniedError) as exc:
+        alert = handle_api_error(exc, "trigger a scan")
+        return (alert, no_update, no_update)
     except ApiError as exc:
         return (
             create_alert(

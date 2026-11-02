@@ -19,8 +19,9 @@ from dash import (
 from dash.exceptions import PreventUpdate
 
 from ui import api_client
-from ui.api_client import STATUS_NO_RESPONSE, ApiError
+from ui.api_client import STATUS_NO_RESPONSE, ApiError, AuthExpiredError, PermissionDeniedError
 from ui.components.common import create_alert
+from ui.components.permission_errors import handle_api_error
 from ui.styles import COLOR_GRAY_MEDIUM
 from .editor_layout import render_factory_diff_lines, render_parameter_row
 
@@ -424,6 +425,9 @@ def save_query(
         return create_alert(
             "Query saved.", color="success", class_name="mb-3", duration=5000
         )
+    # PUT /api/v1/queries/catalog/{ns}/{slug} — admin-only (catalog authoring).
+    except (AuthExpiredError, PermissionDeniedError) as exc:
+        return handle_api_error(exc, "save this query")
     except ApiError as exc:
         return create_alert(f"Save failed: {exc}", color="danger", class_name="mb-3")
 
@@ -649,6 +653,9 @@ def save_as_query(
             ),
             False,
         )
+    # PUT /api/v1/queries/catalog/{ns}/{slug} — admin-only (catalog authoring).
+    except (AuthExpiredError, PermissionDeniedError) as exc:
+        return handle_api_error(exc, "save this query"), True
     except ApiError as exc:
         return (
             create_alert(f"Save failed: {exc}", color="danger", class_name="mb-3"),
@@ -815,6 +822,9 @@ def destructive_action(
     path = f"/api/v1/queries/catalog/{namespace}/{slug}"
     try:
         api_client.delete(path)
+    # DELETE /api/v1/queries/catalog/{ns}/{slug} — admin-only (catalog authoring).
+    except (AuthExpiredError, PermissionDeniedError) as exc:
+        return (*_NO_CHANGE_13, handle_api_error(exc, "delete this query"))
     except ApiError as exc:
         return (
             *_NO_CHANGE_13,

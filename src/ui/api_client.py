@@ -36,6 +36,8 @@ from ui.settings import settings
 
 __all__ = [
     "ApiError",
+    "AuthExpiredError",
+    "PermissionDeniedError",
     "STATUS_NO_RESPONSE",
     "delete",
     "get",
@@ -86,6 +88,18 @@ class ApiError(Exception):
         super().__init__(self.message)
 
 
+class AuthExpiredError(ApiError):
+    """401 — the session is gone (expired, revoked, or logged out).
+
+    A subclass so every existing ``ApiError`` handler still catches it; only the
+    code that turns a 401 into a redirect needs the narrower type.
+    """
+
+
+class PermissionDeniedError(ApiError):
+    """403 — authenticated, but the principal's role does not permit it."""
+
+
 def set_transport(transport: Transport | None) -> None:
     """Install a transport callable, or restore ``requests.request``.
 
@@ -106,7 +120,7 @@ def _describe(response: requests.Response) -> ApiError:
 
     detail = payload.get("detail") if isinstance(payload, dict) else None
     if isinstance(detail, dict):
-        return ApiError(
+        base = ApiError(
             response.status_code,
             detail=detail,
             detail_error=detail.get("error"),
@@ -114,15 +128,40 @@ def _describe(response: requests.Response) -> ApiError:
         )
     # A plain-string ``detail`` is the human-readable reason; prefer it over the
     # raw body so call sites keep the message they showed before the migration.
-    if isinstance(detail, str) and detail:
-        return ApiError(response.status_code, detail=detail, message=detail)
-    # FastAPI's own validation failures carry a *list* detail (422); the body is
-    # still worth surfacing, so fall back to the raw text.
-    return ApiError(
-        response.status_code,
-        detail=detail,
-        message=response.text or None,
-    )
+    elif isinstance(detail, str) and detail:
+        base = ApiError(response.status_code, detail=detail, message=detail)
+    else:
+        # FastAPI's own validation failures carry a *list* detail (422); the body
+        # is still worth surfacing, so fall back to the raw text.
+        base = ApiError(
+            response.status_code,
+            detail=detail,
+            message=response.text or None,
+        )
+    return _with_auth_subclass(base)
+
+
+def _with_auth_subclass(base: ApiError) -> ApiError:
+    """Narrow *base* to an auth-specific subclass when its status warrants it.
+
+    Constructed from the base rather than duplicating ``_describe``'s three
+    construction branches, which is how the types would drift apart.
+    """
+    if base.status_code == 401:
+        return AuthExpiredError(
+            base.status_code,
+            detail=base.detail,
+            detail_error=base.detail_error,
+            message=base.message,
+        )
+    if base.status_code == 403:
+        return PermissionDeniedError(
+            base.status_code,
+            detail=base.detail,
+            detail_error=base.detail_error,
+            message=base.message,
+        )
+    return base
 
 
 def _call(

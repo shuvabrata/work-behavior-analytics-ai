@@ -7,7 +7,8 @@ from typing import Any
 from dash import html, Input, Output, State, callback, clientside_callback, callback_context, no_update
 from dash.exceptions import PreventUpdate
 
-from ui.api_client import ApiError
+from ui.api_client import ApiError, AuthExpiredError, PermissionDeniedError
+from ui.components.permission_errors import handle_api_error
 from ui.runtime_settings import runtime_settings
 from common.logger import logger
 from ui.components.common import create_alert
@@ -188,7 +189,10 @@ def context_menu_quick_expand(_n_clicks_incoming: Any, _n_clicks_outgoing: Any, 
         )
         return (no_update, merged_elements, updated_expanded, updated_loaded_ids, updated_menu_style,
             success_msg, show_style, "preset", metrics, show_style)
-            
+
+    except (AuthExpiredError, PermissionDeniedError) as exc:
+        return (no_update, no_update, expanded_nodes, loaded_node_ids, updated_menu_style,
+               handle_api_error(exc, "expand this node"), show_style, current_layout, no_update, no_update)
     except ApiError as exc:
         # ``execute_expansion_and_merge`` returns ``ok=False`` for an HTTP error
         # response, so the only ``ApiError`` reaching this handler is a

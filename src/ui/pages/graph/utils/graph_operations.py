@@ -10,7 +10,7 @@ import time
 from datetime import datetime
 
 from ui import api_client
-from ui.api_client import STATUS_NO_RESPONSE, ApiError
+from ui.api_client import STATUS_NO_RESPONSE, ApiError, AuthExpiredError, PermissionDeniedError
 from common.logger import logger
 from .data_transform import neo4j_to_cytoscape
 from .element_types import is_edge_element, is_node_element
@@ -78,6 +78,11 @@ def execute_expansion_and_merge(
         if exc.status_code == STATUS_NO_RESPONSE:
             # No HTTP response (timeout / connection refused): the caller's
             # expansion-error handler owns the user-facing alert.
+            raise
+        if isinstance(exc, (AuthExpiredError, PermissionDeniedError)):
+            # An auth failure must reach the caller's auth handler: flattening
+            # it into ``ok=False`` would render it as a generic expansion error
+            # and the user would never be sent to login.
             raise
         logger.warning(
             "[GRAPH-DEBUG][expand.merge] error "

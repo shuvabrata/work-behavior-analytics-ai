@@ -10,10 +10,11 @@ from dash import ctx, html, Input, Output, State, callback, no_update
 from dash.exceptions import MissingCallbackContextException, PreventUpdate
 
 from ui import api_client
-from ui.api_client import STATUS_NO_RESPONSE, ApiError
+from ui.api_client import STATUS_NO_RESPONSE, ApiError, AuthExpiredError, PermissionDeniedError
 from ui.runtime_settings import runtime_settings
 from common.logger import logger
 from ui.components.common import create_alert
+from ui.components.permission_errors import handle_api_error
 from ui.settings import settings
 from ui.styles import (
     VALIDATION_ALERT_STYLE,
@@ -308,6 +309,8 @@ def execute_query(_raw_clicks: Any, _catalog_clicks: Any, store_cypher: Any, que
                 [],  # No unfiltered graph baseline for tabular query
             )
         
+    except (AuthExpiredError, PermissionDeniedError) as exc:
+        return error_response(handle_api_error(exc, "run this graph query"))
     except ApiError as exc:
         if exc.status_code != STATUS_NO_RESPONSE:
             logger.warning(

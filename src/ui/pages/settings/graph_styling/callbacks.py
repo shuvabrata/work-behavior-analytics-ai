@@ -30,7 +30,8 @@ from dash.exceptions import PreventUpdate
 
 from domain.graph_theme import effective_semantic_theme
 from ui import api_client
-from ui.api_client import ApiError
+from ui.api_client import ApiError, AuthExpiredError, PermissionDeniedError
+from ui.components.permission_errors import handle_api_error
 from ui.pages.graph.utils.ui_components import get_shape_css
 from ui.pages.settings.graph_styling.components import build_editor_body
 from ui.styles import (
@@ -566,6 +567,9 @@ def save_theme(
         updated = api_client.patch(
             f"/api/v1/graph-themes/{theme_id}", json=payload
         ).json()
+    # PATCH /api/v1/graph-themes/{id} — admin-only (theme authoring).
+    except (AuthExpiredError, PermissionDeniedError) as exc:
+        return handle_api_error(exc, "save this theme"), no_update
     except ApiError as exc:
         if exc.status_code == 409:
             detail = exc.detail or "Builtin themes are immutable."
@@ -642,6 +646,10 @@ def save_as_theme(
             "/api/v1/graph-themes/",
             json={"name": name.strip(), "base_theme": base_theme, "overrides": overrides},
         ).json()
+    # POST /api/v1/graph-themes/ — admin-only (theme authoring).
+    except (AuthExpiredError, PermissionDeniedError) as exc:
+        alert = handle_api_error(exc, "create this theme")
+        return no_update, no_update, no_update, no_update, alert, no_update
     except ApiError as exc:
         if exc.status_code in (409, 422):
             return True, exc.detail or "Invalid request.", no_update, no_update, no_update, no_update
@@ -725,6 +733,13 @@ def execute_set_default(
 
     try:
         api_client.post(f"/api/v1/graph-themes/{theme_id}/set-default")
+    # POST /api/v1/graph-themes/{id}/set-default — admin-only (theme default).
+    except (AuthExpiredError, PermissionDeniedError) as exc:
+        return (
+            handle_api_error(exc, "set the default theme"),
+            [no_update, no_update],
+            [no_update, no_update],
+        )
     except ApiError as exc:
         return (
             _feedback_alert(f"Set default failed: {exc}", "danger"),
@@ -799,6 +814,13 @@ def execute_delete(
 
     try:
         api_client.delete(f"/api/v1/graph-themes/{theme_id}")
+    # DELETE /api/v1/graph-themes/{id} — admin-only (theme authoring).
+    except (AuthExpiredError, PermissionDeniedError) as exc:
+        return (
+            handle_api_error(exc, "delete this theme"),
+            [no_update, no_update],
+            [no_update, no_update],
+        )
     except ApiError as exc:
         if exc.status_code == 409:
             detail = exc.detail or "Builtin themes cannot be deleted."

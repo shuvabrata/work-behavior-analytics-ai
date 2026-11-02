@@ -181,6 +181,21 @@ def create_alert(
     return dbc.Alert(content, **kwargs)
 
 
+def create_permission_denied_alert(action: str, *, dismissable: bool = True) -> dbc.Alert:
+    """A 403 message: the action is refused because of the user's role.
+
+    Deliberately ``warning``, not ``danger``: the application is working
+    correctly, the user simply lacks the capability. The message names the
+    action so the user knows what was refused.
+    """
+    return create_alert(
+        f"You do not have permission to {action}. "
+        "This requires an administrator.",
+        color="warning",
+        dismissable=dismissable,
+    )
+
+
 _CONFIG_ERROR_GENERIC = (
     "One of the settings in the link is not a valid value. "
     "Please check the numbers and try again."

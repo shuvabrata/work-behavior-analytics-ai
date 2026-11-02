@@ -66,7 +66,7 @@ grep '^DEV_KEYCLOAK_ADMIN_PASSWORD=' .env
 `master` realm. It has no application roles and cannot sign into the app. That is
 a different credential from `DEV_WBA_ADMIN_PASSWORD`, which is the `dev-admin`
 **application** login in the `wba` realm. The names are similar on purpose — see
-the *Keycloak credentials* table in `USER_GUIDE.md`.
+the *Keycloak credentials* table in `INSTALL_GUIDE.md`.
 
 > ### `dev-admin` cannot sign in here — use the account console
 >

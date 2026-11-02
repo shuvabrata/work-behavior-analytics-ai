@@ -78,9 +78,6 @@ services:
       LLM_PROVIDER: ${LLM_PROVIDER}
       CUSTOM_LLM_MODEL: ${CUSTOM_LLM_MODEL}
       LLM_MODEL: ${LLM_MODEL}
-      # Backward compatibility aliases (app uses LLM_MODEL)
-      OPENAI_MODEL: ${OPENAI_MODEL}
-      CUSTOM_MODEL: ${CUSTOM_MODEL}
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       OPENAI_API_URL: ${OPENAI_API_URL}
       CUSTOM_API_TOKEN: ${CUSTOM_API_TOKEN}

@@ -87,7 +87,7 @@ omissions:
 | 4 | `/api/v1` accepts **bearer JWTs only** | One credential type, one enforcement point, one test story. The API stays frontend-agnostic. |
 | 5 | Dash is a **BFF** with an HttpOnly session cookie | Browser never holds a token; revocation is immediate. The one browser-direct API call (the SSE stream) is re-pointed at a Dash proxy route. |
 | 6 | Realm roles `wba-admin`, `wba-user`, `wba-service` | One source of truth; identical validation for human and machine tokens; no user table. Unrecognised roles are denied, never downgraded. |
-| 7 | Standard user reads everything except connector secrets; admin does everything | A clean, useful capability line. |
+| 7 | Standard user reads everything except connector secrets; admin does everything; the service principal additionally reads secrets | A clean, useful capability line. The producers read their connector configuration, credentials included, over the API with a service token. |
 | 8 | Scans are admin-only; chat is user-allowed | A scan causes producers to **write** into the graph. Chat is read-only in effect. |
 | 9 | Per-user ownership of chat sessions and catalog favourites | Closes the "any `session_id` is usable by anyone" hole and lets standard users keep the favourite toggle. |
 | 10 | ASGI middleware for `/app`, FastAPI dependencies for `/api/v1` | Dependencies compose with the existing `app.dependency_overrides` test idiom; middleware is the only way to guard a mounted WSGI app. |
@@ -303,7 +303,7 @@ key rotation does not require an application restart.
 |---|---|
 | `wba-user` | Standard user. Read everything except connector secrets; manage their own chat sessions, favourites, and graph themes. May edit **own** data, not shared configuration. |
 | `wba-admin` | Everything a standard user can do, plus shared configuration and secret exposure. |
-| `wba-service` | Machine principal. Exactly four endpoints, no more. |
+| `wba-service` | Machine principal. Reads everything a standard user reads, plus connector secrets; the only role that may write command status. |
 
 ### Endpoint matrix
 
@@ -317,24 +317,24 @@ key rotation does not require an application restart.
 | Graph query | `POST /api/v1/graph/execute`, `/expand` | ✓ | ✓ | ✓ |
 | Collaboration | `GET /api/v1/graph/collaboration-network[/ego]` | ✓ | ✓ | ✓ |
 | Catalog browse | `GET /api/v1/queries/catalog*` | ✓ | ✓ | ✓ |
-| Favourite toggle | `PUT /api/v1/queries/catalog-metadata/{id}` | ✓ *(own rows)* | ✓ | ✗ |
+| Favourite toggle | `PUT /api/v1/queries/catalog-metadata/{id}` | ✓ *(own rows)* | ✓ | ✓ |
 | Catalog authoring | `PUT/DELETE /api/v1/queries/catalog/{ns}/{slug}` | ✗ | ✓ | ✗ |
 | Theme read | `GET /api/v1/graph_themes/`, `/effective`, `/{id}` | ✓ | ✓ | ✓ |
 | Theme authoring | `POST/PATCH/DELETE`, `/clone` | ✓ *(own themes)* | ✓ | ✗ |
 | Theme default | `POST /api/v1/graph_themes/{id}/set-default` | ✗ | ✓ | ✗ |
 | Chat (own sessions) | `POST/GET/DELETE /api/v1/chats*`, `/{id}/stream` | ✓ | ✓ | ✗ |
-| Chat metrics | `GET /api/v1/chats/metrics/stream` | ✓ | ✓ | ✗ |
-| Connector status | `GET /api/v1/connectors/`, `/{type}` | ✓ | ✓ | ✗ |
-| Connector configs | `GET /{type}/configs` | ✓ | ✓ | ✗ |
-| **Secrets exposure** | `GET /{type}/configs?include_secrets=true` | **✗** | ✓ | ✗ |
+| Chat metrics | `GET /api/v1/chats/metrics/stream` | ✓ | ✓ | ✓ |
+| Connector status | `GET /api/v1/connectors/`, `/{type}` | ✓ | ✓ | ✓ |
+| Connector configs | `GET /{type}/configs` | ✓ | ✓ | ✓ |
+| **Secrets exposure** | `GET /{type}/configs?include_secrets=true` | **✗** | ✓ | ✓ |
 | Connector config write | `POST/PUT/PATCH/DELETE /{type}/configs*` | ✗ | ✓ | ✗ |
 | Connector test | `POST /{type}/test` | ✗ | ✓ | ✗ |
-| Runtime settings read | `GET /api/v1/settings/` | ✓ | ✓ | ✗ |
+| Runtime settings read | `GET /api/v1/settings/` | ✓ | ✓ | ✓ |
 | Runtime settings write | `PATCH/POST /api/v1/settings*` | ✗ | ✓ | ✗ |
 | Recent Actions read | `GET /api/v1/commands/`, `/{id}` | ✓ | ✓ | ✓ |
 | Scan trigger | `POST /api/v1/commands/` | ✗ | ✓ | ✓ |
 | Command status write | `PATCH /api/v1/commands/{id}/status` | ✗ | ✗ | ✓ |
-| Runtime snapshot | `GET /api/v1/settings/runtime-snapshot` | ✗ | ✗ | ✓ |
+| Runtime snapshot | `GET /api/v1/settings/runtime-snapshot` | ✓ | ✓ | ✓ |
 
 **Theme authoring is user-writable, but needs a schema change to become so.** The
 `graph_themes` table has no owner column and `is_default` is a single global flag per
@@ -652,6 +652,14 @@ services** — there is no Keycloak in CI. The strategy follows from that:
 3. **A small `integration`-marked suite** runs against the Compose Keycloak for the full
    redirect-and-callback flow, excluded from CI exactly as the existing integration suites are
    (`pytest.ini` markers; CI runs `-m unit` only).
+
+   **How to run** `tests/test_auth_integration.py`: bring the stack up (`docker compose up -d`),
+   then `pytest -m integration tests/test_auth_integration.py -v`. It drives the real Keycloak
+   login form (no direct-access grant), the refresh rotation, logout, per-role authorization and
+   a Keycloak-outage case; the `server` marker supplies the local mkcert CA and the suite fails
+   rather than skips when the stack is down. It stops and restarts the Keycloak container for the
+   outage case and writes `HTTP_REQUEST_TIMEOUT` once, restoring it in a `finally`, so it is for a
+   local Compose environment only.
 4. **Authorization is tested as a matrix.** A parametrized test asserts the endpoint matrix above
    for each role, so a route added later without a role dependency fails loudly rather than
    defaulting open. This is the single highest-value test in the change.

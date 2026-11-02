@@ -15,7 +15,7 @@ done
  Make a copy of .env.example to .env and update the values.
 
  **Keycloak credentials.** `./scripts/setup.sh` generates the six required
- values. See *Keycloak credentials* in `USER_GUIDE.md` for what each one is.
+ values. See *Keycloak credentials* in `INSTALL_GUIDE.md` for what each one is.
 
  **Keycloak admin console.** Not published by default. See `ADMIN_GUIDE.md` to
  open it on `127.0.0.1:8080`.
@@ -49,7 +49,7 @@ certificate at `deploy/certs/wba.pem` (+ `wba-key.pem`). Generate it once per
 machine with `mkcert` — without it `docker compose up` fails on the 443 bind or
 the browser shows an untrusted-certificate warning. See *Generate the TLS
 certificate* and *Trust the certificate in a Windows browser (WSL2 only)* in
-`USER_GUIDE.md` for the exact `mkcert` commands and the WSL2 Windows-trust-store
+`INSTALL_GUIDE.md` for the exact `mkcert` commands and the WSL2 Windows-trust-store
 import; they are not duplicated here.
 
 ## Environment Configuration

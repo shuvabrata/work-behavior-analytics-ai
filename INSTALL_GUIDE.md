@@ -1,4 +1,4 @@
-# Work Behavior Analytics AI - User Guide
+# Work Behavior Analytics AI - Install Guide
 
 ## Prerequisites
 
@@ -369,5 +369,5 @@ docker compose restart ui
 
 For issues or questions:
 1. Check the logs: `docker compose logs -f api` (or `-f ui`)
-2. Review the [quick-start.md](quick-start.md) guide
+2. Review the [Developer Quick Start Guide](DEVELOPER_QUICK_START.md)
 3. Ensure your `.env` file is properly configured

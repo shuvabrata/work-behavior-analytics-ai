@@ -1,5 +1,14 @@
 # Plan 062: Deliver realm changes without dropping the database, and give `wba-web` an audience
 
+> **SUPERSEDED 2026-11-02 — historical record; do not follow this plan's delivery
+> steps.** The `wba-web` audience mapper it added is still correct and on `main`.
+> The `scripts/keycloak-realm-reconcile.sh` script it created **has been
+> deleted**: it reconciled only 3 of the template's 21 declared facts, so a
+> template edit outside those three silently did nothing — the precise failure
+> mode it was written to prevent. Delivery is now by **re-seeding** the realm
+> (see `ADMIN_GUIDE.md` → "Applying a realm change"). The "add a check-and-update
+> block" maintenance note below is obsolete: there is no script to add to.
+
 > **Executor instructions**: Follow this plan step by step. Run every
 > verification command and confirm the expected result before moving to the
 > next step. If anything in the "STOP conditions" section occurs, stop and

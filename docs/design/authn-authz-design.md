@@ -232,6 +232,17 @@ The realm is checked into the repository as JSON and imported on first boot via
 The realm JSON seeds a single admin so there is no bootstrap paradox. Further role assignment
 is done in the Keycloak admin console.
 
+**Delivering a template change.** `--import-realm` is create-only: it imports a realm that does
+not exist and skips one that already does. Editing the template therefore does nothing to a
+stack already running — silently. The delivery path is to **re-seed** the realm (drop and
+recreate the `keycloak` database so the next boot imports the current template), which
+reproduces every fact the template declares. It is destructive and appropriate only for this
+dev stack, where the realm holds nothing but the seeded `dev-*` users. **No non-destructive
+delivery path is configured**, and one — the official Terraform provider for Keycloak is the
+usual choice — must exist before this stack runs anywhere the realm has to survive a change.
+Console edits are a scratchpad: they are live immediately but invisible to the template, and
+are lost on the next re-seed. Operator steps: `IAM_ADMIN_GUIDE.md` → "Applying a realm change".
+
 ### Deployment
 
 Keycloak reuses the existing Postgres server with its **own database**. The application's

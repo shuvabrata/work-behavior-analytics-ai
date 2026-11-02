@@ -894,7 +894,10 @@ rejects an unregistered post-logout redirect. Note the asymmetry that caused it:
 never added. Fixed by adding the attribute to the template **and** a second
 check-and-update block to `scripts/keycloak-realm-reconcile.sh` — the first use of
 plan 062's reconcile mechanism for a change it was not originally written for,
-which is exactly the pattern 062 claimed would work. Operator decision: logout
+which is exactly the pattern 062 claimed would work. **Superseded 2026-11-02:**
+that script has since been deleted — it reconciled only 3 of the template's 21
+declared facts, so anything outside those three silently went undelivered.
+Template changes are now delivered by re-seeding the realm. Operator decision: logout
 lands on `/app`, which sits behind the session guard, so the user ends at the
 login page rather than a settled logged-out page. That is intended.
 

@@ -168,52 +168,11 @@ If what you edited is not in that output, the change has not been delivered.
 Restarting Keycloak does not help either — the realm already exists, so the
 import is skipped again.
 
-### The normal path
+### The normal path: re-seed the realm
 
-Run the reconcile script. It delivers the current template's realm changes to
-the **running** instance with `kcadm.sh` — no database drop, no restart, no
-downtime, and it preserves every user, group, session and client secret:
-
-```bash
-./scripts/keycloak-realm-reconcile.sh
-```
-
-It is idempotent. Run it as often as you like:
-
-- First run, when the change is missing:
-  `✓ Added wba-web-audience to client wba-web`
-- Any run after that, when the change is already there:
-  `✓ wba-web audience mapper already present — nothing to do`
-
-A re-run issues no write. That property is what makes it safe to run against a
-live environment, and it only holds because every reconcile block checks the
-running realm before it writes.
-
-### Extending it for a new change
-
-The script currently reconciles one thing: the `wba-web` audience mapper.
-Adding a realm change is a two-part job, always in this order:
-
-1. Edit `deploy/keycloak/realm-wba.json.template` — it is the **source of
-   truth**, and the script's mapper must match it exactly.
-2. Add the matching check-and-update block to
-   `scripts/keycloak-realm-reconcile.sh`: read the current value, skip the write
-   if it already matches, otherwise apply it.
-
-The template alone changes nothing on a running stack (see above); the script
-alone puts the realm out of step with the file that defines it. Both are needed,
-and they must agree.
-
-> **The console is not a source of truth.** A change made by hand through the
-> admin console is invisible to the template and to the next reconcile. It will
-> be silently reverted the moment the realm is re-imported, and the next
-> reconcile will not carry it forward. Make realm changes in the template and
-> deliver them with the script.
-
-### Re-seeding from scratch — destructive, last resort only
-
-If the realm must be built again from the template and nothing in it needs to
-survive, recreate the `keycloak` database:
+There is no runtime reconcile step. The realm holds nothing but the seeded
+`dev-*` users and is derived entirely from the template, so delivering a template
+edit means recreating the Keycloak database and letting the next boot import it:
 
 ```bash
 docker compose stop keycloak
@@ -222,14 +181,45 @@ docker compose exec -T postgres createdb -U "$POSTGRES_USER" -O keycloak keycloa
 docker compose up -d keycloak
 ```
 
-**This destroys every user, group, session and client secret in the realm and
-causes a full authentication outage while it runs.** It is appropriate **only**
-on a local dev stack, where the realm holds nothing but the seeded `dev-*` users
-and is derived entirely from the template. It is **never** appropriate against an
-environment with real users — for that, use the reconcile script above.
+The next boot sees an empty database, so `--import-realm` imports the current
+template in full. Every fact the template declares is delivered — not just the
+ones a script happened to know about.
+
+**This is destructive.** It destroys every user, group, session and client
+secret in the realm and causes a full authentication outage while it runs. That
+is an acceptable trade **only** on a local dev stack. It is **never** appropriate
+against an environment with real users — see "When re-seeding is not acceptable"
+below.
 
 This drops **only** the `keycloak` database. The application's own database is a
 separate one on the same server and is not touched.
+
+### The console is not a source of truth
+
+You can change anything you like through the admin console, and the change is
+live immediately. That is useful for trying a setting before committing to it.
+But the console change is invisible to the template, so:
+
+- It is lost the next time the realm is re-seeded.
+- Any other deployment built from the template never sees it.
+
+Treat the console as a scratchpad. Once you know the value you want, put it in
+`deploy/keycloak/realm-wba.json.template` and re-seed.
+
+> **Editing the template on its own does nothing.** Re-seeding is the step that
+> delivers it. An edit that has not been re-seeded has not been applied.
+
+### When re-seeding is not acceptable
+
+Re-seeding is the right answer for this dev stack and the wrong answer for any
+environment with real users, sessions or client secrets. No non-destructive
+delivery path is configured today, and **one must be added before this stack is
+deployed anywhere the realm needs to survive.**
+
+The usual choice is the official Terraform provider for Keycloak — declarative,
+idempotent, and versioned in lockstep with Keycloak. Do not hand-edit the console
+on such an environment in the meantime: the template would silently stop
+describing the realm.
 
 ### Verify a change
 

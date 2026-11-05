@@ -44,7 +44,7 @@ Four properties drive most of the design decisions below:
 | 5 | Dash is a **BFF** with an HttpOnly session cookie | Browser never holds a token; revocation is immediate. The one browser-direct API call (the SSE stream) is routed through a Dash proxy route. |
 | 6 | Realm roles `wba-admin`, `wba-user`, `wba-service` | One source of truth; identical validation for human and machine tokens; no user table. Unrecognised roles are denied, never downgraded. |
 | 7 | Standard user reads everything except connector secrets; admin does everything; the service principal additionally reads secrets | A clean, useful capability line. The producers read their connector configuration, credentials included, over the API with a service token. |
-| 8 | Scans are admin-only; chat is user-allowed | A scan causes producers to **write** into the graph. Chat is read-only in effect. |
+| 8 | Scans are admin-or-service; chat is user-allowed | A scan causes producers to **write** into the graph, so it needs more than a standard user. Chat is read-only in effect. |
 | 9 | Per-user ownership of chat sessions | Chat sessions are owner-scoped, closing the "any `session_id` is usable by anyone" hole. Catalog favourites are **not** per-user: catalog metadata carries no `subject` column, so the favourite toggle remains global. |
 | 10 | A Flask `before_request` hook for `/app`, FastAPI dependencies for `/api/v1` | Dependencies compose with the existing `app.dependency_overrides` test idiom; the UI is a standalone WSGI app, so a request hook is the only thing that guards it. |
 | 11 | No `AUTH_ENABLED` fail-open switch | Tests override the principal dependency and sign real JWTs instead. |
@@ -106,7 +106,7 @@ sequenceDiagram
     B->>A: GET callback (state cookie)
     A->>K: POST token endpoint (client secret, PKCE verifier)
     K->>A: id_token, access_token, refresh_token
-    A->>A: validate id_token via JWKS, map roles
+    A->>A: validate access_token via JWKS, map roles
     A->>A: INSERT auth_session
     A->>B: Set-Cookie wba_session (HttpOnly, Secure, SameSite=Lax)
     A->>B: 302 back to /app/graph
@@ -166,12 +166,13 @@ an init script. Schemas never mix.
 
 ### Issuer URL
 
-`KEYCLOAK_ISSUER` is the public realm URL, e.g. `https://host/auth/realms/wba`. It serves two
-purposes. The app appends `/.well-known/openid-configuration` to it to fetch Keycloak's discovery
-document, which supplies the endpoint URLs — the JWKS URI, the end-session endpoint, and the
-issuer itself — so one base URL is configured rather than each endpoint separately. The same
-string is matched against every token's `iss` claim as an **exact string**, so a difference in
-scheme, trailing slash, or letter case rejects every token.
+`KEYCLOAK_ISSUER` is the public realm URL, e.g. `https://host/auth/realms/wba`. It is matched
+against every token's `iss` claim as an **exact string**, so a difference in scheme, trailing
+slash, or letter case rejects every token.
+
+The app also fetches Keycloak's discovery document, which supplies the endpoint URLs — the JWKS
+URI, the end-session endpoint, and the issuer itself — so one base URL is configured rather than
+each endpoint separately.
 
 Keycloak's public hostname must be pinned so `iss` does not vary with how the request arrived.
 
@@ -382,33 +383,14 @@ that has one.
 
 ---
 
-## Non-API Surfaces
-
-The secured API is not the only surface.
-
-**The UI's own callback path.** Dash's callback route executes every server-side callback, so it
-is a data path in its own right. The design's answer is structural rather than a check: the UI
-image carries neither a database driver nor a data-store client, so a callback cannot reach a data
-store in-process even if it tried. Every data-bearing callback goes over `/api/v1` like any other
-client.
-
-
-**The API documentation routes.** `/docs`, `/redoc` and `/openapi.json` are deliberately served
-without authentication. They expose the API *schema*, not data: every operation still requires a
-bearer, and the schema reveals no credential. They are developer-local tooling and the only
-browser-based way to exercise a bearer-only API. This is a decision, not an oversight — a
-deliberate exception to "the API is authorized", not an exemption from it.
-
----
-
 ## Configuration
 
 Ten settings carry this design. All are read at startup; none is editable at runtime.
 
 | Setting | Runtime | Purpose |
 |---|---|---|
-| `KEYCLOAK_ISSUER` | API + UI | The public realm URL. Matched byte-for-byte against every token's `iss` claim and used as the base for discovery. |
-| `KEYCLOAK_INTERNAL_URL` | API | The realm URL the API container itself fetches discovery, JWKS and tokens from. Must be the Compose service address, because `localhost` inside a container is the container. |
+| `KEYCLOAK_ISSUER` | API | The public realm URL. Matched byte-for-byte against every token's `iss` claim. |
+| `KEYCLOAK_INTERNAL_URL` | API + producers + consumer | The realm URL these runtimes fetch discovery, JWKS and tokens from. Must be the Compose service address, because `localhost` inside a container is the container. |
 | `APP_PUBLIC_BASE_URL` | API | The deployment's public origin. Builds the OAuth `redirect_uri` and, through the realm template, the realm's `redirectUris` / `webOrigins`. Must agree with `KEYCLOAK_ISSUER`'s origin. |
 | `KEYCLOAK_CLIENT_ID` | API + UI | The `wba-web` client identifier. Not a secret. |
 | `KEYCLOAK_CLIENT_SECRET` | API only | The `wba-web` secret, used for the token exchange. |
@@ -465,7 +447,7 @@ design:
 
 nginx terminates TLS in front of the application and Keycloak. The application sees
 plain HTTP internally and must trust `X-Forwarded-Proto` / `X-Forwarded-Host` from that proxy.
-Cookies carry `Secure`; `redirect_uri` is built from `EXTERNAL_BASE_URL`.
+Cookies carry `Secure`; `redirect_uri` is built from `APP_PUBLIC_BASE_URL`.
 
 Two containers: the UI runtime (Dash only, no database access) and the API runtime (routers,
 lifespan, scheduler). The UI container holds no provider credentials and no database drivers,

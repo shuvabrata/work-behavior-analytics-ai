@@ -249,8 +249,9 @@ Every API operation carries exactly one authorization grant, drawn from a closed
 
 **Per-endpoint grants are declared in the code.** `src/app/auth/matrix.py` holds the
 `(method, path) → grant` table, applied to the routers at include time.
-`tests/test_authz_matrix.py` fails CI when that table and the live routers disagree in either
-direction — an operation with no row, or a row with no live operation.
+`tests/test_authz_matrix.py` fails CI when that table and the live routers disagree — an operation
+with no row, a row with no live operation, or a row whose declared grant does not match the
+dependency attached to the route.
 
 ### Enforcement points
 
@@ -445,9 +446,10 @@ design:
 
 ### Docker Compose
 
-nginx terminates TLS in front of the application and Keycloak. The application sees
-plain HTTP internally and must trust `X-Forwarded-Proto` / `X-Forwarded-Host` from that proxy.
-Cookies carry `Secure`; `redirect_uri` is built from `APP_PUBLIC_BASE_URL`.
+nginx terminates TLS in front of the application and Keycloak. The application sees plain HTTP
+internally, so nginx restates the client's scheme in `X-Forwarded-Proto`; the app derives its own
+scheme from that header, and trusts it from **any** peer — safe only because the API publishes no
+host port. Cookies carry `Secure`; `redirect_uri` is built from `APP_PUBLIC_BASE_URL`.
 
 Two containers: the UI runtime (Dash only, no database access) and the API runtime (routers,
 lifespan, scheduler). The UI container holds no provider credentials and no database drivers,

@@ -49,7 +49,7 @@ services:
     volumes:
       - ./deploy/keycloak/realm-wba.json.template:/opt/keycloak/realm-wba.json.template:ro
       - ./deploy/keycloak/entrypoint.sh:/opt/keycloak/entrypoint.sh:ro
-    # Admin console not published. See ADMIN_GUIDE.md to enable on 127.0.0.1:8080.
+    # Admin console not published. See IAM_ADMIN_GUIDE.md to enable on 127.0.0.1:8080.
     networks:
       - wba-ai-network
     healthcheck:

@@ -40,10 +40,14 @@ def test_load_config_from_server_success(monkeypatch: pytest.MonkeyPatch) -> Non
     ]
 
     with patch(
-        "connectors.producers.confluence.confluence_config.requests.get",
-        return_value=mock_response,
-    ) as mock_get:
-        config = load_config_from_server()
+        "connectors.producers.confluence.confluence_config.get_service_token",
+        return_value="svc-token",
+    ):
+        with patch(
+            "connectors.producers.confluence.confluence_config.requests.get",
+            return_value=mock_response,
+        ) as mock_get:
+            config = load_config_from_server()
 
     assert config == {
         "account": [
@@ -61,17 +65,21 @@ def test_load_config_from_server_success(monkeypatch: pytest.MonkeyPatch) -> Non
     mock_get.assert_called_once_with(
         "http://mock-server:8000/api/v1/connectors/confluence/configs",
         params={"include_secrets": "true"},
-        headers={},
+        headers={"Authorization": "Bearer svc-token"},
         timeout=10,
     )
 
 
 def test_load_config_from_server_http_error(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("API_SERVER", "http://mock-server:8000")
-    with patch("connectors.producers.confluence.confluence_config.requests.get") as mock_get:
-        mock_get.side_effect = requests.exceptions.HTTPError("404 Not Found")
-        with pytest.raises(requests.exceptions.HTTPError):
-            load_config_from_server()
+    with patch(
+        "connectors.producers.confluence.confluence_config.get_service_token",
+        return_value="svc-token",
+    ):
+        with patch("connectors.producers.confluence.confluence_config.requests.get") as mock_get:
+            mock_get.side_effect = requests.exceptions.HTTPError("404 Not Found")
+            with pytest.raises(requests.exceptions.HTTPError):
+                load_config_from_server()
 
 
 def test_build_space_signal() -> None:

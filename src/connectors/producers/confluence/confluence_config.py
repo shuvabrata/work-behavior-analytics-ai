@@ -10,7 +10,7 @@ from typing import Any, Dict, List, cast
 import requests
 from atlassian import Confluence
 
-from common.auth import ServiceTokenError, get_service_token
+from common.auth import get_service_token
 from common.logger import logger
 
 
@@ -20,11 +20,7 @@ def load_config_from_server() -> Dict[str, Any]:
     config_url = f"{api_server.rstrip('/')}/api/v1/connectors/confluence/configs"
     params = {"include_secrets": "true"}
 
-    headers: Dict[str, str] = {}
-    try:
-        headers = {"Authorization": f"Bearer {get_service_token()}"}
-    except ServiceTokenError:
-        logger.warning("Service token unavailable — fetching connector config unauthenticated")
+    headers: Dict[str, str] = {"Authorization": f"Bearer {get_service_token()}"}
 
     logger.info(f"Fetching Confluence configuration from {config_url}")
     try:

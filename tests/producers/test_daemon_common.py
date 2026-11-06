@@ -12,6 +12,7 @@ Tests cover:
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import signal
@@ -24,6 +25,7 @@ from unittest.mock import AsyncMock, MagicMock, Mock, patch
 import pytest
 
 from common.command_n_control.models import CommandEnvelope, CommandStatusUpdate
+from common.runtime_settings import RuntimeConfig
 
 # Module-level state to reset between tests
 import connectors.producers.daemon_common as daemon_mod
@@ -1456,3 +1458,43 @@ class TestDaemonMessageFlow:
         assert len(status_calls) == 2
         assert status_calls[0] == (command_id, "running")
         assert status_calls[1] == (command_id, "completed")
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  runtime-settings fetch failure — startup exits, listener keeps values
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestRuntimeSettingsFetchFailure:
+    """A failed runtime-settings fetch must not degrade silently."""
+
+    def test_startup_fetch_failure_exits_non_zero(self, monkeypatch):
+        """A failed startup fetch exits 1 before the daemon starts."""
+        def _raise(*args, **kwargs):
+            raise RuntimeError("service credential unavailable")
+
+        monkeypatch.setattr(daemon_mod, "fetch_runtime_snapshot", _raise)
+
+        with pytest.raises(SystemExit) as exc_info:
+            daemon_mod.run_daemon(
+                container_name="test-container",
+                producer_main_path="/fake/main.py",
+            )
+
+        assert exc_info.value.code == 1
+
+    def test_listener_failure_keeps_current_values(self, monkeypatch):
+        """A failed listener refresh leaves the cache untouched."""
+        sentinel = RuntimeConfig(HTTP_REQUEST_TIMEOUT=999)
+        original = daemon_mod.runtime_cache.current()
+        daemon_mod.runtime_cache.refresh(sentinel)
+
+        def _raise(*args, **kwargs):
+            raise RuntimeError("service credential unavailable")
+
+        monkeypatch.setattr(daemon_mod, "fetch_runtime_snapshot", _raise)
+
+        try:
+            asyncio.run(daemon_mod._apply_settings_changed(["HTTP_REQUEST_TIMEOUT"]))
+            assert daemon_mod.runtime_cache.get_int("HTTP_REQUEST_TIMEOUT") == 999
+        finally:
+            daemon_mod.runtime_cache.refresh(original)

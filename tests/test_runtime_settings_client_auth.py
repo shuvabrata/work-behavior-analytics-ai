@@ -37,26 +37,17 @@ class TestFetchRuntimeSnapshotAuth:
         assert config.HTTP_REQUEST_TIMEOUT == 42
         assert mock_get.call_args[1]["headers"] == {"Authorization": "Bearer tok-abc"}
 
-    def test_token_failure_still_sends_request_without_header(self, caplog: pytest.LogCaptureFixture) -> None:
+    def test_token_failure_raises_without_sending_request(self) -> None:
         with patch("common.runtime_settings.client.get_service_token", side_effect=ServiceTokenError("nope")):
             with patch("common.runtime_settings.client.requests.get") as mock_get:
-                mock_get.return_value = MagicMock(
-                    status_code=200, json=lambda: _VALID_PAYLOAD
-                )
-                with caplog.at_level("WARNING"):
-                    config = fetch_runtime_snapshot("http://app:8000")
+                with pytest.raises(ServiceTokenError):
+                    fetch_runtime_snapshot("http://app:8000")
 
-        assert isinstance(config, RuntimeConfig)
-        assert config.HTTP_REQUEST_TIMEOUT == 42
-        assert mock_get.call_count == 1
-        assert "headers" not in mock_get.call_args[1]
-        assert "wba-internal" in caplog.text
+        mock_get.assert_not_called()
 
-    def test_unreachable_api_still_degrades(self) -> None:
+    def test_unreachable_api_propagates(self) -> None:
         with patch("common.runtime_settings.client.get_service_token", return_value="tok-abc"):
             with patch("common.runtime_settings.client.requests.get") as mock_get:
                 mock_get.side_effect = requests.exceptions.ConnectionError("refused")
-                config = fetch_runtime_snapshot("http://app:8000")
-
-        assert isinstance(config, RuntimeConfig)
-        assert config.HTTP_REQUEST_TIMEOUT == 60
+                with pytest.raises(requests.exceptions.ConnectionError):
+                    fetch_runtime_snapshot("http://app:8000")

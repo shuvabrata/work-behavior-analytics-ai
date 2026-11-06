@@ -112,6 +112,24 @@ runtime_cache: RuntimeConfigCache = RuntimeConfigCache()
 _settings_listener_thread: threading.Thread | None = None
 
 
+async def _apply_settings_changed(changed_keys: list[str]) -> None:
+    """Refresh the runtime settings cache after a ``settings.changed`` event.
+
+    A failed refresh keeps the last good values: the process already holds a
+    usable config, so a transient credential blip must not reset it to defaults.
+    """
+    try:
+        runtime_cache.refresh(fetch_runtime_snapshot(_api_base()))
+    except Exception:  # pylint: disable=broad-except
+        logger.error(
+            f"Failed to refresh runtime settings after settings.changed event: keys={changed_keys} — "
+            "the service credential is broken or unavailable; keeping current values",
+            exc_info=True,
+        )
+        return
+    logger.info(f"Daemon applied settings.changed event: keys={changed_keys}")
+
+
 def _start_settings_listener(rabbitmq_url: str) -> None:
     """Start a background daemon thread listening for runtime config events.
 
@@ -134,8 +152,7 @@ def _start_settings_listener(rabbitmq_url: str) -> None:
             connection = await aio_pika.connect_robust(rabbitmq_url)
 
             async def _on_event(changed_keys: list[str]) -> None:
-                logger.info(f"Daemon received settings.changed event: keys={changed_keys}")
-                runtime_cache.refresh(fetch_runtime_snapshot(_api_base()))
+                await _apply_settings_changed(changed_keys)
 
             await listen_for_settings_changed(
                 connection=connection,
@@ -180,15 +197,19 @@ def _api_base() -> str:
 def _auth_headers() -> dict[str, str]:
     """Return an Authorization header for the app API, or {} if unavailable.
 
-    A token failure must not stop status reporting: the request then goes out
-    unauthenticated and the caller's existing ``except`` block handles the
-    result.
+    Status reporting is best-effort by design, so a credential failure must not
+    stop it: the header is omitted, the request fails, and the caller's existing
+    ``except`` block logs and drops the result.  The failure is surfaced here so
+    the operator sees the broken credential rather than only the later symptom.
     """
     try:
         return {"Authorization": f"Bearer {get_service_token()}"}
     except ServiceTokenError:
         client_id = os.environ.get("KEYCLOAK_SERVICE_CLIENT_ID", "wba-internal")
-        logger.warning(f"Service token unavailable for client_id={client_id} — sending daemon request unauthenticated")
+        logger.warning(
+            f"Service credential unavailable for client_id={client_id} — "
+            "status request will fail and be dropped"
+        )
         return {}
 
 
@@ -545,8 +566,15 @@ def run_daemon(
     producer_main_path: str,
 ) -> None:
     """Daemon entry point — sync pika loop + subprocess children + SIGCHLD."""
-    # Fetch runtime settings snapshot at startup (best-effort).
-    runtime_cache.refresh(fetch_runtime_snapshot(_api_base()))
+    try:
+        runtime_cache.refresh(fetch_runtime_snapshot(_api_base()))
+    except Exception:  # pylint: disable=broad-except
+        logger.error(
+            "Failed to fetch runtime settings at daemon startup — the service "
+            "credential is broken or unavailable; refusing to run on default settings",
+            exc_info=True,
+        )
+        sys.exit(1)
 
     # Start background listener for live runtime config changes.
     rabbitmq_url = os.environ.get("RABBITMQ_URL", "amqp://guest:guest@localhost:5672/")
@@ -656,9 +684,6 @@ def run_scan(
     errored (even if others succeeded), the scan is reported ``failed`` with
     the per-item errors carried in ``result_summary``.
     """
-    # Fetch a fresh runtime settings snapshot at child startup (best-effort).
-    runtime_cache.refresh(fetch_runtime_snapshot(_api_base()))
-
     logger.info(f"Scan started command_id={command_id}")
 
     _update_status(command_id, CommandStatusUpdate(
@@ -666,6 +691,7 @@ def run_scan(
     ))
 
     try:
+        runtime_cache.refresh(fetch_runtime_snapshot(_api_base()))
         result = asyncio.run(scan_func())
         if result.success:
             logger.info(f"Scan completed command_id={command_id}")
@@ -703,9 +729,6 @@ def run_test(
     the exit code and printed message.  This function only needs to
     print the result and exit with the appropriate code.
     """
-    # Fetch a fresh runtime settings snapshot at child startup (best-effort).
-    runtime_cache.refresh(fetch_runtime_snapshot(_api_base()))
-
     logger.info(f"Test started command_id={command_id}")
 
     # Forward item_id to the test function via environment variable
@@ -720,6 +743,7 @@ def run_test(
     ))
 
     try:
+        runtime_cache.refresh(fetch_runtime_snapshot(_api_base()))
         success, message = asyncio.run(test_func())
         if success:
             print(f"SUCCESS: {message}")

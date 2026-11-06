@@ -11,6 +11,7 @@ from __future__ import annotations
 import pytest
 
 import connectors.producers.daemon_common as daemon_mod
+from common.runtime_settings import RuntimeConfig
 
 
 @pytest.fixture(autouse=True)
@@ -18,6 +19,12 @@ def _no_reconciliation_http(monkeypatch: pytest.MonkeyPatch) -> None:
     """Neutralise reconciliation HTTP so tests are hermetic and offline."""
     monkeypatch.setattr(daemon_mod, "_get_command_status", lambda command_id: None)
     monkeypatch.setattr(daemon_mod, "_reconcile_startup_orphans", lambda container_name: None)
+
+
+@pytest.fixture(autouse=True)
+def _stub_runtime_snapshot(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Neutralise the startup runtime-settings fetch so tests are hermetic and offline."""
+    monkeypatch.setattr(daemon_mod, "fetch_runtime_snapshot", lambda *args, **kwargs: RuntimeConfig())
 
 
 @pytest.fixture(autouse=True)

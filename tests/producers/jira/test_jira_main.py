@@ -30,7 +30,11 @@ def test_load_config_from_server_success(mock_get, monkeypatch):
     mock_get.return_value = mock_response
 
     # Call the function
-    config = load_config_from_server()
+    with patch(
+        'connectors.producers.jira.jira_config.get_service_token',
+        return_value='svc-token',
+    ):
+        config = load_config_from_server()
 
     # Assertions
     expected_config = {
@@ -49,7 +53,7 @@ def test_load_config_from_server_success(mock_get, monkeypatch):
     mock_get.assert_called_once_with(
         "http://mock-server:8000/api/v1/connectors/jira/configs",
         params={'include_secrets': 'true'},
-        headers={},
+        headers={'Authorization': 'Bearer svc-token'},
         timeout=10
     )
 
@@ -64,8 +68,12 @@ def test_load_config_from_server_http_error(mock_get, monkeypatch):
     mock_get.side_effect = requests.exceptions.HTTPError("404 Not Found")
 
     # Assert that the correct exception is raised
-    with pytest.raises(requests.exceptions.HTTPError):
-        load_config_from_server()
+    with patch(
+        'connectors.producers.jira.jira_config.get_service_token',
+        return_value='svc-token',
+    ):
+        with pytest.raises(requests.exceptions.HTTPError):
+            load_config_from_server()
 
 # --- New tests for main() config logic ---
 

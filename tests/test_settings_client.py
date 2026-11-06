@@ -1,8 +1,7 @@
 """Unit tests for the runtime settings REST snapshot client.
 
-Tests that ``fetch_runtime_snapshot`` correctly parses API responses,
-falls back to defaults when the API is unreachable, and logs appropriate
-warnings.
+Tests that ``fetch_runtime_snapshot`` correctly parses API responses and
+propagates every failure — credential, transport, and payload — to the caller.
 """
 
 from __future__ import annotations
@@ -79,14 +78,15 @@ class TestFetchRuntimeSnapshot:
 
     def test_parses_valid_response(self) -> None:
         """A valid API response is parsed into a ``RuntimeConfig``."""
-        with patch("common.runtime_settings.client.requests.get") as mock_get:
-            mock_get.return_value = MagicMock(
-                status_code=200,
-                ok=True,
-                json=lambda: _valid_payload(HTTP_REQUEST_TIMEOUT=90),
-            )
+        with patch("common.runtime_settings.client.get_service_token", return_value="tok"):
+            with patch("common.runtime_settings.client.requests.get") as mock_get:
+                mock_get.return_value = MagicMock(
+                    status_code=200,
+                    ok=True,
+                    json=lambda: _valid_payload(HTTP_REQUEST_TIMEOUT=90),
+                )
 
-            config = fetch_runtime_snapshot("http://app:8000")
+                config = fetch_runtime_snapshot("http://app:8000")
 
         assert isinstance(config, RuntimeConfig)
         assert config.HTTP_REQUEST_TIMEOUT == 90
@@ -94,12 +94,13 @@ class TestFetchRuntimeSnapshot:
 
     def test_uses_provided_timeout(self) -> None:
         """The *timeout* parameter is passed to ``requests.get``."""
-        with patch("common.runtime_settings.client.requests.get") as mock_get:
-            mock_get.return_value = MagicMock(
-                status_code=200, ok=True, json=lambda: _valid_payload()
-            )
+        with patch("common.runtime_settings.client.get_service_token", return_value="tok"):
+            with patch("common.runtime_settings.client.requests.get") as mock_get:
+                mock_get.return_value = MagicMock(
+                    status_code=200, ok=True, json=lambda: _valid_payload()
+                )
 
-            fetch_runtime_snapshot("http://app:8000", timeout=5)
+                fetch_runtime_snapshot("http://app:8000", timeout=5)
 
         mock_get.assert_called_once()
         _call_kwargs = mock_get.call_args[1]
@@ -107,96 +108,77 @@ class TestFetchRuntimeSnapshot:
 
     def test_strips_trailing_slash(self) -> None:
         """Trailing slashes on *api_base_url* are stripped."""
-        with patch("common.runtime_settings.client.requests.get") as mock_get:
-            mock_get.return_value = MagicMock(
-                status_code=200, ok=True, json=lambda: _valid_payload()
-            )
+        with patch("common.runtime_settings.client.get_service_token", return_value="tok"):
+            with patch("common.runtime_settings.client.requests.get") as mock_get:
+                mock_get.return_value = MagicMock(
+                    status_code=200, ok=True, json=lambda: _valid_payload()
+                )
 
-            fetch_runtime_snapshot("http://app:8000/")
+                fetch_runtime_snapshot("http://app:8000/")
 
         mock_get.assert_called_once_with(
-            "http://app:8000/api/v1/settings/runtime-snapshot", timeout=10
+            "http://app:8000/api/v1/settings/runtime-snapshot",
+            headers={"Authorization": "Bearer tok"},
+            timeout=10,
         )
 
-    def test_falls_back_on_connection_error(self) -> None:
-        """A connection error falls back to defaults and logs a warning."""
-        with patch("common.runtime_settings.client.requests.get") as mock_get:
-            mock_get.side_effect = requests.exceptions.ConnectionError(
-                "Connection refused"
-            )
+    def test_raises_on_connection_error(self) -> None:
+        """A connection error propagates to the caller."""
+        with patch("common.runtime_settings.client.get_service_token", return_value="tok"):
+            with patch("common.runtime_settings.client.requests.get") as mock_get:
+                mock_get.side_effect = requests.exceptions.ConnectionError(
+                    "Connection refused"
+                )
 
-            with patch("common.runtime_settings.client.logger.warning") as mock_warn:
-                config = fetch_runtime_snapshot("http://app:8000")
+                with pytest.raises(requests.exceptions.ConnectionError):
+                    fetch_runtime_snapshot("http://app:8000")
 
-        assert isinstance(config, RuntimeConfig)
-        # All defaults.
-        assert config.HTTP_REQUEST_TIMEOUT == 60
-        assert config.TIMEZONE == "UTC"
-        messages = [call.args[0] for call in mock_warn.call_args_list]
-        assert any("API unreachable" in message for message in messages)
+    def test_raises_on_timeout(self) -> None:
+        """A timeout propagates to the caller."""
+        with patch("common.runtime_settings.client.get_service_token", return_value="tok"):
+            with patch("common.runtime_settings.client.requests.get") as mock_get:
+                mock_get.side_effect = requests.exceptions.Timeout("Timed out")
 
-    def test_falls_back_on_timeout(self) -> None:
-        """A timeout falls back to defaults and logs a warning."""
-        with patch("common.runtime_settings.client.requests.get") as mock_get:
-            mock_get.side_effect = requests.exceptions.Timeout("Timed out")
+                with pytest.raises(requests.exceptions.Timeout):
+                    fetch_runtime_snapshot("http://app:8000")
 
-            with patch("common.runtime_settings.client.logger.warning") as mock_warn:
-                config = fetch_runtime_snapshot("http://app:8000")
+    def test_raises_on_http_error(self) -> None:
+        """A non-2xx status propagates to the caller."""
+        with patch("common.runtime_settings.client.get_service_token", return_value="tok"):
+            with patch("common.runtime_settings.client.requests.get") as mock_get:
+                mock_get.return_value = MagicMock(
+                    status_code=503,
+                    ok=False,
+                    raise_for_status=MagicMock(
+                        side_effect=requests.exceptions.HTTPError("503 Service Unavailable")
+                    ),
+                )
 
-        assert isinstance(config, RuntimeConfig)
-        assert config.HTTP_REQUEST_TIMEOUT == 60
-        messages = [call.args[0] for call in mock_warn.call_args_list]
-        assert any("API unreachable" in message for message in messages)
+                with pytest.raises(requests.exceptions.HTTPError):
+                    fetch_runtime_snapshot("http://app:8000")
 
-    def test_falls_back_on_http_error(self) -> None:
-        """A non-200 status falls back to defaults and logs a warning."""
-        with patch("common.runtime_settings.client.requests.get") as mock_get:
-            mock_get.return_value = MagicMock(
-                status_code=503,
-                ok=False,
-                raise_for_status=MagicMock(
-                    side_effect=requests.exceptions.HTTPError("503 Service Unavailable")
-                ),
-            )
+    def test_raises_on_invalid_json(self) -> None:
+        """An invalid JSON body propagates to the caller."""
+        with patch("common.runtime_settings.client.get_service_token", return_value="tok"):
+            with patch("common.runtime_settings.client.requests.get") as mock_get:
+                mock_get.return_value = MagicMock(
+                    status_code=200,
+                    ok=True,
+                    json=MagicMock(side_effect=ValueError("Invalid JSON")),
+                )
 
-            with patch("common.runtime_settings.client.logger.warning") as mock_warn:
-                config = fetch_runtime_snapshot("http://app:8000")
+                with pytest.raises(ValueError):
+                    fetch_runtime_snapshot("http://app:8000")
 
-        assert isinstance(config, RuntimeConfig)
-        assert config.HTTP_REQUEST_TIMEOUT == 60
-        messages = [call.args[0] for call in mock_warn.call_args_list]
-        assert any("API unreachable" in message for message in messages)
+    def test_raises_on_validation_error(self) -> None:
+        """A payload with invalid field values propagates to the caller."""
+        with patch("common.runtime_settings.client.get_service_token", return_value="tok"):
+            with patch("common.runtime_settings.client.requests.get") as mock_get:
+                mock_get.return_value = MagicMock(
+                    status_code=200,
+                    ok=True,
+                    json=lambda: _valid_payload(HTTP_REQUEST_TIMEOUT=-1),
+                )
 
-    def test_falls_back_on_invalid_json(self) -> None:
-        """Invalid JSON response falls back to defaults and logs a warning."""
-        with patch("common.runtime_settings.client.requests.get") as mock_get:
-            mock_get.return_value = MagicMock(
-                status_code=200,
-                ok=True,
-                json=MagicMock(side_effect=ValueError("Invalid JSON")),
-            )
-
-            with patch("common.runtime_settings.client.logger.warning") as mock_warn:
-                config = fetch_runtime_snapshot("http://app:8000")
-
-        assert isinstance(config, RuntimeConfig)
-        assert config.HTTP_REQUEST_TIMEOUT == 60
-        messages = [call.args[0] for call in mock_warn.call_args_list]
-        assert any("invalid data" in message for message in messages)
-
-    def test_falls_back_on_validation_error(self) -> None:
-        """Response with invalid field values falls back to defaults."""
-        with patch("common.runtime_settings.client.requests.get") as mock_get:
-            mock_get.return_value = MagicMock(
-                status_code=200,
-                ok=True,
-                json=lambda: _valid_payload(HTTP_REQUEST_TIMEOUT=-1),
-            )
-
-            with patch("common.runtime_settings.client.logger.warning") as mock_warn:
-                config = fetch_runtime_snapshot("http://app:8000")
-
-        assert isinstance(config, RuntimeConfig)
-        assert config.HTTP_REQUEST_TIMEOUT == 60  # default
-        messages = [call.args[0] for call in mock_warn.call_args_list]
-        assert any("invalid data" in message for message in messages)
+                with pytest.raises(ValueError):
+                    fetch_runtime_snapshot("http://app:8000")

@@ -1,23 +1,17 @@
 """REST snapshot client for non-app processes.
 
-Provides ``fetch_runtime_snapshot()`` so that producer daemons, signal
-consumers, and CLI utilities can retrieve the effective runtime settings
-from the app API without importing ``src.app`` or requiring a DB connection.
-
-If the API is unreachable the module falls back to env/default values
-(``RuntimeConfig`` defaults) and logs a warning — this is essential for
-CLI utilities that may run outside Docker Compose but still reuse shared
-code.
+Provides ``fetch_runtime_snapshot()`` so that producer daemons and signal
+consumers can retrieve the effective runtime settings from the app API
+without importing ``src.app`` or requiring a DB connection.
 """
 
 from __future__ import annotations
 
-import os
 from typing import Any
 
 import requests
 
-from common.auth import ServiceTokenError, get_service_token
+from common.auth import ServiceTokenError, get_service_token  # noqa: F401  # pylint: disable=unused-import
 from common.logger import logger
 from common.runtime_settings.config import RuntimeConfig
 
@@ -33,40 +27,26 @@ def fetch_runtime_snapshot(
     Calls ``GET <api_base_url>/api/v1/settings/runtime-snapshot`` and
     returns a validated ``RuntimeConfig`` instance.
 
-    If the API is unreachable (connection error, timeout, non-200 status)
-    the function logs a **WARNING** and falls back to plain
-    ``RuntimeConfig()`` with all-defaults (env / code defaults).
-
     Args:
         api_base_url: Base URL of the running app, e.g. ``http://api:8000``.
         timeout: HTTP request timeout in seconds.
 
     Returns:
-        A ``RuntimeConfig`` instance populated from the API snapshot, or
-        all-defaults if the API is unreachable.
+        A ``RuntimeConfig`` instance populated from the API snapshot.
+
+    Raises:
+        ServiceTokenError: A service credential could not be obtained. This is a
+            configuration or availability fault and is never retried unauthenticated.
+        requests.exceptions.RequestException: The API was unreachable or returned a
+            non-2xx status.
+        ValueError: The response body was not a valid ``RuntimeConfig`` payload.
     """
     url = f"{api_base_url.rstrip('/')}/api/v1/settings/runtime-snapshot"
+    headers = {"Authorization": f"Bearer {get_service_token()}"}
 
-    request_kwargs: dict[str, Any] = {"timeout": timeout}
-    try:
-        request_kwargs["headers"] = {"Authorization": f"Bearer {get_service_token()}"}
-    except ServiceTokenError:
-        client_id = os.environ.get("KEYCLOAK_SERVICE_CLIENT_ID", "wba-internal")
-        logger.warning(f"Service token unavailable for client_id={client_id} — fetching runtime snapshot unauthenticated")
-
-    try:
-        resp = requests.get(url, **request_kwargs)
-        resp.raise_for_status()
-        data: dict[str, Any] = resp.json()
-        config = RuntimeConfig(**data)
-        logger.info(f"Fetched runtime settings snapshot from {url}")
-        return config
-    except requests.exceptions.RequestException as exc:
-        logger.warning(f"Runtime settings API unreachable at {url} — falling back to env/default values. Reason: {exc}")
-    except (ValueError, TypeError, RuntimeError) as exc:
-        # Covers Pydantic validation errors and unexpected response shapes.
-        logger.warning(
-            f"Runtime settings API returned invalid data from {url} — falling back to env/default values. Reason: {exc}"
-        )
-
-    return RuntimeConfig()
+    resp = requests.get(url, headers=headers, timeout=timeout)
+    resp.raise_for_status()
+    data: dict[str, Any] = resp.json()
+    config = RuntimeConfig(**data)
+    logger.info(f"Fetched runtime settings snapshot from {url}")
+    return config

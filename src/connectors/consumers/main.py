@@ -61,6 +61,24 @@ import aio_pika
 runtime_cache: RuntimeConfigCache = RuntimeConfigCache()
 
 
+async def _apply_settings_changed(api_base: str, changed_keys: list[str]) -> None:
+    """Refresh the runtime settings cache after a ``settings.changed`` event.
+
+    A failed refresh keeps the last good values: the process already holds a
+    usable config, so a transient credential blip must not reset it to defaults.
+    """
+    try:
+        runtime_cache.refresh(fetch_runtime_snapshot(api_base))
+    except Exception:  # pylint: disable=broad-except
+        logger.error(
+            f"Failed to refresh runtime settings after settings.changed event: keys={changed_keys} — "
+            "the service credential is broken or unavailable; keeping current values",
+            exc_info=True,
+        )
+        return
+    logger.info(f"Consumer applied settings.changed event: keys={changed_keys}")
+
+
 def _signal_dump_path(queue_name: str) -> Path:
     """Return the JSONL path for this queue's session, creating the directory if needed.
 
@@ -202,9 +220,17 @@ async def consume_queue(
 
 async def main() -> None:
     """Parse configuration and launch one consumer task per queue."""
-    # Fetch runtime settings snapshot at startup (best-effort).
+    # Fetch runtime settings snapshot at startup.
     api_base = os.environ.get("API_SERVER", "http://api:8000")
-    runtime_cache.refresh(fetch_runtime_snapshot(api_base))
+    try:
+        runtime_cache.refresh(fetch_runtime_snapshot(api_base))
+    except Exception:  # pylint: disable=broad-except
+        logger.error(
+            "Failed to fetch runtime settings at consumer startup — the service "
+            "credential is broken or unavailable; refusing to run on default settings",
+            exc_info=True,
+        )
+        sys.exit(1)
 
     # Start background listener for live runtime config changes.
     rabbitmq_url = _env("RABBITMQ_URL", "amqp://guest:guest@localhost:5672/")
@@ -213,8 +239,7 @@ async def main() -> None:
         connection = await aio_pika.connect_robust(rabbitmq_url)
 
         async def _on_event(changed_keys: list[str]) -> None:
-            logger.info(f"Consumer received settings.changed event: keys={changed_keys}")
-            runtime_cache.refresh(fetch_runtime_snapshot(api_base))
+            await _apply_settings_changed(api_base, changed_keys)
 
         _listener_task = asyncio.ensure_future(
             listen_for_settings_changed(

@@ -1081,3 +1081,38 @@ in scope. Correct and necessary.
 
 **Tracker note:** the Step 5 row could not be flipped to ✅ by the reviewer — the edit was rejected
 as self-approval. The operator marks it.
+
+### Gate 6 record — 2026-11-06, full stack on `feature/cleanup-readme`
+
+Full rebuild (`docker compose build`, all six images) followed by `docker compose up -d
+--force-recreate` for the whole stack, then the running containers confirmed to hold the new code
+by reading the edited regions out of `api`, `jira-producer` and `confluence-producer` (C14). The
+two producers had not been recreated during Gate 4, so without this the smoke would have exercised
+the old `*_config.py` loaders.
+
+**1 — health.** All 13 services `running`; `api`, `ui`, `postgres`, `neo4j`, `rabbitmq`,
+`elasticsearch`, `github-mcp` and `keycloak` `healthy`. Restart count **0** on `api`, `ui`, and all
+four connectors — nothing crash-looping, which is the specific risk of D2's `sys.exit(1)`.
+
+**2 — a scan reaches a terminal state.** Command `9c4f900f-…` → `completed`, `items_failed=0,
+items_processed=1, items_succeeded=1`, no error. The producer log shows the full success path:
+`client.py:51 Fetched runtime settings snapshot` immediately after the `running` PATCH, then
+`github_config.py:28 Fetching configuration` and real GitHub fetches.
+
+**3 — `runtime-snapshot` at 200, no 401.** One `status=200` in the API log for the scan window,
+and **zero** `status=401` anywhere in a 15-minute window. The daemon's and the consumer's startup
+fetches are absent from the API log only because the `api` container was itself recreated at
+12:27:15, after those processes started at 12:26:10 — they fetched from the previous API instance,
+whose log no longer exists. Both logged the success path (`client.py:51`), neither logged a
+failure, so no request was unauthenticated.
+
+**4 — the end-to-end statement.** `docker compose logs --since 20m | grep -iE "unauthenticated|
+falling back to"` → **no matches** across every container. This is the fix stated end to end: no
+process anywhere in the stack is degrading on a credential failure.
+
+**Automated gates:** `pytest -m unit tests -q` → 2629 passed, 2 skipped, 0 failed; `mypy src/` →
+clean (324 files); `pylint src --score=y` → 9.69/10 (≥ 9.0); `bandit -c .bandit.yml -r src/ -lll` →
+exit 0, zero High severity (31 Low, 1 Medium — pre-existing).
+
+**Plan complete.** All six steps executed and all six gates passed. Two tracker rows (Step 5) could
+not be flipped by the reviewer — the edit was rejected as self-approval; the operator marks them.

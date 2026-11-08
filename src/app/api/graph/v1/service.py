@@ -1,7 +1,6 @@
 """Service layer for Graph API v1 - business logic and data transformation."""
 
 from typing import Any, Dict, List, Set
-from neo4j.graph import Node, Path, Relationship
 
 from common.logger import logger
 from app.query_catalog import CatalogLoadError, CatalogQuery, get_catalog_query

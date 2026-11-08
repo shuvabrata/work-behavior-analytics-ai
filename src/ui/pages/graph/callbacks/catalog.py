@@ -13,12 +13,9 @@ from dash.exceptions import MissingCallbackContextException, PreventUpdate
 from common.logger import logger
 from ui import api_client
 from ui.api_client import ApiError
-from ui.components.common import create_alert
 from ui.components.person_picker import build_person_chip, build_person_picker
 from ui.styles import (
-    COLOR_BACKGROUND_WHITE,
     COLOR_CHARCOAL,
-    COLOR_BORDER,
     COLOR_CHARCOAL_MEDIUM,
     COLOR_TEXT_SECONDARY,
     COLOR_GRAY_MEDIUM,

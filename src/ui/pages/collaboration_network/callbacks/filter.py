@@ -270,7 +270,9 @@ def update_collab_filter_feedback(
     State("collab-community-filter",  "options"),
     prevent_initial_call=True,
 )
-def clear_collab_filters(n_clicks: int | None, community_options: list[dict[str, Any]] | None) -> tuple[list[int], int, str]:
+def clear_collab_filters(
+    _n_clicks: int | None, community_options: list[dict[str, Any]] | None
+) -> tuple[list[int], int, str]:
     """Reset all filter controls to their defaults."""
     all_communities = [opt["value"] for opt in (community_options or [])]
     return all_communities, 0, "all"
@@ -283,7 +285,7 @@ def clear_collab_filters(n_clicks: int | None, community_options: list[dict[str,
     State("collab-right-tab-filters-collapse", "is_open"),
     prevent_initial_call=True,
 )
-def toggle_collab_filter_panel(n_clicks: int | None, is_open: bool) -> tuple[bool, str]:
+def toggle_collab_filter_panel(_n_clicks: int | None, is_open: bool) -> tuple[bool, str]:
     """Toggle the Filters tab open/closed and update the icon button active state."""
     new_open = not is_open
     btn_class = "graph-right-panel-tab-icon active" if new_open else "graph-right-panel-tab-icon"

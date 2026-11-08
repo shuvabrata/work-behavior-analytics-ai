@@ -8,7 +8,7 @@ from typing import Any
 import dash_bootstrap_components as dbc
 from dash import html
 
-from ui.components.common import create_alert, toggle_details_panel  # noqa: F401
+from ui.components.common import create_alert
 from ui.styles import (
     ALERT_TEXT_STYLE,
     ALERT_HINT_STYLE,

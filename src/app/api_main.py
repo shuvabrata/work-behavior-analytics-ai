@@ -58,7 +58,7 @@ async def _on_settings_changed(changed_keys: list[str]) -> None:
 
 
 @asynccontextmanager
-async def lifespan(app_instance: FastAPI) -> AsyncGenerator[None, None]:
+async def lifespan(_app_instance: FastAPI) -> AsyncGenerator[None, None]:
     """Application lifespan: startup initialisation and shutdown cleanup."""
     # ── Startup ──────────────────────────────────────────────────────────
     global _rabbitmq_connection  # noqa: PLW0603

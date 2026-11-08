@@ -674,7 +674,9 @@ def run_daemon(
 def run_scan(
     *,
     command_id: uuid.UUID,
-    parameters: dict[str, Any],
+    # 'parameters' is part of the keyword-only dispatcher interface and cannot be renamed
+    # to '_parameters' without breaking external callers passing keyword arguments.
+    parameters: dict[str, Any],  # pylint: disable=unused-argument
     scan_func: Callable[[], Coroutine[Any, Any, ScanResult]],
 ) -> None:
     """Scan mode entry point — run scan and report status.

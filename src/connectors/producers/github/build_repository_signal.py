@@ -5,7 +5,6 @@ from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 from common.activity_signal.models import ActivitySignal, RepositoryAttributes
-from common.activity_signal.wba_node_id import wba_format
 from common.logger import logger
 
 from connectors.producers.github.constants import (

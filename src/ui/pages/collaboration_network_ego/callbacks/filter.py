@@ -479,7 +479,7 @@ def _reset_cap(options: list[dict[str, Any]] | None) -> int:
     prevent_initial_call=True,
 )
 def clear_ego_filters(
-    n_clicks: int | None, options: list[dict[str, Any]] | None
+    _n_clicks: int | None, options: list[dict[str, Any]] | None
 ) -> tuple[int, int]:
     """Reset all filter controls to their defaults."""
     return 0, _reset_cap(options)
@@ -492,7 +492,7 @@ def clear_ego_filters(
     State("ego-right-tab-filters-collapse",  "is_open"),
     prevent_initial_call=True,
 )
-def toggle_ego_filter_panel(n_clicks: int | None, is_open: bool) -> tuple[bool, str]:
+def toggle_ego_filter_panel(_n_clicks: int | None, is_open: bool) -> tuple[bool, str]:
     """Toggle the Filters tab open/closed and update the icon button active state."""
     new_open = not is_open
     btn_class = "graph-right-panel-tab-icon active" if new_open else "graph-right-panel-tab-icon"

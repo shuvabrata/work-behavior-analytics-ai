@@ -18,7 +18,6 @@ from ui.components.result_pane import (
 )
 
 from ui.styles import (
-    FONT_SANS,
     FONT_WEIGHT_SEMIBOLD,
     COLOR_BACKGROUND_WHITE,
     COLOR_BORDER,

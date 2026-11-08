@@ -135,7 +135,7 @@ def update_spotlight(query: str | None, elements: list[dict[str, Any]] | None) -
         return no_update, no_update
     except Exception as exc:
         logger.warning(f"[Spotlight] Search failed for query {q!r}: {exc}")
-        raise PreventUpdate
+        raise PreventUpdate from exc
 
     match_wba_ids = {r["wba_id"] for r in response["results"]}
 

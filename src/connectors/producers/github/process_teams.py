@@ -93,16 +93,16 @@ async def process_teams(
             # Fetch member details (name + email) in a worker thread.
             # The team members API returns NamedUser stubs — fetch_github_user
             # accesses .name and .email, triggering GET /users/{login} per member.
-            def fetch_member_details() -> List[Dict[str, Any]]:
+            def fetch_member_details(raw_members: List[Any]) -> List[Dict[str, Any]]:
                 return [
                     fetch_github_user(m)
-                    for m in members_raw
+                    for m in raw_members
                     if getattr(m, "login", None)
                 ]
 
             # Emit Person signals for team members with MEMBER_OF rels
             try:
-                member_details = await asyncio.to_thread(fetch_member_details)
+                member_details = await asyncio.to_thread(fetch_member_details, members_raw)
                 for member_info in member_details:
                     member_login = member_info["login"]
                     member_rels: List[Relationship] = [

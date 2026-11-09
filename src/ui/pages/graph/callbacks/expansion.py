@@ -6,10 +6,10 @@ Callbacks for node expansion (double-click and modal-based).
 from typing import Any
 from dash import Input, Output, State, callback, no_update
 
+from common.logger import logger
 from ui.api_client import ApiError, AuthExpiredError, PermissionDeniedError
 from ui.components.permission_errors import handle_api_error
 from ui.runtime_settings import runtime_settings
-from common.logger import logger
 from ..utils import (
     execute_expansion_and_merge,
     create_expansion_success_alert,
@@ -18,6 +18,8 @@ from ..utils import (
     create_performance_metrics,
     is_edge_element,
 )
+
+_DEBOUNCE_MS = 500
 
 
 @callback(
@@ -41,7 +43,16 @@ from ..utils import (
      State("graph-layout-selector", "value")],
     prevent_initial_call=True
 )
-def execute_doubleclick_expansion(dblclick_data: Any, current_elements: Any, current_unfiltered: Any, loaded_node_ids: Any, expanded_nodes: Any, debounce_store: Any, current_node_positions: Any, current_layout: Any) -> Any:
+def execute_doubleclick_expansion(
+    dblclick_data: Any,
+    current_elements: Any,
+    current_unfiltered: Any,
+    loaded_node_ids: Any,
+    expanded_nodes: Any,
+    debounce_store: Any,
+    current_node_positions: Any,
+    current_layout: Any,
+) -> Any:
     """Execute immediate expansion on double-click with default parameters"""
     timeout_seconds = runtime_settings.get_int("HTTP_REQUEST_TIMEOUT")
     show_style = {"display": "block"}
@@ -64,8 +75,7 @@ def execute_doubleclick_expansion(dblclick_data: Any, current_elements: Any, cur
     last_expansion_time = debounce_store.get(node_id, 0)
     time_since_last = timestamp - last_expansion_time
     
-    DEBOUNCE_MS = 500  # 500ms debounce window
-    if time_since_last < DEBOUNCE_MS:
+    if time_since_last < _DEBOUNCE_MS:
         # Too soon, ignore this double-click
         return (no_update, no_update, expanded_nodes, loaded_node_ids, debounce_store,
                 None, hide_style, current_layout, no_update, no_update)
@@ -212,7 +222,20 @@ def close_expansion_modal(n_clicks: int | None) -> bool:
      State("graph-fit-trigger", "children")],
     prevent_initial_call=True
 )
-def execute_node_expansion(n_clicks: Any, node_id: Any, direction: Any, limit: Any, auto_fit: Any, current_elements: Any, current_unfiltered: Any, loaded_node_ids: Any, expanded_nodes: Any, current_node_positions: Any, current_layout: Any, current_fit_count: Any) -> Any:
+def execute_node_expansion(
+    n_clicks: Any,
+    node_id: Any,
+    direction: Any,
+    limit: Any,
+    auto_fit: Any,
+    current_elements: Any,
+    current_unfiltered: Any,
+    loaded_node_ids: Any,
+    expanded_nodes: Any,
+    current_node_positions: Any,
+    current_layout: Any,
+    current_fit_count: Any,
+) -> Any:
     """Execute node expansion by calling backend API and merging results"""
     timeout_seconds = runtime_settings.get_int("HTTP_REQUEST_TIMEOUT")
     show_style = {"display": "block"}
@@ -242,7 +265,10 @@ def execute_node_expansion(n_clicks: Any, node_id: Any, direction: Any, limit: A
 
         if not result["ok"]:
             error_alert = create_expansion_error_alert(f"Expansion failed: {result['error_message']}")
-            return no_update, no_update, expanded_nodes, loaded_node_ids, True, error_alert, show_style, current_layout, fit_count, no_update, no_update
+            return (
+                no_update, no_update, expanded_nodes, loaded_node_ids, True,
+                error_alert, show_style, current_layout, fit_count, no_update, no_update
+            )
 
         merged_elements = result["merged_elements"]
         updated_loaded_ids = result["updated_loaded_ids"]
@@ -260,7 +286,10 @@ def execute_node_expansion(n_clicks: Any, node_id: Any, direction: Any, limit: A
 
         if result["new_nodes_count"] == 0:
             info_msg = create_no_neighbors_alert()
-            return no_update, no_update, updated_expanded, loaded_node_ids, False, info_msg, show_style, current_layout, fit_count, no_update, no_update
+            return (
+                no_update, no_update, updated_expanded, loaded_node_ids, False,
+                info_msg, show_style, current_layout, fit_count, no_update, no_update
+            )
 
         success_msg = create_expansion_success_alert(
             result["new_nodes_count"],
@@ -276,10 +305,16 @@ def execute_node_expansion(n_clicks: Any, node_id: Any, direction: Any, limit: A
         metrics = create_performance_metrics(
             len(merged_nodes), len(merged_edges), result["elapsed_ms"], is_graph=True
         )
-        return no_update, merged_elements, updated_expanded, updated_loaded_ids, False, success_msg, show_style, "preset", fit_count, metrics, show_style
+        return (
+            no_update, merged_elements, updated_expanded, updated_loaded_ids, False,
+            success_msg, show_style, "preset", fit_count, metrics, show_style
+        )
 
     except (AuthExpiredError, PermissionDeniedError) as exc:
-        return no_update, no_update, expanded_nodes, loaded_node_ids, True, handle_api_error(exc, "expand this node"), show_style, current_layout, fit_count, no_update, no_update
+        return (
+            no_update, no_update, expanded_nodes, loaded_node_ids, True,
+            handle_api_error(exc, "expand this node"), show_style, current_layout, fit_count, no_update, no_update
+        )
     except ApiError as exc:
         # A transport failure only — an HTTP error response comes back as
         # ``ok=False`` from ``execute_expansion_and_merge``. This replaces the

@@ -9,11 +9,11 @@ from __future__ import annotations
 
 import json
 import os
-import requests
 from pathlib import Path
 from typing import Any, Dict, cast
 
 from atlassian import Jira
+import requests
 
 from common.auth import get_service_token
 from common.logger import logger

@@ -5,29 +5,26 @@ from typing import Any, Dict, List, Optional, Awaitable, Callable, cast
 from datetime import datetime, timezone
 
 
-from connectors.producers.github.fetch_github import (
-    fetch_pr_commits,
-    fetch_pr_reviews,
-    fetch_pr_issue_comments,
-    fetch_pr_review_comments,
-    fetch_commit_comments,
-)
-
+from common.activity_signal.models import ActivitySignal
+from common.logger import logger
 from connectors.producers.github.build_commit_signal import build_commit_signal
 from connectors.producers.github.build_person_signal import build_person_signal
 from connectors.producers.github.build_pull_request_signal import build_pull_request_signal
+from connectors.producers.github.fetch_github import (
+    fetch_commit_comments,
+    fetch_pr_commits,
+    fetch_pr_issue_comments,
+    fetch_pr_review_comments,
+    fetch_pr_reviews,
+)
 from connectors.producers.github.map_github import (
     fetch_github_user,
     map_commit,
     map_pr_reviews,
     map_pull_request,
 )
-
-from common.logger import logger
-from common.activity_signal.models import ActivitySignal
 from connectors.producers.github.retry_with_backoff import WbaRetryTimeoutError
-from connectors.producers.person_tracking import PersonSeenTracker
-from connectors.producers.person_tracking import looks_like_profile
+from connectors.producers.person_tracking import PersonSeenTracker, looks_like_profile
 
 async def process_single_pr(pr: Any, 
                             repo: Any,
@@ -120,20 +117,20 @@ async def process_single_pr(pr: Any,
                     # NOTE: pr_c.author may be a NamedUser stub with no URL (raises
                     # IncompletableObject on access). Prefer the git-embedded
                     # GitAuthor (pr_c.commit.author) when the NamedUser is unusable.
-                    def extract_pr_commit_data() -> tuple[Dict[str, Any], Dict[str, Any]]:
-                        author_obj = pr_c.author
+                    def extract_pr_commit_data(commit_obj: Any) -> tuple[Dict[str, Any], Dict[str, Any]]:
+                        author_obj = commit_obj.author
                         if author_obj is not None:
                             try:
                                 _ = author_obj.login
                             except Exception:
                                 # Stub NamedUser with no URL — fall back to git metadata.
-                                author_obj = pr_c.commit.author
+                                author_obj = commit_obj.commit.author
                         return (
                             fetch_github_user(author_obj),
-                            map_commit(repo.name, pr_c, repo_owner),
+                            map_commit(repo.name, commit_obj, repo_owner),
                         )
 
-                    pr_a_data, pr_c_data = await asyncio.to_thread(extract_pr_commit_data)
+                    pr_a_data, pr_c_data = await asyncio.to_thread(extract_pr_commit_data, pr_c)
 
                     pr_login = pr_a_data.get("login") or pr_a_data.get("name", "unknown")
                     pr_is_profile = looks_like_profile(pr_login, pr_a_data.get("name"), pr_a_data.get("email"))

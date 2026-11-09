@@ -115,8 +115,7 @@ def execute_cypher_query(
         error_msg = str(e)
         if "SyntaxError" in error_msg:
             raise ValueError(f"Cypher syntax error: {error_msg}") from e
-        else:
-            raise RuntimeError(f"Query execution error: {error_msg}") from e
+        raise RuntimeError(f"Query execution error: {error_msg}") from e
     
     except Exception as e:
         logger.error(f"Unexpected error executing query: {e}")

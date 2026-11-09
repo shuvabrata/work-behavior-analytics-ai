@@ -277,7 +277,6 @@ class Initiative(JiraIssueBase):
             to_type="Person"
         )
     """
-    pass
 
 
 @dataclass
@@ -1823,7 +1822,7 @@ def merge_relationship(session: Session, relationship: Relationship) -> None:
         "from_id": from_id,
         "to_id": to_id,
         **props,
-        "_display_in_graph": relationship._display_in_graph,
+        "_display_in_graph": relationship._display_in_graph,  # pylint: disable=protected-access
     }
 
     session.run(forward_query, **params)

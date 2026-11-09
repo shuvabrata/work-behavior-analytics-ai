@@ -109,7 +109,19 @@ def _summarize_time_filter(range_value: Any, full_range: Any, label_prefix: Any)
     return f"{label_prefix}: {lo} – {hi}"
 
 
-def _build_active_filter_chips(selected_node_types: Any, selected_rel_types: Any, weight_threshold: Any, top_n_mode: Any, node_type_options: Any, rel_type_options: Any, has_weighted_edges: Any, created_range: Any = None, updated_range: Any = None, seen_range: Any = None, full_ranges: Any = None) -> Any:
+def _build_active_filter_chips(
+    selected_node_types: Any,
+    selected_rel_types: Any,
+    weight_threshold: Any,
+    top_n_mode: Any,
+    node_type_options: Any,
+    rel_type_options: Any,
+    has_weighted_edges: Any,
+    created_range: Any = None,
+    updated_range: Any = None,
+    seen_range: Any = None,
+    full_ranges: Any = None,
+) -> Any:
     """Return badge components for the currently active filters."""
     node_option_values = [opt["value"] for opt in (node_type_options or [])]
     rel_option_values = [opt["value"] for opt in (rel_type_options or [])]
@@ -191,7 +203,17 @@ def _filter_nodes_by_time(nodes: Any, created_range: Any = None, updated_range: 
     return visible_nodes
 
 
-def _compute_filtered_graph(selected_node_types: Any, selected_rel_types: Any, weight_threshold: Any, top_n_mode: Any, unfiltered_elements: Any, created_range: Any = None, updated_range: Any = None, seen_range: Any = None, full_ranges: Any = None) -> Any:
+def _compute_filtered_graph(
+    selected_node_types: Any,
+    selected_rel_types: Any,
+    weight_threshold: Any,
+    top_n_mode: Any,
+    unfiltered_elements: Any,
+    created_range: Any = None,
+    updated_range: Any = None,
+    seen_range: Any = None,
+    full_ranges: Any = None,
+) -> Any:
     """Compute the visible graph subset from the loaded baseline.
 
     Parameters

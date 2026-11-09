@@ -124,7 +124,7 @@ async def fetch_actions_for_entity(
     # NOT .scalars() — it returns only the FIRST column of each row, which
     # silently drops related_name and degrades every card to a raw id with
     # green tests.
-    return [(action, name) for action, name in result.all()]
+    return list(result.all())
 
 
 async def fetch_event_history(

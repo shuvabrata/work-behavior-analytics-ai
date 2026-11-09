@@ -4,21 +4,31 @@ Callbacks for right-click context menu functionality.
 """
 
 from typing import Any
-from dash import html, Input, Output, State, callback, clientside_callback, callback_context, no_update
+
+from dash import (
+    Input,
+    Output,
+    State,
+    callback,
+    callback_context,
+    clientside_callback,
+    html,
+    no_update,
+)
 from dash.exceptions import PreventUpdate
 
+from common.logger import logger
 from ui.api_client import ApiError, AuthExpiredError, PermissionDeniedError
+from ui.components.common import create_alert
 from ui.components.permission_errors import handle_api_error
 from ui.runtime_settings import runtime_settings
-from common.logger import logger
-from ui.components.common import create_alert
 from ui.styles import CONTEXT_MENU_CONTAINER_STYLE
 from ..utils import (
-    execute_expansion_and_merge,
+    create_expansion_error_alert,
     create_expansion_success_alert,
     create_no_neighbors_alert,
-    create_expansion_error_alert,
     create_performance_metrics,
+    execute_expansion_and_merge,
     is_edge_element,
 )
 
@@ -302,7 +312,7 @@ def context_menu_remove_node(n_clicks: Any, rightclick_data: Any, current_elemen
         
         # Skip edges connected to this node
         if is_edge_element(elem):
-            if elem['data']['source'] == node_id or elem['data']['target'] == node_id:
+            if node_id in (elem['data']['source'], elem['data']['target']):
                 removed_count += 1
                 continue
         
@@ -394,7 +404,7 @@ def context_menu_keep_neighbours(n_clicks: Any, rightclick_data: Any, current_el
         if is_edge_element(elem):
             src = elem["data"].get("source", "")
             tgt = elem["data"].get("target", "")
-            if src == node_id or tgt == node_id:
+            if node_id in (src, tgt):
                 retained.append(elem)
             # Drop edges between neighbours and edges to removed nodes silently.
         else:

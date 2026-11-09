@@ -25,6 +25,7 @@ import dash_bootstrap_components as dbc
 from domain.collaboration.config import LAYER_LABELS, SETTING_LABELS
 from domain.timezone import humanize_duration, to_app_timezone
 from ui.settings import settings
+from common.logger import logger
 
 from ui.styles import (
     # Style patterns
@@ -949,8 +950,8 @@ def render_properties_table(items: list[Any]) -> html.Table:
                 formatted_date = html.Span(
                     duration_str, title=actual_time, style=DETAILS_TABLE_VALUE_STYLE
                 )
-            except Exception:
-                pass
+            except (ValueError, TypeError) as exc:
+                logger.warning(f"Failed to format date {str_value}: {exc}")
 
         if formatted_date:
             value_cell = html.Span(

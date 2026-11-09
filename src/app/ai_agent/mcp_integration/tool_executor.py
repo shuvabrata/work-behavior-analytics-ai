@@ -47,8 +47,8 @@ def _build_atlassian_manager() -> AtlassianMCPClientManager:
     db_config = None
     try:
         db_config = load_atlassian_mcp_config()
-    except Exception:  # noqa: BLE001 – loader error must not crash the manager build
-        pass
+    except Exception as exc:  # noqa: BLE001 – loader error must not crash the manager build
+        logger.warning("Failed loading Atlassian MCP config from DB: %s", exc)
     if db_config is not None:
         return AtlassianMCPClientManager(
             atlassian_server_url=db_config["server_url"],

@@ -40,7 +40,7 @@ def _open_discovery(url: str) -> dict[str, object]:
         raise TokenValidationError(
             f"Discovery URL scheme {parsed.scheme!r} is not permitted; expected http or https"
         )
-    with urllib.request.urlopen(url, timeout=settings.HTTP_REQUEST_TIMEOUT) as response:  # noqa: S310
+    with urllib.request.urlopen(url, timeout=settings.HTTP_REQUEST_TIMEOUT) as response:  # nosec B310  # noqa: S310
         discovery: dict[str, object] = json.load(response)
     return discovery
 

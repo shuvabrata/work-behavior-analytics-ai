@@ -4,6 +4,7 @@ from typing import Any
 import dash_bootstrap_components as dbc
 from dash import html, dcc, Input, Output, State, callback, clientside_callback, ClientsideFunction, no_update
 
+from common.logger import logger
 from domain.timezone import now_in_app_timezone, humanize_duration
 from ui import api_client
 from ui.api_client import ApiError
@@ -409,8 +410,8 @@ def render_messages(messages: list[dict[str, Any]] | None) -> list[html.Div]:
                 actual_time = dt.strftime(getattr(settings, "UI_DATETIME_FORMAT", "%b %d, %Y %I:%M %p"))
                 duration_str = humanize_duration(dt)
                 display_timestamp = html.Span(duration_str, title=actual_time)
-            except Exception:
-                pass
+            except (ValueError, TypeError) as exc:
+                logger.warning(f"Failed to format date {timestamp}: {exc}")
 
         if is_pending:
             if isinstance(display_timestamp, str):

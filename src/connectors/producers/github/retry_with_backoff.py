@@ -201,9 +201,8 @@ def retry_with_backoff(
     """
     if retry_budget is None or backoff_cap is None or base_delay is None:
         _ensure_retry_settings()
-        assert _retry_budget is not None
-        assert _backoff_cap is not None
-        assert _base_delay is not None
+        if _retry_budget is None or _backoff_cap is None or _base_delay is None:
+            raise RuntimeError("Retry settings failed to initialize")
         if retry_budget is None:
             retry_budget = _retry_budget
         if backoff_cap is None:

@@ -51,8 +51,8 @@ def _enabled_backends() -> list[str]:
     try:
         if _build_atlassian_manager().atlassian_enabled:
             backends.append("Atlassian")
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("Failed checking Atlassian MCP status: %s", exc)
     return backends
 
 

@@ -154,7 +154,7 @@ def parse_error_response(error_data: dict[str, Any], status_code: int) -> tuple[
                 f"{CYPHER_DOCS}clauses/match/",
                 "danger"
             )
-        elif "syntax error" in error_message.lower():
+        if "syntax error" in error_message.lower():
             # Extract the actual syntax error message
             return (
                 "❌ Cypher Syntax Error",
@@ -162,15 +162,14 @@ def parse_error_response(error_data: dict[str, Any], status_code: int) -> tuple[
                 f"{CYPHER_DOCS}syntax/",
                 "danger"
             )
-        else:
-            return (
-                "⚠️ Query Validation Error",
-                error_message or "Your query did not pass validation. Check the query syntax and try again.",
-                f"{CYPHER_DOCS}introduction/",
-                "warning"
-            )
-    
-    elif status_code == 500:
+        return (
+            "⚠️ Query Validation Error",
+            error_message or "Your query did not pass validation. Check the query syntax and try again.",
+            f"{CYPHER_DOCS}introduction/",
+            "warning"
+        )
+
+    if status_code == 500:
         # Server/execution errors
         if "unable to connect" in error_message.lower() or "connection" in error_message.lower():
             return (
@@ -180,7 +179,7 @@ def parse_error_response(error_data: dict[str, Any], status_code: int) -> tuple[
                 "https://neo4j.com/docs/operations-manual/current/installation/",
                 "danger"
             )
-        elif "timeout" in error_message.lower():
+        if "timeout" in error_message.lower():
             return (
                 "⏱️ Query Timeout",
                 (
@@ -190,22 +189,21 @@ def parse_error_response(error_data: dict[str, Any], status_code: int) -> tuple[
                 f"{CYPHER_DOCS}clauses/limit/",
                 "warning"
             )
-        elif "syntax error" in error_message.lower():
+        if "syntax error" in error_message.lower():
             return (
                 "❌ Cypher Syntax Error",
                 f"{error_message}. Common issues: missing RETURN clause, unmatched parentheses, or invalid property access.",
                 f"{CYPHER_DOCS}syntax/",
                 "danger"
             )
-        else:
-            return (
-                "💥 Query Execution Failed",
-                f"{error_message or 'An error occurred while executing your query. Check the query syntax and Neo4j connection.'}",
-                f"{CYPHER_DOCS}introduction/",
-                "danger"
-            )
-    
-    elif status_code == 503:
+        return (
+            "💥 Query Execution Failed",
+            f"{error_message or 'An error occurred while executing your query. Check the query syntax and Neo4j connection.'}",
+            f"{CYPHER_DOCS}introduction/",
+            "danger"
+        )
+
+    if status_code == 503:
         # Service unavailable
         return (
             "🚧 Service Unavailable",
@@ -213,12 +211,11 @@ def parse_error_response(error_data: dict[str, Any], status_code: int) -> tuple[
             None,
             "warning"
         )
-    
-    else:
-        # Other errors
-        return (
-            "⚠️ Unexpected Error",
-            error_message or "An unexpected error occurred. Please try again or contact support if the issue persists.",
-            None,
-            "danger"
-        )
+
+    # Other errors
+    return (
+        "⚠️ Unexpected Error",
+        error_message or "An unexpected error occurred. Please try again or contact support if the issue persists.",
+        None,
+        "danger"
+    )

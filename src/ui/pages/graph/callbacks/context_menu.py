@@ -312,7 +312,7 @@ def context_menu_remove_node(n_clicks: Any, rightclick_data: Any, current_elemen
         
         # Skip edges connected to this node
         if is_edge_element(elem):
-            if elem['data']['source'] == node_id or elem['data']['target'] == node_id:
+            if node_id in (elem['data']['source'], elem['data']['target']):
                 removed_count += 1
                 continue
         
@@ -404,7 +404,7 @@ def context_menu_keep_neighbours(n_clicks: Any, rightclick_data: Any, current_el
         if is_edge_element(elem):
             src = elem["data"].get("source", "")
             tgt = elem["data"].get("target", "")
-            if src == node_id or tgt == node_id:
+            if node_id in (src, tgt):
                 retained.append(elem)
             # Drop edges between neighbours and edges to removed nodes silently.
         else:

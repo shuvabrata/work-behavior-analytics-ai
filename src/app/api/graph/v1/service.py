@@ -206,9 +206,8 @@ def _format_query_results(
                     if rel.id not in relationship_ids and rel.startNode in nodes_dict and rel.endNode in nodes_dict:
                         relationships_list.append(rel)
                         relationship_ids.add(rel.id)
-                    else:
-                        if rel.startNode not in nodes_dict or rel.endNode not in nodes_dict:
-                            missing_endpoint_count += 1
+                    elif rel.startNode not in nodes_dict or rel.endNode not in nodes_dict:
+                        missing_endpoint_count += 1
             
             logger.info(
                 "After fetching implicit relationships: "
@@ -223,26 +222,25 @@ def _format_query_results(
             isGraph=True,
             resultCount=len(raw_results)
         )
-    
-    else:
-        # Tabular data: convert to serializable format
-        logger.info("Detected tabular data. Returning raw results.")
-        serializable_results = []
-        
-        for record in raw_results:
-            serializable_record = {}
-            for key, value in record.items():
-                # Convert any remaining Neo4j types to JSON-serializable
-                serializable_record[key] = _make_serializable(value)
-            serializable_results.append(serializable_record)
-        
-        return GraphResponse(
-            nodes=[],
-            relationships=[],
-            rawResults=serializable_results,
-            isGraph=False,
-            resultCount=len(serializable_results)
-        )
+
+    # Tabular data: convert to serializable format
+    logger.info("Detected tabular data. Returning raw results.")
+    serializable_results = []
+
+    for record in raw_results:
+        serializable_record = {}
+        for key, value in record.items():
+            # Convert any remaining Neo4j types to JSON-serializable
+            serializable_record[key] = _make_serializable(value)
+        serializable_results.append(serializable_record)
+
+    return GraphResponse(
+        nodes=[],
+        relationships=[],
+        rawResults=serializable_results,
+        isGraph=False,
+        resultCount=len(serializable_results)
+    )
 
 
 

@@ -304,32 +304,32 @@ def execute_query(
                 show_style,  # Show performance metrics
                 cyto_elements,  # Reset unfiltered baseline to fresh execute result
             )
-        else:
-            # Tabular results - create table
-            raw_results = data.get("rawResults", [])
-            table_display = create_table_display(raw_results, result_count)
-            tabular_success_alert = create_alert([
-                html.I(className="fas fa-check-circle me-2"),
-                f"Query executed successfully! Retrieved {result_count} result(s)."
-            ], color="success", class_name="mb-0")
-            performance_metrics = create_performance_metrics(result_count, 0, execution_time_ms, is_graph=False)
-            
-            # Show table, hide graph and default, hide details panel
-            return build_response(
-                data,
-                empty_elements,
-                graph_hidden_style,
-                tabular_success_alert,
-                show_style,
-                table_display,
-                show_style,
-                None,
-                hide_style,
-                hide_style,  # Hide details panel for tabular results
-                performance_metrics,
-                show_style,  # Show performance metrics
-                [],  # No unfiltered graph baseline for tabular query
-            )
+
+        # Tabular results - create table
+        raw_results = data.get("rawResults", [])
+        table_display = create_table_display(raw_results, result_count)
+        tabular_success_alert = create_alert([
+            html.I(className="fas fa-check-circle me-2"),
+            f"Query executed successfully! Retrieved {result_count} result(s)."
+        ], color="success", class_name="mb-0")
+        performance_metrics = create_performance_metrics(result_count, 0, execution_time_ms, is_graph=False)
+
+        # Show table, hide graph and default, hide details panel
+        return build_response(
+            data,
+            empty_elements,
+            graph_hidden_style,
+            tabular_success_alert,
+            show_style,
+            table_display,
+            show_style,
+            None,
+            hide_style,
+            hide_style,  # Hide details panel for tabular results
+            performance_metrics,
+            show_style,  # Show performance metrics
+            [],  # No unfiltered graph baseline for tabular query
+        )
         
     except (AuthExpiredError, PermissionDeniedError) as exc:
         return error_response(handle_api_error(exc, "run this graph query"))

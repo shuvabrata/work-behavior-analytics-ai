@@ -131,11 +131,10 @@ def create_table_display(raw_results: list[dict[str, Any]] | None, result_count:
         ], bordered=True, striped=True, hover=True, responsive=True, className="mb-0 graph-results-table")
         
         return html.Div(table)
-    else:
-        return html.Div(
-            "Query executed successfully but returned no rows.",
-            style={"fontSize": "12px", "color": COLOR_TEXT_SECONDARY, "padding": "8px 0"}
-        )
+    return html.Div(
+        "Query executed successfully but returned no rows.",
+        style={"fontSize": "12px", "color": COLOR_TEXT_SECONDARY, "padding": "8px 0"}
+    )
 
 
 def create_graph_success_alert(node_count: int, rel_count: int) -> html.Div:

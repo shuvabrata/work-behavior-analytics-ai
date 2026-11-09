@@ -1212,12 +1212,11 @@ def create_section_divider(text: str | None = None) -> html.Div:
                 "marginBottom": SPACING_SMALL
             }
         )
-    else:
-        return html.Hr(style={
-            "borderTop": f"1px solid {COLOR_BORDER}",
-            "marginTop": SPACING_MEDIUM,
-            "marginBottom": SPACING_MEDIUM
-        })
+    return html.Hr(style={
+        "borderTop": f"1px solid {COLOR_BORDER}",
+        "marginTop": SPACING_MEDIUM,
+        "marginBottom": SPACING_MEDIUM
+    })
 
 
 def create_stat_card(label: str, value: str, subtitle: str | None = None) -> html.Div:

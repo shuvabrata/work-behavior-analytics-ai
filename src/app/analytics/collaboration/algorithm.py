@@ -13,7 +13,7 @@ from collections import defaultdict
 from typing import Any, Dict, List
 
 import networkx as nx
-import community.community_louvain as community_louvain
+from community import community_louvain
 from matplotlib.colors import LinearSegmentedColormap
 
 from domain.node_size import apply_node_size

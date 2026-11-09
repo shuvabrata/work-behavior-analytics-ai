@@ -406,7 +406,7 @@ def handle_keyboard_shortcuts(shortcut_data: Any, selected_nodes: Any, current_f
         raise PreventUpdate
     
     # F key: Fit graph to view
-    elif action == "fit":
+    if action == "fit":
         # Trigger fit by incrementing the counter
         new_count = (current_fit_count or 0) + 1
         return False, None, new_count

@@ -30,8 +30,8 @@ from typing import Any
 import requests
 from requests import RequestException as RequestsTransportError
 
+from domain.timezone import runtime_settings
 from ui.auth import SessionMissingError, TokenExchangeUnavailableError, get_token
-from ui.runtime_settings import runtime_settings
 from ui.settings import settings
 
 __all__ = [

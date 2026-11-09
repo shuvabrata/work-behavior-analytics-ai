@@ -35,6 +35,7 @@ _SEARCH_FIELDS = [
 # Highlight settings (spec section 3.3)
 _HIGHLIGHT_FRAGMENT_SIZE = 150
 _HIGHLIGHT_NUMBER_OF_FRAGMENTS = 1
+_ES_MAX_RESULT_WINDOW = 10_000
 
 
 def _build_client() -> Elasticsearch:
@@ -140,7 +141,6 @@ def _build_query_body(request: SearchRequest) -> Dict[str, Any]:
     # --- Pagination ---
     # ES default max_result_window is 10 000.  Cap the offset so we never
     # exceed it — any page beyond the window simply returns no results.
-    _ES_MAX_RESULT_WINDOW = 10_000
     from_offset = min((request.page - 1) * request.page_size, _ES_MAX_RESULT_WINDOW)
 
     body: Dict[str, Any] = {

@@ -3,9 +3,10 @@
 Callbacks for graph navigation, keyboard shortcuts, and viewport controls.
 """
 
+from typing import Any
+
 from dash import Input, Output, State, callback, clientside_callback
 from dash.exceptions import PreventUpdate
-from typing import Any
 
 
 # Clientside callback to fit graph to screen when button clicked

@@ -43,7 +43,9 @@ from ..layout import (
     [Input("url", "search"),
      Input("url", "pathname")],
 )
-def load_collaboration_network(search: str | None, pathname: str | None) -> tuple[list[dict[str, Any]], dict[str, Any], list[Any], dict[str, Any], dict[str, Any], bool]:
+def load_collaboration_network(
+    search: str | None, pathname: str | None
+) -> tuple[list[dict[str, Any]], dict[str, Any], list[Any], dict[str, Any], dict[str, Any], bool]:
     """Fetch raw elements into the store when this page is active.
 
     Note: prevent_initial_call is intentionally NOT set here.  In Dash's

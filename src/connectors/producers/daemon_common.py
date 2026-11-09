@@ -109,7 +109,7 @@ runtime_cache: RuntimeConfigCache = RuntimeConfigCache()
 # and refreshes the local runtime settings cache.  Startup failure is
 # non-fatal — the process continues with the startup snapshot.
 # Initialised lazily by ``run_daemon()``.
-_settings_listener_thread: threading.Thread | None = None
+_settings_listener_thread: threading.Thread | None = None  # pylint: disable=invalid-name
 
 
 async def _apply_settings_changed(changed_keys: list[str]) -> None:

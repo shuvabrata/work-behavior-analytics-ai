@@ -17,7 +17,7 @@ Key design decisions:
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Annotated, Any, Dict, List, Literal, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
@@ -544,8 +544,6 @@ class ActivitySignal(BaseModel):
         Args:
             ts: Timestamp to use.  Defaults to ``datetime.utcnow()``.
         """
-        from datetime import timezone  # local import to avoid circular imports
-
         return self.model_copy(
             update={"ingestion_time": ts or datetime.now(tz=timezone.utc)}
         )

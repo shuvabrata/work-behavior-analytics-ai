@@ -9,12 +9,12 @@ import dash_bootstrap_components as dbc
 from dash import ctx, html, Input, Output, State, callback, no_update
 from dash.exceptions import MissingCallbackContextException, PreventUpdate
 
+from common.logger import logger
 from ui import api_client
 from ui.api_client import STATUS_NO_RESPONSE, ApiError, AuthExpiredError, PermissionDeniedError
-from ui.runtime_settings import runtime_settings
-from common.logger import logger
 from ui.components.common import create_alert
 from ui.components.permission_errors import handle_api_error
+from ui.runtime_settings import runtime_settings
 from ui.settings import settings
 from ui.styles import (
     VALIDATION_ALERT_STYLE,
@@ -122,7 +122,15 @@ def validate_query(query_text: str | None) -> dbc.Alert | None:
      State("catalog-query-view-toggle", "value")],
     prevent_initial_call=True
 )
-def execute_query(_raw_clicks: Any, _catalog_clicks: Any, store_cypher: Any, query_text: Any, selected_catalog_query: Any, catalog_parameters: Any, catalog_view: Any, ) -> Any:
+def execute_query(
+    _raw_clicks: Any,
+    _catalog_clicks: Any,
+    store_cypher: Any,
+    query_text: Any,
+    selected_catalog_query: Any,
+    catalog_parameters: Any,
+    catalog_view: Any,
+) -> Any:
     """Execute raw console queries and catalog queries via the unified API."""
     timeout_seconds = runtime_settings.get_int("HTTP_REQUEST_TIMEOUT")
     # Default empty states
@@ -134,7 +142,21 @@ def execute_query(_raw_clicks: Any, _catalog_clicks: Any, store_cypher: Any, que
     default_container_style = {"minHeight": "400px", "padding": "20px"}
     panel_visible_style = GRAPH_DETAILS_PANEL_STYLE
 
-    def build_response(graph_data: Any, elements: Any, graph_container_style: Any, status_children: Any, status_style: Any, table_children: Any, table_style: Any, results_children: Any, results_style: Any, details_style: Any, metrics_children: Any, metrics_style: Any, unfiltered_elements: Any, ) -> Any:
+    def build_response(
+        graph_data: Any,
+        elements: Any,
+        graph_container_style: Any,
+        status_children: Any,
+        status_style: Any,
+        table_children: Any,
+        table_style: Any,
+        results_children: Any,
+        results_style: Any,
+        details_style: Any,
+        metrics_children: Any,
+        metrics_style: Any,
+        unfiltered_elements: Any,
+    ) -> Any:
         """Build execute-query callback response with a stable output contract."""
         return (
             graph_data,

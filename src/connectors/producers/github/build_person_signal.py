@@ -63,4 +63,3 @@ def build_person_signal(
     except Exception as exc:
         logger.warning(f"Skipping Person signal for '{login}' (validation error): {exc}")
         return None
-

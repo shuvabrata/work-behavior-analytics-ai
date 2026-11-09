@@ -8,6 +8,8 @@ from typing import Any
 from domain.node_size import apply_node_size 
 from ui.settings import settings
 
+CYPHER_DOCS = "https://neo4j.com/docs/cypher-manual/current/"
+
 
 def _compact_node_label(label_value: Any) -> str:
     """Create a compact node label for in-node rendering.
@@ -139,16 +141,16 @@ def parse_error_response(error_data: dict[str, Any], status_code: int) -> tuple[
     error_type = error_data.get("detail", {}).get("error", "Unknown error")
     error_message = error_data.get("detail", {}).get("message", "")
     
-    # Neo4j Cypher documentation base URL
-    CYPHER_DOCS = "https://neo4j.com/docs/cypher-manual/current/"
-    
     # Parse and categorize errors
     if status_code == 400:
         # Validation errors
         if "write operation" in error_message.lower() or "validation failed" in error_type.lower():
             return (
                 "🚫 Write operations are not allowed",
-                "Only read-only queries (MATCH, RETURN, WITH, etc.) are permitted for security reasons. Remove CREATE, MERGE, DELETE, SET, or similar keywords from your query.",
+                (
+                    "Only read-only queries (MATCH, RETURN, WITH, etc.) are permitted for security reasons. "
+                    "Remove CREATE, MERGE, DELETE, SET, or similar keywords from your query."
+                ),
                 f"{CYPHER_DOCS}clauses/match/",
                 "danger"
             )
@@ -181,7 +183,10 @@ def parse_error_response(error_data: dict[str, Any], status_code: int) -> tuple[
         elif "timeout" in error_message.lower():
             return (
                 "⏱️ Query Timeout",
-                "The query took too long to execute. Try simplifying your query or adding a LIMIT clause (e.g., LIMIT 100) to reduce the result set size.",
+                (
+                    "The query took too long to execute. Try simplifying your query or "
+                    "adding a LIMIT clause (e.g., LIMIT 100) to reduce the result set size."
+                ),
                 f"{CYPHER_DOCS}clauses/limit/",
                 "warning"
             )

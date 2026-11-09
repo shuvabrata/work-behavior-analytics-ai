@@ -1,15 +1,15 @@
 # pylint: disable=too-many-instance-attributes
 
-import os
+import contextvars
 from datetime import datetime, timezone
+import json
 import logging
+import os
 import sys
 import traceback
-import json
-import contextvars
-import requests 
+from typing import Any, Optional, Type
 
-from typing import Optional, Any, Type
+import requests
 
 # ANSI Color codes for terminal output
 class Colors:

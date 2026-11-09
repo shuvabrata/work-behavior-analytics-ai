@@ -57,7 +57,7 @@ STATUS_NO_RESPONSE = 0
 #: The transport seam's type: ``requests.request``-compatible.
 Transport = Callable[..., requests.Response]
 
-_transport: Transport | None = None
+_transport: Transport | None = None  # pylint: disable=invalid-name
 
 
 class ApiError(Exception):

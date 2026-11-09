@@ -124,6 +124,3 @@ def update_graph_stylesheet(theme_name: str | None) -> list[dict[str, Any]]:
     effective = fetch_effective_theme(active_theme)
 
     return build_cytoscape_stylesheet(active_theme, effective=effective)
-
-
-

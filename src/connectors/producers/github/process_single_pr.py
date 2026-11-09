@@ -5,29 +5,26 @@ from typing import Any, Dict, List, Optional, Awaitable, Callable, cast
 from datetime import datetime, timezone
 
 
-from connectors.producers.github.fetch_github import (
-    fetch_pr_commits,
-    fetch_pr_reviews,
-    fetch_pr_issue_comments,
-    fetch_pr_review_comments,
-    fetch_commit_comments,
-)
-
+from common.activity_signal.models import ActivitySignal
+from common.logger import logger
 from connectors.producers.github.build_commit_signal import build_commit_signal
 from connectors.producers.github.build_person_signal import build_person_signal
 from connectors.producers.github.build_pull_request_signal import build_pull_request_signal
+from connectors.producers.github.fetch_github import (
+    fetch_commit_comments,
+    fetch_pr_commits,
+    fetch_pr_issue_comments,
+    fetch_pr_review_comments,
+    fetch_pr_reviews,
+)
 from connectors.producers.github.map_github import (
     fetch_github_user,
     map_commit,
     map_pr_reviews,
     map_pull_request,
 )
-
-from common.logger import logger
-from common.activity_signal.models import ActivitySignal
 from connectors.producers.github.retry_with_backoff import WbaRetryTimeoutError
-from connectors.producers.person_tracking import PersonSeenTracker
-from connectors.producers.person_tracking import looks_like_profile
+from connectors.producers.person_tracking import PersonSeenTracker, looks_like_profile
 
 async def process_single_pr(pr: Any, 
                             repo: Any,

@@ -62,7 +62,13 @@ class GraphExecuteRequest(BaseModel):
 class GraphNode(BaseModel):
     """Model representing a Neo4j node."""
 
-    wba_id: str = Field(..., description="Canonical WBA node identifier (e.g. 'github::Person::alice'). Stable cross-provider key; used for display and ES spotlight matching.")
+    wba_id: str = Field(
+        ...,
+        description=(
+            "Canonical WBA node identifier (e.g. 'github::Person::alice'). "
+            "Stable cross-provider key; used for display and ES spotlight matching."
+        ),
+    )
     elementId: str = Field(..., description="Neo4j internal element id (e.g. '4:uuid:0'). Used for edge endpoint matching and deduplication.")
     labels: List[str] = Field(default_factory=list, description="Node labels/types")
     properties: Dict[str, Any] = Field(default_factory=dict, description="Node properties")

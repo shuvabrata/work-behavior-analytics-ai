@@ -1,38 +1,38 @@
 import asyncio
-import time
 from contextlib import asynccontextmanager
+import time
+from typing import AsyncGenerator, Callable, Awaitable
 from uuid import uuid4
 
-from typing import AsyncGenerator, Callable, Awaitable
-
-from app.scheduler import scheduler_loop
 import aio_pika
 from fastapi import Depends, FastAPI, Request, Response
+
 from app.api import endpoints
-from app.auth.dependencies import require_user
-from app.api.chats.v1.router import router as chats_v1_router
-from app.api.graph.v1.router import router as graph_v1_router
-from app.api.connectors.v1.router import router as connectors_v1_router
-from app.api.queries.v1.router import router as queries_v1_router
-from app.api.search.v1.router import router as search_v1_router
-from app.api.search.v1.persons_router import router as persons_v1_router
-from app.api.commands.v1.router import router as commands_v1_router
-from app.api.settings.v1.router import router as settings_v1_router
-from app.api.graph_themes.v1.router import router as graph_themes_v1_router
 from app.api.activity.v1.router import router as activity_v1_router
 from app.api.auth.v1.router import router as auth_v1_router
+from app.api.chats.v1.router import router as chats_v1_router
+from app.api.commands.v1.router import router as commands_v1_router
+from app.api.connectors.v1.router import router as connectors_v1_router
+from app.api.connectors.v1.service import sync_github_mcp_env_status
+from app.api.graph.v1.router import router as graph_v1_router
+from app.api.graph_themes.v1.router import router as graph_themes_v1_router
+from app.api.queries.v1.router import router as queries_v1_router
+from app.api.search.v1.persons_router import router as persons_v1_router
+from app.api.search.v1.router import router as search_v1_router
+from app.api.settings.v1.router import router as settings_v1_router
+from app.auth.dependencies import require_user
 from app.common.neo4j_driver import close_driver
 from app.db.session import ASYNC_SESSION_LOCAL
 from app.runtime_settings import load_db_overrides_from_session
-from app.api.connectors.v1.service import sync_github_mcp_env_status
+from app.scheduler import scheduler_loop
+from app.settings import settings
 from common.logger import logger, LogContext
 from common.messaging.settings_events import listen_for_settings_changed
-from app.settings import settings
 
 
 # Module-level RabbitMQ connection reference — opened in lifespan startup,
 # closed in lifespan shutdown.  Used by the settings API to publish events.
-_rabbitmq_connection: aio_pika.RobustConnection | None = None
+_rabbitmq_connection: aio_pika.RobustConnection | None = None  # pylint: disable=invalid-name
 
 
 def get_rabbitmq_connection() -> aio_pika.RobustConnection | None:

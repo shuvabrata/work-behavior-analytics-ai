@@ -2,21 +2,21 @@
 
 from typing import Any, Dict, List, Set
 
-from common.logger import logger
+from app.analytics.collaboration.algorithm import (
+    build_graph,
+    compute_hub_scores,
+    compute_modularity,
+    detect_communities,
+    filter_top_edges_per_node,
+    to_cytoscape_elements,
+)
+from app.analytics.collaboration.ego import build_ego_elements
+from app.analytics.collaboration.queries_loader import load_collaboration_score_query
 from app.query_catalog import CatalogLoadError, CatalogQuery, get_catalog_query
 from app.runtime_settings import runtime_settings
-from app.analytics.collaboration.algorithm import (
-        build_graph,
-        detect_communities,
-        compute_hub_scores,
-        compute_modularity,
-    filter_top_edges_per_node,
-        to_cytoscape_elements,
-    )
+from common.logger import logger
 from domain.collaboration.config import CollaborationNetworkConfig
-from app.analytics.collaboration.ego import build_ego_elements
 from domain.collaboration.errors import CollaborationDataUnavailable
-from app.analytics.collaboration.queries_loader import load_collaboration_score_query
 from domain.person_network_url import DEFAULT_MAX_COLLABORATORS
 from .model import (
     CollaborationNetworkResponse,

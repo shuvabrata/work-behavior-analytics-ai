@@ -7,12 +7,10 @@ import dash_bootstrap_components as dbc
 from dash import Input, Output, State, callback, clientside_callback, html, no_update
 from dash.exceptions import PreventUpdate
 
+from common.logger import logger
 from domain.collaboration.config import CollaborationNetworkConfig, LAYER_ORDER
 from domain.collaboration.ego_metadata import cap_options_for
 from domain.collaboration.errors import CollaborationDataUnavailable
-from ui import api_client
-from ui.api_client import ApiError
-from ui.collaboration_params import ego_query_params, translate_api_error
 from domain.person_network_url import (
     DEFAULT_MAX_COLLABORATORS,
     PERSON_NETWORK_PATH,
@@ -20,9 +18,11 @@ from domain.person_network_url import (
     parse_person_network_url,
     search_with_person,
 )
+from ui import api_client
+from ui.api_client import ApiError
+from ui.collaboration_params import ego_query_params, translate_api_error
 from ui.components.common import describe_config_error, register_loading_overlay_hider
 from ui.components.person_picker import build_person_chip
-from common.logger import logger
 from ..layout import (
     _EGO_LAYOUT,
     _EMPTY_STATE_STYLE,

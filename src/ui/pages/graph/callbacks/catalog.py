@@ -13,13 +13,13 @@ from dash.exceptions import MissingCallbackContextException, PreventUpdate
 from common.logger import logger
 from ui import api_client
 from ui.api_client import ApiError
-from ui.components.person_picker import build_person_chip, build_person_picker
 from ui.styles import (
     COLOR_CHARCOAL,
     COLOR_CHARCOAL_MEDIUM,
     COLOR_TEXT_SECONDARY,
     COLOR_GRAY_MEDIUM,
 )
+from ui.components.person_picker import build_person_chip, build_person_picker
 from ..utils import create_error_alert
 from ..utils.cypher_substitution import substitute_catalog_query_parameters
 
@@ -596,7 +596,10 @@ def render_catalog_query_detail(
                 trigger="hover",
                 placement="auto",
                 style={"maxWidth": "800px"},
-                class_name=f"popover-inverted theme-{'executive-dark' if (theme_name or 'executive-light') == 'executive-light' else 'executive-light'}",
+                class_name=(
+                    f"popover-inverted theme-"
+                    f"{'executive-dark' if (theme_name or 'executive-light') == 'executive-light' else 'executive-light'}"
+                ),
             )
         ])
 

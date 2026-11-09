@@ -15,4 +15,3 @@ def _connector_url() -> str:
 def _truncate(value: Any) -> str:
     """Return *value* as a string truncated to ``_TEXT_MAX`` characters."""
     return str(value)[:_TEXT_MAX]
-

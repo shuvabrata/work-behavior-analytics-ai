@@ -131,7 +131,7 @@ def refresh() -> None:
 # Non-destructive seed of env-configured values into the shared cache.
 runtime_settings.refresh(_seed_config(settings, runtime_settings.current()))
 
-_last_refresh: float = 0.0
+_last_refresh: float = 0.0  # pylint: disable=invalid-name
 _refresh_lock = threading.Lock()
 
 

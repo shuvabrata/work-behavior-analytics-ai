@@ -381,7 +381,7 @@ def remove_parameter(
 )
 def save_query(
     n_clicks: int | None,
-    route: dict[str, Any] | None,
+    _route: dict[str, Any] | None,
     pathname: str | None,
     name: str | None,
     description: str | None,
@@ -443,10 +443,10 @@ def save_query(
     prevent_initial_call=True,
 )
 def toggle_save_as_modal(
-    open_clicks: int | None,
-    cancel_clicks: int | None,
+    _open_clicks: int | None,
+    _cancel_clicks: int | None,
     namespaces: list[dict[str, Any]] | None,
-    is_open: bool | None,
+    _is_open: bool | None,
 ) -> tuple[bool, list[dict[str, str]], bool]:
     """Open/close the Save As modal and populate the namespace dropdown."""
     if not callback_context.triggered:
@@ -483,7 +483,7 @@ def toggle_custom_namespace(namespace_value: str | None) -> dict[str, Any]:
     prevent_initial_call=True,
 )
 def toggle_factory_diff_modal(
-    open_clicks: int | None, close_clicks: int | None
+    _open_clicks: int | None, _close_clicks: int | None
 ) -> bool:
     """Open the factory-diff modal, or close it. Deliberately issues no HTTP call."""
     if not callback_context.triggered:

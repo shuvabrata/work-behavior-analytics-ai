@@ -11,9 +11,9 @@ if TYPE_CHECKING:
     from common.activity_signal.models import ActivitySignal
 
 
-def wba_format(source: str, entity_type: str, id: str) -> str:
+def wba_format(source: str, entity_type: str, entity_id: str) -> str:
     """Return the WBA canonical node ID string: ``{source}::{entity_type}::{id}``."""
-    return f"{source}::{entity_type}::{id}"
+    return f"{source}::{entity_type}::{entity_id}"
 
 
 def wba_node_id(signal: "ActivitySignal") -> str:

@@ -59,11 +59,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.commands.v1.models import CreateCommandRequest
 from app.api.commands.v1.service import create_and_publish_command
-from domain.connector_registry import CONNECTOR_REGISTRY
 from app.db.models.command_status import CommandStatus
 from app.db.models.connector import Connector
 from app.db.models.scheduler_lease import SchedulerLease
 from app.db.session import ASYNC_SESSION_LOCAL
+from domain.connector_registry import CONNECTOR_REGISTRY
 from common.logger import logger
 
 

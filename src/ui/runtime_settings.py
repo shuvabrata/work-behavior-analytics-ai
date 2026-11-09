@@ -36,6 +36,8 @@ from common.logger import logger
 from common.runtime_settings import RuntimeConfig
 from domain.settings import UISettings
 from domain.timezone import runtime_settings
+from ui import api_client
+from ui.api_client import ApiError
 from ui.settings import settings
 
 #: Minimum seconds between two API snapshot fetches from the UI.
@@ -99,12 +101,6 @@ def refresh() -> None:
     values the cache already holds are preserved, exactly as the previous
     helper's fallback did.
     """
-    # Imported lazily: ui.api_client imports this module at module level, so a
-    # top-level import here is a cycle.
-    # pylint: disable=import-outside-toplevel
-    from ui import api_client
-    from ui.api_client import ApiError
-
     try:
         payload = api_client.get_json("/api/v1/settings/runtime-snapshot")
         snapshot = RuntimeConfig(**payload)
@@ -131,7 +127,7 @@ def refresh() -> None:
 # Non-destructive seed of env-configured values into the shared cache.
 runtime_settings.refresh(_seed_config(settings, runtime_settings.current()))
 
-_last_refresh: float = 0.0
+_last_refresh: float = 0.0  # pylint: disable=invalid-name
 _refresh_lock = threading.Lock()
 
 

@@ -10,13 +10,14 @@ from typing import Any
 import math
 import re
 from datetime import datetime
-from urllib.parse import quote
+from urllib.parse import parse_qs, quote, unquote
 
-from dash import callback, ctx, dcc, html, no_update, Input, Output, State
-from dash.exceptions import PreventUpdate
-from urllib.parse import parse_qs, unquote
 import dash_bootstrap_components as dbc
+from dash import Input, Output, State, callback, ctx, dcc, html, no_update
+from dash.exceptions import PreventUpdate
 
+from common.logger import logger
+from domain.es_indexes import MANAGED_INDEXES
 from domain.timezone import humanize_duration, to_app_timezone
 from ui import api_client
 from ui.api_client import AuthExpiredError, PermissionDeniedError
@@ -53,8 +54,6 @@ from ui.styles import (
     CARD_CONTAINER_STYLE,
 )
 from ui.runtime_settings import runtime_settings
-from domain.es_indexes import MANAGED_INDEXES
-from common.logger import logger
 
 
 # ---------------------------------------------------------------------------
@@ -827,7 +826,18 @@ def get_layout() -> html.Div:
                                             {
                                                 "label": html.Span([
                                                     "Person only",
-                                                    html.Span(html.I(className="fas fa-info-circle"), id="search-person-only-help", style={"marginLeft": "6px", "color": COLOR_GRAY_MEDIUM, "fontSize": "12px", "cursor": "help", "display": "inline-flex", "alignItems": "center"})
+                                                    html.Span(
+                                                        html.I(className="fas fa-info-circle"),
+                                                        id="search-person-only-help",
+                                                        style={
+                                                            "marginLeft": "6px",
+                                                            "color": COLOR_GRAY_MEDIUM,
+                                                            "fontSize": "12px",
+                                                            "cursor": "help",
+                                                            "display": "inline-flex",
+                                                            "alignItems": "center",
+                                                        },
+                                                    ),
                                                 ]),
                                                 "value": "person_only",
                                             }

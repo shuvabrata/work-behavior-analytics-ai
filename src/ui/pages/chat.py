@@ -167,10 +167,9 @@ def initialize_session(current_data: dict[str, Any] | None) -> dict[str, Any]:
             if data.get("exists"):
                 # Session exists, return current data
                 return current_data
-            else:
-                # Session doesn't exist, create new one
-                print(f"Session {session_id} not found in backend, creating new session")
-                current_data = None
+            # Session doesn't exist, create new one
+            print(f"Session {session_id} not found in backend, creating new session")
+            current_data = None
         except ApiError:
             # If any error, treat as invalid session and create new one
             print("Session validation failed, creating new session")

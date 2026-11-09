@@ -736,7 +736,7 @@ def render_items_list(store: Dict[str, Any] | None) -> List[Any]:
 )
 def handle_item_edit(
     _clicks: List[int | None],
-    ids: List[Dict[str, Any]],
+    _ids: List[Dict[str, Any]],
     store: Dict[str, Any] | None,
 ) -> tuple[Dict[str, Any] | Any, bool | Any]:
     triggered = callback_context.triggered_id
@@ -775,7 +775,7 @@ def handle_item_edit(
 )
 def handle_item_save(
     _clicks: List[int | None],
-    button_ids: List[Dict[str, Any]],
+    _button_ids: List[Dict[str, Any]],
     field_ids: List[Dict[str, Any]],
     field_values: List[Any],
     edit_state: Dict[str, Any] | None,
@@ -1047,7 +1047,7 @@ def handle_mcp_test_connection(_clicks: List[int | None]) -> dbc.Alert | Any:
     State("url", "pathname"),
     prevent_initial_call=True,
 )
-def handle_cancel_scan(n_clicks: List[int | None], pathname: str | None) -> dbc.Alert | Any:
+def handle_cancel_scan(_n_clicks: List[int | None], pathname: str | None) -> dbc.Alert | Any:
     """Cancel a running scan by sending a cancel command via the API."""
     if not callback_context.triggered:
         return no_update
@@ -1115,7 +1115,7 @@ def handle_cancel_scan(n_clicks: List[int | None], pathname: str | None) -> dbc.
 )
 def handle_connector_save(
     _clicks: List[int | None],
-    button_ids: List[Dict[str, Any]],
+    _button_ids: List[Dict[str, Any]],
     field_ids: List[Dict[str, Any]],
     field_values: List[Any],
     scan_interval_values: List[Any],

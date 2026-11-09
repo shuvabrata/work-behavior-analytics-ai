@@ -12,13 +12,14 @@ from langchain_neo4j import Neo4jGraph, GraphCypherQAChain
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import PromptTemplate
 
-from app.api.graph.v1.query import execute_cypher_query, validate_read_only_query
 from common.logger import logger
+from app.ai_agent.providers import get_provider
+from app.api.graph.v1.query import execute_cypher_query, validate_read_only_query
 from app.runtime_settings import runtime_settings
 from app.settings import settings
 
 # Initialize Neo4j graph connection (lazy initialization)
-_neo4j_graph = None
+_neo4j_graph = None  # pylint: disable=invalid-name
 
 
 def load_neo4j_prompt() -> str:
@@ -206,7 +207,6 @@ def check_neo4j_relevance(
     """
     # If no provider given, we'll need to import and get default provider
     if provider is None:
-        from app.ai_agent.providers import get_provider
         provider = get_provider()
 
     history_block = _format_history_block(conversation_history)
@@ -256,7 +256,6 @@ def query_neo4j_with_chain(
     """
     # If no provider given, we'll need to import and get default provider
     if provider is None:
-        from app.ai_agent.providers import get_provider
         provider = get_provider()
         
     graph = get_neo4j_graph()
@@ -394,7 +393,6 @@ def augment_message_with_neo4j(
     """
     # If no provider given, we'll need to import and get default provider
     if provider is None:
-        from app.ai_agent.providers import get_provider
         provider = get_provider()
         
     if not settings.NEO4J_AI_LOOKUP_ENABLED:

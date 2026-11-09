@@ -26,11 +26,10 @@ def format_property_value(value: Any) -> html.Pre | html.Span:
             str(value),
             style=PROPERTY_COMPLEX_VALUE_STYLE
         )
-    else:
-        return html.Span(
-            str(value),
-            style=PROPERTY_SIMPLE_VALUE_STYLE
-        )
+    return html.Span(
+        str(value),
+        style=PROPERTY_SIMPLE_VALUE_STYLE
+    )
 
 
 def build_property_items(properties: dict[str, Any]) -> list[html.Div]:

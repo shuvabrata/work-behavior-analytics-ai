@@ -135,7 +135,8 @@ clientside_callback(
             // because the table body is set via innerHTML and the children
             // output returns no_update. q.id is a path-safe "namespace/slug",
             // so embedding it in the URL is safe.
-            var editBtn = '<button class="btn btn-primary btn-sm me-1" data-action="edit" data-id="' + esc(q.id) + '" onclick="window.location.href=&quot;/app/catalog/edit/' + q.id + '&quot;">Edit</button>';
+            var editBtn = '<button class="btn btn-primary btn-sm me-1" data-action="edit" ' +
+                'data-id="' + esc(q.id) + '" onclick="window.location.href=&quot;/app/catalog/edit/' + q.id + '&quot;">Edit</button>';
 
             rows.push(
                 '<tr data-namespace="' + esc(ns) + '" data-search="' + esc(searchable(q)) + '"' +

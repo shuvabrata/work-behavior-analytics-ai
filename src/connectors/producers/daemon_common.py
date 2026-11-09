@@ -109,7 +109,7 @@ runtime_cache: RuntimeConfigCache = RuntimeConfigCache()
 # and refreshes the local runtime settings cache.  Startup failure is
 # non-fatal — the process continues with the startup snapshot.
 # Initialised lazily by ``run_daemon()``.
-_settings_listener_thread: threading.Thread | None = None
+_settings_listener_thread: threading.Thread | None = None  # pylint: disable=invalid-name
 
 
 async def _apply_settings_changed(changed_keys: list[str]) -> None:
@@ -674,7 +674,9 @@ def run_daemon(
 def run_scan(
     *,
     command_id: uuid.UUID,
-    parameters: dict[str, Any],
+    # 'parameters' is part of the keyword-only dispatcher interface and cannot be renamed
+    # to '_parameters' without breaking external callers passing keyword arguments.
+    parameters: dict[str, Any],  # pylint: disable=unused-argument
     scan_func: Callable[[], Coroutine[Any, Any, ScanResult]],
 ) -> None:
     """Scan mode entry point — run scan and report status.

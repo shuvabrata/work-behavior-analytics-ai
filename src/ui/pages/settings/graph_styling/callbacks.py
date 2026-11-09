@@ -582,7 +582,7 @@ def save_theme(
     return _feedback_alert(f"Saved \u201c{updated['name']}\u201d.", "success"), by_id
 
 
-# \u2500\u2500 Save As\u2026 modal callbacks \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+# ── Save As… modal callbacks ──────────────────────────────────────────
 
 
 @callback(
@@ -843,4 +843,3 @@ def execute_delete(
         all_data.append({str(t["id"]): t for t in themes})
 
     return _feedback_alert("Theme deleted.", "success"), all_options, all_data
-

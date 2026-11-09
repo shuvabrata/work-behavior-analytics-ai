@@ -4,6 +4,6 @@ Importing this package registers all Dash callbacks for the collab page.
 """
 
 from . import display  # noqa: F401
-from . import filter  # noqa: F401
+from . import filter  # noqa: F401  # pylint: disable=redefined-builtin
 from . import navigation  # noqa: F401
 from . import spotlight  # noqa: F401

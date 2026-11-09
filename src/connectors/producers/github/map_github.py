@@ -113,6 +113,17 @@ def map_commit(
     }
 
 
+_EXT_TO_LANG = {
+    ".py": "Python", ".go": "Go", ".yaml": "YAML", ".yml": "YAML",
+    ".ts": "TypeScript", ".tsx": "TypeScript", ".js": "JavaScript", ".jsx": "JavaScript",
+    ".swift": "Swift", ".java": "Java", ".c": "C", ".cpp": "C++", ".h": "C/C++",
+    ".rs": "Rust", ".rb": "Ruby", ".php": "PHP", ".cs": "C#",
+    ".md": "Markdown", ".json": "JSON", ".sh": "Shell", ".css": "CSS",
+    ".html": "HTML", ".xml": "XML", ".sql": "SQL", ".txt": "Text",
+}
+_TEST_PATTERNS = ("test", "spec", "__tests__", "tests/", ".test.", ".spec.")
+
+
 def map_commit_files(files: List[Any]) -> List[Dict[str, Any]]:
     """Normalise a list of commit file objects.
 
@@ -123,15 +134,6 @@ def map_commit_files(files: List[Any]) -> List[Dict[str, Any]]:
         List of dicts with keys: ``filename``, ``additions``, ``deletions``,
         ``name``, ``extension``, ``language``, ``is_test``.
     """
-    _EXT_TO_LANG = {
-        ".py": "Python", ".go": "Go", ".yaml": "YAML", ".yml": "YAML",
-        ".ts": "TypeScript", ".tsx": "TypeScript", ".js": "JavaScript", ".jsx": "JavaScript",
-        ".swift": "Swift", ".java": "Java", ".c": "C", ".cpp": "C++", ".h": "C/C++",
-        ".rs": "Rust", ".rb": "Ruby", ".php": "PHP", ".cs": "C#",
-        ".md": "Markdown", ".json": "JSON", ".sh": "Shell", ".css": "CSS",
-        ".html": "HTML", ".xml": "XML", ".sql": "SQL", ".txt": "Text",
-    }
-    _TEST_PATTERNS = ("test", "spec", "__tests__", "tests/", ".test.", ".spec.")
     result = []
     for f in files:
         filename: str = f.filename

@@ -25,6 +25,7 @@ from __future__ import annotations
 from flask import Flask, Response, jsonify, request
 
 from common.logger import logger
+from ui import api_client
 from ui.auth import SESSION_COOKIE_NAME, current_session_id
 
 #: Paths served before a session exists. ``/app/assets/`` is Dash's static
@@ -80,8 +81,6 @@ def _session_is_rejected() -> bool:
     valid but the principal lacks a role, and a transport failure means the API
     could not be reached — neither is proof, so both let the request through.
     """
-    from ui import api_client
-
     try:
         api_client.get(_ME_PATH)
     except api_client.AuthExpiredError:

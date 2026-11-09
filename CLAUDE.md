@@ -63,7 +63,7 @@ API_BASE_URL=http://127.0.0.1:8000 PYTHONPATH=src \
 
 - `pytest -q -m unit tests --cov=src`
 - `mypy src/` — **strict** (`disallow_untyped_defs`, `disallow_untyped_calls`). Only `ui.*` relaxes `return-value, index, union-attr`. Every new function needs full annotations.
-- `pylint src` — the repo-wide score must stay **≥ 9.0**
+- `pylint src` — the repo-wide score must stay **≥ 10.0**
 - `bandit -c .bandit.yml -r src/ -lll` — fails on High severity
 - **Spec freshness** — CI regenerates `docs/design/spec-activity-signal.md` and fails if the committed file differs. After changing ActivitySignal models, run the generator above and leave the regenerated doc in the working tree; it must ship in the same change as the model update or CI fails.
 

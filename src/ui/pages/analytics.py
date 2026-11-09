@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Any
 from urllib.parse import urlencode
 
-from dash import ALL, Input, Output, State, callback, clientside_callback, ctx, html
+from dash import ALL, Input, Output, State, callback, clientside_callback, html
 import dash_bootstrap_components as dbc
 
 from domain.collaboration.config import (
@@ -191,7 +191,7 @@ def _is_integer_field(key: str) -> bool:
     the same declaration the schema is generated from, so the single-source
     property is unchanged.
     """
-    return CollaborationNetworkConfig.model_fields[key].annotation is int
+    return CollaborationNetworkConfig.model_fields[key].annotation is int  # pylint: disable=unsubscriptable-object
 
 
 def _field_label(text: str) -> html.Div:

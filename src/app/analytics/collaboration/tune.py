@@ -15,22 +15,25 @@ Exit codes:
   2  — no data found (graph is empty)
 """
 
-from typing import Any
+import argparse
+from collections import defaultdict
 import os
+from pathlib import Path
 import sys
 import time
-from collections import defaultdict
-from pathlib import Path
+from typing import Any
 
 from dotenv import load_dotenv
 from neo4j import GraphDatabase
+import networkx as nx
 
 # ---------------------------------------------------------------------------
-# Environment setup
+# Environment setup — must load .env before NEO4J_* module constants evaluate
 # ---------------------------------------------------------------------------
 project_root = Path(__file__).resolve().parent.parent.parent.parent
 load_dotenv(project_root / ".env")
 
+# pylint: disable=wrong-import-position
 from app.analytics.collaboration.algorithm import (
     build_graph,
     detect_communities,
@@ -90,9 +93,6 @@ def _section(title: str) -> None:
 
 def run_diagnostics(records: list[Any], verbose: bool = False) -> None:
     """Print the full diagnostic report for a set of collaboration records."""
-
-    import networkx as nx
-
     _section("1 / 4  Graph Statistics")
     g = build_graph(records)
 
@@ -154,8 +154,8 @@ def run_diagnostics(records: list[Any], verbose: bool = False) -> None:
     for cid in sorted(community_members, key=lambda c: -len(community_members[c])):
         members = community_members[cid]
         size = len(members)
-        bar = _bar(size, max_size)
-        print(f"  Community {cid:>2}  [{bar}]  {size:>3} members")
+        bar_str = _bar(size, max_size)
+        print(f"  Community {cid:>2}  [{bar_str}]  {size:>3} members")
 
     singletons = sum(1 for s in community_sizes if s == 1)
     if singletons > 0:
@@ -168,9 +168,9 @@ def run_diagnostics(records: list[Any], verbose: bool = False) -> None:
     max_hub = top_hubs[0][1] if top_hubs else 1
 
     for name, score in top_hubs:
-        bar = _bar(score, max_hub)
+        bar_str = _bar(score, max_hub)
         cid = partition.get(name, -1)
-        print(f"  C{cid:<2}  [{bar}]  {score:>6.0f}  {name}")
+        print(f"  C{cid:<2}  [{bar_str}]  {score:>6.0f}  {name}")
 
     # ---------------------------------------------------------------------------
     if verbose:
@@ -198,8 +198,6 @@ def run_diagnostics(records: list[Any], verbose: bool = False) -> None:
 # ---------------------------------------------------------------------------
 
 def main() -> None:
-    import argparse
-
     parser = argparse.ArgumentParser(
         description="Tune collaboration network community detection weights.",
         formatter_class=argparse.RawDescriptionHelpFormatter,

@@ -974,15 +974,34 @@ def _get_manual_setup_layout(connector_type: str, connector_meta: dict[str, Any]
                             _section_title("App Service — Required Variables"),
                             html.Div(
                                 "Set these in the",
-                                style={"fontFamily": FONT_SANS, "fontSize": FONT_SIZE_SMALL, "color": COLOR_GRAY_MEDIUM, "marginBottom": SPACING_XSMALL, "display": "inline"},
+                                style={
+                                    "fontFamily": FONT_SANS,
+                                    "fontSize": FONT_SIZE_SMALL,
+                                    "color": COLOR_GRAY_MEDIUM,
+                                    "marginBottom": SPACING_XSMALL,
+                                    "display": "inline",
+                                },
                             ),
                             html.Code(
                                 " app ",
-                                style={"fontFamily": "monospace", "fontSize": FONT_SIZE_SMALL, "color": COLOR_CHARCOAL_MEDIUM, "backgroundColor": COLOR_CODE_BACKGROUND, "padding": "2px 6px", "borderRadius": "2px"},
+                                style={
+                                    "fontFamily": "monospace",
+                                    "fontSize": FONT_SIZE_SMALL,
+                                    "color": COLOR_CHARCOAL_MEDIUM,
+                                    "backgroundColor": COLOR_CODE_BACKGROUND,
+                                    "padding": "2px 6px",
+                                    "borderRadius": "2px",
+                                },
                             ),
                             html.Div(
                                 "service environment in docker-compose.yml:",
-                                style={"fontFamily": FONT_SANS, "fontSize": FONT_SIZE_SMALL, "color": COLOR_GRAY_MEDIUM, "marginBottom": SPACING_SMALL, "display": "inline"},
+                                style={
+                                    "fontFamily": FONT_SANS,
+                                    "fontSize": FONT_SIZE_SMALL,
+                                    "color": COLOR_GRAY_MEDIUM,
+                                    "marginBottom": SPACING_SMALL,
+                                    "display": "inline",
+                                },
                             ),
                             html.Table(
                                 [
@@ -1019,7 +1038,12 @@ def _get_manual_setup_layout(connector_type: str, connector_meta: dict[str, Any]
                             _section_title("Applying Changes"),
                             html.Div(
                                 "After editing environment variables in docker-compose.yml, restart the affected services:",
-                                style={"fontFamily": FONT_SANS, "fontSize": FONT_SIZE_SMALL, "color": COLOR_GRAY_MEDIUM, "marginBottom": SPACING_XSMALL},
+                                style={
+                                    "fontFamily": FONT_SANS,
+                                    "fontSize": FONT_SIZE_SMALL,
+                                    "color": COLOR_GRAY_MEDIUM,
+                                    "marginBottom": SPACING_XSMALL,
+                                },
                             ),
                             html.Pre(
                                 "docker compose stop app github-mcp\ndocker compose up -d app github-mcp",

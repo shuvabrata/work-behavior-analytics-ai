@@ -30,8 +30,8 @@ from typing import Any
 import requests
 from requests import RequestException as RequestsTransportError
 
+from domain.timezone import runtime_settings
 from ui.auth import SessionMissingError, TokenExchangeUnavailableError, get_token
-from ui.runtime_settings import runtime_settings
 from ui.settings import settings
 
 __all__ = [
@@ -57,7 +57,7 @@ STATUS_NO_RESPONSE = 0
 #: The transport seam's type: ``requests.request``-compatible.
 Transport = Callable[..., requests.Response]
 
-_transport: Transport | None = None
+_transport: Transport | None = None  # pylint: disable=invalid-name
 
 
 class ApiError(Exception):

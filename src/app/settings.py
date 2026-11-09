@@ -11,8 +11,9 @@ database URL — the type system enforces the runtime boundary (Decision 3 of
 plan 052).
 """
 
-from domain.settings import UISettings
 from pydantic import Field
+
+from domain.settings import UISettings
 
 
 class ApiSettings(UISettings):

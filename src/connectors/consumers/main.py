@@ -40,21 +40,21 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+import aio_pika
 from neo4j import GraphDatabase
 
+from common.logger import logger
 from common.messaging.rabbitmq import RabbitMQConsumer
+from common.messaging.settings_events import listen_for_settings_changed
+from common.runtime_settings import RuntimeConfigCache
+from common.runtime_settings.client import fetch_runtime_snapshot
 from connectors.commons.person_cache import PersonCache
 from connectors.consumers.activity_writer import ActivityWriter
-from connectors.consumers.sinks.neo4j_sink import upsert_signal
 from connectors.consumers.sinks.elasticsearch_sink import (
     build_es_client,
     index_signal_with_canonical_id,
 )
-from common.logger import logger
-from common.runtime_settings import RuntimeConfigCache
-from common.runtime_settings.client import fetch_runtime_snapshot
-from common.messaging.settings_events import listen_for_settings_changed
-import aio_pika
+from connectors.consumers.sinks.neo4j_sink import upsert_signal
 
 # ── Module-level runtime settings cache ──────────────────────────────────
 # Initialised with all-defaults.  Refreshed once at consumer startup.

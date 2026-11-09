@@ -78,7 +78,7 @@ def _internal_jwks_uri(discovery: dict[str, object]) -> str:
     return urlunsplit((internal.scheme, internal.netloc, public.path, "", ""))
 
 
-_jwks_client: jwt.PyJWKClient | None = None
+_jwks_client: jwt.PyJWKClient | None = None  # pylint: disable=invalid-name
 
 
 def _get_jwks_client() -> jwt.PyJWKClient:

@@ -19,15 +19,17 @@ import re
 from pathlib import Path
 from typing import Any, AsyncIterator
 
+from common.logger import logger
 from app.api.search.v1.model import SearchRequest, SearchResponse
 from app.api.search.v1.service import search as es_search
 from app.settings import settings
-from common.logger import logger
 
 # ---------------------------------------------------------------------------
-# Prompt loading
+# Prompt loading & field definitions
 # ---------------------------------------------------------------------------
 
+_VALID_FIELDS = {"q", "entity_type", "source", "status", "priority", "date_from", "date_to"}
+_SKIP_FIELDS = {"wba_id", "id", "url", "event_time"}
 _ES_PROMPT: str = ""
 
 
@@ -196,7 +198,6 @@ def generate_search_request(
         return None
 
     # Validate and build SearchRequest — unknown keys are silently dropped
-    _VALID_FIELDS = {"q", "entity_type", "source", "status", "priority", "date_from", "date_to"}
     filtered = {k: v for k, v in parsed.items() if k in _VALID_FIELDS and v is not None}
 
     try:
@@ -271,7 +272,6 @@ def _format_results(response: SearchResponse) -> str:
         # Include all stored attributes (full=True), truncating long strings
         if result.attributes:
             # Skip fields already shown above or internal fields
-            _SKIP_FIELDS = {"wba_id", "id", "url", "event_time"}
             for key, value in result.attributes.items():
                 if key in _SKIP_FIELDS or value is None:
                     continue

@@ -74,7 +74,7 @@ def update_layout(layout_name: Any, reset_clicks: Any, current_layout: Any) -> A
         return {'name': layout_name, 'animate': True}
 
     # Reset button clicked - re-run current layout algorithm to reset node positions
-    elif trigger_id == 'graph-reset-btn':
+    if trigger_id == 'graph-reset-btn':
         # Use current layout name, or default to cose
         current_name = current_layout.get('name', 'cose') if current_layout else 'cose'
 
@@ -124,6 +124,3 @@ def update_graph_stylesheet(theme_name: str | None) -> list[dict[str, Any]]:
     effective = fetch_effective_theme(active_theme)
 
     return build_cytoscape_stylesheet(active_theme, effective=effective)
-
-
-

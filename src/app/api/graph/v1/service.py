@@ -1,23 +1,22 @@
 """Service layer for Graph API v1 - business logic and data transformation."""
 
 from typing import Any, Dict, List, Set
-from neo4j.graph import Node, Path, Relationship
 
-from common.logger import logger
+from app.analytics.collaboration.algorithm import (
+    build_graph,
+    compute_hub_scores,
+    compute_modularity,
+    detect_communities,
+    filter_top_edges_per_node,
+    to_cytoscape_elements,
+)
+from app.analytics.collaboration.ego import build_ego_elements
+from app.analytics.collaboration.queries_loader import load_collaboration_score_query
 from app.query_catalog import CatalogLoadError, CatalogQuery, get_catalog_query
 from app.runtime_settings import runtime_settings
-from app.analytics.collaboration.algorithm import (
-        build_graph,
-        detect_communities,
-        compute_hub_scores,
-        compute_modularity,
-    filter_top_edges_per_node,
-        to_cytoscape_elements,
-    )
+from common.logger import logger
 from domain.collaboration.config import CollaborationNetworkConfig
-from app.analytics.collaboration.ego import build_ego_elements
 from domain.collaboration.errors import CollaborationDataUnavailable
-from app.analytics.collaboration.queries_loader import load_collaboration_score_query
 from domain.person_network_url import DEFAULT_MAX_COLLABORATORS
 from .model import (
     CollaborationNetworkResponse,
@@ -207,9 +206,8 @@ def _format_query_results(
                     if rel.id not in relationship_ids and rel.startNode in nodes_dict and rel.endNode in nodes_dict:
                         relationships_list.append(rel)
                         relationship_ids.add(rel.id)
-                    else:
-                        if rel.startNode not in nodes_dict or rel.endNode not in nodes_dict:
-                            missing_endpoint_count += 1
+                    elif rel.startNode not in nodes_dict or rel.endNode not in nodes_dict:
+                        missing_endpoint_count += 1
             
             logger.info(
                 "After fetching implicit relationships: "
@@ -224,26 +222,25 @@ def _format_query_results(
             isGraph=True,
             resultCount=len(raw_results)
         )
-    
-    else:
-        # Tabular data: convert to serializable format
-        logger.info("Detected tabular data. Returning raw results.")
-        serializable_results = []
-        
-        for record in raw_results:
-            serializable_record = {}
-            for key, value in record.items():
-                # Convert any remaining Neo4j types to JSON-serializable
-                serializable_record[key] = _make_serializable(value)
-            serializable_results.append(serializable_record)
-        
-        return GraphResponse(
-            nodes=[],
-            relationships=[],
-            rawResults=serializable_results,
-            isGraph=False,
-            resultCount=len(serializable_results)
-        )
+
+    # Tabular data: convert to serializable format
+    logger.info("Detected tabular data. Returning raw results.")
+    serializable_results = []
+
+    for record in raw_results:
+        serializable_record = {}
+        for key, value in record.items():
+            # Convert any remaining Neo4j types to JSON-serializable
+            serializable_record[key] = _make_serializable(value)
+        serializable_results.append(serializable_record)
+
+    return GraphResponse(
+        nodes=[],
+        relationships=[],
+        rawResults=serializable_results,
+        isGraph=False,
+        resultCount=len(serializable_results)
+    )
 
 
 

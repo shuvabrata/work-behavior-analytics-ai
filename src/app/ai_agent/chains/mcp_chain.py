@@ -6,8 +6,9 @@ import asyncio
 import json
 from typing import Any, AsyncIterator
 
-from app.ai_agent.mcp_integration.tool_executor import execute_tool_call, list_available_tools, _build_atlassian_manager
 from common.logger import logger
+from app.ai_agent.mcp_integration.tool_executor import execute_tool_call, list_available_tools, _build_atlassian_manager
+from app.ai_agent.providers import get_provider
 from app.settings import settings
 
 
@@ -140,8 +141,6 @@ async def augment_message_with_mcp_stream(
     }
 
     if provider is None:
-        from app.ai_agent.providers import get_provider  # noqa: PLC0415
-
         provider = get_provider()
 
     # ── Step 1: relevance check ───────────────────────────────────────────────

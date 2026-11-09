@@ -126,7 +126,7 @@ def _make_serializable(value: Any) -> Any:
             "labels": list(value.labels),
             "properties": dict(value)
         }
-    elif isinstance(value, Relationship):
+    if isinstance(value, Relationship):
         start_node = cast(Node, value.start_node)
         end_node = cast(Node, value.end_node)
         return {
@@ -136,18 +136,17 @@ def _make_serializable(value: Any) -> Any:
             "endNode": end_node.element_id,
             "properties": dict(value)
         }
-    elif isinstance(value, Path):
+    if isinstance(value, Path):
         return {
             "nodes": [_make_serializable(node) for node in value.nodes],
             "relationships": [_make_serializable(rel) for rel in value.relationships],
         }
-    elif isinstance(value, (list, tuple)):
+    if isinstance(value, (list, tuple)):
         return [_make_serializable(item) for item in value]
-    elif isinstance(value, dict):
+    if isinstance(value, dict):
         return {k: _make_serializable(v) for k, v in value.items()}
-    elif hasattr(value, 'iso_format'):
+    if hasattr(value, 'iso_format'):
         return value.iso_format()
-    elif hasattr(value, '__str__') and type(value).__module__ == 'neo4j.time':
+    if hasattr(value, '__str__') and type(value).__module__ == 'neo4j.time':
         return str(value)
-    else:
-        return value
+    return value

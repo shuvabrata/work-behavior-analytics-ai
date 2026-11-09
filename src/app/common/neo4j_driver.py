@@ -15,11 +15,11 @@ from typing import Any
 from neo4j import GraphDatabase
 from neo4j.exceptions import ServiceUnavailable
 
-from app.settings import settings
 from common.logger import logger
+from app.settings import settings
 
 _driver_lock = threading.Lock()
-_driver_instance = None
+_driver_instance = None  # pylint: disable=invalid-name
 
 
 def get_driver() -> Any:

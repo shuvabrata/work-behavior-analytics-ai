@@ -13,7 +13,7 @@ from collections import defaultdict
 from typing import Any, Dict, List
 
 import networkx as nx
-import community.community_louvain as community_louvain
+from community import community_louvain
 from matplotlib.colors import LinearSegmentedColormap
 
 from domain.node_size import apply_node_size
@@ -85,7 +85,7 @@ def _weight_to_hex(normalized: float) -> str:
         Six-digit CSS hex string, e.g. ``"#b91c1c"``.
     """
     r, g, b, _ = COLLAB_EDGE_CMAP(max(0.0, min(1.0, normalized)))
-    return "#{:02x}{:02x}{:02x}".format(int(r * 255), int(g * 255), int(b * 255))
+    return f"#{int(r * 255):02x}{int(g * 255):02x}{int(b * 255):02x}"
 
 # Number of distinct community colours supported in the Cytoscape stylesheet.
 # Community IDs are clamped to this range so we never exceed the defined styles.
@@ -93,6 +93,9 @@ MAX_COMMUNITY_STYLES = 20
 
 # Louvain can otherwise produce different valid partitions for the same graph.
 LOUVAIN_RANDOM_STATE = 42
+
+_NODE_SIZE_MIN = 0.25
+_NODE_SIZE_MAX = 2.0
 
 
 def normalize_edge_weights(g: nx.Graph) -> Dict[tuple[str, str], float]:
@@ -313,8 +316,6 @@ def to_cytoscape_elements(
 
     # Pre-compute log-normalized _node_size multipliers in [0.25, 2.0].
     # log(score + 1) compresses large outlier scores so hubs don't dwarf peers.
-    _NODE_SIZE_MIN = 0.25
-    _NODE_SIZE_MAX = 2.0
     log_scores = {node: math.log(hub_scores.get(node, 0.0) + 1) for node in g.nodes()}
     ls_min = min(log_scores.values(), default=0.0)
     ls_max = max(log_scores.values(), default=0.0)
@@ -374,9 +375,12 @@ def to_cytoscape_elements(
                 "id": edge_id,
                 "source": canonical_source,
                 "target": canonical_target,
-                "weight": raw_weight,                                                             # raw — used by filters and details panel
-                "normalized_weight": round(normalized_0_1 * 100, 1),                             # 0–100 log-scaled — retained for potential future use
-                "_edge_line_color": _weight_to_hex(normalized_0_1),                              # pre-computed hex — read by stylesheet via data(_edge_line_color); underscore hides it from the panel
+                # raw — used by filters and details panel
+                "weight": raw_weight,
+                # 0–100 log-scaled — retained for potential future use
+                "normalized_weight": round(normalized_0_1 * 100, 1),
+                # pre-computed hex — read by stylesheet via data(_edge_line_color); underscore hides it from panel
+                "_edge_line_color": _weight_to_hex(normalized_0_1),
                 "relType": "COLLABORATES",
                 "elementType": "edge",
             },

@@ -1,11 +1,15 @@
-import os
+# pylint: disable=too-many-instance-attributes
+
+import contextvars
 from datetime import datetime, timezone
+import json
 import logging
+import os
 import sys
 import traceback
-import json
-import contextvars
-import requests 
+from typing import Any, Optional, Type
+
+import requests
 
 # ANSI Color codes for terminal output
 class Colors:
@@ -45,8 +49,7 @@ project_id_var = contextvars.ContextVar('project_id', default='')
 user_id_var = contextvars.ContextVar('user_id', default='')
 request_id_var = contextvars.ContextVar('request_id', default='')
 
-# pylint: disable=too-many-instance-attributes
-from typing import Optional, Any, Type, Tuple
+
 
 class LogContext:
     def __init__(self, project_id: Optional[str] = None, 

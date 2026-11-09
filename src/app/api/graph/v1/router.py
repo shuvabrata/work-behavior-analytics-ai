@@ -163,15 +163,14 @@ async def expand_node(request: NodeExpansionRequest) -> NodeExpansionResponse:
                     "node_id": request.node_id
                 }
             ) from e
-        else:
-            raise HTTPException(
-                status_code=400,
-                detail={
-                    "error": "Invalid request",
-                    "message": str(e),
-                    "node_id": request.node_id
-                }
-            ) from e
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "Invalid request",
+                "message": str(e),
+                "node_id": request.node_id
+            }
+        ) from e
         
     except RuntimeError as e:
         # Neo4j execution errors

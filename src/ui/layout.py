@@ -1,11 +1,11 @@
 from typing import Any
+from urllib.parse import quote
+
 import dash
 import dash_bootstrap_components as dbc
-from dash import dcc, html
+from dash import clientside_callback, dcc, html
 from dash.dependencies import Input, Output, State
-from dash import clientside_callback
 from dash.exceptions import PreventUpdate
-from urllib.parse import quote
 
 from ui.pages import analytics, chat, collaboration_network, collaboration_network_ego, connectors, graph, search, settings, timeline, catalog
 from ui.components.account_bar import get_account_bar_layout
@@ -40,14 +40,46 @@ def create_dash_app() -> dash.Dash:
     # Sidebar using Bootstrap Nav - Executive Dashboard style
     sidebar = dbc.Nav(
         [
-            dbc.NavLink([html.I(className="fas fa-comment-dots fa-fw me-2", title="Chat"), html.Span("Chat", className="sidebar-text")], href="/app/chat", active="exact", id="nav-genai", className="executive-nav-link d-flex align-items-center text-nowrap"),
-            dbc.NavLink([html.I(className="fas fa-search fa-fw me-2", title="Search"), html.Span("Search", className="sidebar-text")], href="/app/search", active="exact", id="nav-search", className="executive-nav-link d-flex align-items-center text-nowrap"),
-            dbc.NavLink([html.I(className="fas fa-project-diagram fa-fw me-2", title="Graph"), html.Span("Graph", className="sidebar-text")], href="/app/graph", active="exact", id="nav-graph", className="executive-nav-link d-flex align-items-center text-nowrap"),
-            dbc.NavLink([html.I(className="fas fa-timeline fa-fw me-2", title="Timeline"), html.Span("Timeline", className="sidebar-text")], href="/app/timeline", active="exact", id="nav-timeline", className="executive-nav-link d-flex align-items-center text-nowrap"),
-            dbc.NavLink([html.I(className="fas fa-chart-pie fa-fw me-2", title="Analytics"), html.Span("Analytics", className="sidebar-text")], href="/app/analytics", active="exact", id="nav-analytics", className="executive-nav-link d-flex align-items-center text-nowrap"),
-            dbc.NavLink([html.I(className="fas fa-book-open fa-fw me-2", title="Catalog"), html.Span("Catalog", className="sidebar-text")], href="/app/catalog", active="exact", id="nav-catalog", className="executive-nav-link d-flex align-items-center text-nowrap"),
-            dbc.NavLink([html.I(className="fas fa-plug fa-fw me-2", title="Connectors"), html.Span("Connectors", className="sidebar-text")], href="/app/connectors", active="exact", id="nav-connectors", className="executive-nav-link d-flex align-items-center text-nowrap"),
-            dbc.NavLink([html.I(className="fas fa-cog fa-fw me-2", title="Settings"), html.Span("Settings", className="sidebar-text")], href="/app/settings", active="exact", id="nav-settings", className="executive-nav-link d-flex align-items-center text-nowrap"),
+            dbc.NavLink(
+                [html.I(className="fas fa-comment-dots fa-fw me-2", title="Chat"), html.Span("Chat", className="sidebar-text")],
+                href="/app/chat", active="exact", id="nav-genai",
+                className="executive-nav-link d-flex align-items-center text-nowrap",
+            ),
+            dbc.NavLink(
+                [html.I(className="fas fa-search fa-fw me-2", title="Search"), html.Span("Search", className="sidebar-text")],
+                href="/app/search", active="exact", id="nav-search",
+                className="executive-nav-link d-flex align-items-center text-nowrap",
+            ),
+            dbc.NavLink(
+                [html.I(className="fas fa-project-diagram fa-fw me-2", title="Graph"), html.Span("Graph", className="sidebar-text")],
+                href="/app/graph", active="exact", id="nav-graph",
+                className="executive-nav-link d-flex align-items-center text-nowrap",
+            ),
+            dbc.NavLink(
+                [html.I(className="fas fa-timeline fa-fw me-2", title="Timeline"), html.Span("Timeline", className="sidebar-text")],
+                href="/app/timeline", active="exact", id="nav-timeline",
+                className="executive-nav-link d-flex align-items-center text-nowrap",
+            ),
+            dbc.NavLink(
+                [html.I(className="fas fa-chart-pie fa-fw me-2", title="Analytics"), html.Span("Analytics", className="sidebar-text")],
+                href="/app/analytics", active="exact", id="nav-analytics",
+                className="executive-nav-link d-flex align-items-center text-nowrap",
+            ),
+            dbc.NavLink(
+                [html.I(className="fas fa-book-open fa-fw me-2", title="Catalog"), html.Span("Catalog", className="sidebar-text")],
+                href="/app/catalog", active="exact", id="nav-catalog",
+                className="executive-nav-link d-flex align-items-center text-nowrap",
+            ),
+            dbc.NavLink(
+                [html.I(className="fas fa-plug fa-fw me-2", title="Connectors"), html.Span("Connectors", className="sidebar-text")],
+                href="/app/connectors", active="exact", id="nav-connectors",
+                className="executive-nav-link d-flex align-items-center text-nowrap",
+            ),
+            dbc.NavLink(
+                [html.I(className="fas fa-cog fa-fw me-2", title="Settings"), html.Span("Settings", className="sidebar-text")],
+                href="/app/settings", active="exact", id="nav-settings",
+                className="executive-nav-link d-flex align-items-center text-nowrap",
+            ),
         ],
         vertical=True,
         pills=False,

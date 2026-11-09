@@ -7,18 +7,13 @@ broken down into logical sections for maintainability.
 from dash import html, dcc
 import dash_bootstrap_components as dbc
 
-from .components import create_expansion_modal, create_context_menu, create_time_slider_pair
-from .utils.ui_components import create_performance_metrics
-
 from ui.components.common import create_controls_bar, create_page_header
 from ui.components.result_pane import (
     create_graph_result_container,
     create_results_empty_state,
     create_table_result_container,
 )
-
 from ui.styles import (
-    FONT_SANS,
     FONT_WEIGHT_SEMIBOLD,
     COLOR_BACKGROUND_WHITE,
     COLOR_BORDER,
@@ -32,6 +27,8 @@ from ui.styles import (
     GRAPH_LOADING_COLOR,
     GRAPH_NODE_HOVER_TOOLTIP_STYLE,
 )
+from .components import create_expansion_modal, create_context_menu, create_time_slider_pair
+from .utils.ui_components import create_performance_metrics
 
 
 def create_graph_controls() -> dbc.Row:

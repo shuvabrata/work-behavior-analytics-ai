@@ -9,11 +9,11 @@ from ..layout import _COLLABORATION_LAYOUT
 register_fullwidth_callback("collab")
 
 
-def toggle_collab_fullwidth(n_clicks: int, is_fullwidth: bool) -> tuple[Any, ...]:
+def toggle_collab_fullwidth(_n_clicks: int, is_fullwidth: bool) -> tuple[Any, ...]:
     """Toggle fullwidth mode for the collaboration network page.
 
     Args:
-        n_clicks: Number of times the button has been clicked.
+        _n_clicks: Number of times the button has been clicked.
         is_fullwidth: Current fullwidth state.
 
     Returns:

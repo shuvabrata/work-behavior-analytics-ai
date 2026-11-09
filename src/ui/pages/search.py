@@ -235,8 +235,8 @@ def _build_attributes_table(attributes: dict[str, Any]) -> html.Table:
                 actual_time = local_dt.strftime(runtime_settings.get("UI_DATETIME_FORMAT"))
                 duration_str = humanize_duration(local_dt)
                 formatted_date = html.Span(duration_str, title=actual_time, style=DETAILS_TABLE_VALUE_STYLE)
-            except Exception:
-                pass
+            except (ValueError, TypeError) as exc:
+                logger.warning(f"Failed to format date {str_value}: {exc}")
                 
         if formatted_date:
             value_cell = formatted_date

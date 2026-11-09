@@ -124,7 +124,6 @@ async def _apply_settings_changed(changed_keys: list[str]) -> None:
         logger.error(
             f"Failed to refresh runtime settings after settings.changed event: keys={changed_keys} — "
             "the service credential is broken or unavailable; keeping current values",
-            exc_info=True,
         )
         return
     logger.info(f"Daemon applied settings.changed event: keys={changed_keys}")

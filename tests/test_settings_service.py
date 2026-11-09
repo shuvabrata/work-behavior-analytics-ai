@@ -349,7 +349,7 @@ class TestReset:
         self, mock_db: AsyncMock, fresh_cache: RuntimeConfigCache
     ) -> None:
         """Resetting an unknown key raises ValueError."""
-        with patch.object(qry, "reset_setting_value", AsyncMock(return_value=None)):
+        with patch.object(qry, "get_setting_by_key", AsyncMock(return_value=None)):
             with pytest.raises(ValueError, match="Unknown setting key"):
                 await service.reset_single(mock_db, "NOT_A_KEY")
 
@@ -359,8 +359,11 @@ class TestReset:
     ) -> None:
         """Resetting sets value to None and falls back to env/default."""
         row = _make_row("HTTP_REQUEST_TIMEOUT", value=None)
-        with patch.object(qry, "reset_setting_value", AsyncMock(return_value=row)), \
-             patch.object(qry, "get_all_settings", AsyncMock(return_value=[row])):
+        with patch.object(qry, "get_setting_by_key", AsyncMock(return_value=row)), \
+             patch.object(qry, "check_conflicts", AsyncMock(return_value={})), \
+             patch.object(qry, "reset_setting_value", AsyncMock(return_value=row)), \
+             patch.object(qry, "get_all_settings", AsyncMock(return_value=[row])), \
+             patch.object(service, "_publish_changed", AsyncMock(return_value=None)):
             result = await service.reset_single(mock_db, "HTTP_REQUEST_TIMEOUT")
 
         assert result["value"] is None

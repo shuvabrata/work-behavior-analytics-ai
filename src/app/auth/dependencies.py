@@ -8,8 +8,10 @@ a design decision taken during the switch.
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
+from typing import Annotated
 
-from fastapi import Depends, HTTPException, Request, status
+from fastapi import Depends, HTTPException, Request, Security, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from app.auth.principal import Principal
 from app.auth.tokens import (
@@ -19,9 +21,30 @@ from app.auth.tokens import (
 )
 from common.logger import logger
 
+#: The OpenAPI security scheme. It exists so ``/openapi.json`` advertises a
+#: bearer credential and Swagger UI renders an Authorize control — it is *not*
+#: the enforcement path. ``auto_error=False`` is load-bearing: with the default
+#: ``True`` this dependency raises its own bare 401 ("Not authenticated") before
+#: the handler runs, losing the ``detail.error`` contract and the 403-for-no-role
+#: branch that ``tests/test_auth_dependencies.py`` pins.
+_bearer_scheme = HTTPBearer(
+    scheme_name="KeycloakBearer",
+    auto_error=False,
+    description=(
+        "Bearer JWT issued by Keycloak realm 'wba'. Mint one with "
+        "`PYTHONPATH=src python scripts/get_token.py --role admin` and paste the "
+        "bare token here (without the 'Bearer ' prefix)."
+    ),
+)
+
 
 def _bearer_token(request: Request) -> str | None:
-    """Return the bearer token from ``Authorization``, or ``None``."""
+    """Return the bearer token from ``Authorization``, or ``None``.
+
+    Retained as the fallback for callers that invoke ``get_principal`` directly
+    rather than through FastAPI's dependency injection (the delegating override
+    in ``tests/conftest.py``), where the ``Security`` sub-dependency does not run.
+    """
     header = request.headers.get("authorization", "")
     scheme, _, token = header.partition(" ")
     if scheme.lower() != "bearer" or not token:
@@ -29,15 +52,20 @@ def _bearer_token(request: Request) -> str | None:
     return token
 
 
-async def get_principal(request: Request) -> Principal:
+async def get_principal(
+    request: Request,
+    credentials: Annotated[
+        HTTPAuthorizationCredentials | None, Security(_bearer_scheme)
+    ] = None,
+) -> Principal:
     """Resolve the caller from ``Authorization: Bearer``.
 
     Raises:
         HTTPException: 401 when the header is missing or the token is invalid;
             403 when the token is valid but carries no recognised role.
     """
-    token = _bearer_token(request)
-    if token is None:
+    token = credentials.credentials if credentials is not None else _bearer_token(request)
+    if not token:
         logger.warning(f"Missing bearer credential for path={request.url.path!r}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

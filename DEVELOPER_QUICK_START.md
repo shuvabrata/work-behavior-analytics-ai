@@ -68,6 +68,13 @@ import; they are not duplicated here.
   bootstrap snippet in [Keycloak database on an existing Postgres
   volume](#keycloak-database-on-an-existing-postgres-volume).
 
+- Sign in to the interactive API docs the same way. The docs at `https://localhost/docs` are
+  deliberately unauthenticated so the schema is readable, but every operation still requires a
+  bearer: run
+  `PYTHONPATH=src python scripts/get_token.py --role admin`, click **Authorize** on the page, and
+  paste the token. Tokens last 15 minutes; re-run the script when calls start returning 401.
+  `--role user` and `--role service` mint the other two roles.
+
 ## Environment Configuration
 
 ### LLM Provider Selection

@@ -151,7 +151,12 @@ async def lifespan(_app_instance: FastAPI) -> AsyncGenerator[None, None]:
     logger.info("[Shutdown] Neo4j driver connection closed")
 
 
-app = FastAPI(lifespan=lifespan)
+app = FastAPI(
+    lifespan=lifespan,
+    swagger_ui_parameters={
+        "persistAuthorization": True,
+    },
+)
 
 
 @app.middleware("http")

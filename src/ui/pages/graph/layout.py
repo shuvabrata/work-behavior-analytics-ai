@@ -4,6 +4,8 @@ This module constructs the complete UI layout for the graph visualization page,
 broken down into logical sections for maintainability.
 """
 
+from typing import cast
+
 from dash import html, dcc
 import dash_bootstrap_components as dbc
 
@@ -432,7 +434,19 @@ def create_right_panel_tabs() -> html.Div:
         dbc.Collapse(
             id="right-tab-catalog-collapse",
             is_open=False,
-            children=[create_catalog_tab_content()],
+            children=[
+                dcc.Loading(
+                    id="catalog-tab-loading",
+                    type="circle",
+                    color=GRAPH_LOADING_COLOR,
+                    delay_show=200,
+                    target_components=cast(
+                        "dcc.Loading.TargetComponents",
+                        {"query-catalog-load-status": "children"},
+                    ),
+                    children=[create_catalog_tab_content()],
+                )
+            ],
         ),
     ])
 
@@ -502,7 +516,8 @@ def create_stores() -> list[dcc.Store]:
         dcc.Store(id="graph-fullwidth-state", data=False),
 
         # Catalog workbench metadata/state
-        dcc.Store(id="query-catalog-store", data=[]),
+        # None is the "not fetched yet" sentinel, distinct from a fetched-empty [].
+        dcc.Store(id="query-catalog-store", data=None),
         dcc.Store(id="selected-catalog-query-store", data=None),
         dcc.Store(id="catalog-parameters-store", data={}),
         # Per-query metadata (favourites): {catalog_id: {"is_favourite": bool, "updated_at": str}}

@@ -26,6 +26,8 @@ Usage::
 
 from __future__ import annotations
 
+import base64
+import json
 import os
 import re
 import threading
@@ -283,6 +285,25 @@ def session_cookies(role: str = "admin") -> dict[str, str]:
 def headers(role: str = "admin") -> dict[str, str]:
     """Return ``Authorization`` headers for *role*."""
     return {"Authorization": f"Bearer {bearer(role)}"}
+
+
+def subject(role: str = "admin") -> str:
+    """Return the Keycloak ``sub`` claim carried by *role*'s bearer.
+
+    The dev users' subjects are random UUIDs assigned by Keycloak at realm
+    import, so they cannot be hard-coded.  ``dev-admin`` / ``dev-user`` are
+    usernames, not subjects.  The signature is not verified — the token was
+    just minted by the live realm, and this is a test helper reading its own
+    claim.
+    """
+    token = bearer(role)
+    payload = token.split(".")[1]
+    padding = "=" * (-len(payload) % 4)
+    claims: dict[str, Any] = json.loads(base64.urlsafe_b64decode(payload + padding))
+    sub = claims.get("sub")
+    if not isinstance(sub, str) or not sub:
+        raise AssertionError(f"The {role!r} bearer carried no 'sub' claim")
+    return sub
 
 
 def admin_headers() -> dict[str, str]:

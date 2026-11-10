@@ -7,7 +7,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.logger import logger
-from app.auth.dependencies import require_admin
+from app.auth.dependencies import require_admin, require_user
+from app.auth.principal import Principal
 from app.db.session import get_async_db
 from app.query_catalog import CatalogLoadError, CatalogQuery, CatalogQueryWrite
 
@@ -139,10 +140,13 @@ async def list_catalog_metadata(
     is_favourite: bool | None = Query(
         default=None, description="Filter by favourite state"
     ),
+    principal: Principal = Depends(require_user),
     db: AsyncSession = Depends(get_async_db),
 ) -> CatalogMetadataListResponse:
-    """List catalog metadata rows, optionally filtered by favourite state."""
-    items = await service.list_catalog_metadata(db, is_favourite=is_favourite)
+    """List the caller's catalog metadata rows, optionally filtered."""
+    items = await service.list_catalog_metadata(
+        db, subject=principal.subject, is_favourite=is_favourite
+    )
     return CatalogMetadataListResponse(
         items=[CatalogMetadataResponse.model_validate(item) for item in items],
         count=len(items),
@@ -152,10 +156,13 @@ async def list_catalog_metadata(
 @router.get("/catalog-metadata/{catalog_id:path}", response_model=CatalogMetadataResponse)
 async def get_catalog_metadata(
     catalog_id: str,
+    principal: Principal = Depends(require_user),
     db: AsyncSession = Depends(get_async_db),
 ) -> CatalogMetadataResponse:
-    """Fetch a single catalog metadata row by ``catalog_id``."""
-    row = await service.get_catalog_metadata(db, catalog_id)
+    """Fetch the caller's catalog metadata row for ``catalog_id``."""
+    row = await service.get_catalog_metadata(
+        db, subject=principal.subject, catalog_id=catalog_id
+    )
     if row is None:
         raise HTTPException(status_code=404, detail="Catalog metadata not found")
     return CatalogMetadataResponse.model_validate(row)
@@ -165,15 +172,19 @@ async def get_catalog_metadata(
 async def set_catalog_metadata(
     catalog_id: str,
     payload: CatalogMetadataPatch,
+    principal: Principal = Depends(require_user),
     db: AsyncSession = Depends(get_async_db),
 ) -> CatalogMetadataResponse:
-    """Upsert a catalog metadata row (idempotent).
+    """Upsert the caller's catalog metadata row (idempotent).
 
     Validates ``catalog_id`` against the YAML catalog (404 if unknown).
     """
     try:
         row = await service.set_catalog_metadata(
-            db, catalog_id, payload.is_favourite
+            db,
+            subject=principal.subject,
+            catalog_id=catalog_id,
+            is_favourite=payload.is_favourite,
         )
     except CatalogQueryNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc

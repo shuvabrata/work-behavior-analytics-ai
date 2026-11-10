@@ -270,7 +270,7 @@ def _build_parameter_help_text(parameter: dict[str, Any]) -> html.Div | None:
 )
 def load_query_catalog(pathname: str | None) -> tuple[list[dict[str, Any]], html.Div | None, dict[str, Any]]:
     """Fetch catalog metadata when the Graph page is opened."""
-    if pathname != "/app/graph":
+    if (pathname or "").rstrip("/") != "/app/graph":
         return no_update, no_update, no_update
 
     try:
@@ -449,7 +449,7 @@ def render_catalog_query_list(
 
     return html.Div([
         html.Div(
-            f"{len(filtered)} query{'ies' if len(filtered) != 1 else 'y'}",
+            f"{len(filtered)} {'queries' if len(filtered) != 1 else 'query'}",
             style={"fontSize": "11px", "color": COLOR_TEXT_SECONDARY, "marginBottom": "8px"},
         ),
         dbc.ListGroup(items, flush=True, class_name="graph-catalog-list-group"),

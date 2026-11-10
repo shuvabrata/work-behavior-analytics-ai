@@ -13,7 +13,9 @@ from dash import Input, Output, callback
 )
 def toggle_query_panel_for_analytics_mode(pathname: str | None, search: str | None) -> tuple[dict[str, Any], dict[str, Any]]:
     """Hide the Console and Catalog tabs when the graph page is in analytics mode."""
-    if pathname != "/app/graph":
+    # Dash supplies None before the URL resolves, and None has no .rstrip(); the
+    # rstrip accepts the trailing-slash form that display_page also routes here.
+    if (pathname or "").rstrip("/") != "/app/graph":
         return {}, {}
 
     params = parse_qs((search or "").lstrip("?"))

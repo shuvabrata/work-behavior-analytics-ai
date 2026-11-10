@@ -14,6 +14,11 @@ session row, so it asks the API once per page navigation instead:
   both let the request through; the latter is what stops an API outage from
   becoming a login loop.
 
+A browser navigation to the app root (``/app`` or ``/app/``) is canonicalised
+to ``/app/graph`` before the session checks: the root only reaches the Graph
+layout through ``display_page``'s fallthrough, and the Graph page's callbacks
+gate on the exact pathname, so the root otherwise renders with a dead catalog.
+
 Static assets and the two initial-render endpoints are exempt. Blocking
 ``/app/_dash-layout`` or ``/app/_dash-dependencies`` yields a blank page rather
 than a login redirect, and blocking ``/app/assets/*`` leaves the login page
@@ -42,6 +47,10 @@ _LOGIN_PATH = "/api/v1/auth/login"
 #: The API route the guard probes with the held cookie.
 _ME_PATH = "/api/v1/auth/me"
 
+#: The documented landing page. ``src/app/api/auth/v1/service.py`` also defaults
+#: a signed-in user here.
+_CANONICAL_ROOT = "/app/graph"
+
 
 def _is_exempt(path: str) -> bool:
     """Return whether *path* is served without a session."""
@@ -60,6 +69,25 @@ def _is_dash_xhr() -> bool:
     if request.headers.get("X-Requested-With") == "XMLHttpRequest":
         return True
     return request.path.startswith("/app/_dash-")
+
+
+def _is_app_root(path: str) -> bool:
+    """Return whether *path* is the app root in either slash form."""
+    return path.rstrip("/") == "/app"
+
+
+def _canonical_root_response() -> Response | None:
+    """Send a document navigation to the app root onto the canonical Graph page.
+
+    The root renders the Graph layout through ``display_page``'s fallthrough, but
+    the Graph page's callbacks gate on the exact ``/app/graph`` pathname, so the
+    page arrives with a dead catalog panel. Callbacks are left alone: Dash parses
+    a 302 as JSON and breaks.
+    """
+    if _is_dash_xhr() or not _is_app_root(request.path):
+        return None
+    logger.info(f"Session guard: canonicalising the app root to {_CANONICAL_ROOT} (path={request.path!r})")
+    return Response(status=302, headers={"Location": _CANONICAL_ROOT})
 
 
 def _unauthenticated_response() -> Response:
@@ -100,10 +128,15 @@ def session_guard() -> Response | None:
     """Return a response when the request has no session, else ``None``.
 
     Called from the UI's single ``before_request`` hook. Returning ``None`` lets
-    Flask continue to the view; returning a response short-circuits it.
+    Flask continue to the view; returning a response short-circuits it. A browser
+    navigation to the app root is canonicalised first, before any session check,
+    so a signed-out visitor logs in and lands on the canonical path directly.
     """
     if _is_exempt(request.path):
         return None
+    canonical = _canonical_root_response()
+    if canonical is not None:
+        return canonical
     if not current_session_id():
         return _unauthenticated_response()
     if request.method == "GET" and not _is_dash_xhr() and _session_is_rejected():

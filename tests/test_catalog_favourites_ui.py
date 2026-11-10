@@ -13,7 +13,7 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch
 
 import pytest
-from dash import html
+from dash import html, no_update
 from dash.exceptions import PreventUpdate
 
 from ui.pages.graph.callbacks import catalog as catalog_cb
@@ -85,6 +85,31 @@ def _patch_ctx(triggered_id, triggered_prop_ids=None):
     fake_ctx.triggered_id = triggered_id
     fake_ctx.triggered_prop_ids = triggered_prop_ids or {}
     return patch.object(catalog_cb, "ctx", fake_ctx)
+
+
+class TestCountLabelPluralisation:
+    def test_single_query_uses_singular(self) -> None:
+        """One query renders the singular form, not '1 queries'."""
+        queries = [_query("schema/a", "Alpha")]
+        result = render_catalog_query_list(queries, "__all__", None, None, {})
+        assert result.children[0].children == "1 query"
+
+    def test_multiple_queries_uses_plural(self) -> None:
+        """More than one query renders 'queries', not 'queryies'."""
+        queries = [_query("schema/a", "Alpha"), _query("schema/b", "Beta")]
+        result = render_catalog_query_list(queries, "__all__", None, None, {})
+        assert result.children[0].children == "2 queries"
+
+    def test_empty_catalog_shows_no_metadata_message(self) -> None:
+        """An empty catalog shows the load message rather than a count."""
+        result = render_catalog_query_list([], "__all__", None, None, {})
+        assert result.children == "No catalog metadata loaded yet."
+
+    def test_filtered_to_nothing_shows_no_match_message(self) -> None:
+        """A non-empty catalog filtered to zero shows the no-match message."""
+        queries = [_query("schema/a", "Alpha")]
+        result = render_catalog_query_list(queries, "other", None, None, {})
+        assert result.children == "No queries match the current filters."
 
 
 class TestStarRendering:
@@ -182,6 +207,45 @@ class TestCatalogLoadSorting:
         ]
         assert load_status is None
         assert metadata["schema/c"]["is_favourite"] is True
+
+
+class TestCatalogLoadPathnameGate:
+    def test_trailing_slash_loads_catalog(self) -> None:
+        """A trailing slash on /app/graph still loads the catalog."""
+        queries = [_query("schema/a", "Alpha")]
+        catalog_response = MagicMock()
+        catalog_response.json.return_value = {"items": queries}
+        metadata_response = MagicMock()
+        metadata_response.json.return_value = {
+            "items": [
+                {
+                    "catalog_id": "schema/a",
+                    "is_favourite": True,
+                    "updated_at": "2026-09-03T00:00:00Z",
+                }
+            ]
+        }
+
+        with patch(
+            "ui.pages.graph.callbacks.catalog.api_client.get",
+            side_effect=[catalog_response, metadata_response],
+        ):
+            loaded, load_status, metadata = load_query_catalog("/app/graph/")
+
+        assert [query["name"] for query in loaded] == ["Alpha"]
+        assert load_status is None
+        assert metadata["schema/a"]["is_favourite"] is True
+
+    @pytest.mark.parametrize("pathname", ("/app/graphs", "/app/graph/x"))
+    def test_non_canonical_pathname_returns_no_update(self, pathname) -> None:
+        """Prefix-sharing and nested paths must not load the catalog."""
+        with patch("ui.pages.graph.callbacks.catalog.api_client.get") as mock_get:
+            loaded, load_status, metadata = load_query_catalog(pathname)
+
+        mock_get.assert_not_called()
+        assert loaded is no_update
+        assert load_status is no_update
+        assert metadata is no_update
 
 
 class TestToggleCallback:

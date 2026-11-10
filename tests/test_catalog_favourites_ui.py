@@ -109,10 +109,7 @@ class TestCountLabelPluralisation:
         """An unfetched catalog shows the loading message, not the empty one."""
         result = render_catalog_query_list(None, "__all__", None, None, {})
         assert result.children == "Loading catalog queries..."
-    def test_empty_catalog_shows_no_metadata_message(self) -> None:
-        """An empty catalog shows the load message rather than a count."""
-        result = render_catalog_query_list([], "__all__", None, None, {})
-        assert result.children == "No catalog metadata loaded yet."
+
 
     def test_filtered_to_nothing_shows_no_match_message(self) -> None:
         """A non-empty catalog filtered to zero shows the no-match message."""

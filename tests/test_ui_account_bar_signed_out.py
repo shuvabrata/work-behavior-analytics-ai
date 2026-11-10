@@ -12,7 +12,7 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
-from dash import no_update  # noqa: F401 - documents the callback's vocabulary
+from dash import html, no_update  # noqa: F401 - documents the callback's vocabulary
 
 from ui import api_client
 from ui.components import account_bar
@@ -78,6 +78,20 @@ def _hrefs(children: Any) -> list[str]:
     return found
 
 
+def _nodes(children: Any) -> list[Any]:
+    """Flatten a Dash component tree to its component nodes."""
+    found: list[Any] = []
+    stack = [children]
+    while stack:
+        node = stack.pop()
+        if isinstance(node, (list, tuple)):
+            stack.extend(node)
+        elif hasattr(node, "children"):
+            found.append(node)
+            stack.append(node.children)
+    return found
+
+
 def test_revoked_session_offers_sign_in(monkeypatch: pytest.MonkeyPatch) -> None:
     _install(monkeypatch, _StubResponse(401, {"detail": "expired"}))
     result = account_bar.render_account_bar("/app/graph")
@@ -117,3 +131,51 @@ def test_live_session_shows_username_and_sign_out(
     assert "dev-user" in texts
     assert "Sign out" in texts
     assert "Sign in" not in texts
+
+
+def test_full_name_rendered_when_present(monkeypatch: pytest.MonkeyPatch) -> None:
+    _install(
+        monkeypatch,
+        _StubResponse(
+            200,
+            {"username": "dev-user", "full_name": "Dev User", "roles": ["wba-user"]},
+        ),
+    )
+    result = account_bar.render_account_bar("/app/graph")
+
+    texts = _texts(result)
+    assert "dev-user" in texts
+    assert "Dev User" in texts
+
+
+def test_absent_full_name_renders_no_second_line(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    for payload in (
+        {"username": "dev-user", "roles": ["wba-user"]},
+        {"username": "dev-user", "full_name": None, "roles": ["wba-user"]},
+        {"username": "dev-user", "full_name": "", "roles": ["wba-user"]},
+    ):
+        _install(monkeypatch, _StubResponse(200, payload))
+        result = account_bar.render_account_bar("/app/graph")
+
+        texts = _texts(result)
+        assert "dev-user" in texts
+        assert "Dev User" not in texts
+
+
+def test_logout_form_posts_to_logout_url(monkeypatch: pytest.MonkeyPatch) -> None:
+    _install(
+        monkeypatch,
+        _StubResponse(200, {"username": "dev-user", "roles": ["wba-user"]}),
+    )
+    result = account_bar.render_account_bar("/app/graph")
+
+    forms = [n for n in _nodes(result) if isinstance(n, html.Form)]
+    assert forms, "no logout form in the menu"
+    form = forms[0]
+    assert form.method == "post"
+    assert form.action == "/api/v1/auth/logout"
+    assert any(
+        isinstance(n, html.Button) and n.type == "submit" for n in _nodes(form.children)
+    )

@@ -41,6 +41,7 @@ class MeResponse(BaseModel):
 
     subject: str
     username: str
+    full_name: str | None = None
     roles: list[str]
 
 

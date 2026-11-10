@@ -125,6 +125,7 @@ def _sign(
     exp_delta: int = 900,
     include_exp: bool = True,
     include_aud: bool = True,
+    full_name: str | None = None,
 ) -> str:
     """Sign a token with *private_pem* shaped like a Keycloak access token."""
     now = datetime.now(tz=timezone.utc)
@@ -136,6 +137,8 @@ def _sign(
         "iat": now,
         "realm_access": {"roles": list(roles)},
     }
+    if full_name is not None:
+        payload["name"] = full_name
     if include_aud:
         payload["aud"] = aud
     if include_exp:
@@ -176,6 +179,20 @@ class TestValidateBearerToken:
         token = _sign(private_pem, roles=("wba-user", "offline_access"))
         principal = tokens.validate_bearer_token(token)
         assert principal.roles == frozenset({"wba-user"})
+
+    def test_name_claim_maps_to_full_name(
+        self, private_pem: bytes, jwks: Any
+    ) -> None:
+        """The ``name`` claim reaches ``Principal.full_name``."""
+        token = _sign(private_pem, full_name="Alice Smith")
+        principal = tokens.validate_bearer_token(token)
+        assert principal.full_name == "Alice Smith"
+
+    def test_absent_name_claim_is_none(self, private_pem: bytes, jwks: Any) -> None:
+        """A token without ``name`` yields ``None``, never an empty string."""
+        token = _sign(private_pem)
+        principal = tokens.validate_bearer_token(token)
+        assert principal.full_name is None
 
     def test_user_and_admin_both_mapped(self, private_pem: bytes, jwks: Any) -> None:
         """Two recognised roles are both carried; ``is_admin`` is true."""

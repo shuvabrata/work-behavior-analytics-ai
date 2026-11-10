@@ -11,10 +11,11 @@ browser takes: the OIDC authorization-code flow with PKCE, then the BFF's own
 ``httpx`` honours ``SSL_CERT_FILE`` (or an explicit ``ca_bundle``) while
 ``requests`` consults only ``REQUESTS_CA_BUNDLE`` / ``CURL_CA_BUNDLE``.
 
-``httpx`` is imported lazily inside the functions that use it.  This module is
-copied into every service image by ``COPY src/common/``, and the API image
-installs only ``requirements.api.txt``, which does not list ``httpx``.  Importing
-this module therefore performs no I/O and pulls in no HTTP client.
+``httpx`` and ``dotenv`` are imported lazily inside the functions that use them.
+This module is copied into every service image by ``COPY src/common/``, and only
+``requirements.api.txt`` and ``requirements.ui.txt`` install ``python-dotenv`` —
+no connector image does.  Importing this module therefore performs no I/O and
+pulls in no HTTP client or ``.env`` parser.
 
 Credentials come from the environment, falling back to ``.env`` — never
 hard-coded.
@@ -30,8 +31,6 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
-
-from dotenv import dotenv_values
 
 if TYPE_CHECKING:
     import httpx
@@ -75,6 +74,8 @@ def env_value(name: str, default: str = "") -> str:
     if value:
         return value
     if _ENV_FILE.is_file():
+        from dotenv import dotenv_values  # noqa: PLC0415  # pylint: disable=import-outside-toplevel
+
         return str(dotenv_values(_ENV_FILE).get(name) or default)
     return default
 

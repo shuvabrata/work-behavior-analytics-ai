@@ -157,6 +157,8 @@ def validate_bearer_token(token: str) -> Principal:
     roles = _mapped_roles(claims)
     subject = str(claims["sub"])
     username = str(claims.get("preferred_username", subject))
+    raw_full_name = claims.get("name")
+    full_name = raw_full_name if isinstance(raw_full_name, str) and raw_full_name else None
 
     if not roles:
         logger.error(
@@ -172,6 +174,7 @@ def validate_bearer_token(token: str) -> Principal:
     return Principal(
         subject=subject,
         username=username,
+        full_name=full_name,
         roles=roles,
         credential=CredentialType.BEARER,
     )

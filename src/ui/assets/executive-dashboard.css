@@ -1176,6 +1176,97 @@ input::placeholder {
 }
 
 /* ============================================================================= */
+/* Account Menu (Top Bar)                                                        */
+/* Bootstrap's .dropdown-menu / .dropdown-item are not themed elsewhere in this   */
+/* file, so without these rules the popup renders white in the dark theme.        */
+/* Scoped under .account-menu so no other dropdown is affected.                   */
+/* ============================================================================= */
+
+.account-menu-toggle,
+.account-menu-toggle.btn {
+    background-color: transparent !important;
+    border: 1px solid var(--color-border) !important;
+    color: var(--color-charcoal) !important;
+    width: 32px;
+    height: 32px;
+    padding: 0 !important;
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+    box-shadow: none !important;
+    font-size: 13px !important;
+}
+
+.account-menu-toggle:hover,
+.account-menu-toggle.btn:hover {
+    background-color: var(--color-surface-active) !important;
+    border-color: var(--color-border-light) !important;
+}
+
+.account-menu-toggle:focus,
+.account-menu-toggle.btn:focus {
+    box-shadow: 0 0 0 2px var(--color-focus-ring) !important;
+}
+
+.account-menu .dropdown-menu {
+    background-color: var(--color-background-white) !important;
+    border: 1px solid var(--color-border) !important;
+    box-shadow: 0 4px 12px var(--color-shadow-light) !important;
+    min-width: 180px;
+}
+
+.account-menu-header {
+    padding: 8px 16px;
+    font-family: "Inter", sans-serif;
+    line-height: 1.35;
+}
+
+.account-menu .dropdown-item {
+    font-family: "Inter", sans-serif;
+    font-size: 13px;
+    color: var(--color-charcoal) !important;
+}
+
+.account-menu .dropdown-item:hover,
+.account-menu .dropdown-item:focus {
+    background-color: var(--color-surface-active) !important;
+    color: var(--color-charcoal) !important;
+}
+
+.account-menu .dropdown-divider {
+    border-top-color: var(--color-border) !important;
+    margin: 4px 0;
+}
+
+/* Dark theme */
+.theme-executive-dark .account-menu-toggle,
+.theme-executive-dark .account-menu-toggle.btn {
+    background-color: transparent !important;
+    border-color: var(--color-border) !important;
+    color: var(--color-text-dark) !important;
+}
+
+.theme-executive-dark .account-menu .dropdown-menu {
+    background-color: var(--color-background-light) !important;
+    border-color: var(--color-border-light) !important;
+    color: var(--color-text-dark) !important;
+}
+
+.theme-executive-dark .account-menu .dropdown-item {
+    color: var(--color-text-dark) !important;
+}
+
+.theme-executive-dark .account-menu .dropdown-item:hover,
+.theme-executive-dark .account-menu .dropdown-item:focus {
+    background-color: var(--color-surface-active) !important;
+    color: var(--color-text-dark) !important;
+}
+
+.theme-executive-dark .account-menu .dropdown-divider {
+    border-top-color: var(--color-border-light) !important;
+}
+
+/* ============================================================================= */
 /* Chat Thinking Dots Animation                                                   */
 /* ============================================================================= */
 

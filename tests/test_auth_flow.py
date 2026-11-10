@@ -424,5 +424,28 @@ class TestMe:
         assert response.json() == {
             "subject": "sub-9",
             "username": "bob",
+            "full_name": None,
             "roles": ["wba-admin"],
         }
+
+    async def test_full_name_returned_when_present(
+        self, client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from app.auth import dependencies
+
+        monkeypatch.setattr(
+            dependencies,
+            "validate_bearer_token",
+            lambda token: Principal(
+                subject="sub-9",
+                username="bob",
+                full_name="Bob Smith",
+                roles=frozenset({"wba-admin"}),
+            ),
+        )
+        response = await client.get(
+            "/api/v1/auth/me", headers={"Authorization": "Bearer good"}
+        )
+
+        assert response.status_code == 200
+        assert response.json()["full_name"] == "Bob Smith"

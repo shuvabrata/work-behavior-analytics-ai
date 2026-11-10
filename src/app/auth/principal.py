@@ -25,6 +25,9 @@ class Principal:
     Attributes:
         subject: Keycloak ``sub`` — stable, never reused.
         username: ``preferred_username``, for display and audit.
+        full_name: The ``name`` claim when the realm's profile scope supplies
+            it. Display-only: absent for machine principals and for any realm
+            without the full-name mapper, so it is never required.
         roles: Mapped internal roles. Unknown realm roles are dropped; a token
             with no recognised role never reaches construction.
         credential: Which credential type produced this principal.
@@ -33,6 +36,7 @@ class Principal:
     subject: str
     username: str
     roles: frozenset[str]
+    full_name: str | None = None
     credential: CredentialType = CredentialType.BEARER
 
     def has_role(self, role: str) -> bool:

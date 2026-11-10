@@ -260,6 +260,19 @@ placeholder = create_placeholder_section(
 
 ---
 
+### Account Menu
+
+**Style Tokens**: `COLOR_CHARCOAL`, `COLOR_GRAY_MEDIUM`, `FONT_SANS`, `FONT_SIZE_SMALL`, `FONT_SIZE_XSMALL`, `FONT_WEIGHT_MEDIUM`
+
+**CSS Classes**: `.account-menu`, `.account-menu-toggle`, `.account-menu-header`
+
+**Visual**:
+- Trigger: icon-only 32×32 button matching the theme toggle — transparent background, 1px `var(--color-border)` border, no caret
+- Popup: right-aligned against the trigger; username in `COLOR_CHARCOAL`, full name beneath it in `COLOR_GRAY_MEDIUM` when the token supplies one
+- Logout entry: menu-item styled submit control
+
+---
+
 ### Graph Components
 
 **Style Tokens**: `GRAPH_QUERY_TEXTAREA_STYLE`, `GRAPH_CYTOSCAPE_STYLE`, `GRAPH_HELPER_TEXT_STYLE`, etc.

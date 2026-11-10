@@ -8,7 +8,7 @@ Endpoints:
 - ``POST /auth/logout`` — session cookie; revokes the row, clears the cookie,
   302 to Keycloak's end-session URL.
 - ``POST /auth/token`` — session cookie; the BFF exchange, returns a bearer.
-- ``GET /auth/me`` — bearer; returns ``{subject, username, roles}``.
+- ``GET /auth/me`` — bearer; returns ``{subject, username, full_name, roles}``.
 
 ``/auth/login`` and ``/auth/callback`` are the only public routes. Everything
 else reads the session **cookie** itself (the two BFF paths, which have no
@@ -131,6 +131,7 @@ async def me(principal: Principal = Depends(require_user)) -> MeResponse:
     return MeResponse(
         subject=principal.subject,
         username=principal.username,
+        full_name=principal.full_name,
         roles=sorted(principal.roles),
     )
 

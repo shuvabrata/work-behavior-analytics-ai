@@ -6,15 +6,17 @@ catalog queries. Rows are created lazily (upsert on toggle) — a row only
 exists for queries the user has interacted with.
 
 ``catalog_id`` is the stable id of a catalog query (``<namespace.directory>/<slug>``)
-as defined by ``app.query_catalog.loader``. It is unique so each catalog query
-maps to at most one metadata row.
+as defined by ``app.query_catalog.loader``. ``subject`` is the Keycloak ``sub``
+of the user who owns the row. A row is unique per ``(catalog_id, subject)``:
+``catalog_id`` is no longer globally unique, so each user keeps their own
+favourite state for a query.
 """
 
 from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, String
+from sqlalchemy import Boolean, DateTime, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import func
 
@@ -25,11 +27,15 @@ class CatalogMetadata(Base):
     """Per-query metadata for the query catalog (currently the favourite flag)."""
 
     __tablename__ = "catalog_metadata"
+    __table_args__ = (
+        UniqueConstraint(
+            "catalog_id", "subject", name="uq_catalog_metadata_catalog_subject"
+        ),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    catalog_id: Mapped[str] = mapped_column(
-        String(255), nullable=False, unique=True
-    )
+    catalog_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    subject: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     is_favourite: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False
     )
@@ -47,6 +53,7 @@ class CatalogMetadata(Base):
         self,
         *,
         catalog_id: str,
+        subject: str,
         is_favourite: bool = False,
         **kwargs: object,
     ) -> None:
@@ -55,10 +62,15 @@ class CatalogMetadata(Base):
         SQLAlchemy's ``default`` only applies at flush time, so an explicit
         ``__init__`` keeps the default visible at construction time too.
         """
-        super().__init__(catalog_id=catalog_id, is_favourite=is_favourite, **kwargs)
+        super().__init__(
+            catalog_id=catalog_id,
+            subject=subject,
+            is_favourite=is_favourite,
+            **kwargs,
+        )
 
     def __repr__(self) -> str:
         return (
             f"CatalogMetadata(id={self.id}, catalog_id={self.catalog_id!r}, "
-            f"is_favourite={self.is_favourite})"
+            f"subject={self.subject!r}, is_favourite={self.is_favourite})"
         )

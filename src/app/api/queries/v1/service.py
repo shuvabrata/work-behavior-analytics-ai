@@ -117,29 +117,38 @@ def _require_catalog_query(catalog_id: str) -> None:
 
 
 async def list_catalog_metadata(
-    db: AsyncSession, *, is_favourite: bool | None = None
+    db: AsyncSession, *, subject: str, is_favourite: bool | None = None
 ) -> list[CatalogMetadata]:
-    """List catalog metadata rows, optionally filtered by favourite state."""
-    return await query.list_catalog_metadata(db, is_favourite=is_favourite)
+    """List the caller's catalog metadata rows, optionally filtered."""
+    return await query.list_catalog_metadata(
+        db, subject=subject, is_favourite=is_favourite
+    )
 
 
 async def get_catalog_metadata(
-    db: AsyncSession, catalog_id: str
+    db: AsyncSession, *, subject: str, catalog_id: str
 ) -> CatalogMetadata | None:
-    """Fetch one catalog metadata row by ``catalog_id``."""
-    return await query.get_catalog_metadata(db, catalog_id)
+    """Fetch the caller's catalog metadata row for ``catalog_id``.
+
+    Returns ``None`` when the row is absent or owned by another subject.
+    """
+    return await query.get_catalog_metadata(
+        db, subject=subject, catalog_id=catalog_id
+    )
 
 
 async def set_catalog_metadata(
-    db: AsyncSession, catalog_id: str, is_favourite: bool
+    db: AsyncSession, *, subject: str, catalog_id: str, is_favourite: bool
 ) -> CatalogMetadata:
-    """Upsert a catalog metadata row, validating ``catalog_id`` first.
+    """Upsert the caller's catalog metadata row, validating ``catalog_id`` first.
 
     Raises :class:`CatalogQueryNotFoundError` (→ 404) if ``catalog_id`` does
     not exist in the YAML catalog.
     """
     _require_catalog_query(catalog_id)
-    row = await query.upsert_catalog_metadata(db, catalog_id, is_favourite)
+    row = await query.upsert_catalog_metadata(
+        db, subject=subject, catalog_id=catalog_id, is_favourite=is_favourite
+    )
     await db.commit()
     await db.refresh(row)
     return row

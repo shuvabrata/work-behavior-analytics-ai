@@ -45,7 +45,7 @@ Four properties drive most of the design decisions below:
 | 6 | Realm roles `wba-admin`, `wba-user`, `wba-service` | One source of truth; identical validation for human and machine tokens; no user table. Unrecognised roles are denied, never downgraded. |
 | 7 | Standard user reads everything except connector secrets; admin does everything; the service principal additionally reads secrets | A clean, useful capability line. The producers read their connector configuration, credentials included, over the API with a service token. |
 | 8 | Scans are admin-or-service; chat is user-allowed | A scan causes producers to **write** into the graph, so it needs more than a standard user. Chat is read-only in effect. |
-| 9 | Per-user ownership of chat sessions | Chat sessions are owner-scoped, closing the "any `session_id` is usable by anyone" hole. Catalog favourites are **not** per-user: catalog metadata carries no `subject` column, so the favourite toggle remains global. |
+| 9 | Per-user ownership of chat sessions and catalog favourites | Chat sessions are owner-scoped, closing the "any `session_id` is usable by anyone" hole. Catalog favourites are owner-scoped too: `catalog_metadata` carries a non-null `subject` column and is unique per `(catalog_id, subject)`, so the favourite toggle writes the caller's own row. |
 | 10 | A Flask `before_request` hook for `/app`, FastAPI dependencies for `/api/v1` | Dependencies compose with the existing `app.dependency_overrides` test idiom; the UI is a standalone WSGI app, so a request hook is the only thing that guards it. |
 | 11 | No `AUTH_ENABLED` fail-open switch | Tests override the principal dependency and sign real JWTs instead. |
 | 12 | Access token 15 min; SSO idle 1 h; SSO max 8 h | Bounded exposure with silent server-side refresh. |
@@ -230,7 +230,7 @@ key rotation does not require an application restart.
 
 | Role | Meaning |
 |---|---|
-| `wba-user` | Standard user. Read everything except connector secrets; manage their own chat sessions. May edit **own** data, not shared configuration. |
+| `wba-user` | Standard user. Read everything except connector secrets; manage their own chat sessions and their own catalog favourites. May edit **own** data, not shared configuration. |
 | `wba-admin` | Everything a standard user can do, plus shared configuration and secret exposure. |
 | `wba-service` | Machine principal. Reads everything a standard user reads, plus connector secrets; the only role that may write command status. |
 

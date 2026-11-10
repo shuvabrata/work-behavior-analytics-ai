@@ -18,11 +18,13 @@ pytestmark = [pytest.mark.unit]
 
 def _make_metadata(
     catalog_id: str = "github/open_pull_requests",
+    subject: str = "user-1",
     is_favourite: bool = False,
 ) -> CatalogMetadata:
     """Build a CatalogMetadata row (not persisted)."""
     return CatalogMetadata(
         catalog_id=catalog_id,
+        subject=subject,
         is_favourite=is_favourite,
         created_at=datetime.now(timezone.utc),
         updated_at=datetime.now(timezone.utc),
@@ -32,8 +34,11 @@ def _make_metadata(
 class TestCatalogMetadataModel:
     def test_instantiates_with_defaults(self) -> None:
         """A row defaults to ``is_favourite=False``."""
-        row = CatalogMetadata(catalog_id="github/open_pull_requests")
+        row = CatalogMetadata(
+            catalog_id="github/open_pull_requests", subject="user-1"
+        )
         assert row.catalog_id == "github/open_pull_requests"
+        assert row.subject == "user-1"
         assert row.is_favourite is False
 
     def test_is_favourite_can_be_true(self) -> None:
@@ -42,14 +47,15 @@ class TestCatalogMetadataModel:
         assert row.is_favourite is True
 
     def test_catalog_id_unique_constraint_defined(self) -> None:
-        """``catalog_id`` carries a unique constraint at the model level."""
+        """A row is unique per ``(catalog_id, subject)`` at the model level."""
         unique_constraints = CatalogMetadata.__table__.constraints
         unique_cols = {
             tuple(sorted(c.columns.keys()))
             for c in unique_constraints
             if c.__class__.__name__ == "UniqueConstraint"
         }
-        assert ("catalog_id",) in unique_cols
+        assert ("catalog_id", "subject") in unique_cols
+        assert ("catalog_id",) not in unique_cols
 
     def test_created_at_set_on_create(self) -> None:
         """``created_at`` is populated when the row is built."""

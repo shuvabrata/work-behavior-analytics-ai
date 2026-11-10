@@ -71,6 +71,7 @@ from ui.pages.timeline.layout import (
     grid_inner_style,
 )
 from ui.styles import (
+    ACTIVE_THEME,
     COLOR_BACKGROUND_WHITE,
     COLOR_BORDER,
     COLOR_CHARCOAL_MEDIUM,
@@ -85,7 +86,7 @@ from ui.styles import (
 from common.logger import logger
 
 _SUGGESTION_LIMIT = 10
-_FALLBACK_THEME = "executive-light"
+_FALLBACK_THEME = ACTIVE_THEME
 _MAX_LANE_HINT = "Maximum 5 — remove one to add another."
 
 _SUGGESTIONS_VISIBLE_STYLE: dict[str, Any] = {

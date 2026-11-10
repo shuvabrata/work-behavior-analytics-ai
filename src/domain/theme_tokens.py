@@ -26,7 +26,7 @@ from typing import Any
 # COLORS - Theme Tokens
 # =============================================================================
 
-ACTIVE_THEME = "executive-light"
+ACTIVE_THEME = "executive-dark"
 
 # Semantic token registry.
 # The UI's ``COLOR_*`` constants are derived from these; they stay in the UI

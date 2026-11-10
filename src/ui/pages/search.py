@@ -25,6 +25,7 @@ from ui.components.common import create_alert, create_page_header
 from ui.components.permission_errors import handle_api_error
 from ui.pages.graph.utils import fetch_effective_theme
 from ui.styles import (
+    ACTIVE_THEME,
     COLOR_BORDER,
     COLOR_BORDER_LIGHT,
     COLOR_GRAY_MEDIUM,
@@ -964,7 +965,7 @@ def _populate_search_theme_store(theme_name: str | None) -> dict[str, Any] | Non
     Fires when the app theme changes (light/dark) and on page mount. Returns
     the merged tokens or ``None`` on error so badge colours fall back to base.
     """
-    active_theme = theme_name or "executive-light"
+    active_theme = theme_name or ACTIVE_THEME
     return fetch_effective_theme(active_theme)
 
 

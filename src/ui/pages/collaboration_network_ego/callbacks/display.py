@@ -6,7 +6,7 @@ from dash import Input, Output, callback, html
 from ui.components.common import build_element_properties_content, register_edge_hover_dimming_callback
 from ui.graph_styles import build_cytoscape_stylesheet
 from ui.pages.graph.utils import fetch_effective_theme
-from ui.styles import FONT_SIZE_XSMALL
+from ui.styles import ACTIVE_THEME, FONT_SIZE_XSMALL
 
 register_edge_hover_dimming_callback("ego-cytoscape")
 
@@ -21,7 +21,7 @@ def update_ego_stylesheet(theme_name: str | None) -> list[dict[str, Any]]:
     Fetches the server-merged effective theme (base tokens ⊕ default-theme
     overrides) for the active base mode, mirroring the Graph page.
     """
-    active_theme = theme_name or "executive-light"
+    active_theme = theme_name or ACTIVE_THEME
     effective = fetch_effective_theme(active_theme)
     return build_cytoscape_stylesheet(active_theme, effective=effective)
 

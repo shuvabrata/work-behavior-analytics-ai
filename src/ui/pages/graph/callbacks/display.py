@@ -8,6 +8,7 @@ from dash import Input, Output, State, callback, callback_context
 
 from ui.components.common import build_element_properties_content, register_edge_hover_dimming_callback, register_fullwidth_callback
 from ui.graph_styles import build_cytoscape_stylesheet
+from ui.styles import ACTIVE_THEME
 from ..utils import create_node_legend, fetch_effective_theme, is_node_element
 
 register_fullwidth_callback("graph")
@@ -33,7 +34,7 @@ def display_properties(selected_nodes: Any, selected_edges: Any, theme_name: Any
                     node_types.add(node_type)
     
     # Default state: show legend with current node types (or empty state if no graph)
-    active_theme = theme_name or "executive-light"
+    active_theme = theme_name or ACTIVE_THEME
     legend_state = create_node_legend(list(node_types) if node_types else None, theme_name=active_theme)
     
     # Node was selected (selectedNodeData returns a list)
@@ -119,7 +120,7 @@ def update_graph_stylesheet(theme_name: str | None) -> list[dict[str, Any]]:
     from it. Falls back to the base tokens on any error so the graph still
     renders with the hardcoded palette.
     """
-    active_theme = theme_name or "executive-light"
+    active_theme = theme_name or ACTIVE_THEME
 
     effective = fetch_effective_theme(active_theme)
 

@@ -14,6 +14,7 @@ from common.logger import logger
 from ui import api_client
 from ui.api_client import ApiError
 from ui.styles import (
+    ACTIVE_THEME,
     COLOR_CHARCOAL,
     COLOR_CHARCOAL_MEDIUM,
     COLOR_TEXT_SECONDARY,
@@ -603,7 +604,7 @@ def render_catalog_query_detail(
                 style={"maxWidth": "800px"},
                 class_name=(
                     f"popover-inverted theme-"
-                    f"{'executive-dark' if (theme_name or 'executive-light') == 'executive-light' else 'executive-light'}"
+                    f"{'executive-dark' if (theme_name or ACTIVE_THEME) == 'executive-light' else 'executive-light'}"
                 ),
             )
         ])

@@ -26,6 +26,7 @@ from ui.pages.graph.utils import (
     neo4j_to_cytoscape,
     parse_error_response,
 )
+from ui.styles import ACTIVE_THEME
 
 
 def _run_test(query_text: str | None) -> dict[str, Any]:
@@ -263,6 +264,6 @@ def update_test_stylesheet(theme_name: str | None) -> list[dict[str, Any]]:
     it. `fetch_effective_theme` returns None on any error, which falls back to
     the hardcoded base tokens.
     """
-    active_theme = theme_name or "executive-light"
+    active_theme = theme_name or ACTIVE_THEME
     effective = fetch_effective_theme(active_theme)
     return build_cytoscape_stylesheet(active_theme, effective=effective)

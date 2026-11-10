@@ -32,7 +32,7 @@ The Executive Dashboard aesthetic prioritizes:
 The design system now has a semantic token layer in `app/dash_app/styles.py`.
 
 - `THEME_TOKENS` stores theme values keyed by semantic names (for example `brand.primary`, `surface.base`, `text.muted`)
-- `ACTIVE_THEME` currently defaults to `executive-light`
+- `ACTIVE_THEME` defaults to `executive-dark`; it is the single source of truth for the default theme
 - Supported themes: `executive-light`, `executive-dark`
 - Existing exported constants (`COLOR_NAVY`, `COLOR_BORDER`, etc.) are still available and now resolve from semantic tokens
 - Theme switching is persisted with `dcc.Store(storage_type="local")` and applied via `app-shell` theme classes (`theme-executive-light`, `theme-executive-dark`)
@@ -42,8 +42,8 @@ This preserves current visuals while making it easier to add future themes (for 
 
 ### Runtime Theme Toggle
 
-- Theme is selected in the top bar `theme-selector`
-- Selection is persisted in `theme-store` (`localStorage`)
+- Theme is toggled by the top bar `theme-toggle-btn`
+- Selection is persisted in `theme-store` (`localStorage`), so it is per-browser, not per-user
 - The root container (`#app-shell`) receives `theme-{name}` class
 - Graph node/edge Cytoscape stylesheet is rebuilt per theme for readable dark-mode graph rendering
 

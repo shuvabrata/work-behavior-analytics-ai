@@ -372,7 +372,12 @@ def render_catalog_query_list(
     metadata_store: dict[str, Any] | None,
 ) -> html.Div:
     """Render the filtered query list."""
-    catalog_queries = catalog_queries or []
+    if catalog_queries is None:
+        return html.Div(
+            "Loading catalog queries...",
+            style={"fontSize": "12px", "color": COLOR_TEXT_SECONDARY},
+        )
+
     metadata_store = metadata_store or {}
     filtered = filter_catalog_queries(
         catalog_queries,
@@ -383,7 +388,7 @@ def render_catalog_query_list(
 
     if not catalog_queries:
         return html.Div(
-            "No catalog metadata loaded yet.",
+            "No catalog queries available.",
             style={"fontSize": "12px", "color": COLOR_TEXT_SECONDARY},
         )
 

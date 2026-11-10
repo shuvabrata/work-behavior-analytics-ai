@@ -47,3 +47,49 @@ def test_graph_layout_includes_catalog_workbench_components():
     assert "catalog-parameter-inputs" in component_ids
     assert "catalog-run-btn" in component_ids
     assert "catalog-load-console-btn" in component_ids
+
+
+def _find_by_id(component, target_id):
+    if component is None:
+        return None
+    if str(getattr(component, "id", None)) == target_id:
+        return component
+    children = getattr(component, "children", None)
+    if isinstance(children, (list, tuple)):
+        for child in children:
+            found = _find_by_id(child, target_id)
+            if found is not None:
+                return found
+    elif children is not None:
+        return _find_by_id(children, target_id)
+    return None
+
+
+def test_catalog_tab_wraps_content_in_loading_targeting_load_status():
+    """The catalog tab shows a spinner while the catalog fetch is in flight.
+
+    The spinner targets ``query-catalog-load-status``, which the catalog load
+    callback writes on both success and failure. It cannot target
+    ``query-catalog-store``: ``dcc.Loading`` only sees components inside its own
+    subtree, and the store is rendered by ``create_stores()`` elsewhere.
+    """
+    layout = get_layout()
+    loading = _find_by_id(layout, "catalog-tab-loading")
+
+    assert loading is not None
+    assert loading.target_components == {"query-catalog-load-status": "children"}
+
+    # The targeted status div must be inside the loading subtree, or the
+    # spinner never fires.
+    assert _find_by_id(loading, "query-catalog-load-status") is not None
+    # And the tab content it wraps must be there too.
+    assert _find_by_id(loading, "catalog-query-list") is not None
+
+
+def test_query_catalog_store_starts_unloaded():
+    """The catalog store starts as None so 'not fetched' is distinguishable from 'empty'."""
+    layout = get_layout()
+    store = _find_by_id(layout, "query-catalog-store")
+
+    assert store is not None
+    assert store.data is None

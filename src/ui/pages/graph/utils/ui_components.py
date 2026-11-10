@@ -10,6 +10,7 @@ from dash import html
 
 from ui.components.common import create_alert
 from ui.styles import (
+    ACTIVE_THEME,
     ALERT_TEXT_STYLE,
     ALERT_HINT_STYLE,
     ALERT_SEPARATOR_STYLE,
@@ -361,7 +362,7 @@ def get_shape_css(shape: str) -> dict[str, Any]:
     return {**base_style, **shape_styles.get(shape, {'borderRadius': '50%'})}
 
 
-def create_node_legend(node_types: list[str] | None = None, theme_name: str = "executive-light") -> html.Div:
+def create_node_legend(node_types: list[str] | None = None, theme_name: str = ACTIVE_THEME) -> html.Div:
     """Create a legend showing node types and their colors
     
     Args:

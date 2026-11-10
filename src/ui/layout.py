@@ -13,6 +13,7 @@ from ui.components.permission_errors import register_auth_redirect
 from ui.components.setup_banner import get_banner_layout
 from ui.settings import settings as app_settings
 from .styles import (
+    ACTIVE_THEME,
     SIDEBAR_STYLE,
     NAVBAR_BRAND_STYLE,
     TOPBAR_STYLE,
@@ -118,7 +119,10 @@ def create_dash_app() -> dash.Dash:
                                 className="global-search-input global-search-group",
                             ),
                             dbc.Button(
-                                html.I(id="theme-icon", className="fas fa-moon"),
+                                html.I(
+                                    id="theme-icon",
+                                    className="fas fa-sun" if ACTIVE_THEME == "executive-dark" else "fas fa-moon",
+                                ),
                                 id="theme-toggle-btn",
                                 color="light",
                                 outline=True,
@@ -148,7 +152,7 @@ def create_dash_app() -> dash.Dash:
     app.layout = dbc.Container([
         dcc.Location(id="url", refresh=False),
         dcc.Store(id="sidebar-collapsed", storage_type="local", data=False),
-        dcc.Store(id="theme-store", storage_type="local", data="executive-light"),
+        dcc.Store(id="theme-store", storage_type="local", data=ACTIVE_THEME),
         dcc.Store(id="search-theme-store", storage_type="memory", data=None),
         dcc.Store(id="date-format-store", data=app_settings.UI_DATE_FORMAT),
         dcc.Store(id="datetime-format-store", data=app_settings.UI_DATETIME_FORMAT),
@@ -167,7 +171,7 @@ def create_dash_app() -> dash.Dash:
             ),
             dbc.Col(content, id="content-col", width=True, className="app-content-col", style={"minWidth": 0})
         ], className="g-0 flex-nowrap app-body-row"),
-    ], fluid=True, id="app-shell", className="app-shell theme-executive-light")
+    ], fluid=True, id="app-shell", className=f"app-shell theme-{ACTIVE_THEME}")
 
     # Callbacks for page routing
     @app.callback(
@@ -300,7 +304,7 @@ def create_dash_app() -> dash.Dash:
     )
     def persist_theme(_n_clicks: int | None, current_theme: str | None) -> str:
         """Toggle between light and dark theme on each button click."""
-        return "executive-dark" if (current_theme or "executive-light") == "executive-light" else "executive-light"
+        return "executive-dark" if (current_theme or ACTIVE_THEME) == "executive-light" else "executive-light"
 
     @app.callback(
         Output("app-shell", "className"),
@@ -309,7 +313,7 @@ def create_dash_app() -> dash.Dash:
     )
     def apply_theme(theme_name: str | None) -> tuple[str, str]:
         """Apply the theme CSS class and update the toggle icon."""
-        active_theme = theme_name or "executive-light"
+        active_theme = theme_name or ACTIVE_THEME
         # Show moon when in light mode (click → go dark)
         # Show sun when in dark mode (click → go light)
         icon = "fas fa-sun" if active_theme == "executive-dark" else "fas fa-moon"
@@ -319,13 +323,13 @@ def create_dash_app() -> dash.Dash:
     # portals (rendered outside #app-shell) also inherit the theme's CSS
     # custom properties and dark-mode overrides.
     clientside_callback(
-        """
-        function(theme_name) {
-            var active = theme_name || 'executive-light';
+        f"""
+        function(theme_name) {{
+            var active = theme_name || '{ACTIVE_THEME}';
             document.body.classList.remove('theme-executive-light', 'theme-executive-dark');
             document.body.classList.add('theme-' + active);
             return window.dash_clientside.no_update;
-        }
+        }}
         """,
         Output("theme-store", "data", allow_duplicate=True),
         Input("theme-store", "data"),

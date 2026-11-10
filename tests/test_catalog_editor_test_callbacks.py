@@ -11,6 +11,7 @@ import pytest
 from ui import api_client
 from ui.api_client import STATUS_NO_RESPONSE, ApiError
 from ui.pages.catalog import editor_test_callbacks
+from ui.styles import ACTIVE_THEME
 
 
 pytestmark = pytest.mark.unit
@@ -276,11 +277,11 @@ def test_stylesheet_follows_theme(monkeypatch):
     assert light != dark
 
 
-def test_stylesheet_none_theme_falls_back_to_light(monkeypatch):
-    """A missing theme-store value must behave as executive-light."""
+def test_stylesheet_none_theme_falls_back_to_active_theme(monkeypatch):
+    """A missing theme-store value must behave as the app's default theme."""
     monkeypatch.setattr(editor_test_callbacks, "fetch_effective_theme", lambda _theme: None)
     assert editor_test_callbacks.update_test_stylesheet(None) == \
-        editor_test_callbacks.update_test_stylesheet("executive-light")
+        editor_test_callbacks.update_test_stylesheet(ACTIVE_THEME)
 
 
 def test_no_callback_owns_both_quick_test_panes():

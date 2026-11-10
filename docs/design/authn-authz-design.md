@@ -274,6 +274,22 @@ Response shape on failure is deliberately asymmetric: `/api/*` returns `401`/`40
 while `/app/*` HTML navigations receive a **302** to the login flow. Returning a redirect to an
 XHR would hand Dash an HTML body where it expects JSON.
 
+**The API documentation routes are deliberately unauthenticated.** `/docs`, `/redoc` and
+`/openapi.json` are readable without a credential so the schema can be opened in a browser. This
+is not an exception to bearer enforcement: reading the schema exposes no data, and every operation
+the schema describes still requires a bearer when it is called.
+
+**The schema advertises an `HTTPBearer` scheme for interactive use.** The principal dependency
+declares the scheme so `/openapi.json` carries `components.securitySchemes` and Swagger UI renders
+an Authorize control. The scheme is documentation, not enforcement — authorization remains entirely
+inside the dependency. It is declared with `auto_error=False` so the dependency itself raises the
+`401`/`403` responses, keeping the `missing_credentials`, `invalid_token` and `no_recognised_role`
+distinctions that a bare `HTTPBearer` error would flatten.
+
+**The supported way to obtain a token for manual exploration is `scripts/get_token.py`.** It drives
+the same authorization-code and PKCE flow as the browser, mints a bearer for the requested role, and
+prints it for pasting into the Authorize box. It adds no client and no grant to the realm.
+
 ### Service accounts
 
 The producers and the consumer call `/api/v1` over HTTP, and a bearer-only API breaks them. They

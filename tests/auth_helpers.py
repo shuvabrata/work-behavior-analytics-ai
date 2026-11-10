@@ -29,15 +29,17 @@ from __future__ import annotations
 import base64
 import json
 import os
-import re
 import threading
 import time
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import httpx
 from dotenv import dotenv_values
+
+from common.auth import Credentials, resolve_ca_bundle
+from common.auth import credentials as _shared_credentials
+from common.auth import login as _shared_login
 
 BASE_URL = "https://localhost"
 REALM_URL = f"{BASE_URL}/auth/realms/wba"
@@ -46,13 +48,10 @@ REALM_URL = f"{BASE_URL}/auth/realms/wba"
 #: request patching can refuse to attach it anywhere else.
 BASE_URL_HOST = httpx.URL(BASE_URL).host
 
-_TOKEN_PATH = "/protocol/openid-connect/token"
-
 #: The cookie the Dash UI guards on; a page test needs it rather than a bearer.
 SESSION_COOKIE_NAME = "wba_session"
 _TIMEOUT = 20.0
 _REFRESH_MARGIN_SECONDS = 60
-_MAX_REDIRECTS = 10
 
 _ENV_FILE = Path(__file__).resolve().parents[1] / ".env"
 
@@ -61,20 +60,6 @@ _PASSWORD_ROLES: dict[str, tuple[str, str]] = {
     "admin": ("dev-admin", "DEV_WBA_ADMIN_PASSWORD"),
     "user": ("dev-user", "DEV_WBA_USER_PASSWORD"),
 }
-
-_HIDDEN_INPUT_RE = re.compile(r'<input[^>]*\btype="hidden"[^>]*>', re.IGNORECASE)
-_NAME_RE = re.compile(r'\bname="([^"]+)"')
-_VALUE_RE = re.compile(r'\bvalue="([^"]*)"')
-_FORM_RE = re.compile(r"<form[^>]*>", re.IGNORECASE)
-_ACTION_RE = re.compile(r'\baction="([^"]+)"')
-
-@dataclass(frozen=True)
-class Credentials:
-    """A live login: the bearer, the session cookie, and when the bearer expires."""
-
-    access_token: str
-    session_id: str
-    expires_at: float
 
 
 _cache: dict[str, Credentials] = {}
@@ -93,125 +78,16 @@ def env_value(name: str, default: str = "") -> str:
 
 def _absolute(location: str) -> str:
     """Return *location* as an absolute URL, resolving a root-relative one."""
-    if location.startswith("/"):
-        return BASE_URL + location
-    return location
+    from common.auth import absolute
+
+    return absolute(location, BASE_URL)
 
 
 def _parse_login_form(html: str) -> tuple[str, dict[str, str]]:
-    """Return ``(action_url, fields)`` from Keycloak's login page.
+    """Return ``(action_url, fields)`` from Keycloak's login page."""
+    from common.auth import parse_login_form
 
-    Real HTML scraping is deliberate: it proves the exact form the browser
-    posts is the one the test posts, so a Keycloak theme change surfaces here
-    rather than as a mysterious 400 in every unrelated suite.
-    """
-    form_tag = _FORM_RE.search(html)
-    if form_tag is None:
-        raise AssertionError("Keycloak login page carried no <form> element")
-    action = _ACTION_RE.search(form_tag.group(0))
-    if action is None:
-        raise AssertionError("Keycloak login form carried no action attribute")
-
-    fields: dict[str, str] = {}
-    for tag in _HIDDEN_INPUT_RE.findall(html):
-        name = _NAME_RE.search(tag)
-        value = _VALUE_RE.search(tag)
-        if name is not None:
-            fields[name.group(1)] = value.group(1) if value is not None else ""
-    return action.group(1).replace("&amp;", "&"), fields
-
-
-def _follow_to_callback(client: httpx.Client, response: httpx.Response) -> httpx.Response:
-    """Follow redirects one hop at a time until the callback has been answered."""
-    for _ in range(_MAX_REDIRECTS):
-        if response.status_code not in (301, 302, 303, 307, 308):
-            break
-        location = response.headers.get("location", "")
-        if not location:
-            break
-        response = client.get(_absolute(location))
-        if "/api/v1/auth/callback" in location:
-            break
-    return response
-
-
-def _login_session(username: str, password: str) -> tuple[str, str, float]:
-    """Complete the real login flow.
-
-    Returns ``(access_token, session_id, expires_at)``.  The session id is
-    returned alongside the bearer because the Dash UI authenticates by cookie,
-    not by bearer, so a test that renders a page needs it.
-    """
-    with httpx.Client(base_url=BASE_URL, follow_redirects=False, timeout=_TIMEOUT) as client:
-        start = client.get("/api/v1/auth/login", params={"next": "/app"})
-        location = start.headers.get("location")
-        if start.status_code != 302 or not location:
-            raise AssertionError(
-                f"GET /api/v1/auth/login returned {start.status_code}, not a 302 "
-                f"redirect to Keycloak"
-            )
-
-        page = client.get(_absolute(location))
-        page.raise_for_status()
-        action_url, fields = _parse_login_form(page.text)
-        fields["username"] = username
-        fields["password"] = password
-
-        response = _follow_to_callback(client, client.post(action_url, data=fields))
-        if response.status_code >= 400:
-            raise AssertionError(
-                f"Login for {username!r} failed with {response.status_code}: "
-                f"{response.text[:200]!r}"
-            )
-
-        session_id = client.cookies.get(SESSION_COOKIE_NAME, "")
-        if not session_id:
-            raise AssertionError(
-                f"Login for {username!r} completed but set no {SESSION_COOKIE_NAME} cookie"
-            )
-
-        exchange = client.post("/api/v1/auth/token")
-        if exchange.status_code != 200:
-            raise AssertionError(
-                f"Token exchange for {username!r} returned {exchange.status_code}: "
-                f"{exchange.text[:200]!r}"
-            )
-        body: dict[str, Any] = exchange.json()
-        expires_in = int(body.get("expires_in") or 900)
-        return str(body["access_token"]), session_id, time.monotonic() + expires_in
-
-
-def _credentials_via_client_credentials() -> Credentials:
-    """Fetch a ``wba-service`` bearer with the ``wba-internal`` client grant."""
-    secret = env_value("KEYCLOAK_SERVICE_CLIENT_SECRET")
-    client_id = env_value("KEYCLOAK_SERVICE_CLIENT_ID", "wba-internal")
-    if not secret:
-        raise AssertionError(
-            "KEYCLOAK_SERVICE_CLIENT_SECRET is unset — the service role cannot be "
-            "minted. Populate .env from .env.example before running this suite."
-        )
-
-    response = httpx.post(
-        REALM_URL + _TOKEN_PATH,
-        data={
-            "grant_type": "client_credentials",
-            "client_id": client_id,
-            "client_secret": secret,
-        },
-        timeout=_TIMEOUT,
-    )
-    if response.status_code != 200:
-        raise AssertionError(
-            f"Client-credentials grant returned {response.status_code}: "
-            f"{response.text[:200]!r}"
-        )
-    body: dict[str, Any] = response.json()
-    expires_in = int(body.get("expires_in") or 900)
-    return Credentials(
-        access_token=str(body["access_token"]),
-        session_id="",
-        expires_at=time.monotonic() + expires_in,
-    )
+    return parse_login_form(html)
 
 
 def credentials(role: str = "admin") -> Credentials:
@@ -226,9 +102,7 @@ def credentials(role: str = "admin") -> Credentials:
         if cached is not None and time.monotonic() < cached.expires_at - _REFRESH_MARGIN_SECONDS:
             return cached
 
-    if role == "service":
-        result = _credentials_via_client_credentials()
-    elif role in _PASSWORD_ROLES:
+    if role in _PASSWORD_ROLES:
         username, password_var = _PASSWORD_ROLES[role]
         password = env_value(password_var)
         if not password:
@@ -236,8 +110,11 @@ def credentials(role: str = "admin") -> Credentials:
                 f"{password_var} is unset — the {role} role cannot be minted. "
                 f"Populate .env from .env.example before running this suite."
             )
-        token, session_id, expires_at = _login_session(username, password)
-        result = Credentials(access_token=token, session_id=session_id, expires_at=expires_at)
+        result = _shared_login(
+            username, password, base_url=BASE_URL, ca_bundle=resolve_ca_bundle()
+        )
+    elif role == "service":
+        result = _shared_credentials("service", base_url=BASE_URL, ca_bundle=resolve_ca_bundle())
     else:
         raise ValueError(f"Unknown role {role!r}; expected admin, user or service")
 

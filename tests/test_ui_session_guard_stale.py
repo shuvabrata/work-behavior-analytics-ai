@@ -160,3 +160,46 @@ def test_exempt_path_makes_no_probe(app: Flask, transport: _Transport) -> None:
     with _request(app, _EXEMPT_PATH, cookie=True):
         assert session_guard() is None
     assert transport.calls == []
+
+
+# ── the app root canonicalises to the Graph page ─────────────────────────
+
+
+@pytest.mark.parametrize("path", ["/app", "/app/"])
+def test_app_root_navigation_redirects_to_graph(app: Flask, path: str) -> None:
+    with _request(app, path, cookie=False):
+        response = session_guard()
+
+    assert response is not None
+    assert response.status_code == 302
+    assert response.headers["Location"] == "/app/graph"
+
+
+def test_app_root_canonicalises_before_the_session_check(
+    app: Flask, transport: _Transport
+) -> None:
+    transport.response = _StubResponse(401, {"detail": "expired"})
+    with _request(app, "/app/", cookie=True):
+        response = session_guard()
+
+    assert response is not None
+    assert response.status_code == 302
+    assert response.headers["Location"] == "/app/graph"
+    assert transport.calls == []
+
+
+@pytest.mark.parametrize("path", ["/app/graph", "/app/analytics"])
+def test_page_paths_are_not_canonicalised(app: Flask, transport: _Transport, path: str) -> None:
+    transport.response = _StubResponse(200, {"username": "dev-user"})
+    with _request(app, path, cookie=True):
+        assert session_guard() is None
+
+
+def test_app_root_dash_xhr_is_not_redirected(app: Flask, transport: _Transport) -> None:
+    transport.response = _StubResponse(200, {"username": "dev-user"})
+    headers = {
+        "Cookie": f"{auth.SESSION_COOKIE_NAME}={_SESSION}",
+        "X-Requested-With": "XMLHttpRequest",
+    }
+    with app.test_request_context("/app/", method="GET", headers=headers):
+        assert session_guard() is None

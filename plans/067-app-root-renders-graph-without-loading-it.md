@@ -6,7 +6,7 @@
 > report — do not improvise. When done, update the status row for this plan
 > in `plans/README.md`.
 >
-> **Drift check (run first)**: `git diff --stat 9fe08fe1..HEAD -- src/ui/ deploy/nginx/nginx.conf tests/`
+> **Drift check (run first)**: `git diff --stat 9fe08fe1..HEAD -- src/ui/ deploy/nginx/nginx.conf tests/ src/app/api/auth/v1/service.py deploy/keycloak/realm-wba.json.template`
 > If any in-scope file changed since this plan was written, compare the
 > "Current state" excerpts against the live code before proceeding; on a
 > mismatch, treat it as a STOP condition.
@@ -16,7 +16,7 @@
 - **Priority**: P2
 - **Effort**: S
 - **Risk**: LOW
-- **Depends on**: none. Related to plans/066 but independent — either order works.
+- **Depends on**: none.
 - **Category**: bug
 - **Planned at**: commit `9fe08fe1`, 2026-11-10
 
@@ -30,16 +30,25 @@ gated on an exact `pathname` match. On the fallthrough path the URL is **not**
 Graph page whose Query Catalog panel is permanently empty, reading
 "No catalog metadata loaded yet."
 
-**This is a real, observed failure.** During plan 065's Gate B, an operator
+**This is a real, observed failure.** While browser-checking the per-user catalog
+favourites change, an operator
 sitting at `https://localhost/app/` saw exactly that: a rendered Graph page with
 a dead catalog panel. Navigating manually to `https://localhost/app/graph` fixed
 it instantly. The cost is a page that looks functional and silently is not —
 the worst failure shape, because the user has no signal that anything is wrong
 and no way to know the URL is the problem.
 
-**What improves.** No URL a user can reach lands on a half-wired page. The root
-canonicalises to `/app/graph`, which is already the documented landing path
-(`DEFAULT_NEXT_PATH` in `src/app/api/auth/v1/service.py:53`).
+**What improves.** The two paths a *browser* arrives at without asking —
+`/app` and `/app/` — stop rendering a half-wired page. They canonicalise to
+`/app/graph`, which is already the documented landing path (`DEFAULT_NEXT_PATH`
+in `src/app/api/auth/v1/service.py:53`).
+
+The trailing-slash form of the Graph path, `/app/graph/`, is a **second** entry
+into the same defect and is fixed in this plan too (Step 4). `display_page`
+normalises the trailing slash before routing (`src/ui/layout.py:179`), so
+`/app/graph/` renders the Graph layout — but the catalog gate compares the raw
+pathname and rejects it, leaving the same dead panel. After Steps 1–4, no URL
+that renders the Graph layout reaches it with a dead catalog panel.
 
 ## Current state
 
@@ -70,6 +79,32 @@ canonicalises to `/app/graph`, which is already the documented landing path
 ```
 
 The first of these is what empties the catalog panel.
+
+These two are the **only** gates in the UI that compare against a single
+un-normalised literal. Every other page's equivalent gate accepts both slash
+forms, e.g.:
+
+```python
+# src/ui/pages/catalog/callbacks.py:27
+    if pathname not in ("/app/catalog", "/app/catalog/", "/app/library", "/app/library/"):
+```
+
+```python
+# src/ui/pages/settings/runtime.py:359
+    if pathname not in ("/app/settings/runtime", "/app/settings/runtime/"):
+```
+
+So `/app/graph/` — which `display_page` *does* route to the Graph layout, since
+it normalises the slash at `src/ui/layout.py:179` — is the second half-wired
+entry point, and the trailing-slash blindness is peculiar to these two gates
+rather than an intentional design.
+
+**Important — normalising is not the same as accepting `/app/`.** The suggested
+predicate is `(pathname or "").rstrip("/") != "/app/graph"`. Because
+`"/app/".rstrip("/")` is `"/app"`, the app root still does **not** match the
+graph gate. Normalising the gate does not make the root claim to be the Graph
+page; it only lets the trailing-slash form of the Graph path through. The root
+is handled by the redirect in Step 1.
 
 **3. How a browser reaches a non-canonical path.** `deploy/nginx/nginx.conf:139-140`:
 
@@ -128,18 +163,26 @@ So the loader is correct; only the URL is wrong.
 **In scope**:
 - `src/ui/session_guard.py` — add the canonicalising redirect
 - `deploy/nginx/nginx.conf` — point `location = /` at the canonical path
+- `src/ui/pages/graph/callbacks/catalog.py` — normalise the `pathname` gate
+- `src/ui/pages/graph/callbacks/analytics_mode.py` — normalise the `pathname` gate
 - `tests/test_ui_session_guard_stale.py` — extend (this is the existing
   session-guard test file; there is no `tests/test_session_guard.py`)
+- `tests/test_catalog_favourites_ui.py` — extend with the `/app/graph/` cases
 - `tests/` — a `server`-marked test for the redirect, if none exists
 
 **Out of scope** (do NOT touch):
 - `display_page`'s fallthrough in `src/ui/layout.py`. Removing it would turn a
   mistyped URL into an error page — a regression. The fallthrough stays; this
   plan ensures users do not *arrive* at a path that only half-works.
-- The `pathname != "/app/graph"` gates. They are correct: the callbacks should
-  not run on other paths. **Do not broaden them to accept `/app/`** — that would
-  make the root silently claim to be the Graph page.
+- The **other** `pathname`-gated callbacks under `src/ui/pages/` (connectors,
+  catalog, settings). They already tolerate both slash forms — see the
+  "Current state" section — so there is nothing to change. Leave them alone.
 - `src/app/api/auth/v1/service.py` — `DEFAULT_NEXT_PATH` is already `/app/graph`.
+  **This file also holds the post-logout URI, which must stay `/app` — see the
+  STOP conditions. Do not "align" it to `/app/graph`.**
+- `deploy/keycloak/realm-wba.json.template` — the realm's
+  `post.logout.redirect.uris` is registered as `${APP_PUBLIC_BASE_URL}/app` and
+  must not change. See the STOP conditions.
 - Any `src/app/` change.
 
 ## Steps
@@ -209,6 +252,33 @@ With the stack up and the containers recreated:
 
 **Verify**: record the final URL and whether the catalog loaded, for all three.
 
+### Step 4: Normalise the two Graph gates so `/app/graph/` also loads
+
+`/app/graph/` renders the Graph layout (`display_page` normalises the slash) but
+both gates reject it, so it shows the same dead catalog panel. Normalise the
+comparison in both:
+
+```python
+# src/ui/pages/graph/callbacks/catalog.py:273
+    if (pathname or "").rstrip("/") != "/app/graph":
+        return no_update, no_update, no_update
+```
+
+```python
+# src/ui/pages/graph/callbacks/analytics_mode.py:16
+    if (pathname or "").rstrip("/") != "/app/graph":
+        return {}, {}
+```
+
+Change **only** the guard expression. Do not alter either callback's return
+values, docstring, or decorator. Do not use a prefix/`startswith` match — that
+would also accept `/app/graphs` or `/app/graph/x`, which are different routes.
+
+**Verify**: `pytest -m unit tests -q` → no new failures (≥ 2632 passed).
+
+**Verify**: `pytest -m unit tests/test_catalog_favourites_ui.py -q` → all pass
+(this file already drives `load_query_catalog("/app/graph")`).
+
 ## Test plan
 
 - Extend `tests/test_ui_session_guard_stale.py` with `unit`-marked cases for the
@@ -232,6 +302,12 @@ With the stack up and the containers recreated:
   widening it, observing the failure, and reverting.
 - If a `server`-marked test is added, it must assert the redirect **status and
   `Location` header** for `/` and `/app/`, not merely a 200 somewhere.
+- For Step 4, add `unit` cases that call `load_query_catalog` directly (and
+  `toggle_query_panel_for_analytics_mode`), asserting it does **not** return
+  `no_update` for `/app/graph/`. `tests/test_catalog_favourites_ui.py:175`
+  already calls `load_query_catalog("/app/graph")` — match that idiom. Include a
+  negative case: `/app/graphs` and `/app/graph/x` must still be rejected, so a
+  `startswith` regression is caught.
 
 ## Done criteria
 
@@ -240,8 +316,12 @@ With the stack up and the containers recreated:
 - [ ] `https://localhost/`, `https://localhost/app`, `https://localhost/app/`
       all end at `/app/graph` with the catalog loaded (Step 3 observed)
 - [ ] `https://localhost/app/graph` still renders normally
+- [ ] `https://localhost/app/graph/` also loads the catalog (Step 4)
 - [ ] A Dash callback request is **not** redirected (no 302 on `/_dash-*`)
 - [ ] `nginx.conf` edit is live in the container (`grep` inside the container)
+- [ ] `src/app/api/auth/v1/service.py` and
+      `deploy/keycloak/realm-wba.json.template` are unmodified
+      (`git status` shows neither)
 - [ ] No file outside the in-scope list modified
 - [ ] `plans/README.md` status row updated
 
@@ -259,12 +339,29 @@ Stop and report if:
 - The `pathname` values observed in the browser differ from `/app/` (e.g. Dash
   is configured with a different prefix than the plan assumes) — record what you
   actually see.
+- **You are tempted to change the post-logout redirect to `/app/graph`.** Do
+  not. The app's post-logout URI is `/app`, and it is registered with Keycloak
+  as `post.logout.redirect.uris = ${APP_PUBLIC_BASE_URL}/app`
+  (`deploy/keycloak/realm-wba.json.template`), matching the value the API sends
+  as `post_logout_redirect_uri` (`src/app/api/auth/v1/service.py`, the
+  RP-initiated logout URL). Keycloak validates the requested URI against that
+  registered set. Changing either to `/app/graph` makes Keycloak reject the
+  request and render its own error page instead of returning the user, and the
+  realm **cannot** be re-seeded non-destructively (`--import-realm` is
+  create-only). Canonicalising `/app` → `/app/graph` at the nginx/UI layer is
+  the intended fix; the registered `/app` URI is correct and must stay. If you
+  believe it must change, STOP and report.
 
 ## Maintenance notes
 
-- **The invariant this protects:** any path `display_page` falls through to the
-  Graph layout for must not be a path a user normally reaches. The fallthrough
-  is a safety net for typos, not a route.
+- **The invariant this protects:** any path that `display_page` routes to the
+  Graph layout — whether by an explicit route, the trailing-slash normalisation,
+  or the fallthrough — must leave the Graph page fully wired. The fallthrough is
+  a safety net for typos, not a route; `/app` and `/app/` were the paths that
+  broke it.
+- **The post-logout URI is deliberately `/app`, not `/app/graph`.** It is
+  registered with Keycloak and cannot be changed without a realm re-seed. A
+  future change that "canonicalises the root" must not touch it.
 - **A reviewer should scrutinize**: that the redirect is navigation-only (a
   redirected Dash callback breaks the page), and that the nginx change is
   actually live — a bind-mounted config can silently serve a stale inode, so the
@@ -276,3 +373,23 @@ Stop and report if:
 - **Deferred**: making the fallthrough itself smarter (rendering a "page not
   found" affordance rather than the Graph layout). That is a UX decision, not a
   defect fix.
+
+## Execution record — 2026-11-10 — DONE
+
+All four steps executed uncommitted in the working tree on
+`feature/callback-issue`.
+
+| Step | Change | Evidence |
+|---|---|---|
+| 1 | `session_guard` canonicalises `/app` and `/app/` to `/app/graph` before the session checks | 13 targeted tests pass, incl. the no-redirect cases for `/app/graph`, `/app/analytics`, and XHR |
+| 2 | nginx `location = /` → `/app/graph` | in-container grep line 140, `nginx -t` ok, `curl /` → `302 /app/graph` |
+| 3 | Rebuilt the `ui` image (no source mount) and browser-verified all three root forms plus the logged-out flow | all land on `/app/graph` with 140 catalog queries; API log shows the fetch |
+| 4 | Both Graph gates normalised with `rstrip("/")` | `/app/graph/` loads; `/app/graphs` still empty; full suite 2647 passed |
+
+**Verification gates**: `pytest -m unit tests -q` → 2647 passed, 0 failed,
+2 skipped; `mypy src/` exit 0; `pylint src` 10.00/10; flake8 findings on the
+edited files are byte-identical to HEAD (pre-existing).
+
+**Note for a future run**: the `ui` service has no source bind-mount, so a UI
+change is not live until `docker compose up -d --build ui`. Step 3 would have
+produced a false failure against the stale image.

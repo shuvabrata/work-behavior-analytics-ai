@@ -8,33 +8,38 @@ from dash import html
 import dash_bootstrap_components as dbc
 
 from ui.components.common import create_page_header
+from ui.components.hub_card import hub_card
 from ui.styles import CARD_CONTAINER_STYLE
-from .components.settings_card import settings_card
+
+SETTINGS_CARD_TYPE = "settings-card"
 
 
 def get_layout() -> html.Div:
     """Return the settings hub page layout."""
     cards = [
-        settings_card(
+        hub_card(
             card_id="runtime",
             title="Runtime Settings",
             icon="fa-solid fa-sliders",
             description="Configure application behaviour.",
             href="/app/settings/runtime",
+            card_type=SETTINGS_CARD_TYPE,
         ),
-        settings_card(
+        hub_card(
             card_id="ai-prompt-control",
             title="AI Prompt Control",
             icon="fa-solid fa-brain",
             description="Manage system prompts and AI response controls.",
             coming_soon=True,
+            card_type=SETTINGS_CARD_TYPE,
         ),
-        settings_card(
+        hub_card(
             card_id="graph-styling",
             title="Graph Styling",
             icon="fa-solid fa-palette",
             description="Customize graph colors, labels, and node appearance.",
             href="/app/settings/graph-styling",
+            card_type=SETTINGS_CARD_TYPE,
         ),
     ]
 

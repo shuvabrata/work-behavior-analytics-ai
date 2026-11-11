@@ -7,10 +7,12 @@ from typing import Any
 from dash import ALL, Input, Output, callback, callback_context
 from dash.exceptions import PreventUpdate
 
+from .layout import SETTINGS_CARD_TYPE
+
 
 @callback(
     Output("url", "pathname", allow_duplicate=True),
-    Input({"type": "settings-card", "card_id": ALL}, "n_clicks_timestamp"),
+    Input({"type": SETTINGS_CARD_TYPE, "card_id": ALL}, "n_clicks_timestamp"),
     prevent_initial_call=True,
 )
 def handle_card_click(_timestamps: list[int | None]) -> Any:

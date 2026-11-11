@@ -7,7 +7,7 @@ from dash import clientside_callback, dcc, html
 from dash.dependencies import Input, Output, State
 from dash.exceptions import PreventUpdate
 
-from ui.pages import analytics, chat, collaboration_network, collaboration_network_ego, connectors, graph, search, settings, timeline, catalog
+from ui.pages import analytics, chat, collaboration_network, collaboration_network_ego, connectors, developer, graph, search, settings, timeline, catalog
 from ui.components.account_bar import get_account_bar_layout
 from ui.components.permission_errors import register_auth_redirect
 from ui.components.setup_banner import get_banner_layout
@@ -79,6 +79,11 @@ def create_dash_app() -> dash.Dash:
             dbc.NavLink(
                 [html.I(className="fas fa-cog fa-fw me-2", title="Settings"), html.Span("Settings", className="sidebar-text")],
                 href="/app/settings", active="exact", id="nav-settings",
+                className="executive-nav-link d-flex align-items-center text-nowrap",
+            ),
+            dbc.NavLink(
+                [html.I(className="fas fa-code fa-fw me-2", title="Developer"), html.Span("Developer", className="sidebar-text")],
+                href="/app/developer", active="exact", id="nav-developer",
                 className="executive-nav-link d-flex align-items-center text-nowrap",
             ),
         ],
@@ -199,6 +204,8 @@ def create_dash_app() -> dash.Dash:
             "/app/settings": settings.get_layout,
             "/app/settings/runtime": settings.get_runtime_layout,
             "/app/settings/graph-styling": settings.get_graph_styling_layout,
+            "/app/developer": developer.get_layout,
+            "/app/developer/api": developer.get_api_layout,
             "/app/search": search.get_layout,
             "/app/chat": chat.get_layout,
         }

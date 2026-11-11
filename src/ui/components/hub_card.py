@@ -1,7 +1,9 @@
-"""Settings hub card component.
+"""Hub card component.
 
-A card used on the Settings hub page (and other hub pages) to navigate to
-sub-pages or show placeholder cards for upcoming features.
+A card used on hub pages (Settings, Developer, and future ones) to navigate to
+sub-pages or show placeholder cards for upcoming features. Lives here rather
+than inside a page package so any page can use it without importing another
+page's package.
 """
 
 from typing import Any
@@ -24,7 +26,7 @@ from ui.styles import (
 )
 
 
-def settings_card(
+def hub_card(
     card_id: str,
     title: str,
     icon: str,
@@ -105,7 +107,7 @@ def settings_card(
 
     card_props: dict[str, Any] = {
         "id": {"type": card_type, "card_id": card_id},
-        "className": "settings-card",
+        "className": "hub-card",
         "style": {
             "padding": SPACING_SMALL,
             "backgroundColor": COLOR_BACKGROUND_LIGHT,

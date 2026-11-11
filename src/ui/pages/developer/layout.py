@@ -10,6 +10,8 @@ from ui.components.common import create_page_header
 from ui.styles import CARD_CONTAINER_STYLE
 from ui.pages.settings.components.settings_card import settings_card
 
+DEVELOPER_CARD_TYPE = "developer-card"
+
 
 def get_layout() -> html.Div:
     """Return the developer hub page layout."""
@@ -20,7 +22,7 @@ def get_layout() -> html.Div:
             icon="fa-solid fa-code",
             description="Browse interactive API documentation.",
             href="/app/developer/api",
-            card_type="developer-card",
+            card_type=DEVELOPER_CARD_TYPE,
         ),
         settings_card(
             card_id="mcp",
@@ -28,7 +30,7 @@ def get_layout() -> html.Div:
             icon="fa-solid fa-server",
             description="Connect AI agents via the Model Context Protocol.",
             coming_soon=True,
-            card_type="developer-card",
+            card_type=DEVELOPER_CARD_TYPE,
         ),
     ]
 

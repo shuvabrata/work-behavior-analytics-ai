@@ -32,7 +32,7 @@ def settings_card(
     *,
     href: str | None = None,
     coming_soon: bool = False,
-    card_type: str = "settings-card",
+    card_type: str,
 ) -> html.Div:
     """Build a hub card for navigating to sub-pages or showing upcoming features.
 
@@ -44,9 +44,9 @@ def settings_card(
         href: If provided, the card is clickable and navigates to this path.
         coming_soon: If True, a "Coming soon" badge is shown in the top-right.
         card_type: The ``type`` field of the pattern-matching component id.
-            Defaults to ``"settings-card"`` (Settings hub).  Pass a distinct
-            value such as ``"developer-card"`` for other hub pages so that
-            their callbacks do not share the same pattern-match namespace.
+            Each hub page passes its own value (``"settings-card"``,
+            ``"developer-card"``) so its callback owns a distinct pattern-match
+            namespace and a card_id collision across hubs cannot mis-route.
 
     Returns:
         A Dash html.Div representing the card.

@@ -203,3 +203,18 @@ def test_sidebar_timeline_nav_link(app_layout: Any) -> None:
     ]
     assert len(nav_links) == 1, "sidebar is missing the Timeline nav item"
     assert nav_links[0].href == "/app/timeline"
+
+
+def test_sidebar_developer_nav_link(app_layout: Any) -> None:
+    """The sidebar must offer a dedicated 'Developer' item at /app/developer.
+
+    Guards the Developer hub's primary entry point. If this test fails, the
+    nav item was removed or its href changed — restore the dbc.NavLink with
+    id='nav-developer' and href='/app/developer' in src/ui/layout.py.
+    """
+    nav_links = [
+        node for node in _iter_components(app_layout)
+        if getattr(node, "id", None) == "nav-developer"
+    ]
+    assert len(nav_links) == 1, "sidebar is missing the Developer nav item"
+    assert nav_links[0].href == "/app/developer"

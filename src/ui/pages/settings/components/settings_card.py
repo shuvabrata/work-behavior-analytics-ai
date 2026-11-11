@@ -1,7 +1,7 @@
 """Settings hub card component.
 
-A card used on the Settings hub page to navigate to sub-pages or show
-placeholder cards for upcoming features.
+A card used on the Settings hub page (and other hub pages) to navigate to
+sub-pages or show placeholder cards for upcoming features.
 """
 
 from typing import Any
@@ -32,8 +32,9 @@ def settings_card(
     *,
     href: str | None = None,
     coming_soon: bool = False,
+    card_type: str = "settings-card",
 ) -> html.Div:
-    """Build a settings hub card.
+    """Build a hub card for navigating to sub-pages or showing upcoming features.
 
     Args:
         card_id: Unique identifier for the card (used in the pattern-matching id).
@@ -42,6 +43,10 @@ def settings_card(
         description: Short description displayed below the title.
         href: If provided, the card is clickable and navigates to this path.
         coming_soon: If True, a "Coming soon" badge is shown in the top-right.
+        card_type: The ``type`` field of the pattern-matching component id.
+            Defaults to ``"settings-card"`` (Settings hub).  Pass a distinct
+            value such as ``"developer-card"`` for other hub pages so that
+            their callbacks do not share the same pattern-match namespace.
 
     Returns:
         A Dash html.Div representing the card.
@@ -99,7 +104,7 @@ def settings_card(
     ]
 
     card_props: dict[str, Any] = {
-        "id": {"type": "settings-card", "card_id": card_id},
+        "id": {"type": card_type, "card_id": card_id},
         "className": "settings-card",
         "style": {
             "padding": SPACING_SMALL,

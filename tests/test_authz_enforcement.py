@@ -80,6 +80,8 @@ CASES: list[tuple[str, str, dict[str, Any]]] = [
     ("GET", "/api/v1/connectors/github/configs", {}),
     ("PUT", "/api/v1/queries/catalog/ns/slug", {}),
     ("POST", "/api/v1/graph-themes/1/set-default", {}),
+    ("GET", "/api/v1/admin/users/", {}),
+    ("DELETE", "/api/v1/admin/users/abc", {}),
 ]
 
 # (method, path, params) -> {role: "401" | "403" | "allowed"}
@@ -121,7 +123,30 @@ EXPECTED: dict[tuple[str, str, str], dict[str, str]] = {
     ("POST", "/api/v1/graph-themes/1/set-default", ""): {
         "none": "401", "user": "403", "admin": "allowed", "service": "403",
     },
+    ("GET", "/api/v1/admin/users/", ""): {
+        "none": "401", "user": "403", "admin": "allowed", "service": "403",
+    },
+    ("DELETE", "/api/v1/admin/users/abc", ""): {
+        "none": "401", "user": "403", "admin": "allowed", "service": "403",
+    },
 }
+
+
+@pytest.fixture(autouse=True)
+def _stub_keycloak(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep the "allowed" admin cells off the network.
+
+    The admin-user handlers would otherwise reach ``keycloak:8080``. Stubbing the
+    agent to raise leaves the handler answering 503, which is neither 401 nor 403,
+    so the "allowed" assertion still holds without any traffic.
+    """
+    from app.auth import keycloak_admin as k
+
+    def boom(*args: Any, **kwargs: Any) -> Any:
+        raise k.KeycloakUnavailableError("stubbed")
+
+    monkeypatch.setattr(k, "_request", boom)
+    monkeypatch.setattr(k, "_admin_token", lambda: "tok")
 
 
 def _params_key(params: dict[str, Any]) -> str:

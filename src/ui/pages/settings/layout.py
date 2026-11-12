@@ -13,6 +13,12 @@ from ui.styles import CARD_CONTAINER_STYLE
 
 SETTINGS_CARD_TYPE = "settings-card"
 
+SETTINGS_CARD_ROUTES: dict[str, str] = {
+    "runtime": "/app/settings/runtime",
+    "graph-styling": "/app/settings/graph-styling",
+    "user-management": "/app/settings/user-management",
+}
+
 
 def get_layout() -> html.Div:
     """Return the settings hub page layout."""
@@ -39,6 +45,14 @@ def get_layout() -> html.Div:
             icon="fa-solid fa-palette",
             description="Customize graph colors, labels, and node appearance.",
             href="/app/settings/graph-styling",
+            card_type=SETTINGS_CARD_TYPE,
+        ),
+        hub_card(
+            card_id="user-management",
+            title="User Management",
+            icon="fa-solid fa-users",
+            description="Create, edit, and remove application users.",
+            href="/app/settings/user-management",
             card_type=SETTINGS_CARD_TYPE,
         ),
     ]

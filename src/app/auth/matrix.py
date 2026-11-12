@@ -31,6 +31,14 @@ AUTHZ_MATRIX: dict[tuple[str, str], Grant] = {
     ("POST", "/api/v1/auth/token"): "session",
     # ── any authenticated principal ──────────────────────────────────────
     ("GET", "/api/v1/auth/me"): "user",
+    # admin users — the whole surface is wba-admin only
+    ("GET", "/api/v1/admin/users/"): "admin",
+    ("POST", "/api/v1/admin/users/"): "admin",
+    ("GET", "/api/v1/admin/users/roles"): "admin",
+    ("GET", "/api/v1/admin/users/{user_id}"): "admin",
+    ("PATCH", "/api/v1/admin/users/{user_id}"): "admin",
+    ("PUT", "/api/v1/admin/users/{user_id}/password"): "admin",
+    ("DELETE", "/api/v1/admin/users/{user_id}"): "admin",
     # activity
     ("GET", "/api/v1/activity/suggest"): "user",
     ("GET", "/api/v1/activity/timeline"): "user",

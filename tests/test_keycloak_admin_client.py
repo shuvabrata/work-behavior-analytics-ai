@@ -81,6 +81,48 @@ def test_admin_401_becomes_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:
         k.get_user("abc")
 
 
+def test_admin_401_invalidates_token(monkeypatch: pytest.MonkeyPatch) -> None:
+    _settings(monkeypatch)
+    posts = {"n": 0}
+
+    def fake_post(url: str, **kwargs: Any) -> _FakeResponse:
+        posts["n"] += 1
+        return _FakeResponse(200, json_body={"access_token": "t", "expires_in": 300})
+
+    monkeypatch.setattr(requests, "post", fake_post)
+    assert k._admin_token() == "t"
+
+    monkeypatch.setattr(requests, "request", lambda *a, **kw: _FakeResponse(401, text="unauthorized"))
+    with pytest.raises(k.KeycloakUnavailableError):
+        k.get_user("abc")
+    assert k._state.access_token is None
+
+    with pytest.raises(k.KeycloakUnavailableError):
+        k.get_user("abc")
+    assert posts["n"] == 2
+
+
+def test_admin_403_keeps_token(monkeypatch: pytest.MonkeyPatch) -> None:
+    _settings(monkeypatch)
+    posts = {"n": 0}
+
+    def fake_post(url: str, **kwargs: Any) -> _FakeResponse:
+        posts["n"] += 1
+        return _FakeResponse(200, json_body={"access_token": "t", "expires_in": 300})
+
+    monkeypatch.setattr(requests, "post", fake_post)
+    assert k._admin_token() == "t"
+
+    monkeypatch.setattr(requests, "request", lambda *a, **kw: _FakeResponse(403, text="forbidden"))
+    with pytest.raises(k.KeycloakUnavailableError):
+        k.get_user("abc")
+    assert k._state.access_token == "t"
+
+    with pytest.raises(k.KeycloakUnavailableError):
+        k.get_user("abc")
+    assert posts["n"] == 1
+
+
 def test_status_mapping(monkeypatch: pytest.MonkeyPatch) -> None:
     _settings(monkeypatch)
     monkeypatch.setattr(

@@ -202,7 +202,15 @@ def _request(
             f"admin request failed ({type(exc).__name__})"
         ) from exc
 
-    if resp.status_code in (401, 403):
+    if resp.status_code == 401:
+        # A rejected token must not stay cached: every later call would replay
+        # it until its cache entry lapsed, turning one rotation into minutes of
+        # 503s. A 403 below is a valid token missing a role, not a stale one.
+        invalidate_admin_token()
+        raise KeycloakUnavailableError(
+            f"admin API refused the service account (status {resp.status_code})"
+        )
+    if resp.status_code == 403:
         raise KeycloakUnavailableError(
             f"admin API refused the service account (status {resp.status_code})"
         )

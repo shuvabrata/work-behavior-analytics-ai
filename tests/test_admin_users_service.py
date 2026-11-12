@@ -228,5 +228,82 @@ async def test_list_total_excludes_service_accounts(monkeypatch: pytest.MonkeyPa
     assert len(users) == 24
 
 
+def _recording_admin(
+    page: list[dict[str, Any]],
+    count: int,
+    service_account_count: int,
+    count_calls: list[str | None],
+) -> type:
+    """Build a fake ``keycloak_admin`` that records ``count_users`` calls."""
+
+    class _FakeAdmin:
+        @staticmethod
+        def list_users(offset: int, limit: int, search: str | None) -> tuple[list[dict[str, Any]], int]:
+            return page, count
+
+        @staticmethod
+        def count_users(search: str | None) -> int:
+            count_calls.append(search)
+            return service_account_count
+
+        @staticmethod
+        def realm_roles(uid: str) -> list[str]:
+            return ["wba-user"]
+
+    return _FakeAdmin
+
+
+async def test_list_total_under_search_is_not_negative(monkeypatch: pytest.MonkeyPatch, _patch_query: Any) -> None:
+    """A search whose only match is a service account must not yield a negative total."""
+    monkeypatch.undo()
+    from app.api.admin_users.v1 import query
+
+    count_calls: list[str | None] = []
+    monkeypatch.setattr(
+        query,
+        "keycloak_admin",
+        _recording_admin([_raw("sa", username="service-account-x")], 1, 3, count_calls),
+    )
+    users, total = query.list_users(0, 25, "service")
+    assert total == 1
+    assert users == []
+    assert count_calls == []
+
+
+async def test_list_total_under_search_covers_all_matches(
+    monkeypatch: pytest.MonkeyPatch, _patch_query: Any
+) -> None:
+    """A search-scoped count must not be reduced by the global service-account count."""
+    monkeypatch.undo()
+    from app.api.admin_users.v1 import query
+
+    count_calls: list[str | None] = []
+    page = [_raw(f"u{i}") for i in range(25)]
+    monkeypatch.setattr(query, "keycloak_admin", _recording_admin(page, 26, 3, count_calls))
+    users, total = query.list_users(0, 25, "a")
+    assert total == 26
+    assert len(users) == 25
+    assert count_calls == []
+
+
+async def test_list_total_clamps_and_skips_global_count(
+    monkeypatch: pytest.MonkeyPatch, _patch_query: Any
+) -> None:
+    """With no search term the total clamps at zero and the global count is used."""
+    monkeypatch.undo()
+    from app.api.admin_users.v1 import query
+
+    count_calls: list[str | None] = []
+    monkeypatch.setattr(
+        query,
+        "keycloak_admin",
+        _recording_admin([_raw("u1")], 1, 3, count_calls),
+    )
+    users, total = query.list_users(0, 25, None)
+    assert total == 0
+    assert len(users) == 1
+    assert count_calls == ["service-account-"]
+
+
 def test_list_assignable_roles() -> None:
     assert service.list_assignable_roles().roles == ["wba-admin", "wba-user"]

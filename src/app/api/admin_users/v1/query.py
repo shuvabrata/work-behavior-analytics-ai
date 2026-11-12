@@ -43,11 +43,17 @@ def list_users(
 ) -> tuple[list[UserSummary], int]:
     """Return a page of listable users and the count of listable users.
 
-    Keycloak's own count includes service-account users, so ``total`` is
-    ``count - service_account_count`` — the count of rows the pager can render.
+    Keycloak's count always includes service-account users while the page
+    filters them out. With no search term every service account is inside the
+    count, so it is subtracted exactly. With one, the count covers only the
+    matching subset and the service accounts within that subset are not
+    separately countable, so the count stands — overstating by at most however
+    many service accounts match the term.
     """
     raw_users, count = keycloak_admin.list_users(offset, limit, search)
-    service_account_count = keycloak_admin.count_users(_SERVICE_ACCOUNT_PREFIX)
+    total = count
+    if not search:
+        total = max(0, count - keycloak_admin.count_users(_SERVICE_ACCOUNT_PREFIX))
 
     summaries: list[UserSummary] = []
     for user in raw_users:
@@ -57,7 +63,7 @@ def list_users(
         summaries.append(
             _to_summary(user, sorted(set(roles) & ASSIGNABLE_REALM_ROLES))
         )
-    return summaries, count - service_account_count
+    return summaries, total
 
 
 def get_user_raw(user_id: str) -> dict[str, object]:

@@ -12,6 +12,7 @@ Plan files for completed work are removed as they land — that is this director
 |------|-------|----------|--------|------------|--------|
 | 001 | Admin user management in the app (Keycloak Admin API + Settings page) | P1 | L | — | DONE — operator re-seed (Step 14) verified 2026-11-12 |
 | 002 | Rename the realm roles and Keycloak client ids (drop the `wba-` prefix) | P2 | M | — | TODO |
+| 003 | Make the admin user list's `total` honest and stop replaying a rejected admin token | P1 | S | — | DONE — verified 2026-11-12 (5 new tests, revert-proofed; uncommitted in the working tree) |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) | REJECTED (with one-line rationale).
 
@@ -26,6 +27,10 @@ Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) | REJE
   001 stays DONE — its code work is unaffected; only its realm strings move.
 - 002's own Step 2 is an operator re-seed, for the same `--import-realm`
   create-only reason, and additionally flushes `auth_session`.
+- 003 is independent of both. It edits
+  `src/app/api/admin_users/v1/query.py` and `src/app/auth/keycloak_admin.py`,
+  which 002 does not touch; 002 changes only the realm role and client id
+  *strings*. Either order is fine.
 
 ## Findings considered and rejected
 

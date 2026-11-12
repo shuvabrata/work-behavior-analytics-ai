@@ -188,6 +188,26 @@ class TestLayout:
         props = search.to_plotly_json()["props"]
         assert props.get("className") == "catalog-search-input"
 
+    def test_pagination_buttons_use_theme_aware_class(self) -> None:
+        """Outline-secondary alone is unreadable; the subtle-action class fixes it.
+
+        Bootstrap's stock ``.btn-outline-secondary`` is ``#6c757d``, which the
+        theme stylesheet documents as failing contrast against both theme
+        backgrounds, and it is not restyled otherwise. ``btn-subtle-action``
+        supplies the theme-aware ``--color-text-secondary`` token instead.
+        """
+        from ui.pages.settings.user_management.layout import get_layout
+
+        by_id = {
+            node.id: node
+            for node in _iter_components(get_layout())
+            if getattr(node, "id", None) in ("um-prev", "um-next")
+        }
+        assert set(by_id) == {"um-prev", "um-next"}
+        for button_id, node in by_id.items():
+            props = node.to_plotly_json()["props"]
+            assert "btn-subtle-action" in (props.get("className") or ""), f"{button_id} is unstyled"
+
     def test_pagination_has_page_indicator(self) -> None:
         from ui.pages.settings.user_management.layout import get_layout
 

@@ -117,30 +117,79 @@ def _render_table(users: list[dict[str, Any]]) -> dbc.Table:
     )
 
 
+def _field_label(text: str, html_for: str, *, first: bool = False) -> dbc.Label:
+    """Return a form label, spaced above its input except for the first field."""
+    return dbc.Label(
+        text,
+        html_for=html_for,
+        className="" if first else "mt-3",
+        style={"fontFamily": FONT_SANS, "fontSize": FONT_SIZE_XSMALL},
+    )
+
+
 def _create_form() -> dbc.Modal:
     return dbc.Modal(
         [
             dbc.ModalHeader(dbc.ModalTitle("New user")),
             dbc.ModalBody(
                 [
-                    dbc.Input(id="um-create-username", placeholder="Username", type="text"),
+                    _field_label("Username", "um-create-username", first=True),
                     dbc.Input(
-                        id="um-create-email", placeholder="Email", type="email", class_name="mt-2"
+                        id="um-create-username",
+                        placeholder="e.g. jsmith",
+                        type="text",
+                        size="sm",
                     ),
-                    dbc.Input(id="um-create-first-name", placeholder="First name", class_name="mt-2"),
-                    dbc.Input(id="um-create-last-name", placeholder="Last name", class_name="mt-2"),
+                    _field_label("Email", "um-create-email"),
+                    dbc.Input(
+                        id="um-create-email",
+                        placeholder="e.g. jsmith@example.com",
+                        type="email",
+                        size="sm",
+                    ),
+                    dbc.Row(
+                        [
+                            dbc.Col(
+                                [
+                                    _field_label("First name", "um-create-first-name"),
+                                    dbc.Input(
+                                        id="um-create-first-name",
+                                        placeholder="e.g. Jane",
+                                        type="text",
+                                        size="sm",
+                                    ),
+                                ],
+                                md=6,
+                            ),
+                            dbc.Col(
+                                [
+                                    _field_label("Last name", "um-create-last-name"),
+                                    dbc.Input(
+                                        id="um-create-last-name",
+                                        placeholder="e.g. Smith",
+                                        type="text",
+                                        size="sm",
+                                    ),
+                                ],
+                                md=6,
+                            ),
+                        ],
+                        className="g-2",
+                    ),
+                    html.Div("Roles", className="mt-3", style={"fontFamily": FONT_SANS, "fontSize": FONT_SIZE_XSMALL}),
+                    html.Div(id="um-create-roles-container"),
                     dbc.Checklist(
                         id="um-create-enabled",
                         options=[{"label": "Enabled", "value": "enabled"}],
                         value=["enabled"],
-                        class_name="mt-2",
+                        className="mt-2",
                     ),
-                    html.Div(id="um-create-roles-container", className="mt-2"),
+                    _field_label("Temporary password (optional)", "um-create-password"),
                     dbc.Input(
                         id="um-create-password",
-                        placeholder="Temporary password (optional)",
+                        placeholder="Leave blank to set later",
                         type="password",
-                        class_name="mt-2",
+                        size="sm",
                     ),
                 ]
             ),
@@ -169,16 +218,50 @@ def _edit_form() -> dbc.Modal:
             dbc.ModalHeader(dbc.ModalTitle("Edit user")),
             dbc.ModalBody(
                 [
-                    dbc.Input(id="um-edit-email", placeholder="Email", type="email"),
-                    dbc.Input(id="um-edit-first-name", placeholder="First name", class_name="mt-2"),
-                    dbc.Input(id="um-edit-last-name", placeholder="Last name", class_name="mt-2"),
+                    _field_label("Email", "um-edit-email", first=True),
+                    dbc.Input(
+                        id="um-edit-email",
+                        placeholder="e.g. jsmith@example.com",
+                        type="email",
+                        size="sm",
+                    ),
+                    dbc.Row(
+                        [
+                            dbc.Col(
+                                [
+                                    _field_label("First name", "um-edit-first-name"),
+                                    dbc.Input(
+                                        id="um-edit-first-name",
+                                        placeholder="e.g. Jane",
+                                        type="text",
+                                        size="sm",
+                                    ),
+                                ],
+                                md=6,
+                            ),
+                            dbc.Col(
+                                [
+                                    _field_label("Last name", "um-edit-last-name"),
+                                    dbc.Input(
+                                        id="um-edit-last-name",
+                                        placeholder="e.g. Smith",
+                                        type="text",
+                                        size="sm",
+                                    ),
+                                ],
+                                md=6,
+                            ),
+                        ],
+                        className="g-2",
+                    ),
+                    html.Div("Roles", className="mt-3", style={"fontFamily": FONT_SANS, "fontSize": FONT_SIZE_XSMALL}),
+                    html.Div(id="um-edit-roles-container"),
                     dbc.Checklist(
                         id="um-edit-enabled",
                         options=[{"label": "Enabled", "value": "enabled"}],
                         value=[],
-                        class_name="mt-2",
+                        className="mt-2",
                     ),
-                    html.Div(id="um-edit-roles-container", className="mt-2"),
                 ]
             ),
             dbc.ModalFooter(
@@ -206,7 +289,13 @@ def _password_form() -> dbc.Modal:
             dbc.ModalHeader(dbc.ModalTitle("Reset password")),
             dbc.ModalBody(
                 [
-                    dbc.Input(id="um-password-value", placeholder="New password", type="password"),
+                    _field_label("New password", "um-password-value", first=True),
+                    dbc.Input(
+                        id="um-password-value",
+                        placeholder="At least 8 characters",
+                        type="password",
+                        size="sm",
+                    ),
                     dbc.Checklist(
                         id="um-password-temporary",
                         options=[{"label": "Require change on first login", "value": "temporary"}],

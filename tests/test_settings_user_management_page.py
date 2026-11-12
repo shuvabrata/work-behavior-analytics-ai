@@ -95,6 +95,70 @@ class TestRoute:
         assert repr(rendered) == repr(get_layout())
 
 
+class TestModalForms:
+    """Every modal field needs a visible label, not just a placeholder.
+
+    A placeholder disappears once the field is filled, leaving the form
+    unlabeled — which is what an admin sees on the Edit form, where every
+    value is pre-populated.
+    """
+
+    LABELED_FIELDS = {
+        "um-create": [
+            "um-create-username",
+            "um-create-email",
+            "um-create-first-name",
+            "um-create-last-name",
+            "um-create-password",
+        ],
+        "um-edit": ["um-edit-email", "um-edit-first-name", "um-edit-last-name"],
+        "um-password": ["um-password-value"],
+    }
+
+    @pytest.mark.parametrize("field_ids", sorted(LABELED_FIELDS.values()), ids=sorted(LABELED_FIELDS))
+    def test_every_field_has_a_label(self, field_ids: list[str]) -> None:
+        from ui.pages.settings.user_management.layout import get_layout
+
+        components = list(_iter_components(get_layout()))
+        labelled = {
+            node.html_for for node in components if type(node).__name__ == "Label"
+        }
+        for field_id in field_ids:
+            assert field_id in labelled, f"{field_id} has no label"
+
+    def test_labels_target_existing_inputs(self) -> None:
+        """A label pointing at a non-existent id is as bad as no label."""
+        from ui.pages.settings.user_management.layout import get_layout
+
+        components = list(_iter_components(get_layout()))
+        input_ids = {
+            node.id
+            for node in components
+            if type(node).__name__ in ("Input", "Checklist") and isinstance(node.id, str)
+        }
+        for node in components:
+            if type(node).__name__ == "Label":
+                assert node.html_for in input_ids, f"{node.html_for} is not an input id"
+
+    def test_modal_inputs_are_compact(self) -> None:
+        """Modal inputs use ``size="sm"``, matching the rest of the app."""
+        from ui.pages.settings.user_management.layout import get_layout
+
+        modal_prefixes = ("um-create-", "um-edit-", "um-password-")
+        inputs = [
+            node
+            for node in _iter_components(get_layout())
+            if type(node).__name__ == "Input"
+            and isinstance(node.id, str)
+            and node.id.startswith(modal_prefixes)
+            and node.id != "um-search"
+        ]
+        assert inputs
+        for node in inputs:
+            props = node.to_plotly_json()["props"]
+            assert props.get("size") == "sm", f"{node.id} is not compact"
+
+
 class TestLayout:
     def test_roles_store_starts_empty(self) -> None:
         from ui.pages.settings.user_management.layout import get_layout

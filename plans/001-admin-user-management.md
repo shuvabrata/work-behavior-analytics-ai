@@ -119,7 +119,8 @@ operation it exposes is admin-only, matching `AUTHZ_MATRIX` rows of `"admin"`.
 - `src/ui/components/hub_card.py` — `hub_card(card_id, title, icon,
   description, *, href=None, coming_soon=False, card_type)`.
 - `src/ui/components/common.py` — `create_page_header`, `create_alert`,
-  `create_permission_denied_alert`, `handle_api_error`.
+  `create_permission_denied_alert`. (`handle_api_error` lives in
+  `src/ui/components/permission_errors.py`.)
 - `src/ui/api_client.py` — `get_json`, `post_json`, `put`, `patch`, `delete`;
   `ApiError` with subclasses `AuthExpiredError` (401) and
   `PermissionDeniedError` (403). All calls go through here.
@@ -165,7 +166,7 @@ operation it exposes is admin-only, matching `AUTHZ_MATRIX` rows of `"admin"`.
 - `src/app/api/admin_users/v1/query.py` (create)
 - `src/app/api/admin_users/v1/cleanup.py` (create)
 - `src/app/api_main.py` (add one import + one `include_router`)
-- `src/app/auth/matrix.py` (add six rows)
+- `src/app/auth/matrix.py` (add seven rows)
 - `src/app/settings.py` (add one secret field)
 - `src/domain/settings.py` (add one client-id field)
 - `src/ui/pages/settings/layout.py` (add card + card→route mapping)
@@ -373,6 +374,9 @@ class UserUpdate(BaseModel):
 class PasswordReset(BaseModel):
     password: str = Field(min_length=8)
     temporary: bool = True
+
+class AssignableRolesResponse(BaseModel):
+    roles: list[str]
 ```
 
 Create `src/app/api/admin_users/v1/query.py` — the only module that imports
@@ -396,6 +400,20 @@ Do not add pagination logic of our own — pass `first`/`max`/`search` straight
 through. The filter happens after the page is fetched; a page of 25 may render
 24 rows.
 
+`total` must be the count of **listed** users, not the raw Keycloak count.
+Keycloak's `GET /users/count` counts service-account users like any other user
+(they are ordinary realm users carrying `serviceAccountClientId` — the same fact
+the filter above relies on), so returning it raw makes `total` exceed the number
+of rows the pager can actually show. The dev realm alone seeds two such users
+(`service-account-wba-internal`, and `service-account-wba-admin-api` from Step
+8), so with `limit=25` the pager offers a further page whose rows are all
+filtered out and the table renders empty. Instead, fetch
+`GET /users/count?search=service-account-` alongside the page and return
+`count - service_account_count`: Keycloak's `search` matches the username, and
+every service-account user's username begins with `service-account-`, so the
+subtraction is exact. Under a user-supplied `search` the two counts already
+agree, but make the call unconditionally so the arithmetic is uniform.
+
 **Verify**: `PYTHONPATH=src python -c "from app.api.admin_users.v1.model import ASSIGNABLE_REALM_ROLES as r; print(sorted(r))"` → `['wba-admin', 'wba-user']`.
 
 ### Step 5: Service layer
@@ -405,24 +423,38 @@ plain exceptions the router maps (matching `app/api/settings/v1/service.py`'s
 `ConflictError` style):
 
 - `UserNotFoundError`, `UserExistsError`, `LastAdminError`, `SelfDeleteError`,
-  `ServiceAccountError`, `IdentityProviderUnavailableError`,
-  `PasswordPolicyError`, `InvalidRoleError`.
+  `ServiceAccountError`, `PasswordPolicyError`, `InvalidRoleError`.
 
 Functions (all `async` where they touch the network — the client is sync, so
 call it via `asyncio.to_thread` to keep the event loop free, matching
 `app/api/queries/v1/router.py`'s use of `asyncio.to_thread`):
 
 - `list_users(offset, limit, search) -> UserListResponse`
-- `get_user(user_id) -> UserSummary`
-- `create_user(payload) -> UserSummary`
+- `list_assignable_roles() -> list[str]` — the sorted assignable set, for the UI's
+  checkbox list (Step 7).
+- `get_user(user_id) -> UserSummary` — `KeycloakNotFoundError` → `UserNotFoundError`.
+- `create_user(payload) -> tuple[UserSummary, list[str]]`
   - Reject any role outside `ASSIGNABLE_REALM_ROLES` with `InvalidRoleError`.
   - Keycloak `409` → `UserExistsError`.
   - After create, if `payload.password` is set call `set_password(..., temporary=True)`.
-    If that fails, log and still return the created user (the account exists);
-    the router adds `"warnings": ["password_not_set"]` to the response.
-- `update_user(user_id, payload) -> UserSummary`
+    If that fails, log and still return the created user (the account exists).
+  - The second element is the response's `warnings` list: `["password_not_set"]`
+    when a requested password could not be set, else `[]`. The service reports
+    this explicitly because the router cannot infer it — a bare `UserSummary`
+    is identical whether or not the password call succeeded, so a router that
+    tried to guess would either drop the warning (an admin is told the user was
+    created, and the user has no way to log in) or invent a channel the tests do
+    not cover.
+- `update_user(user_id, payload) -> tuple[UserSummary, bool]`
   - Read the current user first (gives `enabled` transition and service-account
-    detection).
+    detection). `KeycloakNotFoundError` → `UserNotFoundError`.
+  - The second element is `disabled_now`: true only when **this** call flipped
+    `enabled` from `True` to `False`, computed from the pre-read above. It is
+    reported for the same reason as `create_user`'s warnings — the returned
+    summary's `enabled` is already `False` in both the transition case and the
+    already-disabled case, so the router cannot tell them apart, and a router
+    that fell back to `payload.enabled is False` would revoke a user's sessions
+    on a no-op PATCH that changed nothing.
   - `enabled: false` on a service account → `ServiceAccountError`.
   - **Last-admin guard**: if `enabled is False` and the target currently holds
     `wba-admin`, or if `roles` would remove `wba-admin`, call
@@ -439,6 +471,11 @@ call it via `asyncio.to_thread` to keep the event loop free, matching
   - Service account → `ServiceAccountError`.
   - Only admin → `LastAdminError`.
   - `KeycloakNotFoundError` → `UserNotFoundError`.
+
+All three of `get_user`, `update_user` and `delete_user` answer
+`UserNotFoundError` for a `KeycloakNotFoundError`: the topic of each operation is
+the same user, so a stale id is a 404 in every case rather than a Keycloak-internal
+exception surfacing as a 500.
 
 The router, not the service, schedules cleanup (Step 7): the service returns
 normally only after Keycloak has accepted the change, which is the ordering
@@ -507,30 +544,45 @@ Routes (all admin — the dependency is supplied at include time):
 - `POST "/"` → `201`, body `UserCreate`, response `UserCreatedResponse`. When the
   account was created but the password could not be set, return
   `warnings: ["password_not_set"]`; otherwise an empty list.
+- `GET "/roles"` → `AssignableRolesResponse`. Declare it **above** `GET "/{user_id}"`
+  in the module: FastAPI matches in declaration order, so a `{user_id}` route
+  declared first would swallow `/roles` and try to look up a user whose id is
+  the literal string `roles`.
 - `GET "/{user_id}"` → `UserSummary`.
 - `PATCH "/{user_id}"` → `UserSummary`, body `UserUpdate`.
 - `PUT "/{user_id}/password"` → `204`, body `PasswordReset`.
 - `DELETE "/{user_id}"` → `204`. Signature includes
-  `background: BackgroundTasks` (import from `fastapi`). After
-  `await service.delete_user(...)` returns successfully, call
+  `principal: Principal = Depends(require_admin)` and
+  `background: BackgroundTasks` (from `fastapi`; `Principal` from
+  `app.auth.principal`, `require_admin` from `app.auth.dependencies`). After
+  `await service.delete_user(user_id, principal)` returns successfully, call
   `background.add_task(cleanup.purge_user_data, user_id)`. Nothing is scheduled
   when the service raises.
 - `PATCH "/{user_id}"` schedules `background.add_task(cleanup.revoke_user_sessions,
-  user_id)` **only** when the update transitions `enabled` from `True` to
-  `False`.
+  user_id)` **only** when the update's `disabled_now` flag (Step 5) is true.
+- `POST "/"` returns `UserCreatedResponse` with `warnings` set from
+  `create_user`'s second element — never inferred.
+
+Every mutating handler declares `principal: Principal = Depends(require_admin)`
+as a parameter to obtain the caller for the audit line and the self-delete guard.
+The include-time `Depends(require_admin)` enforces the role but its return value
+never reaches the handler, so both are needed and neither substitutes for the
+other. `src/app/api/chats/v1/router.py` is the in-repo example of a router that
+carries the dependency both ways.
 
 The router maps service exceptions to HTTP responses:
 
 | Exception | Status | `detail.error` |
 |---|---|---|
 | `UserNotFoundError` | 404 | `user_not_found` |
+| `KeycloakNotFoundError` | 404 | `user_not_found` |
 | `UserExistsError` | 409 | `user_exists` |
 | `LastAdminError` | 409 | `last_admin` |
 | `SelfDeleteError` | 409 | `self_delete` |
 | `ServiceAccountError` | 409 | `service_account` |
 | `InvalidRoleError` | 422 | `invalid_role` |
 | `PasswordPolicyError` | 422 | `password_policy` |
-| `IdentityProviderUnavailableError` / `KeycloakUnavailableError` | 503 | `identity_provider_unavailable` |
+| `KeycloakUnavailableError` | 503 | `identity_provider_unavailable` |
 
 Use `detail={"error": ..., "message": ...}` — the UI's `api_client` reads
 `detail["error"]` and `detail["message"]`.
@@ -544,7 +596,7 @@ Then:
    app.include_router(admin_users_v1_router, prefix="/api/v1", dependencies=[Depends(require_admin)])
    ```
    Import `require_admin` alongside the existing `require_user` import.
-3. `src/app/auth/matrix.py` — add six rows under a new `# admin users` comment.
+3. `src/app/auth/matrix.py` — add seven rows under a new `# admin users` comment.
    Note the **trailing slash** on the collection routes: the router declares
    `@router.get("/")` / `@router.post("/")` under `prefix="/admin/users"`, so the
    live path templates end in `/`, exactly as `("/api/v1/settings/", ...)` does
@@ -552,13 +604,14 @@ Then:
    ```python
    ("GET", "/api/v1/admin/users/"): "admin",
    ("POST", "/api/v1/admin/users/"): "admin",
+   ("GET", "/api/v1/admin/users/roles"): "admin",
    ("GET", "/api/v1/admin/users/{user_id}"): "admin",
    ("PATCH", "/api/v1/admin/users/{user_id}"): "admin",
    ("PUT", "/api/v1/admin/users/{user_id}/password"): "admin",
    ("DELETE", "/api/v1/admin/users/{user_id}"): "admin",
    ```
 4. `tests/test_authz_matrix.py` — `test_enumeration_is_non_empty` asserts the
-   exact operation count. It is **58** today; adding six routes makes it **64**.
+   exact operation count. It is **58** today; adding seven routes makes it **65**.
    Update the number and its docstring if it mentions one.
 
 **Verify**: `pytest -m unit tests/test_authz_matrix.py -q` → all pass.
@@ -639,17 +692,28 @@ via monkeypatch. Cases:
 
 - create rejects a role outside the assignable set (`InvalidRoleError`).
 - create maps Keycloak conflict to `UserExistsError`.
-- create with a password calls `set_password(..., temporary=True)`.
+- create with a password calls `set_password(..., temporary=True)` and returns
+  `warnings == []`; create whose `set_password` raises returns the created user
+  with `warnings == ["password_not_set"]` (the tuple's second element, not an
+  inferred flag).
 - update: removing `wba-admin` when the target is the only admin raises
   `LastAdminError`.
 - update: disabling the only admin raises `LastAdminError`.
 - update: disabling a non-admin does not.
+- update: `disabled_now` is true only on a `True` → `False` transition — a PATCH
+  that re-sends `enabled: false` on an already-disabled user returns false (so
+  the router does not revoke a session on a no-op).
+- update: a `KeycloakNotFoundError` from the pre-read maps to `UserNotFoundError`.
+- get: a `KeycloakNotFoundError` maps to `UserNotFoundError`.
 - update: role diff assigns added and removes dropped assignable roles and leaves
   non-assignable roles alone.
 - delete: self-delete raises `SelfDeleteError`.
 - delete: service account raises `ServiceAccountError`.
 - delete: the only admin raises `LastAdminError`.
 - list: service accounts are filtered out.
+- list: `total` excludes service accounts — stub `list_users`'s two count calls
+  as 27 and 2, and assert `total == 25` with 25 mapped rows for a full page.
+- `list_assignable_roles` returns `["wba-admin", "wba-user"]`.
 
 **`tests/test_admin_users_cleanup.py`** — fake `AsyncSession` recording
 `execute`/`commit`/`rollback`. Cases:
@@ -668,8 +732,16 @@ override via the `unauthenticated` fixture and installing a principal, following
 - `wba-user` bearer → 403 on every new route.
 - `wba-admin` bearer with `service`/`query` stubbed → `DELETE` schedules cleanup
   exactly once with the target id.
+- `DELETE` of the caller's own subject → 409 `self_delete` (install an admin
+  principal whose `subject` equals the target id).
+- `GET /roles` → 200 with `["wba-admin", "wba-user"]`, and it is **not** shadowed
+  by the `{user_id}` route (assert the response body, not just the status).
+- `POST` whose password could not be set → 201 with
+  `warnings == ["password_not_set"]`; a successful create → `warnings == []`.
 - a Keycloak failure during delete schedules **no** cleanup.
 - a `KeycloakUnavailableError` maps to 503 `identity_provider_unavailable`.
+- a `KeycloakNotFoundError` on `GET`/`PATCH`/`DELETE` maps to 404
+  `user_not_found`.
 
 **Verify**: `pytest -m unit tests/test_keycloak_admin_client.py tests/test_admin_users_service.py tests/test_admin_users_cleanup.py tests/test_admin_users_api.py -q` → all pass.
 
@@ -708,6 +780,8 @@ __all__ = ["get_layout"]
 - `dcc.ConfirmDialog(id="um-delete-confirm", message=...)`.
 - `dcc.Store(id="um-pending-delete", data=None)` holding the pending user id +
   username.
+- `dcc.Store(id="um-roles", data=[])` holding the assignable roles the API
+  reports (filled by the load callback, consumed by the create/edit modals).
 
 Follow the design-system tokens from `ui/styles.py` (`COLOR_*`, `FONT_*`,
 `SPACING_*`, `CARD_CONTAINER_STYLE`); do not invent sizes or colors.
@@ -720,8 +794,15 @@ Form fields:
 | Edit | email, first name, last name, enabled checkbox, role checkboxes |
 | Password | password*, "Require change on first login" checkbox (checked) |
 
-Role checkboxes are built from a module constant
-`ASSIGNABLE_ROLES = ("wba-admin", "wba-user")` — `wba-service` must never appear.
+Role checkboxes are built from the set the API reports, not from a constant in
+this package: the page holds a `dcc.Store(id="um-roles", data=[])` that the load
+callback fills from `api_client.get_json("/api/v1/admin/users/roles")["roles"]`,
+and the create/edit modals render their checkboxes from `um-roles.data`. This
+keeps `ASSIGNABLE_REALM_ROLES` the single source of truth — the UI image does not
+carry `src/app/`, so a local copy would be a second definition that drifts
+silently. The data is `["wba-admin", "wba-user"]` and `wba-service` must never
+appear. If the roles fetch fails, render the modals with no checkboxes and the
+error in `um-feedback` rather than falling back to a hardcoded list.
 
 `callbacks.py`:
 
@@ -730,7 +811,12 @@ Role checkboxes are built from a module constant
   `api_client.get_json("/api/v1/admin/users/", params={...})`, renders the table
   and pagination; a `PermissionDeniedError` renders
   `create_permission_denied_alert("manage users")` in `um-feedback`; any other
-  `ApiError` renders a danger alert with the message.
+  `ApiError` renders a danger alert with the message. On the same trigger it
+  fills `um-roles` from `api_client.get_json("/api/v1/admin/users/roles")`; if
+  that call fails, write `[]` and surface the error in `um-feedback` rather than
+  rendering a stale or hardcoded role list.
+- **Pagination**: Next is disabled when `offset + limit >= total`, so a page
+  whose rows the service filtered out is never offered.
 - **Create**: open modal → on save `api_client.post_json("/api/v1/admin/users/",
   {...})` → close, refresh, success alert. A `409` shows
   "A user with that username or email already exists." A `422` shows the
@@ -808,8 +894,13 @@ and `tests/test_settings_ui.py`:
 - `display_page("/app/settings/user-management")` returns the page layout
   (call the callback from `create_dash_app()` with the pathname, or import
   `get_layout` and assert the header text);
-- the role checkbox list contains `wba-admin` and `wba-user` and **not**
-  `wba-service` (walk the component tree);
+- the layout carries a `um-roles` store with `data == []` (it is filled at
+  runtime; the test asserts the store exists and starts empty rather than
+  asserting a hardcoded role list, which would re-introduce the duplicate the
+  API endpoint exists to remove);
+- calling the load callback with `um-roles`'s source stubbed to
+  `["wba-admin", "wba-user"]` renders checkboxes for both and **not**
+  `wba-service` (walk the component tree of the returned modal children);
 - the feedback region renders `create_permission_denied_alert(...)` content for a
   `PermissionDeniedError` — call the page's pure render helper directly with a
   stubbed `api_client.set_transport` raising the error, do not hand-build a ctx.
@@ -933,7 +1024,7 @@ ALL must hold:
 - [ ] `pytest -m unit tests -q` exits 0; the five new test modules are collected
       and pass.
 - [ ] `pytest -m unit tests/test_authz_matrix.py -q` passes with the operation
-      count updated to 64.
+      count updated to 65.
 - [ ] `PYTHONPATH=src mypy src/` exits 0.
 - [ ] `PYTHONPATH=src pylint src --score=y` reports 10.00/10.
 - [ ] `flake8` exits 0.
@@ -968,10 +1059,14 @@ Stop and report back (do not improvise) if:
 - **Adding per-user data later** (e.g. saved searches): append a step to
   `_PURGE_STEPS` (and `_REVOKE_STEPS` if it holds session-like state) in
   `cleanup.py`. Do not add logic to the router.
-- **Role model changes**: `ASSIGNABLE_REALM_ROLES` in `model.py` is the only
-  place the UI's checkbox list and the API's validation derive from. Adding a
-  role means adding it there, to the realm template's role list, and to
-  `_MAPPED_ROLES` in `src/app/auth/tokens.py`.
+- **Role model changes**: the assignable set has one source of truth,
+  `ASSIGNABLE_REALM_ROLES` in `src/app/api/admin_users/v1/model.py`, which the UI
+  reads over HTTP from `GET /api/v1/admin/users/roles` rather than duplicating.
+  Adding a role means adding it there, to the realm template's role list, and to
+  `_MAPPED_ROLES` in `src/app/auth/tokens.py`. The UI cannot import the API's
+  constant directly: the UI image does not carry `src/app/` at all (`Dockerfile.ui`
+  copies only `src/ui/`, `ui_main.py`, four files from `src/common/` and
+  `src/domain/`), so any shared set must travel over the API.
 - **Scaling the list**: each row costs one `role-mappings/realm` call
   (≈26 Keycloak round trips per page). If the realm grows large, replace that
   with `GET /roles/{role}/users` and membership lookup, or drop roles from the

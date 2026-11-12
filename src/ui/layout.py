@@ -204,6 +204,7 @@ def create_dash_app() -> dash.Dash:
             "/app/settings": settings.get_layout,
             "/app/settings/runtime": settings.get_runtime_layout,
             "/app/settings/graph-styling": settings.get_graph_styling_layout,
+            "/app/settings/user-management": settings.get_user_management_layout,
             "/app/developer": developer.get_layout,
             "/app/developer/api": developer.get_api_layout,
             "/app/search": search.get_layout,

@@ -10,7 +10,7 @@ Plan files for completed work are removed as they land — that is this director
 
 | Plan | Title | Priority | Effort | Depends on | Status |
 |------|-------|----------|--------|------------|--------|
-| 001 | Admin user management in the app (Keycloak Admin API + Settings page) | P1 | L | — | TODO |
+| 001 | Admin user management in the app (Keycloak Admin API + Settings page) | P1 | L | — | DONE — operator re-seed (Step 14) verified 2026-11-12 |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) | REJECTED (with one-line rationale).
 

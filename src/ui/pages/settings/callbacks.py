@@ -7,7 +7,7 @@ from typing import Any
 from dash import ALL, Input, Output, callback, callback_context
 from dash.exceptions import PreventUpdate
 
-from .layout import SETTINGS_CARD_TYPE
+from .layout import SETTINGS_CARD_ROUTES, SETTINGS_CARD_TYPE
 
 
 @callback(
@@ -29,13 +29,7 @@ def handle_card_click(_timestamps: list[int | None]) -> Any:
         raise PreventUpdate
 
     card_id = triggered.get("card_id")
-    if not card_id:
+    if not card_id or card_id not in SETTINGS_CARD_ROUTES:
         raise PreventUpdate
 
-    if card_id == "runtime":
-        return "/app/settings/runtime"
-
-    if card_id == "graph-styling":
-        return "/app/settings/graph-styling"
-
-    raise PreventUpdate
+    return SETTINGS_CARD_ROUTES[card_id]

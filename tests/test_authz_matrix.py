@@ -69,7 +69,7 @@ _STRICTER_THAN_USER = frozenset({"require_admin", "require_service", "require_ro
 
 def test_enumeration_is_non_empty() -> None:
     """A FastAPI change that stops exposing routes must fail loudly, not pass."""
-    assert len(api_operations(app)) == 58
+    assert len(api_operations(app)) == 65
 
 
 def test_every_operation_is_declared() -> None:

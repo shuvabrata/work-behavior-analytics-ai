@@ -69,6 +69,7 @@ class ApiSettings(UISettings):
     # there would be resident in the UI process's memory for no purpose.
     KEYCLOAK_CLIENT_SECRET: str = ""
     KEYCLOAK_SERVICE_CLIENT_SECRET: str = ""
+    KEYCLOAK_ADMIN_CLIENT_SECRET: str = ""
 
     # Connector / Producer configuration
     COMMIT_DAYS_LIMIT: int = 60

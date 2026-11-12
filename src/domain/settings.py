@@ -61,6 +61,11 @@ class UISettings(BaseSettings):
     # Same split as above: the ID is here, the SECRET is on `ApiSettings`.
     KEYCLOAK_SERVICE_CLIENT_ID: str = "wba-internal"
 
+    # `wba-admin-api` — the confidential client the API exchanges for a Keycloak
+    # admin token, to drive user management. Same split as above: the ID is here,
+    # the SECRET is on `ApiSettings` in `src/app/settings.py`.
+    KEYCLOAK_ADMIN_CLIENT_ID: str = "wba-admin-api"
+
     # `Secure` flag on the session cookie. MUST be true wherever TLS
     # terminates (it does: nginx). Set false ONLY for a plain-HTTP local run.
     AUTH_COOKIE_SECURE: bool = True

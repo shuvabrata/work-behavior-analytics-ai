@@ -9,6 +9,7 @@ from fastapi import Depends, FastAPI, Request, Response
 
 from app.api import endpoints
 from app.api.activity.v1.router import router as activity_v1_router
+from app.api.admin_users.v1.router import router as admin_users_v1_router
 from app.api.auth.v1.router import router as auth_v1_router
 from app.api.chats.v1.router import router as chats_v1_router
 from app.api.commands.v1.router import router as commands_v1_router
@@ -20,7 +21,7 @@ from app.api.queries.v1.router import router as queries_v1_router
 from app.api.search.v1.persons_router import router as persons_v1_router
 from app.api.search.v1.router import router as search_v1_router
 from app.api.settings.v1.router import router as settings_v1_router
-from app.auth.dependencies import require_user
+from app.auth.dependencies import require_admin, require_user
 from app.common.neo4j_driver import close_driver
 from app.db.session import ASYNC_SESSION_LOCAL
 from app.runtime_settings import load_db_overrides_from_session
@@ -195,6 +196,9 @@ app.include_router(commands_v1_router, prefix="/api/v1", dependencies=[Depends(r
 app.include_router(settings_v1_router, prefix="/api/v1", dependencies=[Depends(require_user)])
 app.include_router(graph_themes_v1_router, prefix="/api/v1", dependencies=[Depends(require_user)])
 app.include_router(activity_v1_router, prefix="/api/v1", dependencies=[Depends(require_user)])
+app.include_router(
+    admin_users_v1_router, prefix="/api/v1", dependencies=[Depends(require_admin)]
+)
 # The auth router declares its own per-route roles; /me carries require_user,
 # while login/callback are public and logout/token read the session cookie.
 app.include_router(auth_v1_router, prefix="/api/v1")

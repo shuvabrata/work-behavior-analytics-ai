@@ -51,6 +51,7 @@ Four properties drive most of the design decisions below:
 | 12 | Access token 15 min; SSO idle 1 h; SSO max 8 h | Bounded exposure with silent server-side refresh. |
 | 13 | No page-level nav hiding | Enforcement is at the API. `401` redirects to login; `403` renders a clear message. |
 | 14 | Internal services use Keycloak client-credentials tokens | Keeps exactly one credential type at the API. A bearer-only API breaks the producers and consumer otherwise. |
+| 15 | In-app user administration drives the Keycloak Admin API | The API stays the single enforcement point, Keycloak remains the identity source, and the admin console stays unpublished as the break-glass path. Ordinary user administration stops being an operator task requiring shell access. |
 
 ---
 
@@ -142,13 +143,15 @@ The realm is checked into the repository as JSON and imported on first boot via
 | Roles | `wba-admin`, `wba-user`, `wba-service` |
 | Web client | `wba-web` — confidential, standard flow, PKCE `S256`, redirect `https://<external-host>/api/v1/auth/callback` |
 | Service client | `wba-internal` — service accounts enabled, client-credentials grant, carries `wba-service` |
+| Admin client | `wba-admin-api` — confidential, service accounts enabled, client-credentials grant, carries **no** `wba-*` realm role; its service account holds the `realm-management` client roles `view-users`, `query-users`, `manage-users`, `view-realm` |
 | Access token lifespan | 15 minutes |
 | SSO Session Idle | 1 hour |
 | SSO Session Max | 8 hours |
 | Dev users | one seeded `dev-admin` and one `dev-user`, so `docker compose up` yields a working login immediately |
 
-The realm JSON seeds a single admin so there is no bootstrap paradox. Further role assignment
-is done in the Keycloak admin console.
+The realm JSON seeds a single admin so there is no bootstrap paradox. Further role assignment is
+available in-app (see *User administration* below); the Keycloak admin console remains the
+break-glass path.
 
 **Realm changes are delivered by re-seeding, not by editing.** `--import-realm` is create-only:
 it imports a realm that does not exist and skips one that already does, so editing the template
@@ -312,6 +315,92 @@ the scan's behaviour incorrect.
 
 ---
 
+## User administration
+
+An administrator manages application users from the Settings → User Management page. The page
+calls a `/api/v1/admin/users` surface, which drives the Keycloak Admin REST API on the
+administrator's behalf. Keycloak stays the identity source and the console stays the break-glass
+path; the API is the enforcement point.
+
+### The admin surface
+
+| Operation | Path |
+|---|---|
+| List users (paged, searchable) | `GET /api/v1/admin/users/` |
+| Create a user | `POST /api/v1/admin/users/` |
+| List assignable roles | `GET /api/v1/admin/users/roles` |
+| Get a user | `GET /api/v1/admin/users/{user_id}` |
+| Update a user | `PATCH /api/v1/admin/users/{user_id}` |
+| Reset a password | `PUT /api/v1/admin/users/{user_id}/password` |
+| Delete a user | `DELETE /api/v1/admin/users/{user_id}` |
+
+Every operation carries the `admin` grant. The assignable role set has a single source of truth,
+`ASSIGNABLE_REALM_ROLES` in the admin-users model; the UI reads it over HTTP from
+`GET /api/v1/admin/users/roles` rather than duplicating it, and `wba-service` is never assignable.
+
+### Service accounts
+
+Keycloak presents a client's service account as an ordinary realm user, indistinguishable in a
+list except for `serviceAccountClientId` and a `service-account-` username prefix. These are
+filtered out of the list (and excluded from its count) and rejected on write, so an administrator
+cannot disable, delete, or re-role a machine principal through this surface.
+
+### The admin client
+
+The API authenticates to Keycloak as the `wba-admin-api` client over client-credentials. Its
+service account holds only the `realm-management` roles it needs and carries no `wba-*` realm
+role; its client id is deliberately absent from the bearer-validation client-id set, so a token it
+mints can never authenticate an application request. The admin base URL is derived from
+`KEYCLOAK_INTERNAL_URL` — never from `KEYCLOAK_ISSUER`, whose origin nginx 404s on `/auth/admin`.
+
+### Guards
+
+| Guard | Rule |
+|---|---|
+| Self-delete | An administrator may not delete their own account. |
+| Last admin | The last `wba-admin` holder cannot be deleted, disabled, or have `wba-admin` revoked. |
+| Service account | Service-account users cannot be modified or deleted. |
+
+### Error shapes
+
+Failures return `detail = {"error": ..., "message": ...}`:
+
+| Condition | Status | `error` |
+|---|---|---|
+| Unknown user | 404 | `user_not_found` |
+| Username/email already exists | 409 | `user_exists` |
+| Would remove the last admin | 409 | `last_admin` |
+| Self-delete | 409 | `self_delete` |
+| Service-account target | 409 | `service_account` |
+| Role outside the assignable set | 422 | `invalid_role` |
+| Password rejected by realm policy | 422 | `password_policy` |
+| Keycloak or admin-credential failure | 503 | `identity_provider_unavailable` |
+
+A misconfigured admin credential is our fault, not the caller's, so a `401` from Keycloak's admin
+API is mapped to `503 identity_provider_unavailable` — **never** surfaced as a `401`, which the UI
+would treat as an expired session and redirect to login.
+
+### Cleanup
+
+Because Keycloak is the identity source, deleting or disabling a user does not touch that
+subject's application rows on its own. Both operations schedule a fire-and-forget cleanup after
+Keycloak accepts the change:
+
+- **Delete** purges the subject's `auth_session` and `catalog_metadata` rows.
+- **Disable** revokes the subject's `auth_session` rows (`revoked_at`), so a live session cannot be
+  refreshed. Role changes rely on the existing refresh-token re-read, which takes effect within one
+  access-token lifetime.
+
+Cleanup runs in its own database session, treats each step as an isolated unit, and logs failures
+rather than raising. It is at-most-once: if the API process dies between the Keycloak call and the
+cleanup finishing, the rows are orphaned with no retry.
+
+**Adding the `wba-admin-api` client requires a re-seed.** `--import-realm` is create-only, so the
+new client is not added to a realm that already exists; the dev stack imports it only after the
+Keycloak database is dropped and recreated.
+
+---
+
 ## Session Management
 
 ### Storage
@@ -413,6 +502,8 @@ Ten settings carry this design. All are read at startup; none is editable at run
 | `KEYCLOAK_CLIENT_SECRET` | API only | The `wba-web` secret, used for the token exchange. |
 | `KEYCLOAK_SERVICE_CLIENT_ID` | API + producers + consumer | The `wba-internal` client identifier. Not a secret. |
 | `KEYCLOAK_SERVICE_CLIENT_SECRET` | API + producers + consumer | The `wba-internal` secret, used for the client-credentials grant. |
+| `KEYCLOAK_ADMIN_CLIENT_ID` | API | The `wba-admin-api` client identifier. Not a secret. |
+| `KEYCLOAK_ADMIN_CLIENT_SECRET` | API only | The `wba-admin-api` secret, exchanged for a Keycloak admin token. |
 | `AUTH_COOKIE_SECURE` | API | The `Secure` flag on the session cookie. Must be true wherever TLS terminates. |
 | `AUTH_SESSION_IDLE_MINUTES` | API | Idle bound, enforced by the application against `last_seen_at`. |
 | `AUTH_SESSION_MAX_HOURS` | API | Absolute bound, enforced by the application against `expires_at`. |
@@ -432,6 +523,11 @@ Authentication events are structured log records correlated with the HTTP access
 id: login success and failure with the resolved roles, logout (distinguishing user-initiated from
 expiry), `403` denials with the required role, token and key-refresh failures, and connector
 secret exposure — the most sensitive read in the system.
+
+In-app user administration records one structured `info` line per mutating operation, carrying the
+actor's `sub`/username and the target id: `user_created`, `user_deleted`, `user_role_granted` /
+`user_role_removed` (role names only), `user_password_reset` (**never** the password), and
+`user_disabled`. The cleanup job logs `user_cleanup_completed` per step. Reads are not logged.
 
 No new storage is introduced. If a durable, queryable audit trail is later required, that is a
 separate concern with its own retention and access rules.

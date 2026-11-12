@@ -21,9 +21,18 @@ from ui.styles import (
     FONT_SANS,
     FONT_SIZE_SMALL,
     FONT_SIZE_XSMALL,
+    FONT_SIZE_XTINY,
     SPACING_MEDIUM,
     SPACING_SMALL,
     SPACING_XSMALL,
+)
+
+#: Explains the two assignable realm roles, shown from the Roles label's (i) hint.
+_ROLES_HELP = (
+    "**wba-admin** — everything a standard user can do, plus shared "
+    "configuration, connector secrets, and user management.\n\n"
+    "**wba-user** — standard user. Reads everything except connector secrets, "
+    "and manages their own chat sessions and catalog favourites."
 )
 
 DEFAULT_LIMIT = 25
@@ -127,6 +136,41 @@ def _field_label(text: str, html_for: str, *, first: bool = False) -> dbc.Label:
     )
 
 
+def _roles_label(help_id: str) -> html.Div:
+    """Return the Roles field label with an (i) popover explaining the roles.
+
+    Follows the app-wide info-hint pattern (``pages/timeline/layout.py``,
+    ``components/common.py``): a ``fas fa-info-circle`` icon with ``cursor:
+    help``, targeted by a ``dbc.Popover`` on hover/focus with the inverted
+    class. The icon sits outside the modal's scroll region so the popover is
+    not clipped.
+    """
+    return html.Div(
+        [
+            html.Span("Roles", style={"fontFamily": FONT_SANS, "fontSize": FONT_SIZE_XSMALL}),
+            html.I(
+                className="fas fa-info-circle",
+                id=help_id,
+                style={
+                    "cursor": "help",
+                    "marginLeft": "6px",
+                    "color": COLOR_GRAY_MEDIUM,
+                    "fontSize": FONT_SIZE_XTINY,
+                },
+            ),
+            dbc.Popover(
+                dbc.PopoverBody(dcc.Markdown(_ROLES_HELP), style={"maxWidth": "340px"}),
+                target=help_id,
+                trigger="hover focus",
+                placement="right",
+                class_name="popover-inverted",
+            ),
+        ],
+        className="mt-3",
+        style={"display": "inline-flex", "alignItems": "center"},
+    )
+
+
 def _create_form() -> dbc.Modal:
     return dbc.Modal(
         [
@@ -176,7 +220,7 @@ def _create_form() -> dbc.Modal:
                         ],
                         className="g-2",
                     ),
-                    html.Div("Roles", className="mt-3", style={"fontFamily": FONT_SANS, "fontSize": FONT_SIZE_XSMALL}),
+                    _roles_label("um-create-roles-info"),
                     html.Div(id="um-create-roles-container"),
                     dbc.Checklist(
                         id="um-create-enabled",
@@ -254,7 +298,7 @@ def _edit_form() -> dbc.Modal:
                         ],
                         className="g-2",
                     ),
-                    html.Div("Roles", className="mt-3", style={"fontFamily": FONT_SANS, "fontSize": FONT_SIZE_XSMALL}),
+                    _roles_label("um-edit-roles-info"),
                     html.Div(id="um-edit-roles-container"),
                     dbc.Checklist(
                         id="um-edit-enabled",

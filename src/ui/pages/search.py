@@ -732,6 +732,7 @@ def _build_pagination_row() -> html.Div:
                 outline=True,
                 size="sm",
                 disabled=True,
+                className="btn-subtle-action",
                 style={"fontFamily": FONT_SANS, "fontSize": FONT_SIZE_XSMALL},
             ),
             html.Div(
@@ -746,6 +747,7 @@ def _build_pagination_row() -> html.Div:
                 outline=True,
                 size="sm",
                 disabled=True,
+                className="btn-subtle-action",
                 style={"fontFamily": FONT_SANS, "fontSize": FONT_SIZE_XSMALL},
             ),
         ],

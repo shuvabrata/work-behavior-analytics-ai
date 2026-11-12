@@ -126,6 +126,48 @@ class TestModalForms:
         for field_id in field_ids:
             assert field_id in labelled, f"{field_id} has no label"
 
+    def test_roles_label_has_help_popover(self) -> None:
+        """The Roles field explains the two roles via an (i) hover/focus popover."""
+        from ui.pages.settings.user_management.layout import get_layout
+
+        components = list(_iter_components(get_layout()))
+        icons = {
+            node.id
+            for node in components
+            if type(node).__name__ == "I" and isinstance(getattr(node, "id", None), str)
+            and node.id.endswith("-roles-info")
+        }
+        assert icons == {"um-create-roles-info", "um-edit-roles-info"}
+
+        targets = {
+            node.target
+            for node in components
+            if type(node).__name__ == "Popover"
+        }
+        for icon_id in icons:
+            assert icon_id in targets, f"{icon_id} has no popover"
+
+    def test_roles_popover_uses_app_pattern(self) -> None:
+        """Hover+focus trigger, inverted class, and Markdown body — the app convention."""
+        from ui.pages.settings.user_management.layout import get_layout
+
+        popovers = [
+            node for node in _iter_components(get_layout()) if type(node).__name__ == "Popover"
+        ]
+        assert popovers
+        for node in popovers:
+            props = node.to_plotly_json()["props"]
+            assert props.get("trigger") == "hover focus"
+            assert props.get("class_name") == "popover-inverted"
+
+    def test_roles_popover_names_both_roles(self) -> None:
+        """The help text must actually describe wba-admin and wba-user."""
+        from ui.pages.settings.user_management.layout import _ROLES_HELP
+
+        assert "wba-admin" in _ROLES_HELP
+        assert "wba-user" in _ROLES_HELP
+        assert "wba-service" not in _ROLES_HELP
+
     def test_labels_target_existing_inputs(self) -> None:
         """A label pointing at a non-existent id is as bad as no label."""
         from ui.pages.settings.user_management.layout import get_layout

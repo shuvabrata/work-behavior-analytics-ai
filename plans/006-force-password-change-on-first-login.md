@@ -34,10 +34,29 @@ Re-run by the reviewer:
 
 ### Not yet verifiable
 
-`user_required_action` cannot be checked until the operator re-seeds. It held
-**0 rows** when the defect was found and must hold **2** after the re-seed. Until
-that query returns 2 rows, this fix is unconfirmed — the template edit is a
-necessary precondition, not the proof.
+`user_required_action` could not be checked until the operator re-seeded. It held
+**0 rows** when the defect was found.
+
+### Confirmed after the re-seed — 2026-11-13
+
+The operator re-seeded (after fixing a Docker Desktop bind-mount staleness error
+that had left the `keycloak` container exited; `docker compose rm -sf keycloak`
+re-resolved the host path). Verified by the reviewer:
+
+```
+app-admin | (no action)        ← forced change completed in the browser
+app-user  | UPDATE_PASSWORD    ← attached at import, not yet consumed
+```
+
+That is the exact two-row shape this plan predicted, and it distinguishes
+attachment from consumption: the action was present at import and the browser
+change cleared it for the one user who signed in. The mechanism is confirmed, not
+merely assumed.
+
+Residual state: `.env`'s two `TEST_SUITE_WBA_*_PASSWORD` values are still `FIXME`,
+so the live `server` suites continue to skip until an operator records real
+credentials. `auth_session` holds 2 rows (1 revoked), both username `app-admin` —
+the older row's subject predates the re-seed; harmless because it is revoked.
 
 ## Status
 

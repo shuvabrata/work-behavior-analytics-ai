@@ -80,7 +80,11 @@ at first login") are true only once the fix lands.
 
 **The fix is plan 006.** It adds `"requiredActions": ["UPDATE_PASSWORD"]` to both
 seeded users in the realm template. It requires one more re-seed, because
-`--import-realm` is create-only.
+`--import-realm` is create-only. **Resolved 2026-11-13**: the re-seed was run and
+`app-admin` was forced to change its password in the browser; `app-user`'s action
+remains pending its first login. This plan's Step 6 and the first Step 7
+observation are therefore satisfied — by plan 006's mechanism, not by this
+plan's.
 
 **The "observed shape" in "Why the test suites cannot use the bootstrap pair"
 cannot have been observed.** It claims `status: 200 / location: None / no

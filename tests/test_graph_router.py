@@ -10,6 +10,8 @@ Run with: pytest tests/test_graph_router.py -v
 import pytest
 import httpx
 
+from tests.auth_helpers import configured
+
 
 BASE_URL = "https://localhost"
 EXECUTE_URL = "/api/v1/graph/execute"
@@ -20,6 +22,13 @@ pytestmark = [
     pytest.mark.server,
     pytest.mark.neo4j,
     pytest.mark.authenticated,
+    pytest.mark.skipif(
+        not (
+            configured("TEST_SUITE_WBA_ADMIN_USERNAME")
+            and configured("TEST_SUITE_WBA_ADMIN_PASSWORD")
+        ),
+        reason="TEST_SUITE_WBA_ADMIN_* is not configured — see INSTALL_GUIDE.md",
+    ),
 ]
 
 

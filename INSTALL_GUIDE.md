@@ -105,23 +105,27 @@ already set; each prompt re-offers the current value as the default.
 
 #### Keycloak credentials
 
-The wizard generates six credentials, which you do not need to choose:
+The wizard generates seven credentials, which you do not need to choose:
 
 | Variable | What it is |
 |---|---|
 | `KEYCLOAK_DB_PASSWORD` | Password for the `keycloak` Postgres role |
 | `KEYCLOAK_CLIENT_SECRET` | Secret for the `web` browser client |
 | `KEYCLOAK_SERVICE_CLIENT_SECRET` | Secret for the `internal` service-account client |
-| `DEV_WBA_ADMIN_PASSWORD` | Password for the seeded `dev-admin` **application** login (roles `admin` + `user`) |
-| `DEV_WBA_USER_PASSWORD` | Password for the seeded `dev-user` **application** login (role `user`) |
-| `DEV_KEYCLOAK_ADMIN_PASSWORD` | Password for the Keycloak **admin console** account (`admin`, master realm) — not an application login |
+| `KEYCLOAK_ADMIN_CLIENT_SECRET` | Secret for the `admin-api` client (the API's Keycloak admin token) |
+| `APP_ADMIN_PASSWORD` | First-login bootstrap password for the seeded `app-admin` **application** login (roles `admin` + `user`) |
+| `APP_USER_PASSWORD` | First-login bootstrap password for the seeded `app-user` **application** login (role `user`) |
+| `KEYCLOAK_CONSOLE_ADMIN_PASSWORD` | Password for the Keycloak **admin console** account (`admin`, master realm) — not an application login |
 
-Sign in as `dev-admin` or `dev-user` with the value in `.env`. That file is
-gitignored — never commit it, and never paste these values into a committed file
-or a bug report.
+Sign in as `app-admin` or `app-user` with the value in `.env`. That value is a
+**one-time bootstrap credential**: Keycloak marks it temporary and forces you to
+choose a password of your own at first login. The changed password is *not*
+written back to `.env`, and the bootstrap value stops working once the change is
+completed. `.env` is gitignored — never commit it, and never paste these values
+into a committed file or a bug report.
 
-The `DEV_WBA_*` names are the **application** users in the `wba` realm;
-`DEV_KEYCLOAK_ADMIN_PASSWORD` is the **Keycloak console** account, a different
+The `APP_*` names are the **application** users in the `wba` realm;
+`KEYCLOAK_CONSOLE_ADMIN_PASSWORD` is the **Keycloak console** account, a different
 realm with no application roles. See `IAM_ADMIN_GUIDE.md` for the console.
 
 The browser-facing URL comes from `EXTERNAL_BASE_URL`, which already defaults to

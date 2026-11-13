@@ -26,6 +26,7 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from app.auth import tokens
 from app.auth.principal import CredentialType
 from app.settings import settings
+from tests.auth_helpers import realm_username
 
 pytestmark = [pytest.mark.unit]
 
@@ -304,10 +305,11 @@ class TestRealmShapedToken:
         self, private_pem: bytes, jwks: Any
     ) -> None:
         """A ``web`` token carries its audience and validates."""
+        username = realm_username("user")
         token = _sign(
             private_pem,
             sub="kc-user-id",
-            username="dev-user",
+            username=username,
             roles=("user",),
             aud=[_CLIENT_ID],
             azp=_CLIENT_ID,
@@ -315,7 +317,7 @@ class TestRealmShapedToken:
         )
         principal = tokens.validate_bearer_token(token)
         assert principal.subject == "kc-user-id"
-        assert principal.username == "dev-user"
+        assert principal.username == username
         assert principal.roles == frozenset({"user"})
 
     def test_realm_shaped_token_without_aud_is_rejected(
@@ -329,7 +331,7 @@ class TestRealmShapedToken:
         token = _sign(
             private_pem,
             sub="kc-user-id",
-            username="dev-user",
+            username=realm_username("user"),
             roles=("user",),
             azp=_CLIENT_ID,
             iss=_ISSUER,

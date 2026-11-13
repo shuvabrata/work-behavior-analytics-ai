@@ -14,6 +14,7 @@ from typing import Any
 import pytest
 from dash import html, no_update  # noqa: F401 - documents the callback's vocabulary
 
+from tests.auth_helpers import realm_username
 from ui import api_client
 from ui.components import account_bar
 
@@ -124,11 +125,11 @@ def test_transport_failure_renders_nothing(monkeypatch: pytest.MonkeyPatch) -> N
 def test_live_session_shows_username_and_sign_out(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    _install(monkeypatch, _StubResponse(200, {"username": "dev-user"}))
+    _install(monkeypatch, _StubResponse(200, {"username": realm_username("user")}))
     result = account_bar.render_account_bar("/app/graph")
 
     texts = _texts(result)
-    assert "dev-user" in texts
+    assert realm_username("user") in texts
     assert "Sign out" in texts
     assert "Sign in" not in texts
 
@@ -138,36 +139,36 @@ def test_full_name_rendered_when_present(monkeypatch: pytest.MonkeyPatch) -> Non
         monkeypatch,
         _StubResponse(
             200,
-            {"username": "dev-user", "full_name": "Dev User", "roles": ["user"]},
+            {"username": realm_username("user"), "full_name": "App User", "roles": ["user"]},
         ),
     )
     result = account_bar.render_account_bar("/app/graph")
 
     texts = _texts(result)
-    assert "dev-user" in texts
-    assert "Dev User" in texts
+    assert realm_username("user") in texts
+    assert "App User" in texts
 
 
 def test_absent_full_name_renders_no_second_line(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     for payload in (
-        {"username": "dev-user", "roles": ["user"]},
-        {"username": "dev-user", "full_name": None, "roles": ["user"]},
-        {"username": "dev-user", "full_name": "", "roles": ["user"]},
+        {"username": realm_username("user"), "roles": ["user"]},
+        {"username": realm_username("user"), "full_name": None, "roles": ["user"]},
+        {"username": realm_username("user"), "full_name": "", "roles": ["user"]},
     ):
         _install(monkeypatch, _StubResponse(200, payload))
         result = account_bar.render_account_bar("/app/graph")
 
         texts = _texts(result)
-        assert "dev-user" in texts
-        assert "Dev User" not in texts
+        assert realm_username("user") in texts
+        assert "App User" not in texts
 
 
 def test_logout_form_posts_to_logout_url(monkeypatch: pytest.MonkeyPatch) -> None:
     _install(
         monkeypatch,
-        _StubResponse(200, {"username": "dev-user", "roles": ["user"]}),
+        _StubResponse(200, {"username": realm_username("user"), "roles": ["user"]}),
     )
     result = account_bar.render_account_bar("/app/graph")
 

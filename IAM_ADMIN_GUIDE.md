@@ -54,25 +54,26 @@ Open <http://127.0.0.1:8080/auth/admin/>.
 | Field | Value |
 |---|---|
 | Username | `admin` |
-| Password | the `DEV_KEYCLOAK_ADMIN_PASSWORD` value in `.env` |
+| Password | the `KEYCLOAK_CONSOLE_ADMIN_PASSWORD` value in `.env` |
 
 To read the password without printing it to your terminal history or scrollback:
 
 ```bash
-grep '^DEV_KEYCLOAK_ADMIN_PASSWORD=' .env
+grep '^KEYCLOAK_CONSOLE_ADMIN_PASSWORD=' .env
 ```
 
-`DEV_KEYCLOAK_ADMIN_PASSWORD` is the **Keycloak console** account, in the
+`KEYCLOAK_CONSOLE_ADMIN_PASSWORD` is the **Keycloak console** account, in the
 `master` realm. It has no application roles and cannot sign into the app. That is
-a different credential from `DEV_WBA_ADMIN_PASSWORD`, which is the `dev-admin`
-**application** login in the `wba` realm. The names are similar on purpose — see
+a different credential from `APP_ADMIN_PASSWORD`, which is the
+one-time first-login password for the `app-admin` **application** login in the
+`wba` realm. The names are similar on purpose — see
 the *Keycloak credentials* table in `INSTALL_GUIDE.md`.
 
-> ### `dev-admin` cannot sign in here — use the account console
+> ### `app-admin` cannot sign in here — use the account console
 >
 > This console authenticates against the **`master` realm only**, so the only
-> account that works on it is `admin`. The `wba`-realm users (`dev-admin`,
-> `dev-user`) are not in `master` at all, and signing in with them fails with
+> account that works on it is `admin`. The `wba`-realm users (`app-admin`,
+> `app-user`) are not in `master` at all, and signing in with them fails with
 > *Invalid username or password* no matter what you type — including the correct
 > password. The error text is deliberately identical for a wrong password and a
 > non-existent user, so it reads as a password problem when it is a realm one.
@@ -131,7 +132,7 @@ the *Keycloak credentials* table in `INSTALL_GUIDE.md`.
 The bootstrap admin is created **only on the very first boot against an empty
 Keycloak database**. It is a one-shot seed, not a reconciler — so:
 
-- Changing `DEV_KEYCLOAK_ADMIN_PASSWORD` in `.env` does **not** change the
+- Changing `KEYCLOAK_CONSOLE_ADMIN_PASSWORD` in `.env` does **not** change the
   existing admin's password.
 - If your Keycloak database was created before this variable existed, the admin
   account may not be present at all, and the console will load but reject every
@@ -145,7 +146,7 @@ docker compose exec keycloak /opt/keycloak/bin/kc.sh bootstrap-admin user \
   --username admin --password:env KC_BOOTSTRAP_ADMIN_PASSWORD --no-prompt
 ```
 
-Then sign in as `admin` with the `DEV_KEYCLOAK_ADMIN_PASSWORD` value from `.env`.
+Then sign in as `admin` with the `KEYCLOAK_CONSOLE_ADMIN_PASSWORD` value from `.env`.
 
 ## Applying a realm change
 
@@ -171,7 +172,7 @@ import is skipped again.
 ### The normal path: re-seed the realm
 
 There is no runtime reconcile step. The realm holds nothing but the seeded
-`dev-*` users and is derived entirely from the template, so delivering a template
+`app-*` users and is derived entirely from the template, so delivering a template
 edit means recreating the Keycloak database and letting the next boot import it:
 
 ```bash
@@ -256,7 +257,7 @@ it, close it when you are done.
 ## What is not in this guide
 
 The realm is **code**, not console state: roles, clients, token lifetimes and the
-seeded dev users all come from `deploy/keycloak/realm-wba.json.template` and are
+seeded application users all come from `deploy/keycloak/realm-wba.json.template` and are
 imported on boot. Edits made in the console are not persisted back to the
 template and will be lost when the realm is re-imported — so for anything that
 should survive, change the template instead and re-import.

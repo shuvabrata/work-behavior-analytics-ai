@@ -24,6 +24,7 @@ from app.auth.dependencies import get_principal
 from app.auth.principal import Principal
 from app.db.session import get_async_db
 from app.settings import settings
+from tests.auth_helpers import realm_username
 
 pytestmark = [pytest.mark.unit, pytest.mark.asyncio]
 
@@ -32,8 +33,8 @@ _SECRET = "super-secret-token"
 _MASKED = connectors_service._mask("anything")  # pylint: disable=protected-access
 
 _PRINCIPALS = {
-    "user": Principal(subject="u-1", username="dev-user", roles=frozenset({"user"})),
-    "admin": Principal(subject="a-1", username="dev-admin", roles=frozenset({"admin"})),
+    "user": Principal(subject="u-1", username=realm_username("user"), roles=frozenset({"user"})),
+    "admin": Principal(subject="a-1", username=realm_username("admin"), roles=frozenset({"admin"})),
     "service": Principal(
         subject="s-1", username="internal", roles=frozenset({"service"})
     ),
@@ -138,7 +139,7 @@ async def test_user_include_secrets_is_403_and_logged(
 
     assert response.status_code == 403
     assert response.json()["detail"]["error"] == "forbidden"
-    assert "u-1" in caplog.text or "dev-user" in caplog.text
+    assert "u-1" in caplog.text or realm_username("user") in caplog.text
 
 
 async def test_user_without_parameter_sees_masked_value(

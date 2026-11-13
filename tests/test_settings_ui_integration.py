@@ -26,9 +26,20 @@ from ui.pages.settings.runtime import (
     get_runtime_layout,
     render_settings,
 )
-from tests.auth_helpers import admin_headers, session_cookies
+from tests.auth_helpers import admin_headers, configured, session_cookies
 
-pytestmark = [pytest.mark.integration, pytest.mark.server, pytest.mark.authenticated]
+pytestmark = [
+    pytest.mark.integration,
+    pytest.mark.server,
+    pytest.mark.authenticated,
+    pytest.mark.skipif(
+        not (
+            configured("TEST_SUITE_WBA_ADMIN_USERNAME")
+            and configured("TEST_SUITE_WBA_ADMIN_PASSWORD")
+        ),
+        reason="TEST_SUITE_WBA_ADMIN_* is not configured — see INSTALL_GUIDE.md",
+    ),
+]
 
 BASE_URL = "https://localhost"
 APP_BASE = f"{BASE_URL}/app"

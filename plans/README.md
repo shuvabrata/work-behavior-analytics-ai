@@ -11,8 +11,11 @@ Plan files for completed work are removed as they land — that is this director
 | Plan | Title | Priority | Effort | Depends on | Status |
 |------|-------|----------|--------|------------|--------|
 | 001 | Admin user management in the app (Keycloak Admin API + Settings page) | P1 | L | — | DONE — operator re-seed (Step 14) verified 2026-11-12 |
-| 002 | Rename the realm roles and Keycloak client ids (drop the `wba-` prefix) | P2 | M | — | Step 1 DONE — code verified 2026-11-13 (uncommitted in the working tree); Step 2 operator re-seed still pending |
+| 002 | Rename the realm roles and Keycloak client ids (drop the `wba-` prefix) | P2 | M | — | DONE — Step 1 committed as `e39cdc4d`; Step 2 re-seed + end-to-end gates verified 2026-11-13 |
 | 003 | Make the admin user list's `total` honest and stop replaying a rejected admin token | P1 | S | — | DONE — verified 2026-11-12 (5 new tests, revert-proofed; uncommitted in the working tree) |
+| 004 | Make the seeded dev passwords one-time, and give the live suites their own credentials | P2 | M | 002 (DONE) | IN PROGRESS — code complete and reviewed 2026-11-13 (uncommitted in the working tree); Step 6 re-seed + Step 7 operator observations pending |
+| 005 | Rename the seeded users to `app-admin` / `app-user` and take every username from the environment | P2 | M | 004 (IN PROGRESS) | IN PROGRESS — code complete + reviewed 2026-11-13 (uncommitted); Step 7 operator actions pending |
+| 006 | Attach `UPDATE_PASSWORD` explicitly so the seeded users must change their password at first login | P1 | S | 004, 005 | IN PROGRESS — template edit done + reviewed 2026-11-13 (uncommitted); re-seed + `user_required_action` = 2 rows pending |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) | REJECTED (with one-line rationale).
 
@@ -31,9 +34,43 @@ Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) | REJE
   `src/app/api/admin_users/v1/query.py` and `src/app/auth/keycloak_admin.py`,
   which 002 does not touch; 002 changes only the realm role and client id
   *strings*. Either order is fine.
+- 004 depends on 002 only for ordering: 002 lists the two `DEV_WBA_*` variables
+  as deliberately unchanged, and 004 renames them, so 004 lands after 002 rather
+  than making 002's own record read as stale on arrival. 004's Step 6 is an
+  operator re-seed, for the same `--import-realm` create-only reason as 001 and
+  002.
+- 005 depends on 004 because 004 introduced the `TEST_SUITE_WBA_*` variables and
+  the `configured()` helper that 005 builds on, and 004's `*_BOOTSTRAP_PASSWORD`
+  names are what 005 renames. 005 also completes 004's pending Step 6: the same
+  re-seed applies the renamed users, so the two plans ship on one re-seed rather
+  than two.
+- 005's CI half is an operator action that cannot be done from the tree: the
+  `pytest-unit` job references `vars.WBA_ADMIN_USERNAME` /
+  `vars.WBA_USER_USERNAME`, which must exist in GitHub repository settings
+  before the unit suite passes in CI.
+- 006 follows 004 and 005 and corrects 004's central premise. It is a one-key
+  template edit whose only effect is visible after a re-seed, so it should ride
+  the same re-seed as 004's Step 6 / 005's Step 7: three plans, one re-seed.
 
 ## Findings considered and rejected
 
+- **Dedicated seeded Keycloak users for the test suites (plan 004).** Rejected
+  there; plan 005 revisits the neighbouring question and rejects it again:
+  `skipped`-versus-`failed` for the seven `unit` modules requires either a
+  literal in code or a repository variable, and a repository variable was
+  chosen so no username is ever committed.
+- **A default username inside `tests.auth_helpers.realm_username` (plan 005).**
+  Rejected: a default is the hardcoded username the plan exists to remove, and
+  it would silently run the suite against an account that is not the one the
+  stack seeded.
+- **Rewriting the `dev-admin` / `dev-user` mentions in DONE plans 001, 002, 004
+  and `docs/project-plan/` (plan 005).** Rejected: those are historical records of
+  what was verified at a past date; rewriting them makes the record claim a name
+  that did not exist then.
+- **Leaving the forced-change behaviour to `temporary: true` alone (plan 006).**
+  Rejected: measured to be a no-op on Keycloak's realm-import path. The admin-API
+  path honours it, which is why a probe that only exercised that path would have
+  wrongly cleared it.
 - **Parameterise `common/auth/service_token.py` for the admin client.** Rejected:
   it is connector-runtime code that reads `os.environ`; the API has a settings
   object and a separate secret, so a local cache in `app/auth/keycloak_admin.py`

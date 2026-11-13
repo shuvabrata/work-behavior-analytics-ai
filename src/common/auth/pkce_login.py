@@ -18,7 +18,10 @@ no connector image does.  Importing this module therefore performs no I/O and
 pulls in no HTTP client or ``.env`` parser.
 
 Credentials come from the environment, falling back to ``.env`` — never
-hard-coded.
+hard-coded.  The caller supplies the username and password explicitly:
+:func:`login` performs the interactive flow for any realm user, and
+:func:`credentials` mints the ``service`` bearer with the ``internal`` client's
+client-credentials grant.
 """
 
 from __future__ import annotations
@@ -41,12 +44,6 @@ _REFRESH_MARGIN_SECONDS = 60
 _MAX_REDIRECTS = 10
 
 _ENV_FILE = Path(__file__).resolve().parents[3] / ".env"
-
-#: role -> (realm username, env var holding that user's password)
-_PASSWORD_ROLES: dict[str, tuple[str, str]] = {
-    "admin": ("dev-admin", "DEV_WBA_ADMIN_PASSWORD"),
-    "user": ("dev-user", "DEV_WBA_USER_PASSWORD"),
-}
 
 _HIDDEN_INPUT_RE = re.compile(r'<input[^>]*\btype="hidden"[^>]*>', re.IGNORECASE)
 _NAME_RE = re.compile(r'\bname="([^"]+)"')
@@ -203,7 +200,9 @@ def login(
         session_id = client.cookies.get("wba_session", "")
         if not session_id:
             raise LoginError(
-                f"Login for {username!r} completed but set no wba_session cookie"
+                f"Login for {username!r} did not complete. The password may be wrong, "
+                f"or the account may require a password change — sign in at /app to "
+                f"complete it first."
             )
 
         exchange = client.post("/api/v1/auth/token")
@@ -261,41 +260,16 @@ def _credentials_via_client_credentials(
 
 
 def credentials(
-    role: str = "admin",
     *,
     base_url: str,
     ca_bundle: str | None = None,
     timeout: float = _TIMEOUT_SECONDS,
 ) -> Credentials:
-    """Log in as *role* (``admin``, ``user`` or ``service``).
+    """Fetch a ``service`` bearer with the ``internal`` client grant.
 
     Raises:
-        LoginError: when the flow for *role* does not complete, or its password
-            is not configured.
-        ValueError: for an unknown role.
+        LoginError: when the client-credentials grant does not complete.
     """
-    if role == "service":
-        return _credentials_via_client_credentials(
-            base_url=base_url, ca_bundle=ca_bundle, timeout=timeout
-        )
-    if role in _PASSWORD_ROLES:
-        username, password_var = _PASSWORD_ROLES[role]
-        password = env_value(password_var)
-        if not password:
-            raise LoginError(
-                f"{password_var} is unset — the {role} role cannot be minted. "
-                f"Populate .env from .env.example."
-            )
-        return login(username, password, base_url=base_url, ca_bundle=ca_bundle, timeout=timeout)
-    raise ValueError(f"Unknown role {role!r}; expected admin, user or service")
-
-
-def bearer(
-    role: str = "admin",
-    *,
-    base_url: str,
-    ca_bundle: str | None = None,
-    timeout: float = _TIMEOUT_SECONDS,
-) -> str:
-    """Return a live bearer for *role*."""
-    return credentials(role, base_url=base_url, ca_bundle=ca_bundle, timeout=timeout).access_token
+    return _credentials_via_client_credentials(
+        base_url=base_url, ca_bundle=ca_bundle, timeout=timeout
+    )

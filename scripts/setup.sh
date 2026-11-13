@@ -315,7 +315,7 @@ else
 fi
 
 # ── Keycloak credentials ────────────────────────────────────────────────────
-# All six are generated, never prompted: they are secrets the operator has no
+# All seven are generated, never prompted: they are secrets the operator has no
 # reason to choose, and generating them keeps every one out of git (none has a
 # default in docker-compose.yml). Same idempotent pattern as the encryption
 # key — a re-run must NOT rotate these, because KEYCLOAK_DB_PASSWORD is the
@@ -330,9 +330,9 @@ KEYCLOAK_SECRET_KEYS=(
     "KEYCLOAK_CLIENT_SECRET"
     "KEYCLOAK_SERVICE_CLIENT_SECRET"
     "KEYCLOAK_ADMIN_CLIENT_SECRET"
-    "DEV_WBA_ADMIN_PASSWORD"
-    "DEV_WBA_USER_PASSWORD"
-    "DEV_KEYCLOAK_ADMIN_PASSWORD"
+    "APP_ADMIN_PASSWORD"
+    "APP_USER_PASSWORD"
+    "KEYCLOAK_CONSOLE_ADMIN_PASSWORD"
 )
 
 for KEY in "${KEYCLOAK_SECRET_KEYS[@]}"; do

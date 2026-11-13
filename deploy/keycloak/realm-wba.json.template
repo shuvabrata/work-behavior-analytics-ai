@@ -91,12 +91,13 @@
   ],
   "users": [
     {
-      "username": "dev-admin",
+      "username": "app-admin",
       "enabled": true,
       "emailVerified": true,
-      "email": "dev-admin@wba.invalid",
-      "firstName": "Dev",
+      "email": "app-admin@wba.invalid",
+      "firstName": "Application",
       "lastName": "Admin",
+      "requiredActions": ["UPDATE_PASSWORD"],
       "realmRoles": [
         "admin",
         "user"
@@ -104,26 +105,27 @@
       "credentials": [
         {
           "type": "password",
-          "value": "${DEV_WBA_ADMIN_PASSWORD}",
-          "temporary": false
+          "value": "${APP_ADMIN_PASSWORD}",
+          "temporary": true
         }
       ]
     },
     {
-      "username": "dev-user",
+      "username": "app-user",
       "enabled": true,
       "emailVerified": true,
-      "email": "dev-user@wba.invalid",
-      "firstName": "Dev",
+      "email": "app-user@wba.invalid",
+      "firstName": "Application",
       "lastName": "User",
+      "requiredActions": ["UPDATE_PASSWORD"],
       "realmRoles": [
         "user"
       ],
       "credentials": [
         {
           "type": "password",
-          "value": "${DEV_WBA_USER_PASSWORD}",
-          "temporary": false
+          "value": "${APP_USER_PASSWORD}",
+          "temporary": true
         }
       ]
     },

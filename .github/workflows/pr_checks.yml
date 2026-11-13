@@ -15,6 +15,8 @@ jobs:
       OPENAI_API_KEY: "sk-test-dummy-key-for-ci"
       LLM_MODEL: "gpt-4o"
       GITHUB_MCP_ENABLED: "false"
+      TEST_SUITE_WBA_ADMIN_USERNAME: ${{ vars.WBA_ADMIN_USERNAME }}
+      TEST_SUITE_WBA_USER_USERNAME: ${{ vars.WBA_USER_USERNAME }}
 
     steps:
       - name: Checkout

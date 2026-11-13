@@ -7,7 +7,7 @@ captured with ``$(...)``.
 
 Usage (from workspace root)::
 
-    PYTHONPATH=src python scripts/get_token.py --role admin
+    PYTHONPATH=src python scripts/get_token.py --role admin --username <realm-username>
 
 The token is the command's product, so it is the one thing written to stdout.
 Every diagnostic — role, subject, remaining lifetime, the Swagger reminder — goes
@@ -15,8 +15,9 @@ to stderr, keeping stdout machine-parseable.
 
 Environment variables
 ---------------------
-DEV_WBA_ADMIN_PASSWORD        Password for the ``admin`` dev user.
-DEV_WBA_USER_PASSWORD         Password for the ``user`` dev user.
+WBA_TOKEN_PASSWORD            Password for the ``admin``/``user`` account named
+                              by ``--username``.  When unset, the password is
+                              prompted for interactively.
 KEYCLOAK_SERVICE_CLIENT_SECRET  Secret for the ``service`` role's client grant.
 APP_PUBLIC_BASE_URL           Base URL of the running stack.  Default:
                               ``https://localhost``.
@@ -25,13 +26,19 @@ APP_PUBLIC_BASE_URL           Base URL of the running stack.  Default:
 from __future__ import annotations
 
 import argparse
+import getpass
 import json
 import sys
 import time
 
-from common.auth import LoginError, credentials, env_value, resolve_ca_bundle
-
-_DEV_USERS = {"admin": "dev-admin", "user": "dev-user"}
+from common.auth import (
+    Credentials,
+    LoginError,
+    credentials,
+    env_value,
+    login,
+    resolve_ca_bundle,
+)
 
 
 def _parse_args(argv: list[str] | None) -> argparse.Namespace:
@@ -41,6 +48,11 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         choices=["admin", "user", "service"],
         default="admin",
         help="role to mint (default: admin)",
+    )
+    parser.add_argument(
+        "--username",
+        default=None,
+        help="realm username to log in as; required for --role admin and --role user",
     )
     parser.add_argument(
         "--json",
@@ -54,6 +66,38 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         help="base URL of the stack (default: APP_PUBLIC_BASE_URL, else https://localhost)",
     )
     return parser.parse_args(argv)
+
+
+def _resolve_password(username: str) -> str:
+    """Return the password from ``WBA_TOKEN_PASSWORD``, else prompt for it.
+
+    Raises:
+        LoginError: when the variable is unset and stdin is not a TTY, since a
+            prompt could never be answered.
+    """
+    password = env_value("WBA_TOKEN_PASSWORD")
+    if password:
+        return password
+    if not sys.stdin.isatty():
+        raise LoginError(
+            "WBA_TOKEN_PASSWORD is unset and stdin is not a TTY; "
+            "set the environment variable to run non-interactively"
+        )
+    return getpass.getpass(f"Password for {username}: ")
+
+
+def _mint(args: argparse.Namespace, base_url: str) -> Credentials:
+    """Return live credentials for the requested role, or raise ``LoginError``."""
+    if args.role == "service":
+        return credentials(base_url=base_url, ca_bundle=resolve_ca_bundle())
+    if not args.username:
+        raise LoginError(f"--username is required for --role {args.role}")
+    return login(
+        args.username,
+        _resolve_password(args.username),
+        base_url=base_url,
+        ca_bundle=resolve_ca_bundle(),
+    )
 
 
 def _base_url(override: str | None) -> str:
@@ -75,7 +119,7 @@ def main(argv: list[str] | None = None) -> int:
     base_url = _base_url(args.base_url)
 
     try:
-        creds = credentials(args.role, base_url=base_url, ca_bundle=resolve_ca_bundle())
+        creds = _mint(args, base_url)
     except LoginError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
@@ -100,7 +144,7 @@ def main(argv: list[str] | None = None) -> int:
     else:
         sys.stdout.write(creds.access_token + "\n")
 
-    user = _DEV_USERS.get(args.role, args.role)
+    user = args.username or args.role
     print(
         f"role={args.role} subject={subject} expires_in={remaining}s "
         f"({creds.expires_at - time.monotonic():.0f}s remaining)",

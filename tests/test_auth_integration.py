@@ -48,6 +48,7 @@ from tests.auth_helpers import (
     _absolute,
     _parse_login_form,
     admin_headers,
+    configured,
     env_value,
     service_headers,
     user_headers,
@@ -58,10 +59,26 @@ pytestmark = [pytest.mark.integration, pytest.mark.server]
 TIMEOUT = 30.0
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
-ADMIN_USERNAME = "dev-admin"
-USER_USERNAME = "dev-user"
-ADMIN_PASSWORD_VAR = "DEV_WBA_ADMIN_PASSWORD"
-USER_PASSWORD_VAR = "DEV_WBA_USER_PASSWORD"
+ADMIN_USERNAME_VAR = "TEST_SUITE_WBA_ADMIN_USERNAME"
+USER_USERNAME_VAR = "TEST_SUITE_WBA_USER_USERNAME"
+ADMIN_PASSWORD_VAR = "TEST_SUITE_WBA_ADMIN_PASSWORD"
+USER_PASSWORD_VAR = "TEST_SUITE_WBA_USER_PASSWORD"
+
+_USER_READY = configured("TEST_SUITE_WBA_USER_USERNAME") and configured(
+    "TEST_SUITE_WBA_USER_PASSWORD"
+)
+_ADMIN_READY = configured("TEST_SUITE_WBA_ADMIN_USERNAME") and configured(
+    "TEST_SUITE_WBA_ADMIN_PASSWORD"
+)
+
+needs_user = pytest.mark.skipif(
+    not _USER_READY,
+    reason="TEST_SUITE_WBA_USER_* is not configured — see INSTALL_GUIDE.md",
+)
+needs_admin_and_user = pytest.mark.skipif(
+    not (_ADMIN_READY and _USER_READY),
+    reason="TEST_SUITE_WBA_ADMIN_* and TEST_SUITE_WBA_USER_* are both required",
+)
 
 SETTING_KEY = "HTTP_REQUEST_TIMEOUT"
 SETTING_PATH = f"/api/v1/settings/{SETTING_KEY}"
@@ -132,10 +149,18 @@ def _password(role: str) -> str:
     return str(value)
 
 
+def _username(role: str) -> str:
+    """Return the configured realm username for *role*, never hard-coded."""
+    var = ADMIN_USERNAME_VAR if role == "admin" else USER_USERNAME_VAR
+    value = env_value(var)
+    assert value, f"{var} is unset — populate .env before running this suite"
+    return str(value)
+
+
 @contextmanager
 def _live_session(role: str, *, next_path: str = "/app/graph") -> Iterator[LiveSession]:
     """Complete a real login and yield the open client holding its session cookie."""
-    username = ADMIN_USERNAME if role == "admin" else USER_USERNAME
+    username = _username(role)
     client = _fresh_client()
     try:
         location = _begin_login(client, next_path)
@@ -262,6 +287,7 @@ def _compose(*args: str) -> None:
 # ── The real login sequence ─────────────────────────────────────────────
 
 
+@needs_user
 class TestRealLoginSequence:
     """Each hop of the login is observable and asserted, with nothing stubbed."""
 
@@ -277,7 +303,7 @@ class TestRealLoginSequence:
 
             callback = _follow_until_callback(
                 client,
-                _submit_credentials(client, page.text, USER_USERNAME, _password("user")),
+                _submit_credentials(client, page.text, _username("user"), _password("user")),
             )
 
             assert callback.status_code == 302, (
@@ -307,7 +333,7 @@ class TestRealLoginSequence:
 
             me = httpx.get(f"{BASE_URL}/api/v1/auth/me", headers=bearer, timeout=TIMEOUT)
             assert me.status_code == 200
-            assert me.json()["username"] == USER_USERNAME
+            assert me.json()["username"] == _username("user")
             assert "user" in me.json()["roles"]
 
             authed = httpx.get(
@@ -331,6 +357,7 @@ class TestRealLoginSequence:
 # ── Refresh rotation ────────────────────────────────────────────────────
 
 
+@needs_user
 class TestRefreshRotation:
     """Keycloak rotates the refresh token on every refresh, and the row follows."""
 
@@ -357,6 +384,7 @@ class TestRefreshRotation:
 # ── Logout ──────────────────────────────────────────────────────────────
 
 
+@needs_user
 class TestLogout:
     """Logout revokes the row, clears the cookie, and the exchange then 401s."""
 
@@ -388,6 +416,7 @@ class TestLogout:
 class TestWrongRoleAndCrossUser:
     """Per-role authorization against live Keycloak, not a stubbed verifier."""
 
+    @needs_admin_and_user
     def test_admin_only_setting_write_denies_user(self) -> None:
         before = _read_setting(admin_headers())
         print(
@@ -425,6 +454,7 @@ class TestWrongRoleAndCrossUser:
         if before["value"] is None:
             assert after["source"] != "db"
 
+    @needs_admin_and_user
     def test_connector_secrets_deny_user_allow_admin(self) -> None:
         path = "/api/v1/connectors/github/configs"
         params = {"include_secrets": "true"}
@@ -441,6 +471,7 @@ class TestWrongRoleAndCrossUser:
         )
         assert allowed.status_code == 200, allowed.text[:200]
 
+    @needs_admin_and_user
     def test_chat_is_not_visible_across_users(self) -> None:
         created = httpx.post(
             f"{BASE_URL}/api/v1/chats/", json={}, headers=user_headers(), timeout=TIMEOUT
@@ -486,6 +517,7 @@ class TestWrongRoleAndCrossUser:
 # ── Keycloak-down resilience ────────────────────────────────────────────
 
 
+@needs_user
 class TestKeycloakDownResilience:
     """An unexpired bearer survives a Keycloak outage; a required refresh 503s.
 

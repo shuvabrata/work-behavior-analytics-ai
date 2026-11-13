@@ -147,11 +147,16 @@ The realm is checked into the repository as JSON and imported on first boot via
 | Access token lifespan | 15 minutes |
 | SSO Session Idle | 1 hour |
 | SSO Session Max | 8 hours |
-| Dev users | one seeded `dev-admin` and one `dev-user`, so `docker compose up` yields a working login immediately |
+| Application users | one seeded `app-admin` and one `app-user`, whose bootstrap passwords are temporary: `docker compose up` yields a first login with a mandatory password change |
 
 The realm JSON seeds a single admin so there is no bootstrap paradox. Further role assignment is
 available in-app (see *User administration* below); the Keycloak admin console remains the
 break-glass path.
+
+The application users' seeded passwords are one-time bootstrap credentials — Keycloak forces a change at
+first login. The live `server`-marked suites therefore do not use them: they log in with the
+`TEST_SUITE_WBA_*` account credentials an operator records in `.env`, and skip when those are
+unset.
 
 **Realm changes are delivered by re-seeding, not by editing.** `--import-realm` is create-only:
 it imports a realm that does not exist and skips one that already does, so editing the template
@@ -602,9 +607,10 @@ templated from the same value, so no realm edit is needed. `KEYCLOAK_INTERNAL_UR
 internal address of the identity provider.
 
 **Remove everything that only exists for local access:** the Keycloak admin console and its
-loopback port, the bootstrap admin credentials, and the local development certificates. A
-production deployment has no published admin surface and an operator-managed admin or an external
-identity provider — never a seeded one.
+loopback port, the bootstrap admin credentials, the seeded `app-admin` / `app-user` accounts and
+their `APP_*_PASSWORD` values, the `TEST_SUITE_WBA_*` suite credentials, and the
+local development certificates. A production deployment has no published admin surface and an
+operator-managed admin or an external identity provider — never a seeded one.
 
 **Keep `AUTH_COOKIE_SECURE` true** wherever TLS terminates, and move the Keycloak database
 password out of `.env` into a secret store.

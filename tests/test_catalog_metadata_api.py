@@ -16,7 +16,7 @@ prove one user's star never reaches the other.
 
 **Safety (clean up irrespective of pass/fail):** A session-scoped ``autouse``
 fixture snapshots the pre-existing ``(catalog_id, subject)`` pairs **for both
-identities** — a ``dev-user`` row is invisible to an admin read, so an
+identities** — an ``app-user`` row is invisible to an admin read, so an
 admin-only snapshot would silently leak it — then on teardown deletes every
 pair not present at setup, again for both identities.  This guarantees the
 database returns to its pre-test state even if a test fails midway.
@@ -34,9 +34,22 @@ import httpx
 import psycopg2
 import pytest
 
-from tests.auth_helpers import admin_headers, env_value, subject, user_headers
+from tests.auth_helpers import admin_headers, configured, env_value, subject, user_headers
 
-pytestmark = [pytest.mark.integration, pytest.mark.server, pytest.mark.authenticated]
+pytestmark = [
+    pytest.mark.integration,
+    pytest.mark.server,
+    pytest.mark.authenticated,
+    pytest.mark.skipif(
+        not (
+            configured("TEST_SUITE_WBA_ADMIN_USERNAME")
+            and configured("TEST_SUITE_WBA_ADMIN_PASSWORD")
+            and configured("TEST_SUITE_WBA_USER_USERNAME")
+            and configured("TEST_SUITE_WBA_USER_PASSWORD")
+        ),
+        reason="TEST_SUITE_WBA_ADMIN_* and TEST_SUITE_WBA_USER_* are both required",
+    ),
+]
 
 BASE_URL = "https://localhost"
 

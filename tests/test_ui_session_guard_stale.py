@@ -14,6 +14,7 @@ from typing import Any, Iterator
 import pytest
 from flask import Flask
 
+from tests.auth_helpers import realm_username
 from ui import api_client, auth
 from ui.session_guard import session_guard
 
@@ -93,7 +94,7 @@ def _request(app: Flask, path: str, *, cookie: bool, method: str = "GET"):
 
 
 def test_live_session_passes_through(app: Flask, transport: _Transport) -> None:
-    transport.response = _StubResponse(200, {"username": "dev-user"})
+    transport.response = _StubResponse(200, {"username": realm_username("user")})
     with _request(app, _PAGE_PATH, cookie=True):
         assert session_guard() is None
 
@@ -190,13 +191,13 @@ def test_app_root_canonicalises_before_the_session_check(
 
 @pytest.mark.parametrize("path", ["/app/graph", "/app/analytics"])
 def test_page_paths_are_not_canonicalised(app: Flask, transport: _Transport, path: str) -> None:
-    transport.response = _StubResponse(200, {"username": "dev-user"})
+    transport.response = _StubResponse(200, {"username": realm_username("user")})
     with _request(app, path, cookie=True):
         assert session_guard() is None
 
 
 def test_app_root_dash_xhr_is_not_redirected(app: Flask, transport: _Transport) -> None:
-    transport.response = _StubResponse(200, {"username": "dev-user"})
+    transport.response = _StubResponse(200, {"username": realm_username("user")})
     headers = {
         "Cookie": f"{auth.SESSION_COOKIE_NAME}={_SESSION}",
         "X-Requested-With": "XMLHttpRequest",

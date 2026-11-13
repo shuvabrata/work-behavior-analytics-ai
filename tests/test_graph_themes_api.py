@@ -23,9 +23,20 @@ from __future__ import annotations
 import httpx
 import pytest
 
-from tests.auth_helpers import admin_headers
+from tests.auth_helpers import admin_headers, configured
 
-pytestmark = [pytest.mark.integration, pytest.mark.server, pytest.mark.authenticated]
+pytestmark = [
+    pytest.mark.integration,
+    pytest.mark.server,
+    pytest.mark.authenticated,
+    pytest.mark.skipif(
+        not (
+            configured("TEST_SUITE_WBA_ADMIN_USERNAME")
+            and configured("TEST_SUITE_WBA_ADMIN_PASSWORD")
+        ),
+        reason="TEST_SUITE_WBA_ADMIN_* is not configured — see INSTALL_GUIDE.md",
+    ),
+]
 
 BASE_URL = "https://localhost"
 

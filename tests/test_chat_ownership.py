@@ -20,15 +20,16 @@ from app.api_main import app
 from app.ai_agent import ai_agent
 from app.auth.dependencies import get_principal
 from app.auth.principal import Principal
+from tests.auth_helpers import realm_username
 
 pytestmark = [pytest.mark.unit, pytest.mark.asyncio]
 
 BASE_URL = "http://test"
 
-OWNER = Principal(subject="owner-sub", username="dev-owner", roles=frozenset({"user"}))
-FOREIGN = Principal(subject="foreign-sub", username="dev-foreign", roles=frozenset({"user"}))
+OWNER = Principal(subject="owner-sub", username="stub-owner", roles=frozenset({"user"}))
+FOREIGN = Principal(subject="foreign-sub", username="stub-foreign", roles=frozenset({"user"}))
 ADMIN = Principal(
-    subject="admin-sub", username="dev-admin", roles=frozenset({"admin", "user"})
+    subject="admin-sub", username=realm_username("admin"), roles=frozenset({"admin", "user"})
 )
 
 

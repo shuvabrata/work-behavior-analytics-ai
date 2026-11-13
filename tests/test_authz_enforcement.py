@@ -24,6 +24,7 @@ from app.api_main import app
 from app.auth.dependencies import get_principal
 from app.auth.principal import Principal
 from app.db.session import get_async_db
+from tests.auth_helpers import realm_username
 
 pytestmark = [pytest.mark.unit, pytest.mark.asyncio]
 
@@ -31,8 +32,8 @@ BASE_URL = "https://test"
 COMMAND_ID = "00000000-0000-0000-0000-000000000001"
 
 _ROLE_PRINCIPALS = {
-    "user": Principal(subject="u-1", username="dev-user", roles=frozenset({"user"})),
-    "admin": Principal(subject="a-1", username="dev-admin", roles=frozenset({"admin"})),
+    "user": Principal(subject="u-1", username=realm_username("user"), roles=frozenset({"user"})),
+    "admin": Principal(subject="a-1", username=realm_username("admin"), roles=frozenset({"admin"})),
     "service": Principal(
         subject="s-1", username="internal", roles=frozenset({"service"})
     ),

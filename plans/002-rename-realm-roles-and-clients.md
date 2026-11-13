@@ -805,6 +805,44 @@ post-change outputs are byte-identical, so this change adds none. `.flake8` excl
 (`.github/workflows/pr_checks.yml` runs pytest, pylint, mypy, bandit). Treat the
 "`flake8` exits 0" criterion as unsatisfiable on this tree; it should not be a gate.
 
+Step 2 was run on the dev stack and verified (2026-11-13). Evidence: the Keycloak
+DB holds realm roles `admin` / `user` / `service` and clients `web` / `internal` /
+`admin-api` (101 tables, so the import ran); seeded users map to `dev-admin` =
+admin+user, `dev-user` = user, `service-account-internal` = service; the API
+resolves `KEYCLOAK_CLIENT_ID=web`, `KEYCLOAK_SERVICE_CLIENT_ID=internal`,
+`KEYCLOAK_ADMIN_CLIENT_ID=admin-api` with both secrets set; a service token minted
+through the `internal` client authenticates end-to-end against the API
+(`/api/v1/auth/me` → 200, `username=service-account-internal`, `roles=["service"]`)
+and clears the `require_roles` gate on `POST /api/v1/commands/` (422 on an empty
+body, i.e. past the role gate, not 403); a real browser PKCE login completed
+(`/auth/login` → 302, `/auth/callback` → 302, `/auth/token` → 200) on the `web`
+client; `GET /api/v1/admin/users/` and `/api/v1/admin/users/roles` → 200. No
+`invalid_client` in the Keycloak log; no `401`/`403`/`credential unavailable` in
+any producer or consumer log. `auth_session` was truncated and now holds only
+post-truncate logins, already carrying `["admin", "user"]`.
+
+**Incident during Step 2 (not caused by this plan).** `.env` was rewritten between
+the executor's run and Step 2, replacing seven Keycloak secrets with the `FIXME`
+placeholder — Keycloak failed to start with `password authentication failed for
+user "keycloak"`. The real values were still held by the long-running producer
+containers (created before the rewrite), which is how they were restored; the
+`keycloak` role's password lives in the `pgdata` volume, so recreating the
+Postgres container would not have fixed it. `.env` is gitignored and its backup
+copies (`.env.fixme-*`, `.env.last_good`) are ignored. Three keys remain `FIXME`
+by design (`CUSTOM_API_TOKEN`, `CUSTOM_LLM_MODEL`, `ATLASSIAN_MCP_TOKEN`).
+
+**Operator-confirmed gates (2026-11-13).** The three credential-bearing checks the
+reviewer could not run in its sandbox — the sandbox blocks credential minting — were
+run by hand and passed: (1) the `admin` bearer decodes to `realm_access.roles` of
+`admin` + `user` with `azp=web`, and `GET /api/v1/auth/me` returns
+`roles=["admin","user"]` while `GET /api/v1/admin/users/` lists `dev-admin` and
+`dev-user` with no `service-account-*`; (2) a `user` bearer is admitted on
+`/api/v1/auth/me` but refused with `403 insufficient_role` on `GET
+/api/v1/admin/users/` and on `POST /api/v1/commands/`, while the same `POST` as
+`admin` is not refused; (3) the Settings → User Management Roles hint reads `admin`
+and `user`, a `user` account is denied that page, and promotion to `admin` restores
+access. Step 2 is complete.
+
 ## STOP conditions
 
 Stop and report back (do not improvise) if:

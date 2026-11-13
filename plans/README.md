@@ -13,9 +13,9 @@ Plan files for completed work are removed as they land — that is this director
 | 001 | Admin user management in the app (Keycloak Admin API + Settings page) | P1 | L | — | DONE — operator re-seed (Step 14) verified 2026-11-12 |
 | 002 | Rename the realm roles and Keycloak client ids (drop the `wba-` prefix) | P2 | M | — | DONE — Step 1 committed as `e39cdc4d`; Step 2 re-seed + end-to-end gates verified 2026-11-13 |
 | 003 | Make the admin user list's `total` honest and stop replaying a rejected admin token | P1 | S | — | DONE — verified 2026-11-12 (5 new tests, revert-proofed; uncommitted in the working tree) |
-| 004 | Make the seeded dev passwords one-time, and give the live suites their own credentials | P2 | M | 002 (DONE) | IN PROGRESS — code complete and reviewed 2026-11-13 (uncommitted in the working tree); Step 6 re-seed + Step 7 operator observations pending |
-| 005 | Rename the seeded users to `app-admin` / `app-user` and take every username from the environment | P2 | M | 004 (IN PROGRESS) | IN PROGRESS — code complete + reviewed 2026-11-13 (uncommitted); Step 7 operator actions pending |
-| 006 | Attach `UPDATE_PASSWORD` explicitly so the seeded users must change their password at first login | P1 | S | 004, 005 | IN PROGRESS — template edit done + reviewed 2026-11-13 (uncommitted); re-seed + `user_required_action` = 2 rows pending |
+| 004 | Make the seeded dev passwords one-time, and give the live suites their own credentials | P2 | M | 002 (DONE) | DONE — Step 6 re-seed performed 2026-11-13; forced change observed live. Code uncommitted in the working tree |
+| 005 | Rename the seeded users to `app-admin` / `app-user` and take every username from the environment | P2 | M | 004 (DONE) | IN PROGRESS — code complete + reviewed 2026-11-13 (uncommitted); `.env` renamed and re-seeded; GitHub repo vars still needed for CI |
+| 006 | Attach `UPDATE_PASSWORD` explicitly so the seeded users must change their password at first login | P1 | S | 004, 005 | DONE — re-seeded 2026-11-13; `app-admin` forced a password change, `app-user`'s action still pending |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) | REJECTED (with one-line rationale).
 

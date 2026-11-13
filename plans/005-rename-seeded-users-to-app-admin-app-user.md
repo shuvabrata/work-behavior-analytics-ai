@@ -18,9 +18,9 @@
 
 ## Execution record — 2026-11-13
 
-Steps 1–6 and 8 were executed in the working tree on `feature/bootstrap-pwds`;
-all changes are uncommitted. Step 7 (the `.env` rename, the GitHub repository
-variables, and the Keycloak re-seed) is operator work and was not performed.
+Steps 1–6 and 8 were executed and reviewed; Step 7's operator actions were then
+completed by the operator. The work is committed on `feature/bootstrap-pwds`
+(`c973c19e`, `62b3a18c`, `4363d54d`, `c327ce0b`).
 
 ### Verification evidence
 

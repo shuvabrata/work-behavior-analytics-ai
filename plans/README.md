@@ -16,6 +16,7 @@ Plan files for completed work are removed as they land — that is this director
 | 004 | Make the seeded dev passwords one-time, and give the live suites their own credentials | P2 | M | 002 (DONE) | DONE — Step 6 re-seed performed 2026-11-13; forced change observed live. Code uncommitted in the working tree |
 | 005 | Rename the seeded users to `app-admin` / `app-user` and take every username from the environment | P2 | M | 004 (DONE) | IN PROGRESS — code complete + reviewed 2026-11-13 (uncommitted); `.env` renamed and re-seeded; GitHub repo vars still needed for CI |
 | 006 | Attach `UPDATE_PASSWORD` explicitly so the seeded users must change their password at first login | P1 | S | 004, 005 | DONE — re-seeded 2026-11-13; `app-admin` forced a password change, `app-user`'s action still pending |
+| 007 | Bump `actions/checkout` and `actions/setup-python` off the deprecated Node 20 runtime | P3 | S | — | DONE — applied + reviewed 2026-11-13 (uncommitted); 6+6 bumped, `runs-on`/`python-version` unchanged |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) | REJECTED (with one-line rationale).
 

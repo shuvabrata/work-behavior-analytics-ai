@@ -159,7 +159,7 @@ class TestToggleFailureProducesAlert:
             api_client,
             "patch",
             side_effect=PermissionDeniedError(
-                403, message="Role 'wba-admin' is required."
+                403, message="Role 'admin' is required."
             ),
         ):
             mock_ctx.triggered_id = {

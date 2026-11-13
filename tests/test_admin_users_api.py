@@ -23,8 +23,8 @@ from app.db.session import get_async_db
 pytestmark = [pytest.mark.unit, pytest.mark.asyncio]
 
 BASE_URL = "https://test"
-ADMIN = Principal(subject="a-1", username="dev-admin", roles=frozenset({"wba-admin"}))
-USER = Principal(subject="u-1", username="dev-user", roles=frozenset({"wba-user"}))
+ADMIN = Principal(subject="a-1", username="dev-admin", roles=frozenset({"admin"}))
+USER = Principal(subject="u-1", username="dev-user", roles=frozenset({"user"}))
 
 
 class _FakeDb:
@@ -72,7 +72,7 @@ def _as(principal: Principal | None) -> None:
 
 ROUTES: list[tuple[str, str, dict[str, Any]]] = [
     ("GET", "/api/v1/admin/users/", {}),
-    ("POST", "/api/v1/admin/users/", {"json": {"username": "a", "email": "a@b.c", "roles": ["wba-user"]}}),
+    ("POST", "/api/v1/admin/users/", {"json": {"username": "a", "email": "a@b.c", "roles": ["user"]}}),
     ("GET", "/api/v1/admin/users/roles", {}),
     ("GET", "/api/v1/admin/users/abc", {}),
     ("PATCH", "/api/v1/admin/users/abc", {"json": {}}),
@@ -99,7 +99,7 @@ async def test_get_roles_not_shadowed(client: httpx.AsyncClient) -> None:
     _as(ADMIN)
     resp = await client.get("/api/v1/admin/users/roles")
     assert resp.status_code == 200
-    assert resp.json() == {"roles": ["wba-admin", "wba-user"]}
+    assert resp.json() == {"roles": ["admin", "user"]}
 
 
 async def test_delete_schedules_cleanup_once(client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -189,7 +189,7 @@ async def test_update_conflict_is_409(client: httpx.AsyncClient, monkeypatch: py
     monkeypatch.setattr(
         query, "get_user_raw", lambda uid: {"id": uid, "username": "x", "enabled": True}
     )
-    monkeypatch.setattr(query, "current_roles", lambda uid: {"wba-user"})
+    monkeypatch.setattr(query, "current_roles", lambda uid: {"user"})
     monkeypatch.setattr(query, "is_service_account", lambda user: False)
 
     def _boom(user_id: str, body: dict[str, Any]) -> None:
@@ -214,7 +214,7 @@ async def test_create_policy_error_is_422(client: httpx.AsyncClient, monkeypatch
 
     resp = await client.post(
         "/api/v1/admin/users/",
-        json={"username": "a/b", "email": "a@b.c", "roles": ["wba-user"]},
+        json={"username": "a/b", "email": "a@b.c", "roles": ["user"]},
     )
     assert resp.status_code == 422, resp.text
     assert resp.json()["detail"]["error"] == "password_policy"
@@ -227,12 +227,12 @@ async def test_create_warnings_empty(client: httpx.AsyncClient, monkeypatch: pyt
 
     async def _create(payload: Any, actor: Principal) -> Any:
         return UserCreatedResponse(
-            id="new", username="a", enabled=True, roles=["wba-user"], warnings=[]
+            id="new", username="a", enabled=True, roles=["user"], warnings=[]
         ), []
 
     monkeypatch.setattr(admin_service, "create_user", _create)
     resp = await client.post(
-        "/api/v1/admin/users/", json={"username": "a", "email": "a@b.c", "roles": ["wba-user"]}
+        "/api/v1/admin/users/", json={"username": "a", "email": "a@b.c", "roles": ["user"]}
     )
     assert resp.status_code == 201
     assert resp.json()["warnings"] == []
@@ -250,13 +250,13 @@ async def test_create_warns_when_password_not_set(
             id="new",
             username="a",
             enabled=True,
-            roles=["wba-user"],
+            roles=["user"],
             warnings=["password_not_set"],
         ), ["password_not_set"]
 
     monkeypatch.setattr(admin_service, "create_user", _create)
     resp = await client.post(
-        "/api/v1/admin/users/", json={"username": "a", "email": "a@b.c", "roles": ["wba-user"]}
+        "/api/v1/admin/users/", json={"username": "a", "email": "a@b.c", "roles": ["user"]}
     )
     assert resp.status_code == 201
     assert resp.json()["warnings"] == ["password_not_set"]

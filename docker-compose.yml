@@ -307,7 +307,7 @@ services:
       LOG_DIR: /var/log/github-producer
       CONTAINER_NAME: github-producer
       KEYCLOAK_INTERNAL_URL: ${KEYCLOAK_INTERNAL_URL:-http://keycloak:8080/auth/realms/wba}
-      KEYCLOAK_SERVICE_CLIENT_ID: ${KEYCLOAK_SERVICE_CLIENT_ID:-wba-internal}
+      KEYCLOAK_SERVICE_CLIENT_ID: ${KEYCLOAK_SERVICE_CLIENT_ID:-internal}
     volumes:
       - ./logs/github-producer:/var/log/github-producer
     depends_on:
@@ -332,7 +332,7 @@ services:
       LOG_DIR: /var/log/jira-producer
       CONTAINER_NAME: jira-producer
       KEYCLOAK_INTERNAL_URL: ${KEYCLOAK_INTERNAL_URL:-http://keycloak:8080/auth/realms/wba}
-      KEYCLOAK_SERVICE_CLIENT_ID: ${KEYCLOAK_SERVICE_CLIENT_ID:-wba-internal}
+      KEYCLOAK_SERVICE_CLIENT_ID: ${KEYCLOAK_SERVICE_CLIENT_ID:-internal}
     volumes:
       - ./logs/jira-producer:/var/log/jira-producer
     depends_on:
@@ -357,7 +357,7 @@ services:
       LOG_DIR: /var/log/confluence-producer
       CONTAINER_NAME: confluence-producer
       KEYCLOAK_INTERNAL_URL: ${KEYCLOAK_INTERNAL_URL:-http://keycloak:8080/auth/realms/wba}
-      KEYCLOAK_SERVICE_CLIENT_ID: ${KEYCLOAK_SERVICE_CLIENT_ID:-wba-internal}
+      KEYCLOAK_SERVICE_CLIENT_ID: ${KEYCLOAK_SERVICE_CLIENT_ID:-internal}
     volumes:
       - ./logs/confluence-producer:/var/log/confluence-producer
     depends_on:
@@ -386,7 +386,7 @@ services:
       PYTHONPATH: /app
       LOG_DIR: /var/log/signal-consumer
       KEYCLOAK_INTERNAL_URL: ${KEYCLOAK_INTERNAL_URL:-http://keycloak:8080/auth/realms/wba}
-      KEYCLOAK_SERVICE_CLIENT_ID: ${KEYCLOAK_SERVICE_CLIENT_ID:-wba-internal}
+      KEYCLOAK_SERVICE_CLIENT_ID: ${KEYCLOAK_SERVICE_CLIENT_ID:-internal}
       ELASTICSEARCH_URL: http://elasticsearch:9200
       ELASTIC_PASSWORD: ${ELASTIC_PASSWORD:-}
       # Override DATABASE_URL to use 'postgres' service name instead of 'localhost'

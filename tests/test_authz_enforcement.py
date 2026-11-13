@@ -31,10 +31,10 @@ BASE_URL = "https://test"
 COMMAND_ID = "00000000-0000-0000-0000-000000000001"
 
 _ROLE_PRINCIPALS = {
-    "user": Principal(subject="u-1", username="dev-user", roles=frozenset({"wba-user"})),
-    "admin": Principal(subject="a-1", username="dev-admin", roles=frozenset({"wba-admin"})),
+    "user": Principal(subject="u-1", username="dev-user", roles=frozenset({"user"})),
+    "admin": Principal(subject="a-1", username="dev-admin", roles=frozenset({"admin"})),
     "service": Principal(
-        subject="s-1", username="wba-internal", roles=frozenset({"wba-service"})
+        subject="s-1", username="internal", roles=frozenset({"service"})
     ),
 }
 

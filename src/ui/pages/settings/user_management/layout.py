@@ -29,10 +29,10 @@ from ui.styles import (
 
 #: Explains the two assignable realm roles, shown from the Roles label's (i) hint.
 _ROLES_HELP = (
-    "**wba-admin** — everything a standard user can do, plus shared "
+    "**admin** — everything a standard user can do, plus shared "
     "configuration, connector secrets, and user management.\n\n"
-    "**wba-user** — standard user. Reads everything except connector secrets, "
-    "and manages their own chat sessions and catalog favourites."
+    "**user** — reads everything except connector secrets, and manages "
+    "their own chat sessions and catalog favourites."
 )
 
 DEFAULT_LIMIT = 25

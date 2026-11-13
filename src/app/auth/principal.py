@@ -45,5 +45,5 @@ class Principal:
 
     @property
     def is_admin(self) -> bool:
-        """Return whether this principal carries ``wba-admin``."""
-        return "wba-admin" in self.roles
+        """Return whether this principal carries ``admin``."""
+        return "admin" in self.roles

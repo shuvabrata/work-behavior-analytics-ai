@@ -1,10 +1,10 @@
 """Interactive login against the running WBA stack, for operator tooling.
 
-The realm's ``wba-web`` client refuses direct access grants by design — it is a
+The realm's ``web`` client refuses direct access grants by design — it is a
 BFF client — so the only supported way to obtain a bearer is the path the
 browser takes: the OIDC authorization-code flow with PKCE, then the BFF's own
 ``POST /api/v1/auth/token`` exchange.  Service-role callers use the
-``wba-internal`` client's client-credentials grant instead.
+``internal`` client's client-credentials grant instead.
 
 ``httpx`` is used rather than ``requests`` because the flow runs against
 ``https://localhost``, whose certificate is signed by the local mkcert CA;
@@ -224,11 +224,11 @@ def login(
 def _credentials_via_client_credentials(
     *, base_url: str, ca_bundle: str | None = None, timeout: float = _TIMEOUT_SECONDS
 ) -> Credentials:
-    """Fetch a ``wba-service`` bearer with the ``wba-internal`` client grant."""
+    """Fetch a ``service`` bearer with the ``internal`` client grant."""
     import httpx  # noqa: PLC0415  # pylint: disable=import-outside-toplevel
 
     secret = env_value("KEYCLOAK_SERVICE_CLIENT_SECRET")
-    client_id = env_value("KEYCLOAK_SERVICE_CLIENT_ID", "wba-internal")
+    client_id = env_value("KEYCLOAK_SERVICE_CLIENT_ID", "internal")
     if not secret:
         raise LoginError(
             "KEYCLOAK_SERVICE_CLIENT_SECRET is unset — the service role cannot be "

@@ -20,7 +20,7 @@ from app.auth.principal import Principal
 
 pytestmark = [pytest.mark.unit, pytest.mark.asyncio]
 
-ACTOR = Principal(subject="admin-1", username="admin", roles=frozenset({"wba-admin"}))
+ACTOR = Principal(subject="admin-1", username="admin", roles=frozenset({"admin"}))
 
 
 def _raw(user_id: str = "u1", *, enabled: bool = True, username: str = "alice", **extra: Any) -> dict[str, Any]:
@@ -74,7 +74,7 @@ def _patch_query(monkeypatch: pytest.MonkeyPatch) -> Any:
 
 async def test_create_rejects_non_assignable_role(_patch_query: Any) -> None:
     with pytest.raises(service.InvalidRoleError):
-        await service.create_user(UserCreate(username="a", email="a@b.c", roles=["wba-service"]), ACTOR)
+        await service.create_user(UserCreate(username="a", email="a@b.c", roles=["service"]), ACTOR)
 
 
 async def test_create_maps_conflict(monkeypatch: pytest.MonkeyPatch, _patch_query: Any) -> None:
@@ -83,12 +83,12 @@ async def test_create_maps_conflict(monkeypatch: pytest.MonkeyPatch, _patch_quer
 
     monkeypatch.setattr(service.query, "create_user", boom)
     with pytest.raises(service.UserExistsError):
-        await service.create_user(UserCreate(username="a", email="a@b.c", roles=["wba-user"]), ACTOR)
+        await service.create_user(UserCreate(username="a", email="a@b.c", roles=["user"]), ACTOR)
 
 
 async def test_create_with_password_sets_temporary(_patch_query: Any) -> None:
     created, warnings = await service.create_user(
-        UserCreate(username="a", email="a@b.c", roles=["wba-user"], password="hunter2xx"), ACTOR
+        UserCreate(username="a", email="a@b.c", roles=["user"], password="hunter2xx"), ACTOR
     )
     assert warnings == []
     assert _patch_query["passwords"] == [("new-id", "hunter2xx", True)]
@@ -100,22 +100,22 @@ async def test_create_password_failure_warns(monkeypatch: pytest.MonkeyPatch, _p
 
     monkeypatch.setattr(service.query, "set_password", boom)
     created, warnings = await service.create_user(
-        UserCreate(username="a", email="a@b.c", roles=["wba-user"], password="hunter2xx"), ACTOR
+        UserCreate(username="a", email="a@b.c", roles=["user"], password="hunter2xx"), ACTOR
     )
     assert warnings == ["password_not_set"]
 
 
 async def test_update_removing_last_admin_raises(_patch_query: Any) -> None:
     _patch_query["raw"]["u1"] = _raw("u1")
-    _patch_query["roles"] = {"wba-admin"}
+    _patch_query["roles"] = {"admin"}
     _patch_query["users_with_role"] = [_raw("u1")]
     with pytest.raises(service.LastAdminError):
-        await service.update_user("u1", UserUpdate(roles=["wba-user"]), ACTOR)
+        await service.update_user("u1", UserUpdate(roles=["user"]), ACTOR)
 
 
 async def test_update_disabling_last_admin_raises(_patch_query: Any) -> None:
     _patch_query["raw"]["u1"] = _raw("u1")
-    _patch_query["roles"] = {"wba-admin"}
+    _patch_query["roles"] = {"admin"}
     _patch_query["users_with_role"] = [_raw("u1")]
     with pytest.raises(service.LastAdminError):
         await service.update_user("u1", UserUpdate(enabled=False), ACTOR)
@@ -123,14 +123,14 @@ async def test_update_disabling_last_admin_raises(_patch_query: Any) -> None:
 
 async def test_update_disabling_non_admin_ok(_patch_query: Any) -> None:
     _patch_query["raw"]["u1"] = _raw("u1")
-    _patch_query["roles"] = {"wba-user"}
+    _patch_query["roles"] = {"user"}
     user, disabled_now = await service.update_user("u1", UserUpdate(enabled=False), ACTOR)
     assert disabled_now is True
 
 
 async def test_disabled_now_only_on_transition(_patch_query: Any) -> None:
     _patch_query["raw"]["u1"] = _raw("u1", enabled=False)
-    _patch_query["roles"] = {"wba-user"}
+    _patch_query["roles"] = {"user"}
     _user, disabled_now = await service.update_user("u1", UserUpdate(enabled=False), ACTOR)
     assert disabled_now is False
 
@@ -161,31 +161,31 @@ async def test_get_not_found(monkeypatch: pytest.MonkeyPatch, _patch_query: Any)
 
 async def test_role_diff(_patch_query: Any) -> None:
     _patch_query["raw"]["u1"] = _raw("u1")
-    _patch_query["roles"] = {"wba-admin"}
+    _patch_query["roles"] = {"admin"}
     _patch_query["users_with_role"] = [_raw("u1"), _raw("u2")]
-    await service.update_user("u1", UserUpdate(roles=["wba-user"]), ACTOR)
-    assert ("u1", ["wba-user"]) in _patch_query["assigned"]
-    assert ("u1", ["wba-admin"]) in _patch_query["removed"]
+    await service.update_user("u1", UserUpdate(roles=["user"]), ACTOR)
+    assert ("u1", ["user"]) in _patch_query["assigned"]
+    assert ("u1", ["admin"]) in _patch_query["removed"]
 
 
 async def test_delete_self(_patch_query: Any) -> None:
-    actor = Principal(subject="u1", username="alice", roles=frozenset({"wba-admin"}))
+    actor = Principal(subject="u1", username="alice", roles=frozenset({"admin"}))
     with pytest.raises(service.SelfDeleteError):
         await service.delete_user("u1", actor)
 
 
 async def test_delete_service_account(_patch_query: Any) -> None:
-    _patch_query["raw"]["u2"] = _raw("u2", serviceAccountClientId="wba-internal")
-    actor = Principal(subject="admin", username="admin", roles=frozenset({"wba-admin"}))
+    _patch_query["raw"]["u2"] = _raw("u2", serviceAccountClientId="internal")
+    actor = Principal(subject="admin", username="admin", roles=frozenset({"admin"}))
     with pytest.raises(service.ServiceAccountError):
         await service.delete_user("u2", actor)
 
 
 async def test_delete_last_admin(_patch_query: Any) -> None:
     _patch_query["raw"]["u1"] = _raw("u1")
-    _patch_query["roles"] = {"wba-admin"}
+    _patch_query["roles"] = {"admin"}
     _patch_query["users_with_role"] = [_raw("u1")]
-    actor = Principal(subject="other", username="other", roles=frozenset({"wba-admin"}))
+    actor = Principal(subject="other", username="other", roles=frozenset({"admin"}))
     with pytest.raises(service.LastAdminError):
         await service.delete_user("u1", actor)
 
@@ -194,7 +194,7 @@ async def test_list_passes_through_query_page(monkeypatch: pytest.MonkeyPatch, _
     from app.api.admin_users.v1.model import UserSummary
 
     listed = (
-        [UserSummary(id="u1", username="alice", enabled=True, roles=["wba-user"])],
+        [UserSummary(id="u1", username="alice", enabled=True, roles=["user"])],
         1,
     )
     monkeypatch.setattr(service.query, "list_users", lambda o, l, s: listed)
@@ -220,7 +220,7 @@ async def test_list_total_excludes_service_accounts(monkeypatch: pytest.MonkeyPa
 
         @staticmethod
         def realm_roles(uid: str) -> list[str]:
-            return ["wba-user"]
+            return ["user"]
 
     monkeypatch.setattr(query, "keycloak_admin", _FakeAdmin)
     users, total = query.list_users(0, 25, None)
@@ -248,7 +248,7 @@ def _recording_admin(
 
         @staticmethod
         def realm_roles(uid: str) -> list[str]:
-            return ["wba-user"]
+            return ["user"]
 
     return _FakeAdmin
 
@@ -306,4 +306,4 @@ async def test_list_total_clamps_and_skips_global_count(
 
 
 def test_list_assignable_roles() -> None:
-    assert service.list_assignable_roles().roles == ["wba-admin", "wba-user"]
+    assert service.list_assignable_roles().roles == ["admin", "user"]

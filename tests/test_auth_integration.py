@@ -19,7 +19,7 @@ credential-less ``401`` observations this file depends on.
 
 The login uses the real Keycloak form (HTML scraping, via
 ``tests/auth_helpers.py``) rather than a direct-access grant, which the
-``wba-web`` client disables by design.
+``web`` client disables by design.
 
 Requires the Compose stack::
 
@@ -308,7 +308,7 @@ class TestRealLoginSequence:
             me = httpx.get(f"{BASE_URL}/api/v1/auth/me", headers=bearer, timeout=TIMEOUT)
             assert me.status_code == 200
             assert me.json()["username"] == USER_USERNAME
-            assert "wba-user" in me.json()["roles"]
+            assert "user" in me.json()["roles"]
 
             authed = httpx.get(
                 f"{BASE_URL}/api/v1/search",

@@ -7,14 +7,14 @@
   "ssoSessionMaxLifespan": 28800,
   "roles": {
     "realm": [
-      { "name": "wba-admin", "description": "Full administrative access to WBA" },
-      { "name": "wba-user", "description": "Standard authenticated WBA user" },
-      { "name": "wba-service", "description": "Machine-to-machine service account role" }
+      { "name": "admin", "description": "Full administrative access to WBA" },
+      { "name": "user", "description": "Standard authenticated WBA user" },
+      { "name": "service", "description": "Machine-to-machine service account role" }
     ]
   },
   "clients": [
     {
-      "clientId": "wba-web",
+      "clientId": "web",
       "name": "WBA Web (browser / BFF)",
       "enabled": true,
       "protocol": "openid-connect",
@@ -31,12 +31,12 @@
       },
       "protocolMappers": [
         {
-          "name": "wba-web-audience",
+          "name": "web-audience",
           "protocol": "openid-connect",
           "protocolMapper": "oidc-audience-mapper",
           "consentRequired": false,
           "config": {
-            "included.client.audience": "wba-web",
+            "included.client.audience": "web",
             "id.token.claim": "false",
             "access.token.claim": "true"
           }
@@ -63,7 +63,7 @@
       "secret": "${KEYCLOAK_ADMIN_CLIENT_SECRET}"
     },
     {
-      "clientId": "wba-internal",
+      "clientId": "internal",
       "name": "WBA Internal (service account)",
       "enabled": true,
       "protocol": "openid-connect",
@@ -76,12 +76,12 @@
       "secret": "${KEYCLOAK_SERVICE_CLIENT_SECRET}",
       "protocolMappers": [
         {
-          "name": "wba-internal-audience",
+          "name": "internal-audience",
           "protocol": "openid-connect",
           "protocolMapper": "oidc-audience-mapper",
           "consentRequired": false,
           "config": {
-            "included.client.audience": "wba-internal",
+            "included.client.audience": "internal",
             "id.token.claim": "false",
             "access.token.claim": "true"
           }
@@ -98,8 +98,8 @@
       "firstName": "Dev",
       "lastName": "Admin",
       "realmRoles": [
-        "wba-admin",
-        "wba-user"
+        "admin",
+        "user"
       ],
       "credentials": [
         {
@@ -117,7 +117,7 @@
       "firstName": "Dev",
       "lastName": "User",
       "realmRoles": [
-        "wba-user"
+        "user"
       ],
       "credentials": [
         {
@@ -128,17 +128,17 @@
       ]
     },
     {
-      "username": "service-account-wba-internal",
+      "username": "service-account-internal",
       "enabled": true,
-      "serviceAccountClientId": "wba-internal",
+      "serviceAccountClientId": "internal",
       "realmRoles": [
-        "wba-service"
+        "service"
       ]
     },
     {
-      "username": "service-account-wba-admin-api",
+      "username": "service-account-admin-api",
       "enabled": true,
-      "serviceAccountClientId": "wba-admin-api",
+      "serviceAccountClientId": "admin-api",
       "clientRoles": {
         "realm-management": ["view-users", "query-users", "manage-users", "view-realm"]
       }

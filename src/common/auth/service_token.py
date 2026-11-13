@@ -23,7 +23,7 @@ import requests
 from common.logger import logger
 
 _DEFAULT_REALM_URL = "http://keycloak:8080/auth/realms/wba"
-_DEFAULT_CLIENT_ID = "wba-internal"
+_DEFAULT_CLIENT_ID = "internal"
 _REFRESH_MARGIN_SECONDS = 60
 _FAILURE_BACKOFF_SECONDS = 30
 _HTTP_TIMEOUT_SECONDS = 10
@@ -100,7 +100,7 @@ def _request_token(realm_base: str, client_id: str, client_secret: str) -> tuple
 
 
 def get_service_token() -> str:
-    """Return a cached, unexpired ``wba-internal`` access token.
+    """Return a cached, unexpired ``internal`` access token.
 
     Raises:
         ServiceTokenError: when no secret is configured, the token endpoint

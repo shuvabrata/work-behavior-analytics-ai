@@ -39,7 +39,7 @@ def _reset_token() -> None:
 
 def _settings(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(k.settings, "KEYCLOAK_INTERNAL_URL", "http://keycloak:8080/auth/realms/wba")
-    monkeypatch.setattr(k.settings, "KEYCLOAK_ADMIN_CLIENT_ID", "wba-admin-api")
+    monkeypatch.setattr(k.settings, "KEYCLOAK_ADMIN_CLIENT_ID", "admin-api")
     monkeypatch.setattr(k.settings, "KEYCLOAK_ADMIN_CLIENT_SECRET", "s3cret")
 
 

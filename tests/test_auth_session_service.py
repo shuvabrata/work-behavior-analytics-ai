@@ -91,10 +91,10 @@ class TestIdentitySnapshot:
         principal = Principal(
             subject="sub-7",
             username="carol",
-            roles=frozenset({"wba-admin", "wba-user"}),
+            roles=frozenset({"admin", "user"}),
         )
 
-        assert sorted(principal.roles) == ["wba-admin", "wba-user"]
+        assert sorted(principal.roles) == ["admin", "user"]
         assert principal.subject == "sub-7"
         assert principal.username == "carol"
 

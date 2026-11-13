@@ -1,6 +1,6 @@
 """FastAPI router for the admin user management API.
 
-Every operation is ``wba-admin``-only; the dependency is supplied at include
+Every operation is ``admin``-only; the dependency is supplied at include
 time in ``app.api_main``. Mutating handlers also declare
 ``principal: Principal = Depends(require_admin)`` so the caller reaches the
 handler for the audit line and the self-delete guard.

@@ -38,7 +38,7 @@ class UserExistsError(AdminUserError):
 
 
 class LastAdminError(AdminUserError):
-    """The operation would remove the last ``wba-admin`` holder."""
+    """The operation would remove the last ``admin`` holder."""
 
 
 class SelfDeleteError(AdminUserError):
@@ -141,7 +141,7 @@ async def create_user(payload: UserCreate, actor: Principal) -> tuple[UserCreate
 
 async def _ensure_not_last_admin() -> None:
     """Raise ``LastAdminError`` when removing or disabling would leave no admin."""
-    holders = await asyncio.to_thread(query.users_with_role, "wba-admin")
+    holders = await asyncio.to_thread(query.users_with_role, "admin")
     if len(holders) <= 1:
         raise LastAdminError("Cannot remove or disable the last administrator.")
 
@@ -164,10 +164,10 @@ async def update_user(
 
     removing_admin = (
         payload.roles is not None
-        and "wba-admin" in current_roles
-        and "wba-admin" not in payload.roles
+        and "admin" in current_roles
+        and "admin" not in payload.roles
     )
-    if "wba-admin" in current_roles and (disabling_now or removing_admin):
+    if "admin" in current_roles and (disabling_now or removing_admin):
         await _ensure_not_last_admin()
 
     body: dict[str, object] = {}
@@ -232,7 +232,7 @@ async def delete_user(user_id: str, actor: Principal) -> None:
         raise ServiceAccountError("Service-account users cannot be deleted here.")
 
     current_roles = await asyncio.to_thread(query.current_roles, user_id)
-    if "wba-admin" in current_roles:
+    if "admin" in current_roles:
         await _ensure_not_last_admin()
 
     await asyncio.to_thread(query.delete_user, user_id)

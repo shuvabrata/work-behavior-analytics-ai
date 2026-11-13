@@ -51,20 +51,20 @@ class UISettings(BaseSettings):
 
     KEYCLOAK_REALM: str = "wba"
 
-    # `wba-web` — the confidential browser client used by the BFF.
+    # `web` — the confidential browser client used by the BFF.
     # The ID is not a secret and is safe on the UI runtime; the SECRET is not
     # here — it lives on `ApiSettings` in `src/app/settings.py`.
-    KEYCLOAK_CLIENT_ID: str = "wba-web"
+    KEYCLOAK_CLIENT_ID: str = "web"
 
-    # `wba-internal` — the service-account client used by producers and the
+    # `internal` — the service-account client used by producers and the
     # signal consumer (client-credentials grant). Plan 055 consumes these.
     # Same split as above: the ID is here, the SECRET is on `ApiSettings`.
-    KEYCLOAK_SERVICE_CLIENT_ID: str = "wba-internal"
+    KEYCLOAK_SERVICE_CLIENT_ID: str = "internal"
 
-    # `wba-admin-api` — the confidential client the API exchanges for a Keycloak
+    # `admin-api` — the confidential client the API exchanges for a Keycloak
     # admin token, to drive user management. Same split as above: the ID is here,
     # the SECRET is on `ApiSettings` in `src/app/settings.py`.
-    KEYCLOAK_ADMIN_CLIENT_ID: str = "wba-admin-api"
+    KEYCLOAK_ADMIN_CLIENT_ID: str = "admin-api"
 
     # `Secure` flag on the session cookie. MUST be true wherever TLS
     # terminates (it does: nginx). Set false ONLY for a plain-HTTP local run.

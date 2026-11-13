@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
-ASSIGNABLE_REALM_ROLES: frozenset[str] = frozenset({"wba-admin", "wba-user"})
+ASSIGNABLE_REALM_ROLES: frozenset[str] = frozenset({"admin", "user"})
 
 
 class UserSummary(BaseModel):

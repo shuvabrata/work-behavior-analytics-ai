@@ -7,11 +7,11 @@ those tests: it works by installing a FastAPI dependency override in *this*
 process, and a request through nginx is answered by the ``api`` container
 instead.
 
-The realm's ``wba-web`` client refuses direct access grants by design — it is a
+The realm's ``web`` client refuses direct access grants by design — it is a
 BFF client — so the only supported way to obtain a bearer is the path the
 browser takes: the OIDC authorization-code flow with PKCE, then the BFF's own
 ``POST /api/v1/auth/token`` exchange.  Service-role calls use the
-``wba-internal`` client's client-credentials grant.
+``internal`` client's client-credentials grant.
 
 Credentials come from the environment, falling back to ``.env`` — never
 hard-coded.
@@ -139,7 +139,7 @@ def service_token_env() -> dict[str, str]:
     """
     return {
         "KEYCLOAK_INTERNAL_URL": REALM_URL,
-        "KEYCLOAK_SERVICE_CLIENT_ID": env_value("KEYCLOAK_SERVICE_CLIENT_ID", "wba-internal"),
+        "KEYCLOAK_SERVICE_CLIENT_ID": env_value("KEYCLOAK_SERVICE_CLIENT_ID", "internal"),
         "KEYCLOAK_SERVICE_CLIENT_SECRET": env_value("KEYCLOAK_SERVICE_CLIENT_SECRET"),
     }
 
@@ -184,15 +184,15 @@ def subject(role: str = "admin") -> str:
 
 
 def admin_headers() -> dict[str, str]:
-    """Return ``Authorization`` headers carrying ``wba-admin``."""
+    """Return ``Authorization`` headers carrying ``admin``."""
     return headers("admin")
 
 
 def user_headers() -> dict[str, str]:
-    """Return ``Authorization`` headers carrying ``wba-user`` only."""
+    """Return ``Authorization`` headers carrying ``user`` only."""
     return headers("user")
 
 
 def service_headers() -> dict[str, str]:
-    """Return ``Authorization`` headers carrying ``wba-service``."""
+    """Return ``Authorization`` headers carrying ``service``."""
     return headers("service")

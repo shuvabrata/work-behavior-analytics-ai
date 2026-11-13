@@ -87,7 +87,7 @@ def _admin_principal_by_default() -> Iterator[None]:
         return Principal(
             subject="test-admin",
             username="test-admin",
-            roles=frozenset({"wba-admin", "wba-user"}),
+            roles=frozenset({"admin", "user"}),
         )
 
     app.dependency_overrides[get_principal] = _override

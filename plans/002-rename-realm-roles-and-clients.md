@@ -7,10 +7,20 @@
 > in `plans/README.md` — unless a reviewer dispatched you and told you they
 > maintain the index.
 >
-> **Drift check (run first)**: `git diff --stat c390367c..HEAD -- src/app/auth src/app/api src/common/auth src/connectors/producers/daemon_common.py src/domain/settings.py src/ui deploy/keycloak .env.example docker-compose.yml docker-compose.keycloak.yml docs/design/authn-authz-design.md CLAUDE.md INSTALL_GUIDE.md tests/`
+> **Drift check (run first)**: `git diff --stat c390367c..HEAD -- src/app/auth src/app/api src/common/auth src/connectors/producers/daemon_common.py src/domain/settings.py src/ui deploy/keycloak .env.example docker-compose.yml docs/ CLAUDE.md INSTALL_GUIDE.md IAM_ADMIN_GUIDE.md tests/`
 > If any in-scope file changed since this plan was written, compare the
 > "Current state" excerpts against the live code before proceeding; on a
 > mismatch, treat it as a STOP condition.
+>
+> **The stamp is not an ancestor of HEAD, so this diff is not empty today and
+> that is not drift.** `c390367c` lives on a feature branch that was squash-merged
+> rather than merged; the command above reports the four files plan 003 touched
+> (`src/app/api/admin_users/v1/query.py`, `src/app/auth/keycloak_admin.py`,
+> `tests/test_admin_users_service.py`, `tests/test_keycloak_admin_client.py`).
+> Judge drift by opening the "Current state" excerpts against the live files, not
+> by the diff being non-empty. The one line in `keycloak_admin.py` this plan edits
+> is a module docstring, which plan 003 did not touch; the other three files are
+> not in this plan's Scope.
 
 ## Status
 
@@ -29,8 +39,12 @@ clients `wba-web`, `wba-internal`, `wba-admin-api`, while the realm itself is al
 the realm name inside the realm. Worse, it creates a vocabulary split the code has to
 compensate for: `src/app/auth/matrix.py` declares grants as `"admin"`/`"user"`/`"service"`,
 and `src/app/auth/dependencies.py` contains `_internal_role()` whose only job is to add the
-`wba-` prefix back. After this change there is one vocabulary end to end — the grant label and
-the realm role name are the same string — and `_internal_role()` is deleted as dead code.
+`wba-` prefix back. After this change there is one vocabulary end to end — all three realm role
+names are the grant labels the matrix already uses (`admin`, `user`, `service`) — and
+`_internal_role()` is deleted as dead code. One caveat keeps that from being a pure lexical
+merge: the `"user"` grant means "any authenticated principal", which a `service` token
+satisfies, so the matrix comment block remains the record of that semantic difference rather
+than the spelling.
 
 The cost is a destructive realm re-seed on the dev stack: `--import-realm` is create-only, so
 renaming a role or client in the template has no effect on a realm that already exists. Every
@@ -115,7 +129,41 @@ message at line 60:
 
 `src/app/auth/matrix.py:20-22,34` — the grant semantics documented in a comment block, and one
 section header comment, name the roles. These are comments; the surrounding `AUTHZ_MATRIX`
-values are the grant labels (`"user"`, `"admin"`, `"service"`) and do **not** change.
+values are the grant labels (`"user"`, `"admin"`, `"service"`) and do **not** change. After the
+rename the `"user"` grant label and the `user` realm role are the same string, so the comment
+block at lines 19-23 is the only place that records what the `"user"` grant actually admits —
+see the note under the substitution table.
+
+**Give this block explicit target text; do not just run the table over it.** The mechanical
+result is:
+
+```python
+#: - "user"    : require_user  — user, admin *and* service.
+#: - "admin"   : require_admin — admin only.
+#: - "service" : require_service — service only.
+```
+
+Line 20 is wrong in a way no gate catches: it was an enumeration of three realm roles and now
+reads as an enumeration of the three grant labels named on the lines directly below it, which is
+the opposite of what the comment is for. Rewrite lines 19-23 to key every entry to its
+dependency:
+
+```python
+#: - "public"  : no dependency at all; deliberately open.
+#: - "session" : no bearer dependency; the handler validates the wba_session cookie.
+#: - "user"    : require_user  — any authenticated principal; no role check.
+#: - "admin"   : require_admin — the ``admin`` realm role only.
+#: - "service" : require_service — the ``service`` realm role only.
+#: - a frozenset: require_roles(*grant) — any one of the listed roles.
+```
+
+Keep the `"public"` and `"session"` lines verbatim — they carry no role name, and `wba_session`
+is a cookie name that stays (see *Deliberately unchanged*). This matches the live behaviour:
+`require_user` returns the principal unconditionally, while `require_admin` / `require_service`
+route through `_require_role`.
+
+Line 34 (`# admin users — the whole surface is wba-admin only`) is a plain role reference — the
+table handles it, becoming `admin`.
 
 Occurrences in these two files are **comments/docstrings only** and must be updated for
 accuracy but carry no runtime behaviour:
@@ -271,8 +319,16 @@ Run from the repository root with the virtualenv active (`source .venv/bin/activ
 | Style | `flake8` | exit 0 |
 | Security scan | `bandit -c .bandit.yml -r src/ -lll` | no High severity |
 | Old role literals gone | `grep -rn "wba-admin\|wba-user\|wba-service" src/ tests/ --include="*.py"` | no output |
-| Old client ids gone | `grep -rn "wba-web\|wba-internal\|wba-admin-api" src/ tests/ deploy/ .env.example docker-compose.yml` | no output |
+| Old client ids gone | `grep -rn "wba-web\|wba-internal\|wba-admin-api" src/ tests/ deploy/ .env.example docker-compose.yml --exclude-dir=__pycache__ --exclude-dir=results` | no output |
 | Person-id key intact | `grep -rn '"wba"' src/ui/ --include="*.py"` | 10+ matches, unchanged |
+
+The `--exclude-dir` flags on the client-id grep are load-bearing. Without them it walks
+`src/**/__pycache__/` (whose stale `.pyc` files hold the literals and print to stderr as
+`binary file matches`) and `tests/neo4j_queries/results/` — 54 gitignored generated report
+files whose churn fixtures contain `wba-web`. That directory is out of scope by decision, is
+never regenerated by this plan, and contributes ~138 of the grep's lines, so without the
+exclusions the criterion reports "no output" as permanently unmet no matter how correct the
+rename is.
 
 ## Scope
 
@@ -305,6 +361,7 @@ Docs:
 - `docs/design/authn-authz-design.md`
 - `CLAUDE.md`
 - `INSTALL_GUIDE.md`
+- `IAM_ADMIN_GUIDE.md`
 
 Tests:
 - `tests/auth_helpers.py`
@@ -373,8 +430,19 @@ prefix of another — listed longest-first here, so apply in this order:
 | 4 | `wba-web-audience` | `web-audience` | Contains `wba-web` |
 | 5 | `wba-web` | `web` | |
 | 6 | `wba-admin` | `admin` | |
-| 7 | `wba-user` | `standard-user` | |
+| 7 | `wba-user` | `user` | Collides with the `user` grant label only — and there it should: see below |
 | 8 | `wba-service` | `service` | |
+
+**Row 7 collides with a grant label, deliberately.** `src/app/auth/matrix.py:14` declares
+`Role = Literal["public", "session", "user", "admin", "service"]`, and `AUTHZ_MATRIX` uses
+`"user"` as a grant on every authenticated route. After row 7 the realm role and the grant
+label are the same string, which is the point of the rename. The distinction the spellings used
+to carry is **semantic, not lexical**: `require_user` (`src/app/auth/dependencies.py:93-95`)
+returns the principal unconditionally, so the `"user"` grant means "any authenticated
+principal", not "carries the `user` realm role" — a `service` principal satisfies it. Do **not**
+change `require_user`, and do **not** change any `"user"` value in `AUTHZ_MATRIX`. Let the
+matrix comment block at `matrix.py:19-23` carry that distinction in prose; your edit to those
+lines (below) is what keeps it legible after the collision.
 
 Do not run a single unanchored `sed` across the tree. Edit file by file, and for each file read
 the surrounding line before substituting so you are matching the intended occurrence.
@@ -405,6 +473,18 @@ them, but confirm the result reads `service-account-internal` and
   `It is a factory rather than a bare ``async def`` because ...` — it stays correct. Do not
   otherwise rewrite the docstring.
 
+**Two docstrings phrase the distinction in plain words and must stay as they are.** The
+`require_user` docstring in this same file (`dependencies.py:93-95`) reads
+`"""Require any authenticated principal (user, admin, or service)."""`, and
+`src/app/api/connectors/v1/router.py:47` reads
+`"""403 when a caller without admin or service asks for connector secrets."""`. Neither names a
+prefixed role, so the substitution table does not apply, and neither is a literal any Done
+criterion matches. Both stay **verbatim**: they remain accurate (a `service` principal does
+satisfy `require_user`), and they are a second record of the same distinction the
+`matrix.py` comment block carries. Do not "correct" them into role names — an edit that turned
+"user, admin, or service" into a list of role names would state that the `user` grant requires
+the `user` role, which is false.
+
 **Update the four call sites that pass a prefixed role name** so they pass the new name:
 
 - `src/app/api/commands/v1/router.py:32`:
@@ -417,9 +497,12 @@ them, but confirm the result reads `service-account-internal` and
 docstring (`wba-web`, `wba-internal`). Separately, line 227's docstring says
 ``Fetch a ``wba-service`` bearer`` — row 8 makes that ``service``. The `_PASSWORD_ROLES` dict
 and `credentials()` dispatch key off the **grant labels** `admin` / `user` / `service`
-(already unprefixed) and **do not change**; only the surrounding prose does. Verify by reading
-`credentials()`'s `role == "service"` branch and `_PASSWORD_ROLES` keys — if either now reads
-`standard-user`, you have over-applied row 7 and must revert it.
+(already unprefixed) and **do not change**; only the surrounding prose does. Row 7's new value
+is also `user`, so this file's `_PASSWORD_ROLES` keys read identically before and after the
+rename — an occurrence there is *not* evidence you over-applied anything, and there is nothing
+to revert. These dict keys are the dev-login roles the `get_token.py` `--role` flag selects
+(`scripts/get_token.py:34,41`), which is a different axis from the realm role names; leave the
+whole `_PASSWORD_ROLES` / `credentials()` block untouched.
 
 **`src/app/auth/tokens.py:33` and `tokens.py:123,166`.** The `NoRecognisedRoleError` class
 docstring (line 33) says "no wba-* realm role", the `validate_bearer_token` docstring (line
@@ -438,39 +521,95 @@ need their expectation updated with the code, not just the literal:
   to match.
 - `tests/test_settings_user_management_page.py:164-169` — asserts `"wba-admin" in _ROLES_HELP`
   and `"wba-user" in _ROLES_HELP` and `"wba-service" not in _ROLES_HELP`. After the rename the
-  assertions become `"admin" in _ROLES_HELP`, `"standard-user" in _ROLES_HELP`. **Note the
-  substring hazard**: `"standard-user"` contains `"user"`, and the third assertion checks
-  `"service" not in _ROLES_HELP`. Keep that third assertion meaningful by asserting on the
-  full word — check that `"service"` does not appear — which still holds because the help text
-  never names it. If the substitution makes the third assertion ambiguous, replace it with
-  `_ROLES_HELP.count("**") == 4` — today's value, since each of the two roles is wrapped in a
-  `**bold**` pair — which asserts that exactly two roles are described without depending on
-  substring overlap.
+  help text reads `**admin**` and `**user**`. **Assert on the bolded role names, not the bare
+  words**: the help prose already contains the ordinary English words "user" (in "everything a
+  standard user can do", "user management") and never the word "admin" outside the role, so a
+  bare `"user" in _ROLES_HELP` is satisfied by the prose whether or not the role is named —
+  after the rename it can no longer distinguish anything. Write the assertions as:
+
+  ```python
+  assert "**admin**" in _ROLES_HELP
+  assert "**user**" in _ROLES_HELP
+  assert "service" not in _ROLES_HELP
+  ```
+
+  `"service"` never appears in the help text (verified: zero occurrences), so the third
+  assertion stays meaningful as a bare-word check. Keep it, and keep
+  `_ROLES_HELP.count("**") == 4` as the alternative if you prefer a substring-independent form
+  (still 4 — one `**` pair around each of the two role names).
 
 **Docs.** Apply the table, then fix the prose that no longer reads correctly:
 
-- `docs/design/authn-authz-design.md` — 16 role references and 6 client-id references across
+- `docs/design/authn-authz-design.md` — 16 lines carry role references (22 occurrences) and 12
+  carry client ids (12 occurrences), across
   the decision summary (rows 6, 7), the Keycloak table (lines 143-146), the enterprise-SSO
-  paragraph (line 214), the Roles table (236-238), the Grants table (249-250), the
+  paragraph (line 214), the Roles table (236-238), the Grants table (248-250), the
   user-administration section (339, 361), the re-seed note (398) and the settings table
   (501-506). Row 6's Decision cell currently reads "Realm roles `wba-admin`, `wba-user`,
-  `wba-service`" and becomes "Realm roles `admin`, `standard-user`, `service`".
+  `wba-service`" and becomes "Realm roles `admin`, `user`, `service`".
+- **The grants table (lines 248-250) needs more than a substitution.** Its premise is that a
+  grant label and a realm role name are different strings, so a mechanical pass leaves three
+  rows circular: `admin` becomes "`admin` only" and `service` becomes "`service` only", which
+  restates the label instead of mapping it to a dependency. Rewrite those two rows to name the
+  dependency — `| `admin` | `require_admin` — requires the `admin` realm role. |` and
+  `| `service` | `require_service` — requires the `service` realm role. |`. The `user` row
+  (line 248) needs the opposite treatment: `require_user`
+  (`src/app/auth/dependencies.py:93-95`) performs **no** role check, so add that any
+  authenticated principal satisfies this grant, including one carrying only `service` — without
+  that sentence the row reads as a role requirement now that `user` is also a role name.
+- **The Roles table (lines 236-238) has one circular cell.** Row 236 becomes
+  ``| `user` | Standard user. Read everything except connector secrets; … |`` — a role named
+  `user` defined as "a standard user". Replace that opening with the role's actual meaning, e.g.
+  ``| `user` | Standard user of the application. Read everything except connector secrets; … |``
+  or drop the clause. Leave rows 237-238 alone: their "a standard user" is ordinary prose about
+  an ordinary user, not a definition of a role. Also fix the sentence at line 129, which reads
+  "never silently downgraded to the standard user role" — that names no prefixed literal so the
+  table does not reach it, but it is describing the `user` role and now reads as a third term.
 - **Do not add plan references, stage letters, or file:line citations to this doc.** It is a
   long-term reference; describe the end state only.
-- `CLAUDE.md:238` — the Keycloak/auth environment bullet; it names `wba-admin-api` twice.
+- `CLAUDE.md:238` — the Keycloak/auth environment bullet; it names `wba-admin-api` once.
   `CLAUDE.md:254` — the reference-documents table row, which names the three roles.
 - `INSTALL_GUIDE.md:113-116` — the credentials table: client-id descriptions on 113-114, role
   names on 115-116. The `DEV_WBA_*` env var names on those rows do **not** change.
+- `IAM_ADMIN_GUIDE.md` — 4 client-id occurrences, all in the console-verification section:
+  `:231` (a runnable `kcadm.sh` command passed `-q clientId=wba-web`), `:234` (the
+  `wba-web-audience` mapper name), `:235` (`"included.client.audience"` is `"wba-web"`) and
+  `:265` (`wba-web` / `wba-internal` in the pointer to the design doc). Line 231 is load-bearing:
+  it is the command an operator runs to confirm the audience mappers survived a realm change, and
+  it silently returns nothing once the client id moves.
 - `.env.example:188-190` (the three client-id values), `:203,205,207` (comments), `:212`
   (the comment naming `wba-admin + wba-user` and `wba-user`).
+- **`src/ui/pages/settings/user_management/layout.py:31-36` is the one user-facing string this
+  plan rewrites.** A literal substitution yields "**user** — standard user. Reads everything
+  except connector secrets…". That second entry *defined* the role as "a standard user", which
+  reads as circular once the role is itself named `user`. Drop the definitional clause from the
+  second sentence; leave the first sentence's "a standard user" alone, where it is ordinary
+  English describing an ordinary user rather than a role name:
+
+  ```python
+  _ROLES_HELP = (
+      "**admin** — everything a standard user can do, plus shared "
+      "configuration, connector secrets, and user management.\n\n"
+      "**user** — reads everything except connector secrets, and manages "
+      "their own chat sessions and catalog favourites."
+  )
+  ```
+
+  Keep exactly two `**` pairs and the bold-only convention for role names — do **not** introduce
+  backticks to disambiguate the role, and do not add a third formatted term.
+  `tests/test_settings_user_management_page.py` asserts on `**admin**` and `**user**` and on
+  `"service"` being absent. The `#:` comment above the assignment names no role and does not
+  change.
 
 **Verify**:
 ```
 grep -rn "wba-admin\|wba-user\|wba-service" src/ tests/ --include="*.py"
-grep -rn "wba-web\|wba-internal\|wba-admin-api" src/ tests/ deploy/ .env.example docker-compose.yml
-grep -rn "wba-admin\|wba-user\|wba-service\|wba-web\|wba-internal\|wba-admin-api" docs/design/authn-authz-design.md CLAUDE.md INSTALL_GUIDE.md
+grep -rn "wba-web\|wba-internal\|wba-admin-api" src/ tests/ deploy/ .env.example docker-compose.yml --exclude-dir=__pycache__ --exclude-dir=results
+grep -rn "wba-admin\|wba-user\|wba-service\|wba-web\|wba-internal\|wba-admin-api" docs/ CLAUDE.md INSTALL_GUIDE.md IAM_ADMIN_GUIDE.md
 ```
-All three → no output.
+All three → no output. The `--exclude-dir` flags on the second grep are required (see the note
+under the Commands table). The third greps `docs/` recursively rather than naming one file, so a
+newly added design doc carrying a role name is caught too.
 
 ```
 grep -rn '"wba"' src/ui/ --include="*.py"
@@ -481,9 +620,11 @@ grep -rn '"wba"' src/ui/ --include="*.py"
 the person-id key — revert and restart.
 
 ```
-grep -n "_internal_role" src/ tests/
+grep -rn "_internal_role" src/ tests/
 ```
-→ no output.
+→ no output. The `-r` is required: without it grep refuses to descend into a directory and
+prints `Is a directory` to stderr while matching nothing, so the check would report "no output"
+even with both occurrences still present.
 
 ```
 grep -n "wba-service\|wba-internal\|wba-web" deploy/keycloak/realm-wba.json.template
@@ -564,11 +705,11 @@ re-seed. Get an explicit go.
    PYTHONPATH=src python scripts/get_token.py --role admin --json
    ```
    Decode the `access_token`'s `realm_access.roles` and confirm it contains `admin` and
-   `standard-user`, and **not** `wba-admin` or `wba-user`.
+   `user`, and **not** `wba-admin` or `wba-user`.
    ```bash
    curl -sk -H "Authorization: Bearer <admin token>" https://localhost/api/v1/auth/me
    ```
-   → `roles` is `["admin", "standard-user"]`.
+   → `roles` is `["admin", "user"]`.
    ```bash
    curl -sk -H "Authorization: Bearer <admin token>" https://localhost/api/v1/admin/users/
    ```
@@ -586,8 +727,8 @@ re-seed. Get an explicit go.
    `--role user` token → `403` with `insufficient_role`.
 
 7. **Prove the UI.** Open `https://localhost/app/settings`, click **User Management**. The
-   Roles info hint must read `admin` and `standard-user`. Create a test user with role
-   `standard-user`, sign in as them in a private window, and confirm Settings → User
+   Roles info hint must read `admin` and `user`. Create a test user with role
+   `user`, sign in as them in a private window, and confirm Settings → User
    Management gives the permission-denied message. Then, as `dev-admin`, promote them to
    `admin` and confirm the change takes effect. Delete the test user when done.
 
@@ -608,19 +749,19 @@ re-seed. Get an explicit go.
 - **No new test files.** This plan renames identifiers; the existing suite is the regression
   gate, and it covers the behavior that could break:
   - `tests/test_auth_dependencies.py` — pins that `require_admin` accepts `admin` and rejects
-    `standard-user` with `insufficient_role`, and that an unrecognised role yields 403
+    `user` with `insufficient_role`, and that an unrecognised role yields 403
     `no_recognised_role`. The parametrize list at line 115 must carry all three new names.
   - `tests/test_auth_tokens.py` — pins that exactly the roles in `_MAPPED_ROLES` survive
     filtering and unknown ones are dropped.
   - `tests/test_authz_matrix.py` — pins the route→grant table against the live app, which is
     what catches a `require_roles` broken by the `_internal_role` deletion at the router
     level.
-  - `tests/test_admin_users_service.py` (21 references) — pins the last-admin guard, the
-    single heaviest user of the role strings.
+  - `tests/test_admin_users_service.py` (23 occurrences over 22 lines) — pins the last-admin
+    guard, the single heaviest user of the role strings.
 - **One assertion needs a deliberate rewrite rather than a substitution**:
-  `tests/test_settings_user_management_page.py:164-169`, per Step 1, because
-  `"standard-user"` contains `"user"` and the existing `"wba-service" not in` assertion
-  depends on non-overlapping substrings.
+  `tests/test_settings_user_management_page.py:164-169`, per Step 1, because the help text's
+  prose already contains the ordinary word "user" — so the assertion must match `**user**`, the
+  bolded role name, rather than a bare substring.
 - Structural pattern for a new test, if the executor judges one is needed: the existing
   `tests/test_auth_dependencies.py` `_stub_valid` + `httpx.ASGITransport` idiom. Do not invent
   a new test style.
@@ -637,13 +778,32 @@ ALL must hold:
 - [ ] `flake8` exits 0
 - [ ] `bandit -c .bandit.yml -r src/ -lll` reports no High severity
 - [ ] `grep -rn "wba-admin\|wba-user\|wba-service" src/ tests/ --include="*.py"` → no output
-- [ ] `grep -rn "wba-web\|wba-internal\|wba-admin-api" src/ tests/ deploy/ .env.example docker-compose.yml` → no output
-- [ ] `grep -n "_internal_role" src/ tests/` → no output
+- [ ] `grep -rn "wba-web\|wba-internal\|wba-admin-api" src/ tests/ deploy/ .env.example docker-compose.yml --exclude-dir=__pycache__ --exclude-dir=results` → no output
+- [ ] `grep -rn "_internal_role" src/ tests/` → no output
 - [ ] `grep -rn '"wba"' src/ui/ --include="*.py"` → still 10+ matches (person-id key untouched)
-- [ ] `grep -rn "wba-admin\|wba-user\|wba-service\|wba-web\|wba-internal\|wba-admin-api" docs/ CLAUDE.md INSTALL_GUIDE.md` → no output
+- [ ] `grep -rn "wba-admin\|wba-user\|wba-service\|wba-web\|wba-internal\|wba-admin-api" docs/ CLAUDE.md INSTALL_GUIDE.md IAM_ADMIN_GUIDE.md` → no output
 - [ ] `git status` shows no modified files outside the Scope list
 - [ ] `.env` is not committed
 - [ ] `plans/README.md` status row for 002 updated
+
+## Execution record
+
+Step 1 landed uncommitted in the working tree on `feature/rename-roles` (2026-11-13),
+across 44 files, all inside the Scope list. Step 2 (the operator re-seed) is not
+started. Verified independently by the reviewer: `pytest -m unit tests -q` → 2765
+passed / 0 failed / 2 skipped with no test function added or removed; `mypy src/` →
+clean; `pylint src` → 10.00; `bandit … -lll` → no issues (High severity 0, identical
+to HEAD); all five Done-criteria greps → no output; the `"wba"` person-id key → 18
+matches, unchanged. `require_roles("admin", "service")` was probed directly — 403s
+for a `user`-only principal and passes `admin` / `service` — because the unit suite
+does not exercise it (see the maintenance note).
+
+**Defect in this plan's Done criteria.** `flake8` exits 1 today and did so at the
+stamp: it reports 1133 pre-existing findings across `src/`, and the `HEAD` and
+post-change outputs are byte-identical, so this change adds none. `.flake8` excludes
+`tests` but not `.venv`-adjacent paths, and flake8 is not a CI gate
+(`.github/workflows/pr_checks.yml` runs pytest, pylint, mypy, bandit). Treat the
+"`flake8` exits 0" criterion as unsatisfiable on this tree; it should not be a gate.
 
 ## STOP conditions
 
@@ -656,6 +816,10 @@ Stop and report back (do not improvise) if:
 - `require_roles` is called anywhere with a **short** label (e.g. `require_roles("admin")` with
   no prefix) in the pre-change code. That would mean `_internal_role` was load-bearing today,
   not a pass-through, and the analysis in "Why this matters" is wrong.
+- You find yourself editing `require_user` or a `"user"` grant value in `AUTHZ_MATRIX`. The
+  `user` grant means "any authenticated principal" and is unrelated to the `user` realm role;
+  if a gate appears to require changing either, that is a signal the rename collided somewhere
+  the plan did not anticipate — report it rather than "fixing" the semantics.
 - A gate fails twice after a reasonable fix attempt.
 - A grep in the Done criteria returns matches in a file **not** listed in the Scope section.
   That is a real occurrence of a literal the plan did not anticipate — report the path and line
@@ -677,6 +841,12 @@ Stop and report back (do not improvise) if:
   `AUTHZ_MATRIX` share one vocabulary. A future change that reintroduces a prefix difference
   between grant labels and realm role names will need the same helper again — and will
   reintroduce the silent-403 trap the moment a caller passes a short label.
+- **The `user` grant label is not the `user` realm role.** After this rename they are the same
+  string, but `require_user` admits any authenticated principal (`service` included), so
+  `("GET", "/api/v1/auth/me"): "user"` in `AUTHZ_MATRIX` does not mean "carries the `user` role".
+  The matrix comment block at `src/app/auth/matrix.py:19-23` is now the only place that records
+  this; if those comment lines are ever deleted as redundant, the distinction is lost and a
+  future reader may tighten `require_user` into a role check that 403s service tokens.
 - **A reviewer should scrutinize**: the `deploy/keycloak/realm-wba.json.template` diff, because
   the audience mappers (`included.client.audience`) are easy to miss and their mismatch
   rejects every token with a confusing `azt/aud` error; and the `require_roles` edit, because

@@ -25,10 +25,10 @@ pytestmark = [pytest.mark.unit, pytest.mark.asyncio]
 
 BASE_URL = "http://test"
 
-OWNER = Principal(subject="owner-sub", username="dev-owner", roles=frozenset({"wba-user"}))
-FOREIGN = Principal(subject="foreign-sub", username="dev-foreign", roles=frozenset({"wba-user"}))
+OWNER = Principal(subject="owner-sub", username="dev-owner", roles=frozenset({"user"}))
+FOREIGN = Principal(subject="foreign-sub", username="dev-foreign", roles=frozenset({"user"}))
 ADMIN = Principal(
-    subject="admin-sub", username="dev-admin", roles=frozenset({"wba-admin", "wba-user"})
+    subject="admin-sub", username="dev-admin", roles=frozenset({"admin", "user"})
 )
 
 

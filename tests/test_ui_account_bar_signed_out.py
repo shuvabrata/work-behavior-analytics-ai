@@ -138,7 +138,7 @@ def test_full_name_rendered_when_present(monkeypatch: pytest.MonkeyPatch) -> Non
         monkeypatch,
         _StubResponse(
             200,
-            {"username": "dev-user", "full_name": "Dev User", "roles": ["wba-user"]},
+            {"username": "dev-user", "full_name": "Dev User", "roles": ["user"]},
         ),
     )
     result = account_bar.render_account_bar("/app/graph")
@@ -152,9 +152,9 @@ def test_absent_full_name_renders_no_second_line(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     for payload in (
-        {"username": "dev-user", "roles": ["wba-user"]},
-        {"username": "dev-user", "full_name": None, "roles": ["wba-user"]},
-        {"username": "dev-user", "full_name": "", "roles": ["wba-user"]},
+        {"username": "dev-user", "roles": ["user"]},
+        {"username": "dev-user", "full_name": None, "roles": ["user"]},
+        {"username": "dev-user", "full_name": "", "roles": ["user"]},
     ):
         _install(monkeypatch, _StubResponse(200, payload))
         result = account_bar.render_account_bar("/app/graph")
@@ -167,7 +167,7 @@ def test_absent_full_name_renders_no_second_line(
 def test_logout_form_posts_to_logout_url(monkeypatch: pytest.MonkeyPatch) -> None:
     _install(
         monkeypatch,
-        _StubResponse(200, {"username": "dev-user", "roles": ["wba-user"]}),
+        _StubResponse(200, {"username": "dev-user", "roles": ["user"]}),
     )
     result = account_bar.render_account_bar("/app/graph")
 

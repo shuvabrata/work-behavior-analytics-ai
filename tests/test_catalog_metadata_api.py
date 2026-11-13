@@ -10,8 +10,8 @@ Markers: ``integration``, ``server``, ``authenticated``.
 
 **Per-subject semantics.**  Catalog favourites are owner-scoped: a row is keyed
 by ``(catalog_id, subject)`` and every read is filtered to the caller's own
-``subject``.  Two identities are exercised — ``admin_headers()`` (``wba-admin``)
-and ``user_headers()`` (``wba-user``) — so the cross-subject cases below can
+``subject``.  Two identities are exercised — ``admin_headers()`` (``admin``)
+and ``user_headers()`` (``user``) — so the cross-subject cases below can
 prove one user's star never reaches the other.
 
 **Safety (clean up irrespective of pass/fail):** A session-scoped ``autouse``
@@ -205,7 +205,7 @@ class TestList:
 class TestSubjectIsolation:
     @pytest.mark.asyncio
     async def test_user_star_is_invisible_to_admin(self) -> None:
-        """A star set by ``wba-user`` does not appear for ``wba-admin``."""
+        """A star set by ``user`` does not appear for ``admin``."""
         async with httpx.AsyncClient(base_url=BASE_URL, headers=user_headers()) as user:
             assert (await _star(user, VALID_CATALOG_ID, True)).status_code == 200
             user_items = await _list_metadata(user)
@@ -218,7 +218,7 @@ class TestSubjectIsolation:
 
     @pytest.mark.asyncio
     async def test_admin_star_is_invisible_to_user(self) -> None:
-        """Symmetric: a star set by ``wba-admin`` does not appear for ``wba-user``."""
+        """Symmetric: a star set by ``admin`` does not appear for ``user``."""
         async with httpx.AsyncClient(base_url=BASE_URL, headers=admin_headers()) as admin:
             assert (await _star(admin, VALID_CATALOG_ID, True)).status_code == 200
             admin_items = await _list_metadata(admin)

@@ -112,7 +112,7 @@ class TestGetPrincipalStatusCodes:
 
 
 class TestRequireUser:
-    @pytest.mark.parametrize("role", ["wba-user", "wba-admin", "wba-service"])
+    @pytest.mark.parametrize("role", ["user", "admin", "service"])
     async def test_accepts_every_role(
         self, role: str, client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -127,16 +127,16 @@ class TestRequireAdmin:
     async def test_admin_allowed(
         self, client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """``wba-admin`` passes."""
-        _stub_valid(monkeypatch, _principal("wba-admin"))
+        """``admin`` passes."""
+        _stub_valid(monkeypatch, _principal("admin"))
         response = await client.get("/admin", headers={"Authorization": "Bearer t"})
         assert response.status_code == 200
 
     async def test_user_forbidden(
         self, client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """A valid ``wba-user`` is 403 against an admin-only route."""
-        _stub_valid(monkeypatch, _principal("wba-user"))
+        """A valid ``user`` is 403 against an admin-only route."""
+        _stub_valid(monkeypatch, _principal("user"))
         response = await client.get("/admin", headers={"Authorization": "Bearer t"})
         assert response.status_code == 403
         assert response.json()["detail"]["error"] == "insufficient_role"
@@ -146,16 +146,16 @@ class TestRequireService:
     async def test_service_allowed(
         self, client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """``wba-service`` passes."""
-        _stub_valid(monkeypatch, _principal("wba-service"))
+        """``service`` passes."""
+        _stub_valid(monkeypatch, _principal("service"))
         response = await client.get("/service", headers={"Authorization": "Bearer t"})
         assert response.status_code == 200
 
     async def test_user_forbidden(
         self, client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """A valid ``wba-user`` is 403 against a service-only route."""
-        _stub_valid(monkeypatch, _principal("wba-user"))
+        """A valid ``user`` is 403 against a service-only route."""
+        _stub_valid(monkeypatch, _principal("user"))
         response = await client.get("/service", headers={"Authorization": "Bearer t"})
         assert response.status_code == 403
         assert response.json()["detail"]["error"] == "insufficient_role"

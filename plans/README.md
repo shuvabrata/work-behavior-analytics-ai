@@ -45,9 +45,11 @@ Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) | REJE
   re-seed applies the renamed users, so the two plans ship on one re-seed rather
   than two.
 - 005's CI half is an operator action that cannot be done from the tree: the
-  `pytest-unit` job references `vars.WBA_ADMIN_USERNAME` /
-  `vars.WBA_USER_USERNAME`, which must exist in GitHub repository settings
-  before the unit suite passes in CI.
+  `pytest-unit` job references `vars.TEST_SUITE_WBA_ADMIN_USERNAME` /
+  `vars.TEST_SUITE_WBA_USER_USERNAME`, which must exist as GitHub repository
+  Variables before the unit suite passes in CI. The repository-variable name and
+  the job environment-variable name are the same string, so there is no
+  short-name/long-name mapping to keep in sync.
 - 006 follows 004 and 005 and corrects 004's central premise. It is a one-key
   template edit whose only effect is visible after a re-seed, so it should ride
   the same re-seed as 004's Step 6 / 005's Step 7: three plans, one re-seed.

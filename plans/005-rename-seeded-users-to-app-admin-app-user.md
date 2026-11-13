@@ -62,11 +62,16 @@ is the `"app-admin"` / `"app-user"` absence grep, which passes.
 
 1. Rename the three variables in `.env` and add
    `TEST_SUITE_WBA_ADMIN_USERNAME=app-admin` / `TEST_SUITE_WBA_USER_USERNAME=app-user`.
-2. Create GitHub repository variables `WBA_ADMIN_USERNAME` and
-   `WBA_USER_USERNAME`. Until they exist the `pytest-unit` job fails at
-   collection.
+   (**Done 2026-11-13** — the `.env` keys are `APP_ADMIN_PASSWORD`,
+   `APP_USER_PASSWORD`, `KEYCLOAK_CONSOLE_ADMIN_PASSWORD`, and both usernames are
+   set.)
+2. Create GitHub repository variables `TEST_SUITE_WBA_ADMIN_USERNAME` and
+   `TEST_SUITE_WBA_USER_USERNAME`. Until they exist the `pytest-unit` job fails at
+   collection. (**Outstanding** — the workflow now references these exact names.)
 3. Re-seed Keycloak so the renamed users exist — this also completes plan 004's
-   pending Step 6, so both plans land on one re-seed.
+   pending Step 6, so both plans land on one re-seed. (**Done 2026-11-13**, with
+   plan 006's `requiredActions` fix; `app-admin` was forced to change its
+   password and `app-user`'s action is pending its first login.)
 
 ## Status
 
@@ -618,7 +623,14 @@ import.
 The `pytest-unit` job checks out a tree with no `.env`, so the two username
 variables must come from the job environment. Add them to the existing `env:`
 block (`.github/workflows/pr_checks.yml` lines 12–17), **referencing repository
-variables — never a literal**:
+variables — never a literal**.
+
+Use **one name for both layers**: the repository variable and the job environment
+variable are spelled identically, so `TEST_SUITE_WBA_ADMIN_USERNAME` is the repo
+variable's name *and* the variable name the Python code reads. This keeps the
+`${{ vars.X }}` lookup and the `env:` key from drifting apart, and means whoever
+sets the repository variable types exactly the name `tests/auth_helpers.py`
+already uses.
 
 ```yaml
     env:
@@ -627,17 +639,23 @@ variables — never a literal**:
       OPENAI_API_KEY: "sk-test-dummy-key-for-ci"
       LLM_MODEL: "gpt-4o"
       GITHUB_MCP_ENABLED: "false"
-      TEST_SUITE_WBA_ADMIN_USERNAME: ${{ vars.WBA_ADMIN_USERNAME }}
-      TEST_SUITE_WBA_USER_USERNAME: ${{ vars.WBA_USER_USERNAME }}
+      TEST_SUITE_WBA_ADMIN_USERNAME: ${{ vars.TEST_SUITE_WBA_ADMIN_USERNAME }}
+      TEST_SUITE_WBA_USER_USERNAME: ${{ vars.TEST_SUITE_WBA_USER_USERNAME }}
 ```
 
-The repository settings must define `WBA_ADMIN_USERNAME` and
-`WBA_USER_USERNAME` (Settings → Secrets and variables → Actions → Variables).
-**This is an operator action you cannot perform from this tree** — see Step 7.
+The repository settings must define `TEST_SUITE_WBA_ADMIN_USERNAME` and
+`TEST_SUITE_WBA_USER_USERNAME` (Settings → Secrets and variables → Actions →
+Variables). **This is an operator action you cannot perform from this tree** — see
+Step 7.
 
-**Verify**: `grep -n "vars.WBA_" .github/workflows/pr_checks.yml` → the two new
-lines. `git grep -nE '"app-admin"|"app-user"' -- tests/ .github/` → no output
-(the literal must not appear in code or CI config).
+`${{ vars.X }}` resolves against a repository variable named exactly `X`; a
+mismatch yields an empty string, which makes `realm_username()` raise at
+collection — the failure this step exists to prevent. There is no longer a
+short-name/long-name mapping to get wrong.
+
+**Verify**: `grep -n "vars\.TEST_SUITE_WBA_" .github/workflows/pr_checks.yml` →
+the two new lines. `git grep -nE '"app-admin"|"app-user"' -- tests/ .github/` →
+no output (the literal must not appear in code or CI config).
 
 ### Step 6 — update the documentation
 
@@ -688,9 +706,12 @@ Report that they are required:
    ```
    Until this is done, `entrypoint.sh`'s `:?` guards abort Keycloak on its next
    recreate because the new names are absent.
-2. **GitHub repository variables** `WBA_ADMIN_USERNAME=app-admin` and
-   `WBA_USER_USERNAME=app-user` (Settings → Secrets and variables → Actions →
-   Variables). Until these exist, the `pytest-unit` job fails at collection with
+2. **GitHub repository variables** `TEST_SUITE_WBA_ADMIN_USERNAME=app-admin` and
+   `TEST_SUITE_WBA_USER_USERNAME=app-user` (Settings → Secrets and variables →
+   Actions → **Variables**, not Secrets — `${{ vars.* }}` does not read secrets).
+   The repository-variable name and the job environment-variable name are the
+   same string, so the value the code reads is exactly the name you type. Until
+   these exist, the `pytest-unit` job fails at collection with
    `TEST_SUITE_WBA_ADMIN_USERNAME is unset or still FIXME`.
 3. **Re-seed Keycloak** so the renamed users exist. `--import-realm` is
    create-only, so an existing realm keeps `dev-admin` / `dev-user` forever

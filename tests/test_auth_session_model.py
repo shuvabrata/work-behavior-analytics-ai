@@ -24,7 +24,7 @@ def _make_session(**overrides: object) -> AuthSession:
         "session_id_hash": hashlib.sha256(b"opaque-cookie-id").hexdigest(),
         "subject": "sub-1",
         "username": "alice",
-        "roles": ["wba-user"],
+        "roles": ["user"],
         "refresh_token_encrypted": "gAAAAA-fake-fernet-token",
         "expires_at": now + timedelta(hours=8),
         "last_seen_at": now,
@@ -43,7 +43,7 @@ class TestAuthSessionModel:
         row = _make_session()
         assert row.subject == "sub-1"
         assert row.username == "alice"
-        assert row.roles == ["wba-user"]
+        assert row.roles == ["user"]
         assert isinstance(row.expires_at, datetime)
         assert isinstance(row.last_seen_at, datetime)
 
@@ -75,8 +75,8 @@ class TestAuthSessionModel:
 
     def test_roles_are_stored_as_given(self) -> None:
         """The roles snapshot is stored verbatim, including multiple roles."""
-        row = _make_session(roles=["wba-user", "wba-admin"])
-        assert row.roles == ["wba-user", "wba-admin"]
+        row = _make_session(roles=["user", "admin"])
+        assert row.roles == ["user", "admin"]
 
     def test_repr(self) -> None:
         """``__repr__`` exposes the identity fields."""

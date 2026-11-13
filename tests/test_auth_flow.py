@@ -138,7 +138,7 @@ def _keycloak(monkeypatch: pytest.MonkeyPatch) -> _KeycloakStub:
         service,
         "validate_bearer_token",
         lambda token: Principal(
-            subject="sub-1", username="alice", roles=frozenset({"wba-user"})
+            subject="sub-1", username="alice", roles=frozenset({"user"})
         ),
     )
     return stub
@@ -248,7 +248,7 @@ class TestCallback:
         assert "Path=/" in set_cookie
         assert len(store.rows) == 1
         assert store.rows[0].subject == "sub-1"
-        assert store.rows[0].roles == ["wba-user"]
+        assert store.rows[0].roles == ["user"]
 
 
 # ── /auth/token ──────────────────────────────────────────────────────────
@@ -413,7 +413,7 @@ class TestMe:
             dependencies,
             "validate_bearer_token",
             lambda token: Principal(
-                subject="sub-9", username="bob", roles=frozenset({"wba-admin"})
+                subject="sub-9", username="bob", roles=frozenset({"admin"})
             ),
         )
         response = await client.get(
@@ -425,7 +425,7 @@ class TestMe:
             "subject": "sub-9",
             "username": "bob",
             "full_name": None,
-            "roles": ["wba-admin"],
+            "roles": ["admin"],
         }
 
     async def test_full_name_returned_when_present(
@@ -440,7 +440,7 @@ class TestMe:
                 subject="sub-9",
                 username="bob",
                 full_name="Bob Smith",
-                roles=frozenset({"wba-admin"}),
+                roles=frozenset({"admin"}),
             ),
         )
         response = await client.get(

@@ -16,7 +16,7 @@ from common.auth.service_token import (
 
 pytestmark = [pytest.mark.unit]
 
-_CLIENT_ID = "wba-internal"
+_CLIENT_ID = "internal"
 _SECRET_VALUE = "super-secret-value"
 
 

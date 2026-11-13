@@ -33,7 +33,7 @@ class TestAuthHeaders:
                 headers = daemon_mod._auth_headers()
 
         assert headers == {}
-        assert "wba-internal" in caplog.text
+        assert "internal" in caplog.text
 
 
 class TestApiRequest:

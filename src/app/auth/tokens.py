@@ -18,7 +18,7 @@ from app.auth.principal import CredentialType, Principal
 from app.settings import settings
 from common.logger import logger
 
-_MAPPED_ROLES = frozenset({"wba-admin", "wba-user", "wba-service"})
+_MAPPED_ROLES = frozenset({"admin", "user", "service"})
 
 _ALGORITHMS = ["RS256"]
 
@@ -30,7 +30,7 @@ class TokenValidationError(Exception):
 
 
 class NoRecognisedRoleError(TokenValidationError):
-    """The token carried no wba-* realm role — rejected, never downgraded."""
+    """The token carried no recognised realm role — rejected, never downgraded."""
 
 
 def _open_discovery(url: str) -> dict[str, object]:
@@ -120,7 +120,7 @@ def validate_bearer_token(token: str) -> Principal:
     Raises:
         TokenValidationError: The token is malformed, expired, signed by an
             unknown key, or fails an ``iss``/``aud``/``azp`` check.
-        NoRecognisedRoleError: The token carries no mapped ``wba-*`` role.
+        NoRecognisedRoleError: The token carries no mapped realm role.
     """
     if not token:
         raise TokenValidationError("No bearer token supplied")
@@ -163,7 +163,7 @@ def validate_bearer_token(token: str) -> Principal:
     if not roles:
         logger.error(
             f"Bearer token for sub={subject!r} username={username!r} carries no "
-            f"recognised wba-* role"
+            f"recognised realm role"
         )
         raise NoRecognisedRoleError("Token carries no recognised role")
 

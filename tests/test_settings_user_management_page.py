@@ -161,12 +161,12 @@ class TestModalForms:
             assert props.get("class_name") == "popover-inverted"
 
     def test_roles_popover_names_both_roles(self) -> None:
-        """The help text must actually describe wba-admin and wba-user."""
+        """The help text must actually describe admin and user."""
         from ui.pages.settings.user_management.layout import _ROLES_HELP
 
-        assert "wba-admin" in _ROLES_HELP
-        assert "wba-user" in _ROLES_HELP
-        assert "wba-service" not in _ROLES_HELP
+        assert "**admin**" in _ROLES_HELP
+        assert "**user**" in _ROLES_HELP
+        assert "service" not in _ROLES_HELP
 
     def test_labels_target_existing_inputs(self) -> None:
         """A label pointing at a non-existent id is as bad as no label."""
@@ -337,7 +337,7 @@ class TestRenderUsersPage:
 
         def transport(method: str, url: str, *, params: Any = None, json: Any = None, timeout: Any = None) -> _Resp:
             if url.endswith("/admin/users/roles"):
-                return _Resp({"roles": ["wba-admin", "wba-user"]})
+                return _Resp({"roles": ["admin", "user"]})
             return _Resp({"users": [], "total": 0, "offset": 0, "limit": 25})
 
         _install_transport(monkeypatch, transport)
@@ -345,18 +345,18 @@ class TestRenderUsersPage:
             {"offset": 0, "limit": 25, "search": ""}
         )
 
-        assert roles == ["wba-admin", "wba-user"]
+        assert roles == ["admin", "user"]
         labels = [
             option["label"]
             for container in create_roles
             for option in container.options
         ]
-        assert labels == ["wba-admin", "wba-user"]
-        assert "wba-service" not in labels
+        assert labels == ["admin", "user"]
+        assert "service" not in labels
         edit_labels = [
             option["label"] for container in edit_roles for option in container.options
         ]
-        assert "wba-service" not in edit_labels
+        assert "service" not in edit_labels
 
     def test_permission_denied_renders_alert(self, monkeypatch: pytest.MonkeyPatch) -> None:
         from ui import api_client
@@ -380,7 +380,7 @@ class TestRenderUsersPage:
 
         def transport(method: str, url: str, *, params: Any = None, json: Any = None, timeout: Any = None) -> _Resp:
             if url.endswith("/admin/users/roles"):
-                return _Resp({"roles": ["wba-admin", "wba-user"]})
+                return _Resp({"roles": ["admin", "user"]})
             return _Resp({"users": [], "total": 10, "offset": 0, "limit": 25})
 
         _install_transport(monkeypatch, transport)

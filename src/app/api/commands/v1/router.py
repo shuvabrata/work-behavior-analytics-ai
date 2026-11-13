@@ -29,7 +29,7 @@ router = APIRouter(prefix="/commands", tags=["commands"])
 
 @router.post(
     "/", response_model=CommandResponse, status_code=201,
-    dependencies=[Depends(require_roles("wba-admin", "wba-service"))],
+    dependencies=[Depends(require_roles("admin", "service"))],
 )
 async def create_command(
     payload: CreateCommandRequest,

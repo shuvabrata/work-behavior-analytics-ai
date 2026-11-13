@@ -118,7 +118,7 @@ def _sign(
     *,
     sub: str = "sub-1",
     username: str = "alice",
-    roles: tuple[str, ...] = ("wba-user",),
+    roles: tuple[str, ...] = ("user",),
     aud: Any = _CLIENT_ID,
     azp: str = _CLIENT_ID,
     iss: str = _ISSUER,
@@ -167,18 +167,18 @@ class TestValidateBearerToken:
         self, private_pem: bytes, jwks: Any
     ) -> None:
         """A valid token maps to a Principal with the recognised roles."""
-        token = _sign(private_pem, roles=("wba-user",))
+        token = _sign(private_pem, roles=("user",))
         principal = tokens.validate_bearer_token(token)
         assert principal.subject == "sub-1"
         assert principal.username == "alice"
-        assert principal.roles == frozenset({"wba-user"})
+        assert principal.roles == frozenset({"user"})
         assert principal.credential is CredentialType.BEARER
 
     def test_unknown_roles_are_dropped(self, private_pem: bytes, jwks: Any) -> None:
         """Realm roles outside the mapped set never reach the principal."""
-        token = _sign(private_pem, roles=("wba-user", "offline_access"))
+        token = _sign(private_pem, roles=("user", "offline_access"))
         principal = tokens.validate_bearer_token(token)
-        assert principal.roles == frozenset({"wba-user"})
+        assert principal.roles == frozenset({"user"})
 
     def test_name_claim_maps_to_full_name(
         self, private_pem: bytes, jwks: Any
@@ -196,9 +196,9 @@ class TestValidateBearerToken:
 
     def test_user_and_admin_both_mapped(self, private_pem: bytes, jwks: Any) -> None:
         """Two recognised roles are both carried; ``is_admin`` is true."""
-        token = _sign(private_pem, roles=("wba-user", "wba-admin"))
+        token = _sign(private_pem, roles=("user", "admin"))
         principal = tokens.validate_bearer_token(token)
-        assert principal.roles == frozenset({"wba-user", "wba-admin"})
+        assert principal.roles == frozenset({"user", "admin"})
         assert principal.is_admin is True
 
     def test_expired_token_rejected(self, private_pem: bytes, jwks: Any) -> None:
@@ -292,23 +292,23 @@ class TestValidateBearerToken:
         The positive counterpart to the mismatch test: the assertion is a real
         gate, not an unconditional raise.
         """
-        token = _sign(private_pem, roles=("wba-user",))
+        token = _sign(private_pem, roles=("user",))
         principal = tokens.validate_bearer_token(token)
         assert principal.subject == "sub-1"
 
 
 class TestRealmShapedToken:
-    """Pin the claim shape the ``wba-web`` audience mapper must produce."""
+    """Pin the claim shape the ``web`` audience mapper must produce."""
 
     def test_realm_shaped_token_validates(
         self, private_pem: bytes, jwks: Any
     ) -> None:
-        """A ``wba-web`` token carries its audience and validates."""
+        """A ``web`` token carries its audience and validates."""
         token = _sign(
             private_pem,
             sub="kc-user-id",
             username="dev-user",
-            roles=("wba-user",),
+            roles=("user",),
             aud=[_CLIENT_ID],
             azp=_CLIENT_ID,
             iss=_ISSUER,
@@ -316,7 +316,7 @@ class TestRealmShapedToken:
         principal = tokens.validate_bearer_token(token)
         assert principal.subject == "kc-user-id"
         assert principal.username == "dev-user"
-        assert principal.roles == frozenset({"wba-user"})
+        assert principal.roles == frozenset({"user"})
 
     def test_realm_shaped_token_without_aud_is_rejected(
         self, private_pem: bytes, jwks: Any
@@ -330,7 +330,7 @@ class TestRealmShapedToken:
             private_pem,
             sub="kc-user-id",
             username="dev-user",
-            roles=("wba-user",),
+            roles=("user",),
             azp=_CLIENT_ID,
             iss=_ISSUER,
             include_aud=False,
@@ -340,14 +340,14 @@ class TestRealmShapedToken:
 
 
 class TestServiceShapedToken:
-    """Pin the claim shape a ``wba-internal`` client-credentials token has.
+    """Pin the claim shape a ``internal`` client-credentials token has.
 
-    The producers and the consumer authenticate as ``wba-internal``, whose
-    audience mapper emits ``aud=["wba-internal"]``. The validator must accept
-    that pair as well as ``wba-web``'s, and reject a mismatched pair.
+    The producers and the consumer authenticate as ``internal``, whose
+    audience mapper emits ``aud=["internal"]``. The validator must accept
+    that pair as well as ``web``'s, and reject a mismatched pair.
     """
 
-    _SERVICE_CLIENT_ID = "wba-internal"
+    _SERVICE_CLIENT_ID = "internal"
 
     @pytest.fixture(autouse=True)
     def _pin_service_client_id(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -356,19 +356,19 @@ class TestServiceShapedToken:
     def test_service_shaped_token_validates(
         self, private_pem: bytes, jwks: Any
     ) -> None:
-        """A ``wba-internal`` token carrying a service role validates."""
+        """A ``internal`` token carrying a service role validates."""
         token = _sign(
             private_pem,
             sub="service-client",
-            username="service-account-wba-internal",
-            roles=("wba-service",),
+            username="service-account-internal",
+            roles=("service",),
             aud=[self._SERVICE_CLIENT_ID],
             azp=self._SERVICE_CLIENT_ID,
             iss=_ISSUER,
         )
         principal = tokens.validate_bearer_token(token)
         assert principal.subject == "service-client"
-        assert principal.roles == frozenset({"wba-service"})
+        assert principal.roles == frozenset({"service"})
 
     def test_web_aud_with_service_azp_is_rejected(
         self, private_pem: bytes, jwks: Any
@@ -376,7 +376,7 @@ class TestServiceShapedToken:
         """The azp/aud pair must match — a crossed pair is rejected."""
         token = _sign(
             private_pem,
-            roles=("wba-service",),
+            roles=("service",),
             aud=[_CLIENT_ID],
             azp=self._SERVICE_CLIENT_ID,
             iss=_ISSUER,
@@ -390,7 +390,7 @@ class TestServiceShapedToken:
         """An ``aud``-less service token is rejected, naming the claim."""
         token = _sign(
             private_pem,
-            roles=("wba-service",),
+            roles=("service",),
             azp=self._SERVICE_CLIENT_ID,
             iss=_ISSUER,
             include_aud=False,

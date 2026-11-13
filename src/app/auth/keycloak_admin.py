@@ -1,8 +1,8 @@
 """Keycloak Admin REST client for the API runtime.
 
 The API drives Keycloak's admin surface on an administrator's behalf. It uses a
-dedicated `wba-admin-api` client (client-credentials) whose service account
-holds realm-management roles; that client carries no `wba-*` realm role and its
+dedicated `admin-api` client (client-credentials) whose service account
+holds realm-management roles; that client carries no realm role and its
 id is deliberately absent from `app.auth.tokens._service_client_ids()`, so its
 tokens can never authenticate an application request.
 

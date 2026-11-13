@@ -17,9 +17,9 @@ Grant = Role | frozenset[Role]
 #: (http method, full path template) -> required authorization.
 #: - "public"  : no dependency at all; deliberately open.
 #: - "session" : no bearer dependency; the handler validates the wba_session cookie.
-#: - "user"    : require_user  — wba-user, wba-admin *and* wba-service.
-#: - "admin"   : require_admin — wba-admin only.
-#: - "service" : require_service — wba-service only.
+#: - "user"    : require_user  — any authenticated principal; no role check.
+#: - "admin"   : require_admin — the ``admin`` realm role only.
+#: - "service" : require_service — the ``service`` realm role only.
 #: - a frozenset: require_roles(*grant) — any one of the listed roles.
 AUTHZ_MATRIX: dict[tuple[str, str], Grant] = {
     # ── public ───────────────────────────────────────────────────────────
@@ -31,7 +31,7 @@ AUTHZ_MATRIX: dict[tuple[str, str], Grant] = {
     ("POST", "/api/v1/auth/token"): "session",
     # ── any authenticated principal ──────────────────────────────────────
     ("GET", "/api/v1/auth/me"): "user",
-    # admin users — the whole surface is wba-admin only
+    # admin users — the whole surface is admin only
     ("GET", "/api/v1/admin/users/"): "admin",
     ("POST", "/api/v1/admin/users/"): "admin",
     ("GET", "/api/v1/admin/users/roles"): "admin",

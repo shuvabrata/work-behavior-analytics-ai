@@ -112,20 +112,15 @@ def _require_role(principal: Principal, role: str, path: str) -> Principal:
 async def require_admin(
     request: Request, principal: Principal = Depends(get_principal)
 ) -> Principal:
-    """Require ``wba-admin``; 403 otherwise."""
-    return _require_role(principal, "wba-admin", request.url.path)
+    """Require ``admin``; 403 otherwise."""
+    return _require_role(principal, "admin", request.url.path)
 
 
 async def require_service(
     request: Request, principal: Principal = Depends(get_principal)
 ) -> Principal:
-    """Require ``wba-service``; 403 otherwise."""
-    return _require_role(principal, "wba-service", request.url.path)
-
-
-def _internal_role(role: str) -> str:
-    """Map a short role label (``"admin"``) to its internal name (``"wba-admin"``)."""
-    return role if role.startswith("wba-") else f"wba-{role}"
+    """Require ``service``; 403 otherwise."""
+    return _require_role(principal, "service", request.url.path)
 
 
 def require_roles(*roles: str) -> Callable[..., Awaitable[Principal]]:
@@ -140,7 +135,7 @@ def require_roles(*roles: str) -> Callable[..., Awaitable[Principal]]:
     produce the dependency, not a coroutine. The returned dependency is named
     ``require_roles`` so the route-enumeration test can identify it.
     """
-    internal = [_internal_role(role) for role in roles]
+    internal = list(roles)
 
     async def _dependency(
         request: Request, principal: Principal = Depends(get_principal)

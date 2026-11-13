@@ -228,11 +228,11 @@ mapper:
 
 ```bash
 docker exec wba-ai-keycloak /opt/keycloak/bin/kcadm.sh get clients -r wba \
-  -q clientId=wba-web --fields 'id,clientId,protocolMappers' --format json
+  -q clientId=web --fields 'id,clientId,protocolMappers' --format json
 ```
 
-The JSON must contain a `wba-web-audience` entry whose
-`"included.client.audience"` is `"wba-web"`. Use the same shape to check any
+The JSON must contain a `web-audience` entry whose
+`"included.client.audience"` is `"web"`. Use the same shape to check any
 other change you made — read the field you changed back from the running realm
 and compare it to the template.
 
@@ -262,5 +262,5 @@ template and will be lost when the realm is re-imported — so for anything that
 should survive, change the template instead and re-import.
 
 For the application side — how the API validates tokens, what the roles mean, and
-how `wba-web` / `wba-internal` are used — see
+how `web` / `internal` are used — see
 `docs/design/authn-authz-design.md`.

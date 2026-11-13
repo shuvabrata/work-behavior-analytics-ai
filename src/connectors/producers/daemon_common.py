@@ -204,7 +204,7 @@ def _auth_headers() -> dict[str, str]:
     try:
         return {"Authorization": f"Bearer {get_service_token()}"}
     except ServiceTokenError:
-        client_id = os.environ.get("KEYCLOAK_SERVICE_CLIENT_ID", "wba-internal")
+        client_id = os.environ.get("KEYCLOAK_SERVICE_CLIENT_ID", "internal")
         logger.warning(
             f"Service credential unavailable for client_id={client_id} — "
             "status request will fail and be dropped"

@@ -46,7 +46,7 @@ async def _require_secret_privilege(
 ) -> None:
     """403 when a caller without admin or service asks for connector secrets."""
     if include_secrets and not (
-        principal.has_role("wba-admin") or principal.has_role("wba-service")
+        principal.has_role("admin") or principal.has_role("service")
     ):
         logger.warning(
             f"403 denied: connector secrets requested without privilege "
@@ -57,7 +57,7 @@ async def _require_secret_privilege(
             status_code=status.HTTP_403_FORBIDDEN,
             detail={
                 "error": "forbidden",
-                "message": "Exposing connector secrets requires the wba-admin or wba-service role.",
+                "message": "Exposing connector secrets requires the admin or service role.",
             },
         )
 

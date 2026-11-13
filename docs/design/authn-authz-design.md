@@ -42,7 +42,7 @@ Four properties drive most of the design decisions below:
 | 3 | Reuse the existing Postgres with a separate `keycloak` database | One fewer container. Accepted cost: Keycloak availability and backup blast radius become coupled to the application database server. |
 | 4 | `/api/v1` accepts **bearer JWTs only** | One credential type, one enforcement point, one test story. The API stays frontend-agnostic. |
 | 5 | Dash is a **BFF** with an HttpOnly session cookie | Browser never holds a token; revocation is immediate. The one browser-direct API call (the SSE stream) is routed through a Dash proxy route. |
-| 6 | Realm roles `wba-admin`, `wba-user`, `wba-service` | One source of truth; identical validation for human and machine tokens; no user table. Unrecognised roles are denied, never downgraded. |
+| 6 | Realm roles `admin`, `user`, `service` | One source of truth; identical validation for human and machine tokens; no user table. Unrecognised roles are denied, never downgraded. |
 | 7 | Standard user reads everything except connector secrets; admin does everything; the service principal additionally reads secrets | A clean, useful capability line. The producers read their connector configuration, credentials included, over the API with a service token. |
 | 8 | Scans are admin-or-service; chat is user-allowed | A scan causes producers to **write** into the graph, so it needs more than a standard user. Chat is read-only in effect. |
 | 9 | Per-user ownership of chat sessions and catalog favourites | Chat sessions are owner-scoped, closing the "any `session_id` is usable by anyone" hole. Catalog favourites are owner-scoped too: `catalog_metadata` carries a non-null `subject` column and is unique per `(catalog_id, subject)`, so the favourite toggle writes the caller's own row. |
@@ -126,7 +126,7 @@ credential type produced it — the last so session and bearer callers stay dist
 and tests without changing an authorization rule.
 
 Unrecognised realm roles are **dropped**, and a token carrying no recognised role is rejected with
-`403` — never silently downgraded to the standard user role.
+`403` — never silently admitted with a default role.
 
 ---
 
@@ -140,10 +140,10 @@ The realm is checked into the repository as JSON and imported on first boot via
 | Element | Value |
 |---|---|
 | Realm | `wba` |
-| Roles | `wba-admin`, `wba-user`, `wba-service` |
-| Web client | `wba-web` — confidential, standard flow, PKCE `S256`, redirect `https://<external-host>/api/v1/auth/callback` |
-| Service client | `wba-internal` — service accounts enabled, client-credentials grant, carries `wba-service` |
-| Admin client | `wba-admin-api` — confidential, service accounts enabled, client-credentials grant, carries **no** `wba-*` realm role; its service account holds the `realm-management` client roles `view-users`, `query-users`, `manage-users`, `view-realm` |
+| Roles | `admin`, `user`, `service` |
+| Web client | `web` — confidential, standard flow, PKCE `S256`, redirect `https://<external-host>/api/v1/auth/callback` |
+| Service client | `internal` — service accounts enabled, client-credentials grant, carries `service` |
+| Admin client | `admin-api` — confidential, service accounts enabled, client-credentials grant, carries **no** realm role; its service account holds the `realm-management` client roles `view-users`, `query-users`, `manage-users`, `view-realm` |
 | Access token lifespan | 15 minutes |
 | SSO Session Idle | 1 hour |
 | SSO Session Max | 8 hours |
@@ -211,7 +211,7 @@ service publishes only when asked, and the admin console uses a **separate** loo
 
 Enterprise SSO is absorbed by **brokering**: an IdP is added inside realm `wba`. The app still
 receives its callback from Keycloak, so `KEYCLOAK_ISSUER` is unchanged and the application is
-untouched; IdP mappers map enterprise groups onto `wba-admin` / `wba-user`, preserving the
+untouched; IdP mappers map enterprise groups onto `admin` / `user`, preserving the
 role model. Onboarding is a Keycloak admin-console change. Pointing at a *different Keycloak
 instance* does change `KEYCLOAK_ISSUER`, but nothing else in this design.
 
@@ -233,9 +233,9 @@ key rotation does not require an application restart.
 
 | Role | Meaning |
 |---|---|
-| `wba-user` | Standard user. Read everything except connector secrets; manage their own chat sessions and their own catalog favourites. May edit **own** data, not shared configuration. |
-| `wba-admin` | Everything a standard user can do, plus shared configuration and secret exposure. |
-| `wba-service` | Machine principal. Reads everything a standard user reads, plus connector secrets; the only role that may write command status. |
+| `user` | Standard user of the application. Read everything except connector secrets; manage their own chat sessions and their own catalog favourites. May edit **own** data, not shared configuration. |
+| `admin` | Everything a standard user can do, plus shared configuration and secret exposure. |
+| `service` | Machine principal. Reads everything a standard user reads, plus connector secrets; the only role that may write command status. |
 
 ### Endpoint grants
 
@@ -245,9 +245,9 @@ Every API operation carries exactly one authorization grant, drawn from a closed
 |---|---|
 | `public` | No credential at all. Deliberately open, and the only such routes are health and the login/callback legs. |
 | `session` | The `wba_session` cookie authenticates the handler itself. No bearer accepted. Confined to the two routes the BFF needs to turn a cookie into a bearer, and to revoke one. |
-| `user` | Any authenticated principal — user, admin, or service. |
-| `admin` | `wba-admin` only. |
-| `service` | `wba-service` only. |
+| `user` | `require_user` — any authenticated principal satisfies this grant, including one carrying only `service`; no role check is performed. |
+| `admin` | `require_admin` — requires the `admin` realm role. |
+| `service` | `require_service` — requires the `service` realm role. |
 | a set of grants | Any one of the listed grants. Used where admin and service both qualify. |
 
 **Per-endpoint grants are declared in the code.** `src/app/auth/matrix.py` holds the
@@ -296,7 +296,7 @@ prints it for pasting into the Authorize box. It adds no client and no grant to 
 ### Service accounts
 
 The producers and the consumer call `/api/v1` over HTTP, and a bearer-only API breaks them. They
-authenticate with the `wba-internal` client via the client-credentials grant, fetching a token at
+authenticate with the `internal` client via the client-credentials grant, fetching a token at
 startup and refreshing on expiry. This keeps a **single** credential type at the API: the only
 difference between a human and a machine token is which role it carries.
 
@@ -336,7 +336,7 @@ path; the API is the enforcement point.
 
 Every operation carries the `admin` grant. The assignable role set has a single source of truth,
 `ASSIGNABLE_REALM_ROLES` in the admin-users model; the UI reads it over HTTP from
-`GET /api/v1/admin/users/roles` rather than duplicating it, and `wba-service` is never assignable.
+`GET /api/v1/admin/users/roles` rather than duplicating it, and `service` is never assignable.
 
 ### Service accounts
 
@@ -347,8 +347,8 @@ cannot disable, delete, or re-role a machine principal through this surface.
 
 ### The admin client
 
-The API authenticates to Keycloak as the `wba-admin-api` client over client-credentials. Its
-service account holds only the `realm-management` roles it needs and carries no `wba-*` realm
+The API authenticates to Keycloak as the `admin-api` client over client-credentials. Its
+service account holds only the `realm-management` roles it needs and carries no realm
 role; its client id is deliberately absent from the bearer-validation client-id set, so a token it
 mints can never authenticate an application request. The admin base URL is derived from
 `KEYCLOAK_INTERNAL_URL` — never from `KEYCLOAK_ISSUER`, whose origin nginx 404s on `/auth/admin`.
@@ -358,7 +358,7 @@ mints can never authenticate an application request. The admin base URL is deriv
 | Guard | Rule |
 |---|---|
 | Self-delete | An administrator may not delete their own account. |
-| Last admin | The last `wba-admin` holder cannot be deleted, disabled, or have `wba-admin` revoked. |
+| Last admin | The last `admin` holder cannot be deleted, disabled, or have `admin` revoked. |
 | Service account | Service-account users cannot be modified or deleted. |
 
 ### Error shapes
@@ -395,7 +395,7 @@ Cleanup runs in its own database session, treats each step as an isolated unit, 
 rather than raising. It is at-most-once: if the API process dies between the Keycloak call and the
 cleanup finishing, the rows are orphaned with no retry.
 
-**Adding the `wba-admin-api` client requires a re-seed.** `--import-realm` is create-only, so the
+**Adding the `admin-api` client requires a re-seed.** `--import-realm` is create-only, so the
 new client is not added to a realm that already exists; the dev stack imports it only after the
 Keycloak database is dropped and recreated.
 
@@ -498,12 +498,12 @@ Ten settings carry this design. All are read at startup; none is editable at run
 | `KEYCLOAK_ISSUER` | API | The public realm URL. Matched byte-for-byte against every token's `iss` claim. |
 | `KEYCLOAK_INTERNAL_URL` | API + producers + consumer | The realm URL these runtimes fetch discovery, JWKS and tokens from. Must be the Compose service address, because `localhost` inside a container is the container. |
 | `APP_PUBLIC_BASE_URL` | API | The deployment's public origin. Builds the OAuth `redirect_uri` and, through the realm template, the realm's `redirectUris` / `webOrigins`. Must agree with `KEYCLOAK_ISSUER`'s origin. |
-| `KEYCLOAK_CLIENT_ID` | API + UI | The `wba-web` client identifier. Not a secret. |
-| `KEYCLOAK_CLIENT_SECRET` | API only | The `wba-web` secret, used for the token exchange. |
-| `KEYCLOAK_SERVICE_CLIENT_ID` | API + producers + consumer | The `wba-internal` client identifier. Not a secret. |
-| `KEYCLOAK_SERVICE_CLIENT_SECRET` | API + producers + consumer | The `wba-internal` secret, used for the client-credentials grant. |
-| `KEYCLOAK_ADMIN_CLIENT_ID` | API | The `wba-admin-api` client identifier. Not a secret. |
-| `KEYCLOAK_ADMIN_CLIENT_SECRET` | API only | The `wba-admin-api` secret, exchanged for a Keycloak admin token. |
+| `KEYCLOAK_CLIENT_ID` | API + UI | The `web` client identifier. Not a secret. |
+| `KEYCLOAK_CLIENT_SECRET` | API only | The `web` secret, used for the token exchange. |
+| `KEYCLOAK_SERVICE_CLIENT_ID` | API + producers + consumer | The `internal` client identifier. Not a secret. |
+| `KEYCLOAK_SERVICE_CLIENT_SECRET` | API + producers + consumer | The `internal` secret, used for the client-credentials grant. |
+| `KEYCLOAK_ADMIN_CLIENT_ID` | API | The `admin-api` client identifier. Not a secret. |
+| `KEYCLOAK_ADMIN_CLIENT_SECRET` | API only | The `admin-api` secret, exchanged for a Keycloak admin token. |
 | `AUTH_COOKIE_SECURE` | API | The `Secure` flag on the session cookie. Must be true wherever TLS terminates. |
 | `AUTH_SESSION_IDLE_MINUTES` | API | Idle bound, enforced by the application against `last_seen_at`. |
 | `AUTH_SESSION_MAX_HOURS` | API | Absolute bound, enforced by the application against `expires_at`. |

@@ -11,7 +11,7 @@ Plan files for completed work are removed as they land — that is this director
 | Plan | Title | Priority | Effort | Depends on | Status |
 |------|-------|----------|--------|------------|--------|
 | 001 | Admin user management in the app (Keycloak Admin API + Settings page) | P1 | L | — | DONE — operator re-seed (Step 14) verified 2026-11-12 |
-| 002 | Rename the realm roles and Keycloak client ids (drop the `wba-` prefix) | P2 | M | — | TODO |
+| 002 | Rename the realm roles and Keycloak client ids (drop the `wba-` prefix) | P2 | M | — | Step 1 DONE — code verified 2026-11-13 (uncommitted in the working tree); Step 2 operator re-seed still pending |
 | 003 | Make the admin user list's `total` honest and stop replaying a rejected admin token | P1 | S | — | DONE — verified 2026-11-12 (5 new tests, revert-proofed; uncommitted in the working tree) |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) | REJECTED (with one-line rationale).

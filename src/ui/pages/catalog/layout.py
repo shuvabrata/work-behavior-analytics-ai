@@ -78,6 +78,7 @@ def get_layout() -> html.Div:
                 style=CARD_CONTAINER_STYLE,
             ),
         ],
+        className="dense-page",
     )
 
 

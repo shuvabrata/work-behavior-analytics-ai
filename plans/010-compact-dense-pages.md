@@ -717,10 +717,17 @@ piece:
 
 .dense-page .executive-table thead th,
 .dense-page .executive-table tbody td {
-    padding-top: 4px;
-    padding-bottom: 4px;
+    padding-top: 2px;
+    padding-bottom: 2px;
 }
 ```
+
+Both `.executive-table` tables use `size="sm"`, so Bootstrap's Materia bundle
+(`.table-sm>:not(caption)>*>*`) already applies `4px` on all four sides. The
+rule above therefore has to go *below* 4px to have any effect; at 4px it was a
+restatement of Bootstrap's value and changed nothing measurable. Vertical only —
+a `padding` shorthand would also set the horizontal values and move column
+gutters.
 
 **Deliberately absent: the `.graph-filter-card` family of padding rules.**
 `.graph-filter-card`, its `.card-body`, and `.graph-filter-card-body` all carry an

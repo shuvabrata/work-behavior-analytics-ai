@@ -1,5 +1,5 @@
 PyGithub==2.10.0
-aio-pika==10.2.2
+aio-pika==10.2.3
 asyncpg==0.32.0
 pydantic==2.14.3
 requests==2.34.2

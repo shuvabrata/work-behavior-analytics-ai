@@ -174,3 +174,46 @@ def test_stream_bridge_calls_the_app_proxy_not_the_api_directly():
         content = fh.read()
     assert "'/app/stream/' + sessionId" in content
     assert "/api/v1/chats" not in content
+
+
+# ── callback wiring tests ──────────────────────────────────────────────────────
+
+
+def _callback_by_name(mapping, name):
+    """Return the entry in a Dash callback mapping whose function is ``name``."""
+    for entry in mapping.values():
+        callback = entry.get("callback")
+        if getattr(callback, "__name__", None) == name:
+            return entry
+    return None
+
+
+def test_render_from_session_treats_session_store_as_an_input():
+    """render_from_session must be triggered by session-store, not read it as State.
+
+    On re-entering /app/chat the page layout is rebuilt from scratch, so the
+    rendered messages are gone. The conversation itself survives because
+    session-store is a session-storage Store, which Dash rehydrates on mount by
+    calling setProps. That is an ordinary property change: it only reaches a
+    callback that declares session-store as an Input. With State (the bug) the
+    store is repopulated but nothing redraws it, and the page shows the
+    empty-state placeholder until the user submits another message.
+    """
+    from dash import _callback as dash_callback  # noqa: PLC0415
+    from ui.layout import create_dash_app  # noqa: PLC0415
+
+    create_dash_app()
+
+    entry = _callback_by_name(dash_callback.GLOBAL_CALLBACK_MAP, "render_from_session")
+    assert entry is not None, "render_from_session is not registered"
+
+    inputs = {(i["id"], i["property"]) for i in entry.get("inputs", [])}
+    assert ("session-store", "data") in inputs, (
+        "render_from_session must declare Input('session-store', 'data'); "
+        "as a State the store is restored on remount but never redrawn, so the "
+        "chat history is invisible until the user sends another message."
+    )
+    assert ("streaming-active", "data") in inputs, (
+        "render_from_session must keep Input('streaming-active', 'data') to "
+        "re-render once the SSE stream finishes."
+    )

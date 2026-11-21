@@ -282,8 +282,8 @@ clientside_callback(
 # ── Python callback: re-render chat-messages when streaming finishes ──────────
 @callback(
     Output("chat-messages", "children", allow_duplicate=True),
-    Input("streaming-active", "data"),
-    State("session-store", "data"),
+    [Input("streaming-active", "data"),
+     Input("session-store", "data")],
     prevent_initial_call=True,
 )
 def render_from_session(streaming_active: bool, session_data: dict[str, Any] | None) -> list[Any] | Any:

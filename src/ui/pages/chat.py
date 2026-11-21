@@ -663,18 +663,17 @@ def submit_on_enter(_n_submit: int | None, n_clicks: int | None) -> int:
 # Clientside callback for auto-scrolling to bottom
 clientside_callback(
     """
-    function(trigger) {
-        if (trigger) {
-            setTimeout(function() {
-                var chatContainer = document.querySelector('.chat-messages-container');
-                if (chatContainer) {
-                    chatContainer.scrollTop = chatContainer.scrollHeight;
-                }
-            }, 100);
-        }
+    function(trigger, messages) {
+        setTimeout(function() {
+            var chatContainer = document.querySelector('.chat-messages-container');
+            if (chatContainer) {
+                chatContainer.scrollTop = chatContainer.scrollHeight;
+            }
+        }, 100);
         return '';
     }
     """,
     Output("loading-output", "children"),
-    Input("scroll-trigger", "children")
+    Input("scroll-trigger", "children"),
+    Input("chat-messages", "children")
 )

@@ -17,6 +17,7 @@ license: Complete terms in LICENSE.txt
 - Professional boardroom sophistication
 - Data-driven precision without being cold
 - Timeless elegance that won't feel dated
+- Data-dense surfaces (Graph, Timeline, Search, Catalog, Collaboration Network) run tighter spacing than card and form surfaces, via the `.dense-page` scope class
 
 **Color Palette**:
 - Primary: Navy `#2c5282`

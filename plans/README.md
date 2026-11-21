@@ -10,7 +10,7 @@ Plan files for completed work are removed as they land — that is this director
 
 | Plan | Title | Priority | Effort | Depends on | Status |
 |------|-------|----------|--------|------------|--------|
-| 010 | Compact the data-dense pages and raise the app-wide font scale | P2 | M | — | IN PROGRESS — steps 1-6 of 8 done (gates 1-6 confirmed); next is step 7, design docs |
+| 010 | Compact the data-dense pages and raise the app-wide font scale | P2 | M | — | IN PROGRESS — steps 1-7 of 8 done; only step 8 (the full CI gate) remains |
 
 ## Dependency notes
 

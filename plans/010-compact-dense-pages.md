@@ -59,7 +59,7 @@
 | 4 | Search | ✅ DONE (gate 4 confirmed) |
 | 5 | Catalog | ✅ DONE (gate 5 confirmed) |
 | 6 | Collaboration Network (both pages) | ✅ DONE (gate 6 confirmed) |
-| 7 | Design docs | ⬜ TODO |
+| 7 | Design docs | ✅ DONE |
 | 8 | Full CI gate | ⬜ TODO |
 
 ## Why this matters

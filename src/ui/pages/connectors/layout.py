@@ -778,7 +778,12 @@ def _render_field(field: dict[str, Any], connector_type: str, section: str) -> h
         control = dbc.Switch(id=field_id, label="", value=False)
     elif input_type == FIELD_MULTISELECT:
         options = field.get("options", [])
-        control = dcc.Dropdown(id=field_id, options=options, value=field.get("default", []), multi=True)
+        control = dbc.Checklist(
+            id=field_id,
+            options=options,
+            value=field.get("default", []),
+            inline=False,
+        )
     else:
         control = dbc.Input(id=field_id, type="text", placeholder=placeholder)
 

@@ -23,7 +23,11 @@ from ui.api_client import STATUS_NO_RESPONSE, ApiError, AuthExpiredError, Permis
 from ui.components.common import create_alert
 from ui.components.permission_errors import handle_api_error
 from ui.styles import COLOR_GRAY_MEDIUM
-from .editor_layout import render_factory_diff_lines, render_parameter_row
+from .editor_layout import (
+    SAVE_AS_PLACEHOLDER,
+    render_factory_diff_lines,
+    render_parameter_row,
+)
 
 
 # Sentinel tuple for the 13 no_update outputs shared by destructive_action's
@@ -435,6 +439,7 @@ def save_query(
 @callback(
     Output("editor-save-as-modal", "is_open"),
     Output("editor-save-as-namespace", "options"),
+    Output("editor-save-as-namespace", "value"),
     Output("editor-save-as-open", "data"),
     Input("editor-save-as", "n_clicks"),
     Input("editor-save-as-cancel", "n_clicks"),
@@ -447,8 +452,12 @@ def toggle_save_as_modal(
     _cancel_clicks: int | None,
     namespaces: list[dict[str, Any]] | None,
     _is_open: bool | None,
-) -> tuple[bool, list[dict[str, str]], bool]:
-    """Open/close the Save As modal and populate the namespace dropdown."""
+) -> tuple[bool, list[dict[str, str]], str, bool]:
+    """Open/close the Save As modal and populate the namespace dropdown.
+
+    The dropdown's value is reset on open because a native ``<select>`` always
+    holds a selection and would otherwise re-show the previous choice.
+    """
     if not callback_context.triggered:
         raise PreventUpdate
     triggered = callback_context.triggered_id
@@ -458,9 +467,9 @@ def toggle_save_as_modal(
             for ns in (namespaces or [])
         ]
         options.append({"label": "+ New namespace…", "value": "__new__"})
-        return True, options, True
+        return True, options, SAVE_AS_PLACEHOLDER, True
     if triggered == "editor-save-as-cancel":
-        return False, no_update, False
+        return False, no_update, no_update, False
     raise PreventUpdate
 
 
@@ -616,8 +625,10 @@ def save_as_query(
 
     if namespace_value == "__new__":
         namespace = (custom_namespace or "").strip()
+    elif namespace_value and namespace_value != SAVE_AS_PLACEHOLDER:
+        namespace = namespace_value
     else:
-        namespace = namespace_value or ""
+        namespace = ""
     slug = (slug or "").strip()
 
     if not namespace or not slug:

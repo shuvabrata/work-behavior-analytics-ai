@@ -6,6 +6,7 @@ from dash import dcc, html
 import dash_bootstrap_components as dbc
 
 from ui.components.common import create_page_header
+from ui.components.select_field import build_select
 from ui.components.result_pane import (
     create_graph_result_container,
     create_results_empty_state,
@@ -54,6 +55,13 @@ PARAM_FIELD_LABELS = {
     "description": "Description",
     "env_var": "Env var",
 }
+
+DEFAULT_STATUS = "active"
+
+# Native <select> has no clearable state, so "no selection yet" is modelled as a
+# sentinel option that must stay first in the list; save_as_query treats any
+# value other than a real namespace as unset.
+SAVE_AS_PLACEHOLDER = "__placeholder__"
 
 STATUS_OPTIONS = [
     {"label": "Active", "value": "active"},
@@ -165,12 +173,10 @@ def _render_metadata_section() -> html.Div:
                             dbc.Col(
                                 [
                                     dbc.Label("Status", html_for="editor-status"),
-                                    dcc.Dropdown(
-                                        id="editor-status",
+                                    build_select(
+                                        input_id="editor-status",
                                         options=STATUS_OPTIONS,
-                                        clearable=True,
-                                        placeholder="Status",
-                                        searchable=False,
+                                        value=DEFAULT_STATUS,
                                     ),
                                 ],
                                 md=3,
@@ -452,10 +458,10 @@ def _render_save_as_modal() -> dbc.Modal:
             dbc.ModalBody(
                 [
                     dbc.Label("Namespace", html_for="editor-save-as-namespace"),
-                    dcc.Dropdown(
-                        id="editor-save-as-namespace",
-                        placeholder="Select namespace",
-                        searchable=False,
+                    build_select(
+                        input_id="editor-save-as-namespace",
+                        options=[{"label": "Select namespace", "value": SAVE_AS_PLACEHOLDER}],
+                        value=SAVE_AS_PLACEHOLDER,
                     ),
                     dbc.Input(
                         id="editor-save-as-namespace-custom",

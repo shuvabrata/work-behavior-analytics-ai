@@ -15,6 +15,7 @@ import dash_cytoscape as cyto
 from dash import dcc, html
 
 from domain.graph_theme import ALLOWED_SHAPES, NODE_TYPES
+from ui.components.select_field import build_select
 from ui.styles import (
     COLOR_BACKGROUND_LIGHT,
     COLOR_BORDER,
@@ -146,18 +147,11 @@ def _shape_input(input_id: dict[str, Any], value: Any = None) -> dbc.Select:
     concrete shape (no "inherit" state — themes are full snapshots).
     """
     options = [{"label": shape, "value": shape} for shape in ALLOWED_SHAPES]
-    return dbc.Select(
-        id=input_id,
+    return build_select(
+        input_id=input_id,
         options=options,
         value=value if value is not None else "ellipse",
-        style={
-            "fontFamily": FONT_SANS,
-            "fontSize": FONT_SIZE_SMALL,
-            "height": "34px",
-            "padding": f"0 {SPACING_XSMALL}",
-            "border": f"1px solid {COLOR_BORDER}",
-            "width": "100%",
-        },
+        width="100%",
     )
 
 
@@ -314,20 +308,13 @@ def build_edges_card(base_theme: str, overrides: dict[str, Any] | None = None) -
     fields.append(
         _field_row(
             "Arrow Shape",
-            dbc.Select(
-                id=arrow_id,
+            build_select(
+                input_id=arrow_id,
                 options=[
                     {"label": shape, "value": shape} for shape in ARROW_SHAPES
                 ],
                 value=overrides.get("arrow_shape") or ARROW_SHAPES[0],
-                style={
-                    "fontFamily": FONT_SANS,
-                    "fontSize": FONT_SIZE_SMALL,
-                    "height": "34px",
-                    "padding": f"0 {SPACING_XSMALL}",
-                    "border": f"1px solid {COLOR_BORDER}",
-                    "width": "100%",
-                },
+                width="100%",
             ),
             "edge",
             base_theme,
@@ -557,20 +544,13 @@ def build_theme_toolbar(base_theme: str) -> html.Div:
                                     "whiteSpace": "nowrap",
                                 },
                             ),
-                            dbc.Select(
-                                id={
+                            build_select(
+                                input_id={
                                     "type": "gs-theme-select",
                                     "base_theme": base_theme,
                                 },
                                 options=[],
                                 placeholder="Select a theme\u2026",
-                                style={
-                                    "fontFamily": FONT_SANS,
-                                    "fontSize": FONT_SIZE_SMALL,
-                                    "height": "34px",
-                                    "padding": f"0 {SPACING_XSMALL}",
-                                    "border": f"1px solid {COLOR_BORDER}",
-                                },
                             ),
                         ],
                         width=4,

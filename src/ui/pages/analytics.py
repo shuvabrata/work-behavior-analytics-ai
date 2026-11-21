@@ -25,6 +25,7 @@ from domain.collaboration.ego_metadata import COLLABORATOR_CAP_OPTIONS
 from domain.analytics_registry import GRAPH_ANALYTICS
 from domain.person_network_url import DEFAULT_MAX_COLLABORATORS
 from ui.components.common import create_alert, create_page_header
+from ui.components.select_field import build_select
 from ui.styles import (
     CARD_CONTAINER_STYLE,
     COLOR_BACKGROUND_LIGHT,
@@ -463,14 +464,13 @@ def _create_card_controls(spec: _CardControlsSpec) -> html.Div:
                     dbc.Col(
                         [
                             html.Label("Collaborator Cap", style={"fontSize": FONT_SIZE_SMALL, "fontFamily": FONT_SANS}),
-                            dbc.Select(
-                                id=f"{prefix}-collaborator-cap",
+                            build_select(
+                                input_id=f"{prefix}-collaborator-cap",
                                 options=[
                                     {"label": f"Top {cap}", "value": cap}
                                     for cap in COLLABORATOR_CAP_OPTIONS
                                 ],
                                 value=DEFAULT_MAX_COLLABORATORS,
-                                size="sm",
                             ),
                         ],
                         md=6,

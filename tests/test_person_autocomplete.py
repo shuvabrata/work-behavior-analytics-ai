@@ -813,7 +813,7 @@ def test_header_picker_enlarges_the_input_over_the_inline_default():
     """
     css = _css()
     block = css.split(".ego-header-picker .form-control {")[1].split("}")[0]
-    assert "font-size: 14px !important" in block, (
+    assert "font-size: 15px !important" in block, (
         "the header input's font-size must be !important to beat the inline style"
     )
 
@@ -833,16 +833,16 @@ def test_the_shared_picker_defaults_are_unchanged():
                 return line.split(":", 1)[1].strip().rstrip(";")
         raise AssertionError(f"no font-size in {selector}")
 
-    assert font_size_of(".catalog-person-chip-name") == "12px"
-    assert font_size_of(".catalog-person-chip-id") == "10px"
+    assert font_size_of(".catalog-person-chip-name") == "13px"
+    assert font_size_of(".catalog-person-chip-id") == "11px"
 
 
 def test_the_header_host_raises_the_chip_above_those_defaults():
     """The header's chip is deliberately larger than the shared default."""
     css = _css()
     for selector, expected in (
-        (".ego-header-picker .catalog-person-chip-name", "13px"),
-        (".ego-header-picker .catalog-person-chip-id", "11px"),
+        (".ego-header-picker .catalog-person-chip-name", "14px"),
+        (".ego-header-picker .catalog-person-chip-id", "12px"),
     ):
         block = css.split(selector + " {")[1].split("}")[0]
         assert f"font-size: {expected}" in block, f"{selector} should be {expected}"

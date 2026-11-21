@@ -15,6 +15,8 @@ from ui import api_client
 from ui.api_client import ApiError
 from ui.styles import (
     ACTIVE_THEME,
+    FONT_SIZE_TINY,
+    FONT_SIZE_XSMALL,
     COLOR_CHARCOAL,
     COLOR_CHARCOAL_MEDIUM,
     COLOR_TEXT_SECONDARY,
@@ -259,7 +261,7 @@ def _build_parameter_help_text(parameter: dict[str, Any]) -> html.Div | None:
 
     return html.Div(
         help_parts,
-        style={"fontSize": "11px", "color": COLOR_TEXT_SECONDARY, "marginTop": "4px"},
+        style={"fontSize": FONT_SIZE_TINY, "color": COLOR_TEXT_SECONDARY, "marginTop": "4px"},
     )
 
 
@@ -376,7 +378,7 @@ def render_catalog_query_list(
     if catalog_queries is None:
         return html.Div(
             "Loading catalog queries...",
-            style={"fontSize": "12px", "color": COLOR_TEXT_SECONDARY},
+            style={"fontSize": FONT_SIZE_XSMALL, "color": COLOR_TEXT_SECONDARY},
         )
 
     metadata_store = metadata_store or {}
@@ -390,13 +392,13 @@ def render_catalog_query_list(
     if not catalog_queries:
         return html.Div(
             "No catalog queries available.",
-            style={"fontSize": "12px", "color": COLOR_TEXT_SECONDARY},
+            style={"fontSize": FONT_SIZE_XSMALL, "color": COLOR_TEXT_SECONDARY},
         )
 
     if not filtered:
         return html.Div(
             "No queries match the current filters.",
-            style={"fontSize": "12px", "color": COLOR_TEXT_SECONDARY},
+            style={"fontSize": FONT_SIZE_XSMALL, "color": COLOR_TEXT_SECONDARY},
         )
 
     items = []
@@ -418,7 +420,7 @@ def render_catalog_query_list(
                                     status_badge,
                                 ],
                                 className="graph-catalog-list-item-title",
-                                style={"fontWeight": 600, "fontSize": "12px"},
+                                style={"fontWeight": 600, "fontSize": FONT_SIZE_XSMALL},
                             ),
                             html.Button(
                                 html.I(
@@ -443,7 +445,7 @@ def render_catalog_query_list(
                         ],
                         className="graph-catalog-list-item-title-row",
                     ),
-                    html.Div(subtitle, style={"fontSize": "11px", "color": COLOR_TEXT_SECONDARY}),
+                    html.Div(subtitle, style={"fontSize": FONT_SIZE_TINY, "color": COLOR_TEXT_SECONDARY}),
                 ],
                 id={"type": "catalog-query-select", "catalog_id": catalog_id},
                 action=True,
@@ -456,7 +458,7 @@ def render_catalog_query_list(
     return html.Div([
         html.Div(
             f"{len(filtered)} {'queries' if len(filtered) != 1 else 'query'}",
-            style={"fontSize": "11px", "color": COLOR_TEXT_SECONDARY, "marginBottom": "8px"},
+            style={"fontSize": FONT_SIZE_TINY, "color": COLOR_TEXT_SECONDARY, "marginBottom": "8px"},
         ),
         dbc.ListGroup(items, flush=True, class_name="graph-catalog-list-group"),
     ])
@@ -547,7 +549,7 @@ def render_catalog_query_detail(
         return (
             html.Div(
                 "Select a catalog query to inspect it here.",
-                style={"fontSize": "12px", "color": COLOR_TEXT_SECONDARY},
+                style={"fontSize": FONT_SIZE_XSMALL, "color": COLOR_TEXT_SECONDARY},
             ),
             [],
             None,
@@ -612,7 +614,7 @@ def render_catalog_query_detail(
     detail_children.append(
         html.Div(
             summary_children,
-            style={"fontSize": "12px", "color": COLOR_CHARCOAL_MEDIUM, "marginTop": "6px", "display": "flex", "alignItems": "center"},
+            style={"fontSize": FONT_SIZE_XSMALL, "color": COLOR_CHARCOAL_MEDIUM, "marginTop": "6px", "display": "flex", "alignItems": "center"},
         )
     )
 
@@ -662,7 +664,7 @@ def render_catalog_query_detail(
                 html.Div([
                     html.Label(
                         label_children,
-                        style={"fontSize": "12px", "fontWeight": 600, "marginBottom": "4px"},
+                        style={"fontSize": FONT_SIZE_XSMALL, "fontWeight": 600, "marginBottom": "4px"},
                     ),
                     dbc.Input(
                         id={"type": "catalog-parameter-input", "name": parameter_name},

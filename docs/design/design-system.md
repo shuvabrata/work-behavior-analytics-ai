@@ -124,7 +124,7 @@ button carrying an inline radius keeps that value instead of 6px.
 
 **Google Fonts Import** (included in layout.py):
 ```
-https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600;700&family=Inter:wght@300;400;500;600&display=swap
+https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600;700&family=Inter:wght@400;500;600;700&display=swap
 ```
 
 ### Font Sizes
@@ -132,11 +132,15 @@ https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600;700
 | Token | Value | Usage |
 |-------|-------|-------|
 | `FONT_SIZE_XLARGE` | `42px` | Large decorative text |
-| `FONT_SIZE_LARGE` | `15px` | Section headings |
-| `FONT_SIZE_MEDIUM` | `14px` | Body text |
-| `FONT_SIZE_SMALL` | `13px` | Small text, labels |
-| `FONT_SIZE_XSMALL` | `12px` | Tiny text, captions |
-| Not defined (use `11px`) | `11px` | Helper text, footnotes |
+| `FONT_SIZE_LARGE` | `16px` | Section headings |
+| `FONT_SIZE_MEDIUM` | `15px` | Body text |
+| `FONT_SIZE_SMALL` | `14px` | Small text, labels |
+| `FONT_SIZE_XSMALL` | `13px` | Tiny text, captions |
+| `FONT_SIZE_TINY` | `12px` | Helper text |
+| `FONT_SIZE_XTINY` | `11px` | Footnotes, compact metadata |
+| `FONT_SIZE_XXSMALL` | `11px` | Compact metadata |
+
+`FONT_SIZE_XTINY` and `FONT_SIZE_XXSMALL` share the `11px` value as the floor of the scale; the names are kept separate because call sites import them individually.
 
 ### Font Weights
 
@@ -165,6 +169,20 @@ Follows a consistent 4px/8px grid system:
 | `SPACING_XXLARGE` | `48px` | Maximum spacing |
 
 **Design Rule**: Always use spacing tokens instead of hardcoded pixel values.
+
+---
+
+### Dense pages
+
+The app carries two spacing tiers: the text scale is app-wide, density is per-page.
+
+The **dense** pages are Graph, Timeline, Search, Catalog, and both Collaboration Network pages. These display lists and graphs, where space around content is worth more as content. The **card and form** pages — Analytics, Connectors, Settings, Developer, Chat — keep the roomier base spacing. Density is a property of the page, not of the app.
+
+The mechanism is the `.dense-page` scope class, which a dense page puts on its root `html.Div`. Density rules in `executive-dashboard.css` are all scoped under `.dense-page`, so a card or form page cannot become dense.
+
+The `SPACING_*` token values are the same on both tiers. Dense pages use page-local literal values; the tokens themselves are never changed, because they are shared with the card pages.
+
+One exception recurs: an element whose size is set by an inline `style=` prop cannot be restyled by a stylesheet rule, since inline outranks any class selector. Density for such an element belongs in Python, not in the stylesheet.
 
 ---
 
@@ -419,10 +437,13 @@ All CSS variables are defined in `app/dash_app/assets/executive-dashboard.css`:
     
     /* Typography */
     --font-sans: 'Inter', sans-serif;
-    --font-size-small: 13px;
+    --font-size-small: 14px;
+    --font-size-xsmall: 13px;
     
     /* Spacing */
-    --spacing-small: 16px;
+    --spacing-xxsmall: 8px;
+    --spacing-xsmall: 12px;
+    --spacing-medium: 24px;
     
     /* Transitions */
     --transition-base: 0.2s ease;

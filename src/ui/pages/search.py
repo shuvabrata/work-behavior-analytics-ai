@@ -582,7 +582,7 @@ def _build_result_card(result: dict[str, Any], full: bool, badge_colors: dict[st
             "border": f"1px solid {COLOR_BORDER}",
             "borderLeft": f"3px solid {badge_bg}",
             "borderRadius": "2px",
-            "padding": SPACING_SMALL,
+            "padding": SPACING_XSMALL,
             "marginBottom": SPACING_XSMALL,
         },
     )
@@ -835,7 +835,7 @@ def get_layout() -> html.Div:
                                                         style={
                                                             "marginLeft": "6px",
                                                             "color": COLOR_GRAY_MEDIUM,
-                                                            "fontSize": "12px",
+                                                            "fontSize": FONT_SIZE_XSMALL,
                                                             "cursor": "help",
                                                             "display": "inline-flex",
                                                             "alignItems": "center",
@@ -928,6 +928,7 @@ def get_layout() -> html.Div:
                 style=CARD_CONTAINER_STYLE,
             ),
         ],
+        className="dense-page",
     )
 
 

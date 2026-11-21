@@ -28,7 +28,9 @@ from ui.styles import (
     COLOR_GRAY_DARK,
     COLOR_GRAY_LIGHTER,
     FONT_SIZE_SMALL,
+    FONT_SIZE_TINY,
     FONT_SIZE_XSMALL,
+    FONT_SIZE_XTINY,
     FONT_WEIGHT_SEMIBOLD,
 )
 
@@ -42,12 +44,12 @@ The clientside render callback calls cy.resize() + cy.fit() explicitly once the
 DOM is stable.
 """
 
-_CANVAS_HEIGHT = "calc(100vh - 148px)"
+_CANVAS_HEIGHT = "calc(100vh - 128px)"
 """Canvas height, sized to the chrome the page actually renders above it.
 """
 
 _LABEL_STYLE = {
-    "fontSize": "11px",
+    "fontSize": FONT_SIZE_TINY,
     "fontWeight": FONT_WEIGHT_SEMIBOLD,
     "color": COLOR_GRAY_DARK,
     "marginBottom": "8px",
@@ -136,7 +138,7 @@ def _create_right_panel_tabs() -> html.Div:
                                 color="link",
                                 size="sm",
                                 className="ms-auto",
-                                style={"fontSize": "11px", "padding": "0", "textDecoration": "none"},
+                                style={"fontSize": FONT_SIZE_TINY, "padding": "0", "textDecoration": "none"},
                             ),
                         ], className="d-flex justify-content-between align-items-start mb-3"),
 
@@ -163,7 +165,7 @@ def _create_right_panel_tabs() -> html.Div:
                                 id="ego-weight-threshold-label",
                                 children="Show collaborators with weight ≥ 0",
                                 className="d-block mt-1",
-                                style={"fontSize": "10px", "color": "var(--color-text-secondary)"},
+                                style={"fontSize": FONT_SIZE_XTINY, "color": "var(--color-text-secondary)"},
                             ),
                         ], className="mb-3"),
 
@@ -176,10 +178,10 @@ def _create_right_panel_tabs() -> html.Div:
                                 value=DEFAULT_MAX_COLLABORATORS,
                                 inline=False,
                                 className="graph-filter-radio",
-                                style={"fontSize": "12px"},
+                                style={"fontSize": FONT_SIZE_XSMALL},
                             ),
                         ]),
-                    ], className="graph-filter-card-body", style={"padding": "0 0 24px 0"}),
+                    ], className="graph-filter-card-body", style={"padding": "0 8px 12px 8px"}),
                 ], className="graph-filter-card", style={"border": "none", "backgroundColor": "transparent"}),
             ],
         ),
@@ -254,7 +256,7 @@ def get_layout() -> html.Div:
                             ),
                         ],
                     ),
-                ], id="ego-viz-col", width=8, style={"paddingRight": "16px"}),
+                ], id="ego-viz-col", width=8, style={"paddingRight": "8px"}),
 
                 dbc.Col([
                     html.Div(
@@ -272,7 +274,7 @@ def get_layout() -> html.Div:
                             ),
                         ],
                     ),
-                ], id="ego-details-col", width=4, style={"borderLeft": f"1px solid {COLOR_GRAY_LIGHTER}", "paddingLeft": "16px"}),
+                ], id="ego-details-col", width=4, style={"borderLeft": f"1px solid {COLOR_GRAY_LIGHTER}", "paddingLeft": "8px"}),
             ], className="g-0"),
 
             # Hidden Output target for the clientside render callback.
@@ -280,6 +282,7 @@ def get_layout() -> html.Div:
         ],
         id="ego-page",
         style={"padding": "0 8px"},
+        className="dense-page",
     )
 
 

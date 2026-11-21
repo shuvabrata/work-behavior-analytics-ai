@@ -7,6 +7,8 @@ across the graph page layout.
 from dash import dcc, html
 from ui.styles import (
     COLOR_GRAY_DARK,
+    FONT_SIZE_TINY,
+    FONT_SIZE_XTINY,
     FONT_WEIGHT_SEMIBOLD,
 )
 
@@ -34,7 +36,7 @@ def create_time_slider_pair(suffix: str, label: str) -> html.Div:
     """
     return html.Div([
         html.Label(label, style={
-            "fontSize": "11px",
+            "fontSize": FONT_SIZE_TINY,
             "fontWeight": FONT_WEIGHT_SEMIBOLD,
             "color": COLOR_GRAY_DARK,
             "marginBottom": "4px",
@@ -59,7 +61,7 @@ def create_time_slider_pair(suffix: str, label: str) -> html.Div:
         html.Small(
             id=f"time-slider-{suffix}-label",
             className="d-block mt-1",
-            style={"fontSize": "10px", "color": "var(--color-text-secondary)"},
+            style={"fontSize": FONT_SIZE_XTINY, "color": "var(--color-text-secondary)"},
         ),
     ], style={
         "backgroundColor": "var(--color-background-pale)",

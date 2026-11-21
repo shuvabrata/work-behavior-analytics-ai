@@ -49,6 +49,19 @@
 - **Category**: tech-debt (UI density / design tokens)
 - **Planned at**: commit `cef02fa4`, 2026-11-21
 
+### Progress
+
+| Step | Scope | Status |
+|---|---|---|
+| 1 | Shared text scale, shared chrome, `.dense-page` CSS | ✅ DONE (gate 1 confirmed) |
+| 2 | Graph | ✅ DONE (gate 2 confirmed) |
+| 3 | Timeline | ✅ DONE (gate 3 confirmed) |
+| 4 | Search | ⬜ TODO |
+| 5 | Catalog | ⬜ TODO |
+| 6 | Collaboration Network (both pages) | ⬜ TODO |
+| 7 | Design docs | ⬜ TODO |
+| 8 | Full CI gate | ⬜ TODO |
+
 ## Why this matters
 
 The app is a heavy-duty workbench, but it spends screen area the way a marketing
@@ -1345,13 +1358,32 @@ ALL must hold, **after gates 1-6 have each been confirmed by the operator**:
       **Do not use the `src/ui/pages/*.py` glob here.**
 - [ ] `grep -c "Inter:wght@400;500;600;700" src/ui/layout.py` → 1
 - [ ] `grep -n "Inter:wght" docs/design/design-system.md` → matches `layout.py`
-- [ ] **Gate 1 confirmed**: card-page interior padding identical to before; card
+- [x] **Gate 1 confirmed**: card-page interior padding identical to before; card
       and form pages reviewed for text regressions (Chat composer, Analytics
       cards, setup banner, Settings table); both themes checked
-- [ ] **Gate 2 confirmed**: Graph canvas and empty state both grown and **equal**;
+- [x] **Gate 2 confirmed**: Graph canvas and empty state both grown and **equal**;
       filter panel shows no wrapping
-- [ ] **Gate 3 confirmed**: Timeline row count ≥ baseline, per-lane truncation loss
+      - Canvas and empty state both measured 784px tall. Canvas sits 52px lower
+        only while the status strip is visible; dismissing the alert collapses the
+        strip to zero and the canvas returns flush to the viewport edge. The
+        transient offset is accepted — the strip is dismissable and the canvas is
+        pannable, so no content is unreachable. No change made.
+- [x] **Gate 3 confirmed**: Timeline row count ≥ baseline, per-lane truncation loss
       reported, no clipped card text
+      - Card height 52px → 44px and lane pitch 56px → 48px, identical in both
+        themes. Zero vertically clipped cards.
+      - Row count at the natural window is 4 = baseline. The grid is
+        content-height-limited, so the reclaimed height shrinks the container
+        instead of revealing another row; scrolled windows show the dense card
+        crossing an extra-row threshold one step earlier (216px: 2 → 3 rows;
+        330px: 3 → 4 rows). No window shows fewer rows than the baseline.
+      - **Truncation loss: none.** Comparing fit-per-text against the pre-density
+        card metrics, the primary line sits at 100% in both states, and the
+        secondary name is equal or slightly better under the dense rule
+        (+0.0pp, +1.6pp, +1.9pp) — the tighter padding (6px vs 7px per side)
+        hands each name ~2px more width. No text is worse off.
+      - Page keeps no scrollbar: `scrollHeight == clientHeight` at a 900px
+        viewport, and neither axis overflows.
 - [ ] **Gate 4 confirmed**: Search result count ≥ baseline, filter inputs unchanged
 - [ ] **Gate 5 confirmed**: Catalog table denser **and** Settings → User Management
       table **not** denser

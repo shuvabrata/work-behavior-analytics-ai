@@ -442,7 +442,8 @@ def get_layout() -> html.Div:
                 scrollable=True,
                 is_open=False,
             ),
-        ]
+        ],
+        className="dense-page",
     )
 
 

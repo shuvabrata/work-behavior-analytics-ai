@@ -10,7 +10,7 @@ Plan files for completed work are removed as they land — that is this director
 
 | Plan | Title | Priority | Effort | Depends on | Status |
 |------|-------|----------|--------|------------|--------|
-| 010 | Compact the data-dense pages and raise the app-wide font scale | P2 | M | — | IN PROGRESS — steps 1-3 of 8 done (gates 1-3 confirmed); next is step 4, Search |
+| 010 | Compact the data-dense pages and raise the app-wide font scale | P2 | M | — | IN PROGRESS — steps 1-4 of 8 done (gates 1-4 confirmed); next is step 5, Catalog |
 
 ## Dependency notes
 

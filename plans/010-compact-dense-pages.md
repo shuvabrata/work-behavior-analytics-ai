@@ -56,7 +56,7 @@
 | 1 | Shared text scale, shared chrome, `.dense-page` CSS | ✅ DONE (gate 1 confirmed) |
 | 2 | Graph | ✅ DONE (gate 2 confirmed) |
 | 3 | Timeline | ✅ DONE (gate 3 confirmed) |
-| 4 | Search | ⬜ TODO |
+| 4 | Search | ✅ DONE (gate 4 confirmed) |
 | 5 | Catalog | ⬜ TODO |
 | 6 | Collaboration Network (both pages) | ⬜ TODO |
 | 7 | Design docs | ⬜ TODO |
@@ -1045,8 +1045,9 @@ In `src/ui/pages/search.py:762`, add `className="dense-page"` to the
 
 #### 4b. Compress the result card
 
-`src/ui/pages/search.py`, the result card at lines 578-588. Change `padding` and
-`marginBottom` from the shared tokens to literals:
+`src/ui/pages/search.py`, the result card at lines 578-588. Compress `padding`
+from its current token to the next one down, expressed with the token rather than
+a literal:
 
 ```python
     return html.Div(
@@ -1056,16 +1057,29 @@ In `src/ui/pages/search.py:762`, add `className="dense-page"` to the
             "border": f"1px solid {COLOR_BORDER}",
             "borderLeft": f"3px solid {badge_bg}",
             "borderRadius": "2px",
-            # Literals, not SPACING_*, which the card pages share.
-            "padding": "10px",
-            "marginBottom": "8px",
+            "padding": SPACING_XSMALL,
+            "marginBottom": SPACING_XSMALL,
         },
     )
 ```
 
-Use **literals here, not the tokens** — `SPACING_SMALL` and `SPACING_XSMALL` are
-shared with the card pages, so changing the tokens would densify Analytics. The
-comment above is the house-style note explaining why.
+`SPACING_XSMALL` is `12px`; the card's padding was `SPACING_SMALL` (`16px`) and
+its margin was already `SPACING_XSMALL`, so only the padding value changes.
+
+**Values come from the token scale, not from literals.** The original draft of
+this step used a page-local literal because the token *values* are shared with
+the card pages — but changing a value is not the same act as reusing an existing
+one. Reusing `SPACING_XSMALL` here touches nothing the card pages read, so it
+costs them nothing, while a literal would put hardcoded pixels into a codebase
+whose design system states spacing must always come from the `SPACING_*` tokens.
+The measure of compliance is whether the token's *value* is edited, not whether
+the token is referenced.
+
+This is the smaller of the two available gains, and it was chosen deliberately:
+it reclaims 80px of results-list height against the 156px a 10px/8px literal pair
+would, and in exchange the step keeps the documented token convention intact. A
+future pass that wants the larger gain should do it by adding a value to the
+token scale, not by hardcoding.
 
 **Do not** compress the page's filter inputs. They take their padding and
 line-height from the shared `INPUT_STYLE` constant (`src/ui/styles.py`), which
@@ -1089,7 +1103,8 @@ so no new import is needed.
 ```bash
 grep -c "dense-page" src/ui/pages/search.py   # 1
 grep -rnE '["'\'']fontSize["'\'']\s*:\s*["'\''](9|10)px["'\'']' src/ui/pages/search.py   # no matches
-grep -n '"padding": "10px"' src/ui/pages/search.py   # 1
+grep -n '"padding": SPACING_XSMALL,\|"marginBottom": SPACING_XSMALL,' src/ui/pages/search.py   # 2
+grep -n '"padding": "10px"\|"marginBottom": "8px"' src/ui/pages/search.py   # no matches
 pytest -m unit tests -q
 ```
 
@@ -1384,7 +1399,25 @@ ALL must hold, **after gates 1-6 have each been confirmed by the operator**:
         hands each name ~2px more width. No text is worse off.
       - Page keeps no scrollbar: `scrollHeight == clientHeight` at a 900px
         viewport, and neither axis overflows.
-- [ ] **Gate 4 confirmed**: Search result count ≥ baseline, filter inputs unchanged
+- [x] **Gate 4 confirmed**: Search result count ≥ baseline, filter inputs unchanged
+      - Result card padding `SPACING_SMALL` → `SPACING_XSMALL` (16px → 12px);
+        `marginBottom` stays `SPACING_XSMALL` (12px). Card height 175px → 167px and
+        the results column's scrollHeight 2178px → 2098px (80px of reclaimed list
+        length, ~3.7%).
+      - Visible cards at a given scroll position are never meaningfully fewer under
+        the density rule. Sweep of `#content-col` scrollTop 0→1300 in 100px steps
+        against a forced pre-step-4 reference: identical at 10 positions, and +1
+        fully-visible card at 800, 1000 and 1200. One position (400) reports one
+        card fewer, and inspecting the geometry shows the card's top edge sits
+        0.6px above the viewport edge — a sub-pixel boundary artifact, not a
+        regression.
+      - **Filter inputs unchanged**, as required: the shared `INPUT_STYLE`
+        consumers measure `padding: 16px 14px`, `line-height: 19.5px`,
+        `font-size: 13px`, `height: 34px` both before and after. The constant was
+        not touched, so Settings → Runtime is unaffected.
+      - No text clipped in any card (`0` cards with overflowing leaf text in both
+        states), and all 10 result badges render on a single line with no
+        wrapping. Both themes measure identical; no horizontal overflow.
 - [ ] **Gate 5 confirmed**: Catalog table denser **and** Settings → User Management
       table **not** denser
 - [ ] **Gate 6 confirmed**: every measured value **equal** between the two

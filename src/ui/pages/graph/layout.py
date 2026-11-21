@@ -16,6 +16,9 @@ from ui.components.result_pane import (
     create_table_result_container,
 )
 from ui.styles import (
+    FONT_SIZE_TINY,
+    FONT_SIZE_XSMALL,
+    FONT_SIZE_XTINY,
     FONT_WEIGHT_SEMIBOLD,
     COLOR_BACKGROUND_WHITE,
     COLOR_BORDER,
@@ -65,7 +68,7 @@ def _filter_card() -> dbc.Card:
                     color="link",
                     size="sm",
                     className="ms-auto",
-                    style={"fontSize": "11px", "padding": "0", "textDecoration": "none"}
+                    style={"fontSize": FONT_SIZE_TINY, "padding": "0", "textDecoration": "none"}
                 )
             ], className="d-flex justify-content-between align-items-start mb-3"),
 
@@ -88,7 +91,7 @@ def _filter_card() -> dbc.Card:
                     id="time-filters-collapse-toggle",
                     className="collapse-toggle-subtle",
                     style={
-                        "fontSize": "11px",
+                        "fontSize": FONT_SIZE_TINY,
                         "fontWeight": FONT_WEIGHT_SEMIBOLD,
                         "color": COLOR_GRAY_DARK,
                         "marginBottom": "8px",
@@ -113,7 +116,7 @@ def _filter_card() -> dbc.Card:
                     html.Label(
                         "Node Types:",
                         style={
-                            "fontSize": "11px",
+                            "fontSize": FONT_SIZE_TINY,
                             "fontWeight": FONT_WEIGHT_SEMIBOLD,
                             "color": COLOR_GRAY_DARK,
                             "marginBottom": "8px",
@@ -126,7 +129,7 @@ def _filter_card() -> dbc.Card:
                         value=[],    # All selected by default
                         inline=False,
                         className="graph-filter-checklist",
-                        style={"fontSize": "12px"}
+                        style={"fontSize": FONT_SIZE_XSMALL}
                     )
                 ], width=6, className="mb-3"),
 
@@ -134,7 +137,7 @@ def _filter_card() -> dbc.Card:
                     html.Label(
                         "Relationship Types:",
                         style={
-                            "fontSize": "11px",
+                            "fontSize": FONT_SIZE_TINY,
                             "fontWeight": FONT_WEIGHT_SEMIBOLD,
                             "color": COLOR_GRAY_DARK,
                             "marginBottom": "8px",
@@ -147,7 +150,7 @@ def _filter_card() -> dbc.Card:
                         value=[],    # All selected by default
                         inline=False,
                         className="graph-filter-checklist",
-                        style={"fontSize": "12px"}
+                        style={"fontSize": FONT_SIZE_XSMALL}
                     )
                 ], width=6, className="mb-3"),
             ], className="g-2"),
@@ -160,7 +163,7 @@ def _filter_card() -> dbc.Card:
                         html.Label(
                             "Weight Threshold:",
                             style={
-                                "fontSize": "11px",
+                                "fontSize": FONT_SIZE_TINY,
                                 "fontWeight": FONT_WEIGHT_SEMIBOLD,
                                 "color": COLOR_GRAY_DARK,
                                 "marginBottom": "8px",
@@ -181,7 +184,7 @@ def _filter_card() -> dbc.Card:
                                 id="weight-threshold-label",
                                 children="Show edges with weight ≥ 0",
                                 className="d-block mt-1",
-                                style={"fontSize": "10px", "color": "var(--color-text-secondary)"}
+                                style={"fontSize": FONT_SIZE_XTINY, "color": "var(--color-text-secondary)"}
                             )
                         ])
                     ], className="mb-3"),
@@ -191,7 +194,7 @@ def _filter_card() -> dbc.Card:
                         html.Label(
                             "Edge Limit:",
                             style={
-                                "fontSize": "11px",
+                                "fontSize": FONT_SIZE_TINY,
                                 "fontWeight": FONT_WEIGHT_SEMIBOLD,
                                 "color": COLOR_GRAY_DARK,
                                 "marginBottom": "8px",
@@ -208,7 +211,7 @@ def _filter_card() -> dbc.Card:
                             value="all",
                             inline=False,
                             className="graph-filter-radio",
-                            style={"fontSize": "12px"}
+                            style={"fontSize": FONT_SIZE_XSMALL}
                         )
                     ])
                 ]
@@ -220,7 +223,7 @@ def _filter_card() -> dbc.Card:
                 style={"display": "none"},
                 children="Weight-based controls are available for weighted graphs only."
             )
-        ], className="graph-filter-card-body", style={"padding": "0 0 24px 0"})
+        ], className="graph-filter-card-body", style={"padding": "0 8px 12px 8px"})
     ], className="graph-filter-card", style={"border": "none", "backgroundColor": "transparent"})
 
 
@@ -259,7 +262,7 @@ def _console_card() -> dbc.Card:
                     style=GRAPH_HELPER_TEXT_STYLE
                 )
             ])
-        ], style={"padding": "16px"})
+        ], style={"padding": "12px"})
     ], style={"border": f"1px solid {COLOR_GRAY_LIGHTER}", "borderRadius": "2px", "backgroundColor": "var(--color-background-white)"})
 
 
@@ -348,7 +351,7 @@ def create_catalog_tab_content() -> html.Div:
                 id="catalog-query-detail",
                 children=html.Div(
                     "Select a catalog query to inspect it here.",
-                    style={"fontSize": "12px", "color": COLOR_TEXT_SECONDARY}
+                    style={"fontSize": FONT_SIZE_XSMALL, "color": COLOR_TEXT_SECONDARY}
                 ),
                 style={
                     "color": COLOR_CHARCOAL_MEDIUM,
@@ -401,7 +404,7 @@ def create_catalog_tab_content() -> html.Div:
             id="catalog-query-list",
             children=html.Div(
                 "Loading catalog queries...",
-                style={"fontSize": "12px", "color": COLOR_TEXT_SECONDARY}
+                style={"fontSize": FONT_SIZE_XSMALL, "color": COLOR_TEXT_SECONDARY}
             ),
             style={
                 "border": f"1px solid {COLOR_BORDER}",
@@ -411,7 +414,7 @@ def create_catalog_tab_content() -> html.Div:
                 "color": COLOR_CHARCOAL_MEDIUM,
             }
         ),
-    ], style={"padding": "8px 0"})
+    ], style={"padding": "4px 0"})
 
 
 def create_right_panel_tabs() -> html.Div:
@@ -471,12 +474,18 @@ def create_results_section() -> html.Div:
                     type="circle",
                     color=GRAPH_LOADING_COLOR,
                     children=[
-                        create_graph_result_container(id_prefix="graph"),
+                        create_graph_result_container(
+                            id_prefix="graph",
+                            style_override={"height": "calc(100vh - 116px)"},
+                        ),
                         create_table_result_container(id_prefix="graph"),
-                        create_results_empty_state(id_prefix="graph")
+                        create_results_empty_state(
+                            id_prefix="graph",
+                            style_override={"minHeight": "calc(100vh - 116px)"},
+                        )
                     ]
                 )
-            ], id="graph-viz-col", width=8, style={"paddingRight": "24px"}),
+            ], id="graph-viz-col", width=8, style={"paddingRight": "12px"}),
 
             # Right col: workbench tab bar + tab panels + details panel
             dbc.Col([
@@ -494,7 +503,7 @@ def create_results_section() -> html.Div:
                         },
                     )
                 ], className="graph-right-panel-workbench hover-scrollbar")
-            ], id="graph-details-col", width=4, style={"borderLeft": f"1px solid {COLOR_GRAY_LIGHTER}", "paddingLeft": "24px"})
+            ], id="graph-details-col", width=4, style={"borderLeft": f"1px solid {COLOR_GRAY_LIGHTER}", "paddingLeft": "12px"})
         ], className="g-0")
     ], className="mb-2")
 
@@ -632,4 +641,4 @@ def get_layout() -> html.Div:
         
         # Expansion modal
         create_expansion_modal(),
-    ])
+    ], className="dense-page")

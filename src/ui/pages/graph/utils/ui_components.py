@@ -134,7 +134,7 @@ def create_table_display(raw_results: list[dict[str, Any]] | None, result_count:
         return html.Div(table)
     return html.Div(
         "Query executed successfully but returned no rows.",
-        style={"fontSize": "12px", "color": COLOR_TEXT_SECONDARY, "padding": "8px 0"}
+        style={"fontSize": FONT_SIZE_XSMALL, "color": COLOR_TEXT_SECONDARY, "padding": "8px 0"}
     )
 
 

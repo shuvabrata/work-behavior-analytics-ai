@@ -5,6 +5,8 @@ relies on the shared Cytoscape stylesheet module (``ui.graph_styles``)
 but lives in the shared components package because two pages use it.
 """
 
+from typing import Any
+
 from dash import html
 import dash_cytoscape as cyto
 
@@ -16,12 +18,15 @@ from ui.styles import (
 )
 
 
-def create_graph_result_container(id_prefix: str = "graph") -> html.Div:
+def create_graph_result_container(
+    id_prefix: str = "graph", style_override: dict[str, Any] | None = None
+) -> html.Div:
     """Create main graph visualization container with Cytoscape
 
     Returns:
         html.Div containing Cytoscape graph component
     """
+    graph_style = {**GRAPH_CYTOSCAPE_STYLE, **(style_override or {})}
     return html.Div(
         id=f"{id_prefix}-cytoscape-container",
         style={"display": "none"},  # Hidden initially, then maintains consistent size after first query
@@ -32,7 +37,7 @@ def create_graph_result_container(id_prefix: str = "graph") -> html.Div:
                 id=f"{id_prefix}-cytoscape",
                 elements=[],
                 layout={'name': 'cose', 'animate': True, 'spacingFactor': 1.5},
-                style=GRAPH_CYTOSCAPE_STYLE,
+                style=graph_style,
                 stylesheet=CYTOSCAPE_STYLESHEET,
                 userZoomingEnabled=True,
                 userPanningEnabled=True,
@@ -56,18 +61,19 @@ def create_table_result_container(id_prefix: str = "graph") -> html.Div:
     )
 
 
-def create_results_empty_state(id_prefix: str = "graph") -> html.Div:
+def create_results_empty_state(
+    id_prefix: str = "graph", style_override: dict[str, Any] | None = None
+) -> html.Div:
     """Create empty state display (shown before any query execution)
 
     Returns:
         html.Div with empty state message
     """
+    empty_style = {"minHeight": "calc(75vh)", "padding": "16px"}
+    empty_style.update(style_override or {})
     return html.Div(
         id=f"{id_prefix}-results-container",
-        style={
-            "minHeight": "calc(75vh)",
-            "padding": "16px"
-        },
+        style=empty_style,
         children=[
             html.Div(
                 [

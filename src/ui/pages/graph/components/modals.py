@@ -9,6 +9,7 @@ import dash_bootstrap_components as dbc
 from dash import html
 
 from ui.settings import settings
+from ui.styles import FONT_SIZE_TINY
 
 
 def create_expansion_modal() -> dbc.Modal:
@@ -46,7 +47,7 @@ def create_expansion_modal() -> dbc.Modal:
                     size="sm",
                     className="mb-2"
                 ),
-                html.Small("Will load up to this many neighbors (1-500)", className="text-muted", style={"fontSize": "11px"})
+                html.Small("Will load up to this many neighbors (1-500)", className="text-muted", style={"fontSize": FONT_SIZE_TINY})
             ]),
             html.Div([
                 dbc.Checkbox(
@@ -55,7 +56,7 @@ def create_expansion_modal() -> dbc.Modal:
                     value=False,
                     className="mt-3"
                 ),
-                html.Small("Automatically zoom to show all nodes", className="text-muted d-block", style={"fontSize": "11px", "marginLeft": "24px"})
+                html.Small("Automatically zoom to show all nodes", className="text-muted d-block", style={"fontSize": FONT_SIZE_TINY, "marginLeft": "24px"})
             ]),
         ]),
         dbc.ModalFooter([

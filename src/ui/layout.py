@@ -32,7 +32,7 @@ def create_dash_app() -> dash.Dash:
         external_stylesheets=[
             dbc.themes.MATERIA,
             "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css",
-            "https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600;700&family=Inter:wght@300;400;500;600&display=swap"
+            "https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600;700&family=Inter:wght@400;500;600;700&display=swap"
         ],
         suppress_callback_exceptions=True  # Required for multi-page apps
     )
@@ -152,7 +152,7 @@ def create_dash_app() -> dash.Dash:
     )
 
     # Main content area with page routing
-    content = html.Div(id="page-content", className="p-2")
+    content = html.Div(id="page-content", className="px-1 py-1")
 
     app.layout = dbc.Container([
         dcc.Location(id="url", refresh=False),

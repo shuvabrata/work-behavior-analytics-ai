@@ -42,7 +42,7 @@ The clientside render callback calls cy.resize() + cy.fit() explicitly once the
 DOM is stable.
 """
 
-_CANVAS_HEIGHT = "calc(100vh - 148px)"
+_CANVAS_HEIGHT = "calc(100vh - 128px)"
 """Canvas height, sized to the chrome the page actually renders above it.
 """
 

@@ -203,7 +203,7 @@ GRID_SCROLL_STYLE: dict[str, Any] = {
     "overflow": "auto",
     # Fill the viewport below the topbar + header + selector bar; grow only as
     # far as the content needs (no premature scrollbar when the page has room).
-    "maxHeight": "calc(100vh - 220px)",
+    "maxHeight": "calc(100vh - 200px)",
     "border": f"1px solid {COLOR_BORDER}",
     "borderRadius": "2px",
     "backgroundColor": COLOR_BACKGROUND_WHITE,

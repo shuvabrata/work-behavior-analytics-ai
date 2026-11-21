@@ -30,13 +30,13 @@ FONT_SANS = "'Inter', sans-serif"
 
 # Font Sizes
 FONT_SIZE_XLARGE = "42px"
-FONT_SIZE_LARGE = "15px"
-FONT_SIZE_MEDIUM = "14px"
-FONT_SIZE_SMALL = "13px"
-FONT_SIZE_XSMALL = "12px"
-FONT_SIZE_TINY = "11px"
-FONT_SIZE_XTINY = "10px"
-FONT_SIZE_XXSMALL = "9px"
+FONT_SIZE_LARGE = "16px"
+FONT_SIZE_MEDIUM = "15px"
+FONT_SIZE_SMALL = "14px"
+FONT_SIZE_XSMALL = "13px"
+FONT_SIZE_TINY = "12px"
+FONT_SIZE_XTINY = "11px"
+FONT_SIZE_XXSMALL = "11px"
 
 # Font Weights
 FONT_WEIGHT_NORMAL = "400"
@@ -145,8 +145,8 @@ COMPACT_PAGE_HEADER_STYLE = {
     "textTransform": "uppercase",
     "letterSpacing": "0.8px",
     "borderBottom": f"1px solid {COLOR_BORDER}",
-    "paddingBottom": SPACING_XSMALL,
-    "marginBottom": SPACING_XXSMALL
+    "paddingBottom": SPACING_XXSMALL,
+    "marginBottom": SPACING_XXXSMALL
 }
 
 # Card Containers
@@ -229,7 +229,7 @@ NAVBAR_BRAND_STYLE = {
 
 TOPBAR_STYLE = {
     "minHeight": "auto",
-    "height": "44px",
+    "height": "40px",
     "padding": "0",
     "borderBottom": f"1px solid {COLOR_BORDER}",
     "boxShadow": "0 1px 2px var(--color-topbar-shadow)",
@@ -237,7 +237,7 @@ TOPBAR_STYLE = {
 }
 
 TOPBAR_CONTAINER_STYLE = {
-    "padding": "8px 16px"
+    "padding": "4px 12px"
 }
 
 TOGGLE_BUTTON_STYLE = {

@@ -191,7 +191,7 @@ def get_layout() -> html.Div:
                             layout=_COLLABORATION_LAYOUT,
                             style={
                                 "width": "100%",
-                                "height": "calc(100vh - 200px)",
+                                "height": "calc(100vh - 180px)",
                                 "border": f"1px solid {COLOR_GRAY_LIGHTER}",
                                 "borderRadius": "2px",
                             },

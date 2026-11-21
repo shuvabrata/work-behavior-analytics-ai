@@ -60,7 +60,7 @@
 | 5 | Catalog | ✅ DONE (gate 5 confirmed) |
 | 6 | Collaboration Network (both pages) | ✅ DONE (gate 6 confirmed) |
 | 7 | Design docs | ✅ DONE |
-| 8 | Full CI gate | ⬜ TODO |
+| 8 | Full CI gate | ✅ DONE (`pytest` 2770 passed / 0 failed / 2 skipped; `mypy` no issues; `pylint` 10.00/10) |
 
 ## Why this matters
 
@@ -1359,27 +1359,27 @@ assertions.
 
 ALL must hold, **after gates 1-6 have each been confirmed by the operator**:
 
-- [ ] `pytest -m unit tests -q` exits 0
-- [ ] `mypy src/` exits 0; `pylint src --score=y` reports ≥ 10.0 (the CI gates —
+- [x] `pytest -m unit tests -q` exits 0
+- [x] `mypy src/` exits 0; `pylint src --score=y` reports ≥ 10.0 (the CI gates —
       `flake8` is not one; see "Commands you will need")
-- [ ] `grep -rn "dense-page" src/ui/pages/ | wc -l` → 6 (one per dense page root)
-- [ ] `grep -c "dense-page" src/ui/assets/executive-dashboard.css` → 5 — the five
+- [x] `grep -rn "dense-page" src/ui/pages/ | wc -l` → 6 (one per dense page root)
+- [x] `grep -c "dense-page" src/ui/assets/executive-dashboard.css` → 5 — the five
       selectors in step 1g's block: `.timeline-card`,
       `.graph-right-panel-tab-icon`, `.graph-right-panel-tab-bar`, and the two
       `.executive-table` selectors. There is deliberately no `graph-filter-card`
       rule.
-- [ ] `grep -n "dense-page .graph-filter-card" src/ui/assets/executive-dashboard.css` → no matches
-- [ ] `grep -nE "font-size: *(9|10)px" src/ui/assets/executive-dashboard.css` → no matches
-- [ ] `grep -cE "font-size: *var\(" src/ui/assets/executive-dashboard.css` → 3
-- [ ] `grep -rnE '["'\'']fontSize["'\'']\s*:\s*["'\''](9|10)px["'\'']' src/ui/pages/graph/ src/ui/pages/collaboration_network/ src/ui/pages/collaboration_network_ego/ src/ui/pages/search.py` → no matches
-- [ ] `grep -n "SPACING_\(XXXSMALL\|XXSMALL\|XSMALL\|SMALL\|MEDIUM\|LARGE\|XLARGE\|XXLARGE\) =" src/ui/styles.py` → values unchanged from `4px/8px/12px/16px/24px/32px/40px/48px`
-- [ ] `grep -n "\"height\": \"40px\"" src/ui/styles.py` → 1
-- [ ] `grep -rn "calc(100vh" src/ui/pages/ --include="*.py"` → timeline 200px, ego
+- [x] `grep -n "dense-page .graph-filter-card" src/ui/assets/executive-dashboard.css` → no matches
+- [x] `grep -nE "font-size: *(9|10)px" src/ui/assets/executive-dashboard.css` → no matches
+- [x] `grep -cE "font-size: *var\(" src/ui/assets/executive-dashboard.css` → 3
+- [x] `grep -rnE '["'\'']fontSize["'\'']\s*:\s*["'\''](9|10)px["'\'']' src/ui/pages/graph/ src/ui/pages/collaboration_network/ src/ui/pages/collaboration_network_ego/ src/ui/pages/search.py` → no matches
+- [x] `grep -n "SPACING_\(XXXSMALL\|XXSMALL\|XSMALL\|SMALL\|MEDIUM\|LARGE\|XLARGE\|XXLARGE\) =" src/ui/styles.py` → values unchanged from `4px/8px/12px/16px/24px/32px/40px/48px`
+- [x] `grep -n "\"height\": \"40px\"" src/ui/styles.py` → 1
+- [x] `grep -rn "calc(100vh" src/ui/pages/ --include="*.py"` → timeline 200px, ego
       128px, collab 180px, chat 220px (unchanged), step 2d's two Graph overrides,
       and the ego `_EMPTY_STATE_STYLE` docstring's historical `145px` (leave it).
       **Do not use the `src/ui/pages/*.py` glob here.**
-- [ ] `grep -c "Inter:wght@400;500;600;700" src/ui/layout.py` → 1
-- [ ] `grep -n "Inter:wght" docs/design/design-system.md` → matches `layout.py`
+- [x] `grep -c "Inter:wght@400;500;600;700" src/ui/layout.py` → 1
+- [x] `grep -n "Inter:wght" docs/design/design-system.md` → matches `layout.py`
 - [x] **Gate 1 confirmed**: card-page interior padding identical to before; card
       and form pages reviewed for text regressions (Chat composer, Analytics
       cards, setup banner, Settings table); both themes checked
@@ -1468,10 +1468,10 @@ ALL must hold, **after gates 1-6 have each been confirmed by the operator**:
         Graph, and the first text line measures an 8px inset from the panel edge in
         both themes. The column gutters were deliberately left at their new 8px —
         only the inner container's horizontal padding changed.
-- [ ] Measured: the rendered topbar is 40px, not re-inflated by Bootstrap to fit
+- [x] Measured: the rendered topbar is 40px, not re-inflated by Bootstrap to fit
       its 32px controls
-- [ ] No files outside the in-scope list are modified (`git status`)
-- [ ] `plans/README.md` status row updated
+- [x] No files outside the in-scope list are modified (`git status`)
+- [x] `plans/README.md` status row updated
 
 ## STOP conditions
 

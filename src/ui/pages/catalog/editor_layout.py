@@ -110,7 +110,6 @@ def get_editor_layout() -> html.Div:
                     _render_factory_diff_modal(),
                     _render_test_results_modal(),
                 ],
-                className="editor-form",
                 style={**CARD_CONTAINER_STYLE, "paddingTop": SPACING_XSMALL},
             ),
         ],

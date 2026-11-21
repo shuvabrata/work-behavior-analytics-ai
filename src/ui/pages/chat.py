@@ -5,11 +5,10 @@ import dash_bootstrap_components as dbc
 from dash import html, dcc, Input, Output, State, callback, clientside_callback, ClientsideFunction, no_update
 
 from common.logger import logger
-from domain.timezone import now_in_app_timezone, humanize_duration
+from domain.timezone import now_in_app_timezone, humanize_duration, to_app_timezone
 from ui import api_client
 from ui.api_client import ApiError
 from ui.runtime_settings import runtime_settings
-from ui.settings import settings
 from ui.components.common import create_diamond_icon, create_page_header
 from ui.styles import (
     FONT_SANS,
@@ -407,7 +406,8 @@ def render_messages(messages: list[dict[str, Any]] | None) -> list[html.Div]:
         if timestamp:
             try:
                 dt = datetime.fromisoformat(timestamp)
-                actual_time = dt.strftime(getattr(settings, "UI_DATETIME_FORMAT", "%b %d, %Y %I:%M %p"))
+                dt = to_app_timezone(dt)
+                actual_time = dt.strftime(runtime_settings.get("UI_DATETIME_FORMAT") or "%b %d, %Y %I:%M %p")
                 duration_str = humanize_duration(dt)
                 display_timestamp = html.Span(duration_str, title=actual_time)
             except (ValueError, TypeError) as exc:

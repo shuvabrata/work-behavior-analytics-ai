@@ -84,6 +84,9 @@ window.dash_clientside.stream = {
             }
 
             function formatTimestamp() {
+                // A UTC instant ("Z"). The Python render path converts it to the
+                // app timezone before display, so the offset need not be baked in
+                // here. See render_messages in src/ui/pages/chat.py.
                 return new Date().toISOString();
             }
 

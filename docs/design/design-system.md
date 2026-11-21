@@ -1,6 +1,6 @@
 # Executive Dashboard Design System
 
-This document describes the centralized design system for the Work Behavior Analytics AI application's frontend. All design tokens, components, and styling patterns are defined in `app/dash_app/styles.py` and `app/dash_app/assets/executive-dashboard.css`.
+This document describes the centralized design system for the Work Behavior Analytics AI application's frontend. All design tokens, components, and styling patterns are defined in `src/ui/styles.py` and `src/ui/assets/executive-dashboard.css`.
 
 ## Table of Contents
 
@@ -29,14 +29,14 @@ The Executive Dashboard aesthetic prioritizes:
 
 ## Theme Foundation
 
-The design system now has a semantic token layer in `app/dash_app/styles.py`.
+The design system now has a semantic token layer in `src/ui/styles.py`.
 
 - `THEME_TOKENS` stores theme values keyed by semantic names (for example `brand.primary`, `surface.base`, `text.muted`)
 - `ACTIVE_THEME` defaults to `executive-dark`; it is the single source of truth for the default theme
 - Supported themes: `executive-light`, `executive-dark`
 - Existing exported constants (`COLOR_NAVY`, `COLOR_BORDER`, etc.) are still available and now resolve from semantic tokens
 - Theme switching is persisted with `dcc.Store(storage_type="local")` and applied via `app-shell` theme classes (`theme-executive-light`, `theme-executive-dark`)
-- CSS variables are defined for light mode under both `:root` and `:root[data-theme="executive-light"]`, with dark overrides in `.theme-executive-dark` in `app/dash_app/assets/executive-dashboard.css`
+- CSS variables are defined for light mode under both `:root` and `:root[data-theme="executive-light"]`, with dark overrides in `.theme-executive-dark` in `src/ui/assets/executive-dashboard.css`
 
 This preserves current visuals while making it easier to add future themes (for example `executive-dark`) without rewriting component code.
 
@@ -193,7 +193,7 @@ One exception recurs: an element whose size is set by an inline `style=` prop ca
 **Style Token**: `COMPACT_PAGE_HEADER_STYLE`
 
 ```python
-from app.dash_app.components.common import create_page_header
+from ui.components.common import create_page_header
 
 # Usage — breadcrumb is a list of (label, href) segments; href=None = current page
 header = create_page_header(
@@ -223,7 +223,7 @@ Dashboard navigation rule).
 **Style Tokens**: `FEATURE_CARD_STYLE`, `FEATURE_CARD_TITLE_STYLE`, `FEATURE_CARD_DESCRIPTION_STYLE`
 
 ```python
-from app.dash_app.components.common import create_feature_card
+from ui.components.common import create_feature_card
 
 # Usage
 card = create_feature_card(
@@ -239,7 +239,7 @@ card = create_feature_card(
 
 ### Chat Messages
 
-**Implementation**: Built inline in the chat page — see `render_messages` in `src/app/dash_app/pages/chat.py`. There are no chat-message style tokens.
+**Implementation**: Built inline in the chat page — see `render_messages` in `src/ui/pages/chat.py`. There are no chat-message style tokens.
 
 **Visual**: 
 - User messages: Navy background with white text, right-aligned
@@ -252,7 +252,7 @@ card = create_feature_card(
 **Style Tokens**: `PLACEHOLDER_ICON_STYLE`, `PLACEHOLDER_MESSAGE_STYLE`
 
 ```python
-from app.dash_app.components.common import create_placeholder_section
+from ui.components.common import create_placeholder_section
 
 # Usage
 placeholder = create_placeholder_section(
@@ -425,7 +425,7 @@ options = [{"label": "Inherit (default)", "value": ""}] + [
 
 ---
 
-All CSS variables are defined in `app/dash_app/assets/executive-dashboard.css`:
+All CSS variables are defined in `src/ui/assets/executive-dashboard.css`:
 
 ```css
 :root,
@@ -469,8 +469,8 @@ All CSS variables are defined in `app/dash_app/assets/executive-dashboard.css`:
 ```python
 from dash import html
 import dash_bootstrap_components as dbc
-from app.dash_app.components.common import create_page_header, create_feature_card
-from app.dash_app.styles import CARD_CONTAINER_STYLE
+from ui.components.common import create_page_header, create_feature_card
+from ui.styles import CARD_CONTAINER_STYLE
 
 def get_layout():
     return html.Div([
@@ -502,7 +502,7 @@ def get_layout():
 
 ```python
 from dash import html
-from app.dash_app.styles import (
+from ui.styles import (
     COLOR_NAVY,
     FONT_SANS,
     SPACING_MEDIUM,
@@ -525,7 +525,7 @@ custom_div = html.Div(
 ### Merging Styles
 
 ```python
-from app.dash_app.styles import FEATURE_CARD_STYLE, merge_styles
+from ui.styles import FEATURE_CARD_STYLE, merge_styles
 
 custom_card_style = merge_styles(
     FEATURE_CARD_STYLE,
@@ -576,12 +576,12 @@ card = html.Div("Content", style=custom_card_style)
 
 ### Adding New Colors
 
-1. Add constant to `app/dash_app/styles.py`:
+1. Add constant to `src/ui/styles.py`:
    ```python
    COLOR_NEW = "#hexcode"
    ```
 
-2. Add CSS variable to `app/dash_app/assets/executive-dashboard.css`:
+2. Add CSS variable to `src/ui/assets/executive-dashboard.css`:
    ```css
    :root {
        --color-new: #hexcode;
@@ -590,8 +590,8 @@ card = html.Div("Content", style=custom_card_style)
 
 ### Adding New Components
 
-1. Add component function to `app/dash_app/components/common.py`
-2. Add style constants to `app/dash_app/styles.py`
+1. Add component function to `src/ui/components/common.py`
+2. Add style constants to `src/ui/styles.py`
 3. Document in this file under "Components" section
 4. Add usage example
 
@@ -607,20 +607,49 @@ card = html.Div("Content", style=custom_card_style)
 ## File Structure
 
 ```
-app/dash_app/
-├── styles.py                     # Python design tokens (single source of truth)
-├── components/
-│   └── common.py                 # Reusable UI components
-├── assets/
-│   └── executive-dashboard.css   # CSS animations, interactions, variables
+src/ui/                             # Imported as the top-level `ui` package
+├── layout.py                       # App shell, nav, and route → page dispatch
+├── styles.py                       # Python design tokens (single source of truth)
+├── api_client.py                   # HTTP client to the backend API
+├── settings.py                     # UISettings (credential-free)
+├── runtime_settings.py             # Runtime-settings snapshot from the API
+├── auth.py                         # BFF session handling
+├── session_guard.py                # Session-expiry guard
+├── stream_proxy.py                 # Chat streaming proxy
+├── request_logging.py              # Request logging
+├── graph_styles.py                 # Shared graph styling used across pages
+├── collaboration_params.py         # Shared collaboration-network parameters
+├── components/                     # Shared UI components
+│   ├── common.py                   # Page headers, feature cards, placeholder sections
+│   ├── account_bar.py              # Account menu
+│   ├── hub_card.py                 # Hub card
+│   ├── permission_errors.py        # Permission-error surfaces
+│   ├── person_picker.py            # Person picker
+│   ├── result_pane.py              # Shared result pane
+│   ├── setup_banner.py             # Setup banner
+│   └── spotlight.py                # Spotlight
+├── assets/                         # Served CSS and JavaScript
+│   ├── executive-dashboard.css     # CSS animations, interactions, variables
+│   ├── sidebar.css                 # Sidebar styles
+│   ├── stream-bridge.js            # Chat streaming bridge
+│   └── tooltip-transform.js        # Graph tooltip positioning
 └── pages/
-    ├── chat.py                   # Chat page
-    ├── people.py                 # People page
-    ├── progress.py               # Progress page
-    ├── settings.py               # Settings page
-    └── graph/
-        └── layout.py             # Graph visualization page
+    ├── analytics.py                # Analytics page (single module)
+    ├── chat.py                     # Chat page (single module)
+    ├── search.py                   # Search page (single module)
+    ├── catalog/                    # Page package: layout.py + callbacks.py
+    ├── collaboration_network/      # Page package: layout.py + callbacks/
+    ├── collaboration_network_ego/  # Page package: layout.py + callbacks/
+    ├── connectors/                 # Page package: layout.py + callbacks.py
+    ├── developer/                  # Page package: layout.py + callbacks.py
+    ├── graph/                      # Page package: layout.py + callbacks/
+    ├── settings/                   # Page package: layout.py + callbacks.py
+    └── timeline/                   # Page package: layout.py + callbacks.py
 ```
+
+A page is either a single module (`analytics.py`, `chat.py`, `search.py`) or a package
+directory whose `__init__.py` imports its `callbacks` module, so the page's callbacks
+register on import.
 
 ---
 

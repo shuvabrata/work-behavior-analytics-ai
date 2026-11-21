@@ -839,24 +839,33 @@ input::placeholder {
     border-color: var(--color-navy);
 }
 
-.graph-filter-card .rc-slider-mark-text,
-.graph-filter-card .rc-slider-dot,
-.graph-filter-card .rc-slider-handle,
-.graph-filter-card .rc-slider-track,
-.graph-filter-card .rc-slider-rail {
+/* Dash 4 renders sliders with Radix markup (`dash-slider-*`). Its own defaults are
+   not theme-aware: the mark text resolves to a near-black and the fill to purple
+   in both themes. Override the Dash variables rather than restyling each part, so
+   marks, filled track and thumb all follow the active theme. */
+.graph-filter-card {
+    --Dash-Text-Strong: var(--color-text-secondary);
+    --Dash-Fill-Interactive-Strong: var(--color-navy);
+}
+
+.graph-filter-card .dash-slider-mark {
+    color: var(--color-text-secondary);
+}
+
+.graph-filter-card .dash-slider-track {
+    background-color: var(--color-border-gray);
+}
+
+.graph-filter-card .dash-slider-thumb {
+    border: 2px solid var(--color-background-white);
+}
+
+/* Dash gives the slider's value box a hard-coded white fill. Point it at the same
+   themed input surface the app's other form controls use, so the box follows the
+   active theme. The box's text inherits the theme colour already. */
+.graph-filter-card .dash-input-container {
+    background-color: var(--color-input-background);
     border-color: var(--color-border-gray);
-}
-
-.graph-filter-card .rc-slider-mark-text {
-    color: var(--color-text-secondary) !important;
-}
-
-.graph-filter-card .rc-slider-track {
-    background-color: var(--color-navy);
-}
-
-.graph-filter-card .rc-slider-handle {
-    background-color: var(--color-background-white);
 }
 
 /* Dash slider tooltip — explicit theme styling */

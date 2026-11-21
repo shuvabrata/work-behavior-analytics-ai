@@ -56,7 +56,11 @@ def create_expansion_modal() -> dbc.Modal:
                     value=False,
                     className="mt-3"
                 ),
-                html.Small("Automatically zoom to show all nodes", className="text-muted d-block", style={"fontSize": FONT_SIZE_TINY, "marginLeft": "24px"})
+                html.Small(
+                    "Automatically zoom to show all nodes",
+                    className="text-muted d-block",
+                    style={"fontSize": FONT_SIZE_TINY, "marginLeft": "24px"},
+                )
             ]),
         ]),
         dbc.ModalFooter([

@@ -57,8 +57,8 @@
 | 2 | Graph | ✅ DONE (gate 2 confirmed) |
 | 3 | Timeline | ✅ DONE (gate 3 confirmed) |
 | 4 | Search | ✅ DONE (gate 4 confirmed) |
-| 5 | Catalog | ⬜ TODO |
-| 6 | Collaboration Network (both pages) | ⬜ TODO |
+| 5 | Catalog | ✅ DONE (gate 5 confirmed) |
+| 6 | Collaboration Network (both pages) | ✅ DONE (gate 6 confirmed) |
 | 7 | Design docs | ⬜ TODO |
 | 8 | Full CI gate | ⬜ TODO |
 
@@ -1425,10 +1425,49 @@ ALL must hold, **after gates 1-6 have each been confirmed by the operator**:
       - No text clipped in any card (`0` cards with overflowing leaf text in both
         states), and all 10 result badges render on a single line with no
         wrapping. Both themes measure identical; no horizontal overflow.
-- [ ] **Gate 5 confirmed**: Catalog table denser **and** Settings → User Management
+- [x] **Gate 5 confirmed**: Catalog table denser **and** Settings → User Management
       table **not** denser
-- [ ] **Gate 6 confirmed**: every measured value **equal** between the two
+      - Catalog (`denseScope=True`): cell padding `4px` → `2px` vertical, row height
+        48/50px → **44/46px**, table height 6990px → **6426px** (−564px), visible
+        rows 14 → **15**. Identical in both themes.
+      - Settings → User Management (`denseScope=False`): cell padding `4px`,
+        row height 38px, table height 103px — **unchanged**, matching the pre-step-5
+        baseline exactly. This is the check that proves the `.dense-page` scoping held.
+      - The step required a `.executive-table` rule that actually bites. The original
+        `padding-top/bottom: 4px` restated Bootstrap Materia's `.table-sm` value
+        (`size="sm"` on both tables) and measured as a no-op — computed padding was
+        4px with and without the class on both pages. The rule was corrected to 2px
+        so the density is real; see the amended CSS block above step 2.
+      - Horizontal cell padding is deliberately left at Bootstrap's 4px: a `padding`
+        shorthand would move column gutters, which is out of scope for this step.
+- [x] **Gate 6 confirmed**: every measured value **equal** between the two
       Collaboration Network pages
+      - Org and per-person pages match on every sizing value, in both themes:
+        root `padding: 0 8px` with `className="dense-page"`; viz column
+        `padding-right: 8px`; details column `padding-left: 8px` with the 1px left
+        border; filter-card body `padding: 0 0 12px 0`; identical inline font-size
+        sets (`11px`/`12px`/`13px`, all token-backed).
+      - No label wraps in either filter panel (0 wrapped), so the +1px literal
+        raise did not reflow a control.
+      - No page scrollbar and no horizontal overflow on either page; canvas fills
+        the viewport on both.
+      - The org page carries one extra control (a `graph-filter-checklist`, absent
+        from the per-person page), so it has 5 inline font literals against 4 —
+        the value the original plan mis-stated as 4 vs 4. Both pages' literals were
+        raised with the same tokens.
+      - The plan's claim that "no new imports are needed" was wrong: both files
+        imported only `FONT_SIZE_SMALL`/`FONT_SIZE_XSMALL`. `FONT_SIZE_TINY` and
+        `FONT_SIZE_XTINY` were added to both import blocks, verified as used in
+        each (pylint has no unused-import).
+      - **Follow-on fix found by browser review**: both collaboration filter
+        panels had `graph-filter-card-body` at `padding: 0 0 12px 0` — zero left
+        and right — so the panel's inner text sat flush against its left edge.
+        Pre-existing, not caused by this step (HEAD carried the same `0 0 24px 0`
+        with the horizontal values already at zero); Graph had been fixed the same
+        way during its own step. Both pages now read `0 8px 12px 8px`, matching
+        Graph, and the first text line measures an 8px inset from the panel edge in
+        both themes. The column gutters were deliberately left at their new 8px —
+        only the inner container's horizontal padding changed.
 - [ ] Measured: the rendered topbar is 40px, not re-inflated by Bootstrap to fit
       its 32px controls
 - [ ] No files outside the in-scope list are modified (`git status`)

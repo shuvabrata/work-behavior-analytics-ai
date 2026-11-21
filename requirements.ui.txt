@@ -24,4 +24,4 @@ requests==2.34.2
 # plotly is a Dash transitive dependency; pinned so a drift in the graph
 # rendering library is visible in the diff rather than silent.
 plotly==7.1.0
-gunicorn==26.2.0
+gunicorn==27.0.1

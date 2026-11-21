@@ -27,6 +27,7 @@ from domain.timezone import humanize_duration, to_app_timezone
 from ui.settings import settings
 from common.logger import logger
 
+from ui.components.select_field import build_select
 from ui.styles import (
     # Style patterns
     COMPACT_PAGE_HEADER_STYLE,
@@ -702,21 +703,17 @@ def create_controls_bar(id_prefix: str, *, layout_enabled: bool = True) -> dbc.R
                     "letterSpacing": "0.3px",
                 }
             ),
-            dbc.Select(
-                id=f"{id_prefix}-layout-selector",
+            build_select(
+                input_id=f"{id_prefix}-layout-selector",
                 options=_LAYOUT_OPTIONS,
                 value="cose",
                 disabled=not layout_enabled,
+                width="200px",
                 style={
-                    "fontFamily": FONT_SANS,
-                    "width": "200px",
                     "display": "inline-block",
-                    "fontSize": "12px",
-                    "border": f"1px solid {COLOR_GRAY_LIGHTER}",
                     "opacity": "1" if layout_enabled else "0.45",
                     "cursor": "not-allowed" if not layout_enabled else "default",
                 },
-                size="sm",
             ),
         ], width="auto"),
         dbc.Col([

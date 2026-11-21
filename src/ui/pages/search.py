@@ -23,6 +23,7 @@ from ui import api_client
 from ui.api_client import AuthExpiredError, PermissionDeniedError
 from ui.components.common import create_alert, create_page_header
 from ui.components.permission_errors import handle_api_error
+from ui.components.select_field import build_select
 from ui.pages.graph.utils import fetch_effective_theme
 from ui.styles import (
     ACTIVE_THEME,
@@ -598,16 +599,10 @@ def _build_filters_panel() -> dbc.Collapse:
                     dbc.Col(
                         [
                             html.Label("Entity Type", style=_LABEL_STYLE),
-                            dbc.Select(
-                                id="search-entity-type",
+                            build_select(
+                                input_id="search-entity-type",
                                 options=_ENTITY_TYPE_OPTIONS,
                                 value="",
-                                style={
-                                    **INPUT_STYLE,
-                                    "height": "36px",
-                                    "lineHeight": "18px",
-                                    "padding": "4px 8px",
-                                },
                             ),
                         ],
                         md=3,
@@ -617,16 +612,10 @@ def _build_filters_panel() -> dbc.Collapse:
                     dbc.Col(
                         [
                             html.Label("Source", style=_LABEL_STYLE),
-                            dbc.Select(
-                                id="search-source",
+                            build_select(
+                                input_id="search-source",
                                 options=_SOURCE_OPTIONS,
                                 value="",
-                                style={
-                                    **INPUT_STYLE,
-                                    "height": "36px",
-                                    "lineHeight": "18px",
-                                    "padding": "4px 8px",
-                                },
                             ),
                         ],
                         md=2,

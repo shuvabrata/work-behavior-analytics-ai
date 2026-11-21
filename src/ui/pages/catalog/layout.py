@@ -4,6 +4,7 @@ from dash import dcc, html
 import dash_bootstrap_components as dbc
 
 from ui.components.common import create_page_header
+from ui.components.select_field import build_select
 from ui.styles import (
     CARD_CONTAINER_STYLE,
     COLOR_GRAY_MEDIUM,
@@ -30,8 +31,8 @@ def get_layout() -> html.Div:
                     dbc.Row(
                         [
                             dbc.Col(
-                                dbc.Select(
-                                    id="library-namespace-filter",
+                                build_select(
+                                    input_id="library-namespace-filter",
                                     options=[
                                         {
                                             "label": "All namespaces",
@@ -39,7 +40,6 @@ def get_layout() -> html.Div:
                                         }
                                     ],
                                     value="__all__",
-                                    size="sm",
                                 ),
                                 width=3,
                             ),

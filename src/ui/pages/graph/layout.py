@@ -10,6 +10,7 @@ from dash import html, dcc
 import dash_bootstrap_components as dbc
 
 from ui.components.common import create_controls_bar, create_page_header
+from ui.components.select_field import build_select
 from ui.components.result_pane import (
     create_graph_result_container,
     create_results_empty_state,
@@ -323,11 +324,10 @@ def create_catalog_tab_content() -> html.Div:
             dbc.Row([
                 dbc.Col([
                     html.Label("Namespace", className="mb-1", style=GRAPH_HELPER_TEXT_STYLE),
-                    dbc.Select(
-                        id="catalog-namespace-filter",
+                    build_select(
+                        input_id="catalog-namespace-filter",
                         options=[{"label": "All namespaces", "value": "__all__"}],
                         value="__all__",
-                        size="sm",
                     ),
                 ], width=5, style={"paddingLeft": "0"}),
                 dbc.Col([

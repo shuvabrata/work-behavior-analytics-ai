@@ -20,6 +20,7 @@ from ui.components.common import (
     create_loading_overlay_container,
     create_page_header,
 )
+from ui.components.select_field import build_select
 from ui.pages.timeline.helpers import (
     cap_cell,
     card_primary,
@@ -494,11 +495,10 @@ def _toolbar() -> html.Div:
             html.Div(
                 [
                     html.Label("Range", style=_TOOLBAR_LABEL_STYLE),
-                    dbc.Select(
-                        id="timeline-range",
+                    build_select(
+                        input_id="timeline-range",
                         options=_RANGE_OPTIONS,
                         value="all",
-                        size="sm",
                         style={"minWidth": "150px"},
                     ),
                 ],
@@ -537,11 +537,10 @@ def _toolbar() -> html.Div:
             html.Div(
                 [
                     html.Label("Group by", style=_TOOLBAR_LABEL_STYLE),
-                    dbc.Select(
-                        id="timeline-group",
+                    build_select(
+                        input_id="timeline-group",
                         options=_GROUP_OPTIONS,
                         value="day",
-                        size="sm",
                         style={"minWidth": "120px"},
                     ),
                 ],

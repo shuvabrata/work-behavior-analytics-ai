@@ -389,12 +389,12 @@ compare_btn = dbc.Button(
 
 ### Form Inputs & Dropdowns
 
-**App Standard**: Use `dbc.Select` (native `<select>`, styled via Bootstrap's `.form-select`) for all dropdowns, **not** `dcc.Dropdown` (react-select). `dcc.Dropdown` renders a custom DOM structure that bypasses the theme-aware `.form-select` / `.theme-executive-dark .form-select` CSS rules, causing white backgrounds and poor contrast in dark mode.
+**App Standard**: Use `dbc.Select` (native `<select>`, styled via Bootstrap's `.form-select`) for every single-choice dropdown. One control for the whole app is what keeps filter bars and form rows visually identical across pages; `dcc.Dropdown` is a separate component with its own markup, sizing and behaviour, so mixing the two produces controls that disagree on height, padding and focus treatment.
 
 ```python
 import dash_bootstrap_components as dbc
 
-# Correct — native <select>, theme-aware in both light and dark mode
+# Correct — native <select>, one control app-wide
 picker = dbc.Select(
     id="catalog-namespace-filter",
     options=[{"label": "All namespaces", "value": "__all__"}],
@@ -402,7 +402,7 @@ picker = dbc.Select(
     size="sm",
 )
 
-# Incorrect — react-select; inconsistent styling across themes
+# Incorrect — a second dropdown component that will not match dbc.Select
 from dash import dcc
 picker = dcc.Dropdown(
     id="my-dropdown",
@@ -410,13 +410,21 @@ picker = dcc.Dropdown(
 )
 ```
 
-**Native `<select>` cannot hold a null value** (unlike `dcc.Dropdown`'s clearable mode). To express an "inherit default / no selection" state, add an explicit first option with an empty value and treat `""` as unset in callbacks:
+Do not set height, border, font or padding inline. `.form-select` in `executive-dashboard.css` already owns background, border, radius, focus ring and font weight in both themes, and an inline override shadows those rules rather than extending them. Pass only a width when a layout slot needs one — width is the one property the stylesheet cannot know.
+
+**Sizing**: use `size="sm"` for selectors inside cards, toolbars and filter rows. Use the default size only for a primary form control in a full-width form.
+
+**Native `<select>` cannot hold a null value.** To express an "inherit default / no selection" state, add an explicit first option with an empty value and treat `""` as unset in callbacks:
 
 ```python
 options = [{"label": "Inherit (default)", "value": ""}] + [
     {"label": shape, "value": shape} for shape in ALLOWED_SHAPES
 ]
 ```
+
+A filter sentinel such as `__all__` ("All namespaces") is **not** this case — it is a real, selectable third state meaning "do not filter", and callbacks test for it by name. Reserve `""` for "unset"; reserve a named sentinel for "all".
+
+**Multi-select fields use `dbc.Checklist`, not a dropdown.** A multi-select cannot be a native `<select>` without the `multiple` attribute, and `dcc.Dropdown`'s `multi=True` is the one thing the `dbc.Select` standard cannot cover — so multi-select is a separate idiom rather than an exception to it. `dbc.Checklist` renders one checkbox per option, inherits the themed `.form-check-input` rules, and its value is already a list, which is the shape the connector config read-back path expects. Connector forms declare this as `input_type: FIELD_MULTISELECT`.
 
 **Visual**:
 - Light theme: white background, charcoal text, navy focus ring

@@ -1066,7 +1066,7 @@ textarea.form-control {
 }
 
 /* ============================================================================= */
-/* Shared themed table (Library, and any future data tables) */
+/* Shared themed table — the one table standard (ui.components.table) */
 /* ============================================================================= */
 
 .executive-table {
@@ -1079,6 +1079,7 @@ textarea.form-control {
 .executive-table thead th {
     background-color: var(--color-background-light) !important;
     color: var(--color-charcoal) !important;
+    border-color: var(--color-border) !important;
     font-size: 12px;
     font-weight: var(--font-weight-semibold);
     letter-spacing: 0.4px;
@@ -1089,6 +1090,7 @@ textarea.form-control {
 .executive-table tbody td {
     background-color: var(--color-background-white);
     color: var(--color-charcoal-medium);
+    border-color: var(--color-border) !important;
     border-bottom: 1px solid var(--color-border) !important;
     font-size: 13px;
 }
@@ -1105,6 +1107,54 @@ textarea.form-control {
 .executive-table.table-hover > tbody > tr:hover > * {
     background-color: var(--color-surface-active) !important;
     color: var(--color-charcoal) !important;
+}
+
+.executive-table .badge {
+    font-size: 12px;
+}
+
+/* The key/value variant: key and value cells carry the property-panel type
+   scale, which used to come from inline DETAILS_TABLE_* tokens. */
+.executive-table--kv .kv-key {
+    font-family: var(--font-sans);
+    font-size: 12px;
+    font-weight: var(--font-weight-medium);
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.7px;
+    padding: 6px 10px 6px 0;
+    vertical-align: top;
+    white-space: nowrap;
+    width: 38%;
+    border-bottom: 1px solid var(--color-border-light);
+}
+
+.executive-table--kv .kv-value {
+    font-family: var(--font-sans);
+    font-size: 15px;
+    font-weight: var(--font-weight-normal);
+    color: var(--color-text-secondary);
+    padding: 6px 0 6px 8px;
+    vertical-align: top;
+    word-break: break-word;
+    border-bottom: 1px solid var(--color-border-light);
+}
+
+.executive-table--kv .kv-value code {
+    font-family: 'SFMono-Regular', 'Consolas', 'Menlo', monospace;
+    font-size: 14px;
+    color: var(--color-navy);
+    background-color: var(--color-background-pale);
+    padding: 5px 6px;
+    border-radius: 2px;
+    border: none;
+}
+
+.executive-table--kv .kv-value a {
+    color: var(--color-navy);
+    text-decoration: none;
+    cursor: pointer;
+    word-break: break-all;
 }
 
 /* ============================================================================= */

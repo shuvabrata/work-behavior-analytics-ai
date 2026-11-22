@@ -269,8 +269,10 @@ copies `src/ui/` to `./ui/`.
 - `src/ui/pages/graph/utils/ui_components.py` — stop importing and applying
   `ALERT_TEXT_STYLE`
 - `src/ui/pages/graph/callbacks/query.py` — stop passing `VALIDATION_ALERT_STYLE`
-- `src/ui/pages/settings/graph_styling/callbacks.py` — remove the inline style
-- `src/ui/pages/settings/user_management/callbacks.py` — remove the inline style
+- `src/ui/pages/settings/graph_styling/callbacks.py` — remove the alert's inline
+  style only; the module's `ui.styles` import stays (its glyph label uses it)
+- `src/ui/pages/settings/user_management/callbacks.py` — remove the alert's inline
+  style and the now-unused `ui.styles` import line in full
 - `src/ui/pages/collaboration_network/callbacks/filter.py` — swap the inline style
   for the class
 - `docs/design/design-system.md` — the new Alerts section (step 5)
@@ -287,6 +289,13 @@ copies `src/ui/` to `./ui/`.
 - **The `.card-config-alert` rule** in the stylesheet. It is a sticky wrapper
   `div` around the Analytics config feedback, not an alert surface. It is not a
   `.alert` element and the base rule does not reach it.
+- **`src/ui/pages/catalog/editor_test_callbacks.py`.** Its `_BADGE_CLASS` stays
+  `"alert-inline-badge"` — step 2b deletes the CSS block, not the class. Do not
+  rename the constant or remove the class from the three `dbc.Alert` calls.
+- **`src/ui/pages/collaboration_network/callbacks/filter.py`'s
+  `empty_state_style`.** Its `fontSize: FONT_SIZE_SMALL` and the
+  `FONT_SIZE_SMALL` import are unrelated to the banner. Step 4 removes the
+  banner's inline style only.
 - **Any `SPACING_*` or `FONT_SIZE_*` token value.** This plan changes no token
   value. It removes two constants and changes CSS.
 - **`docs/design/frontend-design-skill.md`.** Its design-direction block is about
@@ -455,10 +464,27 @@ whole app's alerts should use. Do not use `--font-size-small` (14px) here.
 
 #### 2b. Remove the superseded `.alert-inline-badge` block
 
-The block at lines 703-716 is now redundant — the base rule covers its size,
-padding, radius and font. Delete it. The **class name stays in use** by the
-Catalog editor badge, so do not remove the class from any Python file; only the
-CSS block goes.
+The block at lines 703-716 — the two rules introduced by the
+`/* Inline Result Badge (compact dismissible alert) */` comment — is now
+redundant. Delete both rules. The **class name stays in use**, so do not remove
+it from any Python file; only the CSS block goes.
+
+**This deletion is not a no-op.** The class has exactly one consumer: the
+Catalog editor's Quick-Test badge, where it is the module constant
+`_BADGE_CLASS = "alert-inline-badge"` in
+`src/ui/pages/catalog/editor_test_callbacks.py`, applied by
+`_quick_test_badge` to three `dbc.Alert` returns (success, success-count,
+danger). The deleted block's `padding: 3px 22px 3px 8px` and `margin-bottom: 0`
+exist only for that badge. It is not a `.alert` a normal builder produces:
+without the block its geometry falls back to the new base rule, changing its
+padding from `3px 22px 3px 8px` to `6px 22px 6px 12px` and giving it a
+`margin-bottom: 8px` it does not have today. Both changes are visible — the
+badge grows taller and no longer sits flush under the Quick Test button.
+
+Whether that new geometry is acceptable is an operator decision at the gate, not
+something to predict here. What is required is that it be **measured**, which is
+why gate 2 gains a row for it. Do not "preserve" the old geometry by keeping the
+deleted block or by re-adding the rules elsewhere.
 
 #### 2c. Scope the status banner
 
@@ -502,6 +528,7 @@ Then measure every alert type. Trigger each one and report computed style:
 | Permission denied | A 403 path (or the Settings users page as a non-admin) | warning |
 | Validation warning | Graph → run an invalid query | warning |
 | Status banner | `/app/collaboration` | light |
+| Catalog quick-test badge | `/app/catalog` → open a query → Quick Test on a valid and an invalid query | success and danger |
 
 For each, report: `backgroundColor`, `borderLeftColor`, `borderLeftWidth`,
 `borderRadius`, `fontSize`, `fontFamily`, `paddingTop`, `paddingBottom`, and the
@@ -517,6 +544,10 @@ rendered **height**.
 - The dismiss button sits inside the alert's bounds, not outside them.
 - **Both themes.** In the dark theme, confirm the surface is dark and the text is
   light — the failure mode this plan exists to fix is a light slab on a dark page.
+- **The Catalog quick-test badge** reports its computed `paddingTop`,
+  `paddingBottom` and `marginBottom`, and those are compared against the
+  pre-change values in step 2b. Report whether it is still flush under the Quick
+  Test button.
 
 **Report** the table and the before/after heights, state which requirements
 passed, and **stop**.
@@ -555,20 +586,47 @@ or `ALERT_DOC_LINK_ICON_STYLE` — they set properties the base rule does not.
 
 #### 3c. Remove the two raw inline styles
 
-In `src/ui/pages/settings/graph_styling/callbacks.py` and
-`src/ui/pages/settings/user_management/callbacks.py`, remove the
-`style={"fontSize": FONT_SIZE_XTINY}` argument from the `dbc.Alert` call. Remove
-the now-unused `FONT_SIZE_XTINY` import if nothing else in the module uses it —
-check before removing.
+The two settings modules are **not** symmetric, so read each one before editing.
+
+In `src/ui/pages/settings/graph_styling/callbacks.py`, the alert is built by
+`_feedback_alert` (its `dbc.Alert` carries
+`style={"fontFamily": FONT_SANS, "fontSize": FONT_SIZE_XTINY}`). Remove the
+`style=` argument. This module keeps both names: `_row_preview`'s glyph label
+uses `FONT_SANS` and `FONT_SIZE_XTINY` at lines 154-155, so the import block at
+lines 39-40 is **unchanged**. The step-3 grep expects `FONT_SIZE_XTINY` to go
+from 3 occurrences to 2, for exactly this reason.
+
+In `src/ui/pages/settings/user_management/callbacks.py`, the alert is built by
+`_feedback`. Remove its `style=` argument. Here both names become unused —
+`FONT_SANS` and `FONT_SIZE_XTINY` occur **only** on the import line (line 30)
+and the removed `style=`. Delete the whole line
+`from ui.styles import FONT_SANS, FONT_SIZE_XTINY`. Leaving either name behind
+trips pylint's `unused-import`, which is not disabled in `.pylintrc` and fails
+the CI score gate.
+
+**The two modules must not end up identical.** After this step
+`graph_styling/callbacks.py` still imports `ui.styles` names and
+`user_management/callbacks.py` does not.
 
 **Step 3 verification**:
 
 ```bash
-grep -rn "VALIDATION_ALERT_STYLE\|ALERT_TEXT_STYLE" src/   # no matches
-grep -rn "fontSize.*FONT_SIZE_XTINY" src/ui/pages/settings/graph_styling/callbacks.py src/ui/pages/settings/user_management/callbacks.py   # no matches
+grep -rnI "VALIDATION_ALERT_STYLE\|ALERT_TEXT_STYLE" src/   # no matches
+grep -c "FONT_SIZE_XTINY" src/ui/pages/settings/graph_styling/callbacks.py   # 2 (was 3)
+grep -n "FONT_SANS\|FONT_SIZE_XTINY" src/ui/pages/settings/user_management/callbacks.py   # no matches
+grep -rnI "style={\"fontFamily\": FONT_SANS, \"fontSize\": FONT_SIZE_XTINY}" src/ui/pages/settings/   # no matches
 pytest -m unit tests -q
 mypy src/
+pylint src --score=y
 ```
+
+The `-I` flag on the first grep is required: stale `.pyc` files under
+`src/**/__pycache__/` retain the deleted names in their code objects and plain
+`grep -rn` reports them as binary matches, which reads as a false failure until
+pytest recompiles the modules. `pylint` is in this block because removing the
+two constants can leave an unused import behind (see 3c) and that fails CI's
+score gate. Note the two settings files do **not** end up in the same state —
+see 3c.
 
 #### GATE 3 — browser review of the type consistency
 
@@ -612,9 +670,16 @@ Then remove the `FONT_SIZE_SMALL` import if nothing else in the module uses it.
 
 ```bash
 grep -n "alert-status-banner" src/ui/pages/collaboration_network/callbacks/filter.py   # 1
-grep -n "fontSize" src/ui/pages/collaboration_network/callbacks/filter.py             # no matches
+grep -c "fontSize" src/ui/pages/collaboration_network/callbacks/filter.py   # 1 (was 2)
+grep -n "FONT_SIZE_SMALL" src/ui/pages/collaboration_network/callbacks/filter.py   # 2 (import + empty-state use at line 71)
 pytest -m unit tests -q
 ```
+
+The bar is one `fontSize`, not zero. `filter.py` also builds
+`empty_state_style` (the centered "no data" block), which sets
+`"fontSize": FONT_SIZE_SMALL` and keeps both the `FONT_SIZE_SMALL` import and
+that use. Only the banner's `style={"fontSize": FONT_SIZE_SMALL}` goes; leaving
+the empty-state use and the import in place is correct — do not remove either.
 
 #### GATE 4 — browser review of the status banner
 
@@ -692,12 +757,14 @@ ALL must hold, **after gates 1-4 have each been confirmed by the operator**:
 - [ ] `pylint src --score=y` reports ≥ 10.0
 - [ ] `grep -c "^\.alert {" src/ui/assets/executive-dashboard.css` → 1
 - [ ] `grep -c "alert-inline-badge" src/ui/assets/executive-dashboard.css` → 0
-- [ ] `grep -rn "VALIDATION_ALERT_STYLE\|ALERT_TEXT_STYLE" src/` → no matches
+- [ ] `grep -rnI "VALIDATION_ALERT_STYLE\|ALERT_TEXT_STYLE" src/` → no matches (the `-I` matters; stale `.pyc` files otherwise match)
 - [ ] `grep -rn "font-family: var(--font-sans)" src/ui/assets/executive-dashboard.css` → ≥ 1
 - [ ] **Gate 1 confirmed**: inherited text renders in Inter on every sampled page,
       in both themes
 - [ ] **Gate 2 confirmed**: every alert has a neutral surface, one font size, and
-      a shorter single-line height; the dismiss button sits inside the alert
+      a shorter single-line height; the dismiss button sits inside the alert;
+      the Catalog quick-test badge's padding/margin were recorded and the
+      operator accepted the change (step 2b)
 - [ ] **Gate 3 confirmed**: every alert in the app reports the same font size
 - [ ] **Gate 4 confirmed**: the collaboration status banner kept its larger size
 - [ ] `docs/design/design-system.md` has an Alerts section with no line numbers and
@@ -722,10 +789,22 @@ Stop and report back (do not improvise) if:
   selector that won; do not escalate to `!important`.
 - **`--color-info` does not exist** under that name. Report the actual token name
   rather than adding a new custom property.
+- **Step 2 makes the Catalog quick-test badge taller** (from `3px` to `6px`
+  vertical padding, plus an `8px` bottom margin). That is the expected
+  consequence of the deletion, not a defect to fix: report the measured values
+  at gate 2 and let the operator accept or reject them. Do not restore the
+  deleted rules, and do not add a badge-specific override to "fix" it.
 - Removing a constant in step 3 leaves a module with an unused import that
-  `pylint` flags. Fix the import; do not disable the lint check.
+  `pylint` flags. Fix the import; do not disable the lint check. The two
+  settings modules differ here — `user_management/callbacks.py` loses its import
+  line entirely, `graph_styling/callbacks.py` keeps it.
 - A `class_name` argument in Python already contains the class you are adding, so
   the class appears twice. Report it rather than guessing which to keep.
+- **The git-based drift check errors out.** If `git diff` / `git log` fail with a
+  message about an empty or corrupt object (an unreadable `.git/objects` entry),
+  that is a broken local object store, not drift. Fall back to locating every
+  file by content using the excerpts in "Current state", and note the git error
+  in your report. Do not attempt `git fsck`, `git gc`, or any repair.
 
 ## Maintenance notes
 

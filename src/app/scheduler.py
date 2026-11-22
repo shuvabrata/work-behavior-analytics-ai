@@ -24,7 +24,7 @@ expires within one tick period and any surviving instance picks it up.
 
 Due-Check Logic
 ---------------
-For each enabled connector with ``scan_interval_hours IS NOT NULL``:
+For each connector with ``scan_interval_hours IS NOT NULL``:
 
 1. Resolve ``producer_container`` from ``CONNECTOR_REGISTRY``.
    Connectors with no producer (e.g. Slack) are silently skipped.

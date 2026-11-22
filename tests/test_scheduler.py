@@ -42,13 +42,11 @@ def _utc_now() -> datetime:
 
 def _make_connector(
     connector_type: str = "github",
-    enabled: bool = True,
     scan_interval_hours: int | None = 24,
 ) -> MagicMock:
     """Build a mock Connector with the attributes the scheduler reads."""
     c = MagicMock()
     c.connector_type = connector_type
-    c.enabled = enabled
     c.scan_interval_hours = scan_interval_hours
     return c
 
@@ -123,7 +121,7 @@ REGISTRY_NO_PRODUCER = {
 
 
 class TestGetDueConnectors:
-    """Due-check logic for each enabled connector with a schedule."""
+    """Due-check logic for each connector with a schedule."""
 
     @pytest.mark.asyncio
     async def test_no_scan_history_is_due(self, mock_db):
@@ -167,27 +165,6 @@ class TestGetDueConnectors:
         with patch("app.scheduler.CONNECTOR_REGISTRY", REGISTRY_WITH_PRODUCER):
             due = await _get_due_connectors(mock_db, now)
         assert due == []
-
-    @pytest.mark.asyncio
-    async def test_disabled_connector_still_due(self, mock_db):
-        """enabled=False does NOT prevent a scan — the enabled flag is ignored.
-
-        The scheduler only keys off ``scan_interval_hours``. A disabled
-        connector with an interval and no scan history is still due.
-        """
-        connector = _make_connector(
-            connector_type="github",
-            scan_interval_hours=24,
-            enabled=False,
-        )
-        mock_db.execute.side_effect = [
-            _execute_result(scalars=[connector]),
-            _execute_result(scalar_one_or_none=None),  # no scan history
-        ]
-        now = _utc_now()
-        with patch("app.scheduler.CONNECTOR_REGISTRY", REGISTRY_WITH_PRODUCER):
-            due = await _get_due_connectors(mock_db, now)
-        assert due == [("github", "github-producer")]
 
     @pytest.mark.asyncio
     async def test_no_producer_container_skipped(self, mock_db):

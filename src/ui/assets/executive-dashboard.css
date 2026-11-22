@@ -1032,39 +1032,6 @@ textarea.form-control {
     white-space: nowrap;
 }
 
-.graph-results-table {
-    background-color: var(--color-background-white) !important;
-    color: var(--color-charcoal-medium) !important;
-    border-color: var(--color-border) !important;
-}
-
-.graph-results-table thead th {
-    background-color: var(--color-background-light) !important;
-    color: var(--color-charcoal) !important;
-    border-color: var(--color-border) !important;
-    font-size: 12px;
-    font-weight: var(--font-weight-semibold);
-    letter-spacing: 0.4px;
-    text-transform: uppercase;
-}
-
-.graph-results-table tbody td {
-    background-color: var(--color-background-white);
-    color: var(--color-charcoal-medium);
-    border-color: var(--color-border) !important;
-    font-size: 13px;
-}
-
-.graph-results-table.table-striped > tbody > tr:nth-of-type(odd) > * {
-    background-color: var(--color-background-light) !important;
-    color: var(--color-charcoal-medium) !important;
-}
-
-.graph-results-table.table-hover > tbody > tr:hover > * {
-    background-color: var(--color-surface-active) !important;
-    color: var(--color-charcoal) !important;
-}
-
 /* ============================================================================= */
 /* Shared themed table — the one table standard (ui.components.table) */
 /* ============================================================================= */

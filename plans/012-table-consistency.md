@@ -52,7 +52,7 @@
 |---|---|---|
 | 1 | Foundation: `ui/components/table.py`, CSS base + variants, unit tests | DONE — gate 1 confirmed |
 | 2 | Catalog (Library) table | DONE — gate 2 confirmed |
-| 3 | Settings → User Management table | TODO |
+| 3 | Settings → User Management table | DONE — gate 3 confirmed |
 | 4 | Graph query-results table | TODO |
 | 5 | Key/value tables (Graph, Collaboration Network, Ego, Timeline, Search) | TODO |
 | 6 | Connectors env-var table | TODO |

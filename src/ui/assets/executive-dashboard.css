@@ -1394,17 +1394,25 @@ textarea.form-control {
     border-collapse: collapse;
     width: 100%;
     margin: 0.6em 0;
-    font-size: 0.9em;
+    font-size: 13px;
 }
 .chat-markdown th,
 .chat-markdown td {
-    border: 1px solid var(--color-border);
+    border: none;
+    border-bottom: 1px solid var(--color-border);
     padding: 6px 12px;
     text-align: left;
 }
 .chat-markdown th {
     background-color: var(--color-background-light);
+    color: var(--color-charcoal);
+    font-size: 12px;
     font-weight: var(--font-weight-semibold);
+    letter-spacing: 0.4px;
+    text-transform: uppercase;
+}
+.chat-markdown tbody tr:last-child td {
+    border-bottom: none;
 }
 .chat-markdown a {
     color: var(--color-navy);

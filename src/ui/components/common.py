@@ -22,12 +22,11 @@ import re
 from datetime import datetime
 from dash import html, dcc
 import dash_bootstrap_components as dbc
+from common.logger import logger
 from domain.collaboration.config import LAYER_LABELS, SETTING_LABELS
 from domain.timezone import humanize_duration, to_app_timezone
-from ui.settings import settings
-from common.logger import logger
-
 from ui.components.select_field import build_select
+from ui.settings import settings
 from ui.styles import (
     # Style patterns
     COMPACT_PAGE_HEADER_STYLE,

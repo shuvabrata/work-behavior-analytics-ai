@@ -677,6 +677,8 @@ bandit result.
 > layout for the Graph, Collaboration Network and Search property panels. Those
 > panels keep their existing renderer, so the key/value criteria below are not
 > met and are not required. `key_value_table` and its CSS variant were removed.
+> See "Scope decision — step 5 dropped" in the Progress section for the full
+> record of what was reverted.
 
 - One base CSS ruleset and one variant; `.graph-results-table` is gone.
 - No table carries an inline `fontSize` or `fontFamily`.
@@ -709,10 +711,11 @@ Stop and report (do not improvise) if:
 - User Management's row height equals Catalog's — the `.dense-page` scoping failed.
 - The Catalog table's JS body stops filling after the skeleton change. Report which
   selector the JS targets and what the builder now emits.
-- A key/value table overflows its panel because the cells moved from inline styles
-  to CSS. Report the panel and the overflow, not a new width.
-- A key/value table renders differently on two of the four pages that share the
-  renderer. That means a page overrides the shared styles locally; report which.
+- ~~A key/value table overflows its panel because the cells moved from inline styles
+  to CSS. Report the panel and the overflow, not a new width.~~ **Descoped** — step 5 dropped.
+- ~~A key/value table renders differently on two of the four pages that share the
+  renderer. That means a page overrides the shared styles locally; report which.~~
+  **Descoped** — step 5 dropped.
 - The chat markdown table no longer reads as a table without its cell grid. That is
   a design decision, not a value to tune.
 - Anything appears to require editing a file in the "Out of scope" list.
@@ -721,8 +724,10 @@ Stop and report (do not improvise) if:
 
 - The builder is the single place a table's structure changes. A page that needs a
   new table should call it, not build a `dbc.Table`.
-- The key/value builder's cell formatting is the shared property renderer's logic.
-  A change to how a date or a URL renders belongs there, not in a page.
+- ~~The key/value builder's cell formatting is the shared property renderer's logic.
+  A change to how a date or a URL renders belongs there, not in a page.~~
+  **Descoped** — `key_value_table` was removed with step 5; property tables keep
+  their existing per-renderer formatting.
 - A dense page's table density comes from `.dense-page` on the page root. A page
   that needs a denser table without being dense is a design question, not a new
   modifier.

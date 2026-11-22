@@ -5,11 +5,11 @@ import dash_bootstrap_components as dbc
 
 from ui.components.common import create_page_header
 from ui.components.select_field import build_select
+from ui.components.table import data_table
 from ui.styles import (
     CARD_CONTAINER_STYLE,
     COLOR_GRAY_MEDIUM,
     FONT_SANS,
-    FONT_SIZE_SMALL,
     SPACING_XSMALL,
 )
 
@@ -94,30 +94,20 @@ def render_catalog_table() -> html.Div:
     """
     return html.Div(
         [
-            dbc.Table(
+            data_table(
                 [
-                    html.Thead(
-                        html.Tr(
-                            [
-                                html.Th("Name"),
-                                html.Th("Summary"),
-                                html.Th("Tags"),
-                                html.Th("Status"),
-                                html.Th("Default View"),
-                                html.Th("Parameters"),
-                                html.Th("Views"),
-                                html.Th("Origin"),
-                                html.Th("Actions"),
-                            ]
-                        )
-                    ),
-                    html.Tbody(id="library-table-body"),
+                    "Name",
+                    "Summary",
+                    "Tags",
+                    "Status",
+                    "Default View",
+                    "Parameters",
+                    "Views",
+                    "Origin",
+                    "Actions",
                 ],
-                bordered=False,
-                hover=True,
-                size="sm",
-                className="align-middle executive-table",
-                style={"fontFamily": FONT_SANS, "fontSize": FONT_SIZE_SMALL},
+                body_id="library-table-body",
+                className="align-middle",
             ),
             html.Div(
                 "No queries match the current filters.",

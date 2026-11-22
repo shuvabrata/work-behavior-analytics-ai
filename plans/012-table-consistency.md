@@ -50,8 +50,8 @@
 
 | Step | Scope | Status |
 |---|---|---|
-| 1 | Foundation: `ui/components/table.py`, CSS base + variants, unit tests | TODO |
-| 2 | Catalog (Library) table | TODO |
+| 1 | Foundation: `ui/components/table.py`, CSS base + variants, unit tests | DONE — gate 1 confirmed |
+| 2 | Catalog (Library) table | DONE — gate 2 confirmed |
 | 3 | Settings → User Management table | TODO |
 | 4 | Graph query-results table | TODO |
 | 5 | Key/value tables (Graph, Collaboration Network, Ego, Timeline, Search) | TODO |

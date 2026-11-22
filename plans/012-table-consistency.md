@@ -172,6 +172,13 @@ Catalog editor's View Test modal. A change to it is visible in both places.
 
 These are settled. Do not re-open them while executing.
 
+> **Decisions 2, 3, 4 and 12 are descoped in part.** With step 5 dropped, the
+> `key_value_table` builder and the `--kv` variant were removed, so the key/value
+> half of decision 2, all of decision 3, the property-table half of decision 4,
+> and the key/value sentence in decision 12 no longer apply. The text below is the
+> original decision record and is kept as written; the executed state is described
+> in "Scope decision — step 5 dropped".
+
 1. **Abstraction**: a builder module plus CSS, documented in the design system.
 2. **Surface**: two builders — `data_table` (columns/rows) and `key_value_table`
    (key/value pairs) — sharing one base class.
@@ -204,11 +211,13 @@ These are settled. Do not re-open them while executing.
 19. **Dark mode**: every page gate checks both themes.
 20. **Docs**: a Tables section in `docs/design/design-system.md`, last step.
 21. **Plan number**: 012 (011 is taken).
-22. **Metric tooltips**: the `hub_score` / `normalized_weight` (i) popovers in the
+22. ~~**Metric tooltips**: the `hub_score` / `normalized_weight` (i) popovers in the
     key cell are preserved via `key_value_table`'s `key_renderer` hook, wired to
     `_panel_metric_key_cell` in `common.py`. The tooltip bodies and their unique-id
     generator stay in `common.py`; they are collaboration-domain content, not
-    table structure.
+    table structure.~~ **Descoped** — no `key_value_table` exists after step 5 was
+    dropped; the tooltips stay in `common.py` with the existing renderer, so they
+    are unaffected.
 
 ## Commands you will need
 

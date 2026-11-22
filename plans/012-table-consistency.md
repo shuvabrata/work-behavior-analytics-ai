@@ -53,8 +53,8 @@
 | 1 | Foundation: `ui/components/table.py`, CSS base + variants, unit tests | DONE — gate 1 confirmed |
 | 2 | Catalog (Library) table | DONE — gate 2 confirmed |
 | 3 | Settings → User Management table | DONE — gate 3 confirmed |
-| 4 | Graph query-results table | TODO |
-| 5 | Key/value tables (Graph, Collaboration Network, Ego, Timeline, Search) | TODO |
+| 4 | Graph query-results table | DONE — gate 4 confirmed |
+| 5 | Key/value tables (Graph, Collaboration Network, Ego, Timeline, Search) | DROPPED — operator rejected the migrated layout; property panels keep their current renderer |
 | 6 | Connectors env-var table | TODO |
 | 7 | Chat markdown tables | TODO |
 | 8 | Design docs + full CI gate | TODO |
@@ -647,20 +647,26 @@ bandit result.
 
 ## Done criteria
 
-- One base CSS ruleset and two variants; `.graph-results-table` is gone.
+> **Descoped after step 5.** The operator rejected the migrated key/value
+> layout for the Graph, Collaboration Network and Search property panels. Those
+> panels keep their existing renderer, so the key/value criteria below are not
+> met and are not required. `key_value_table` and its CSS variant were removed.
+
+- One base CSS ruleset and one variant; `.graph-results-table` is gone.
 - No table carries an inline `fontSize` or `fontFamily`.
 - Both migrated `dbc.Table` callers keep `align-middle`; no table relying on it
   becomes top-aligned.
-- URLs in property tables render navy and uninlined, not as default browser links.
+- ~~URLs in property tables render navy and uninlined, not as default browser links.~~ **Descoped.**
 - Header 12px uppercase in every table, including chat markdown.
-- Body 13px; key/value cells use CSS classes, not inline tokens.
-- Property tables format datetimes from `runtime_settings`, matching Decision 4,
-  and `tests/test_table_builder.py` pins it.
+- ~~Body 13px; key/value cells use CSS classes, not inline tokens.~~ **Descoped.**
+- ~~Property tables format datetimes from `runtime_settings`, matching Decision 4,
+  and `tests/test_table_builder.py` pins it.~~ **Descoped.**
 - Bottom-only row rules everywhere; no outer border, no cell grid.
 - Dense pages keep their reduced padding; User Management does not.
-- Search no longer forks the key/value renderer.
-- The `hub_score` and `normalized_weight` (i) popovers still render in the
-  properties panel, and `tests/test_shared_graph_components.py` passes unchanged.
+- ~~Search no longer forks the key/value renderer.~~ **Descoped.**
+- ~~The `hub_score` and `normalized_weight` (i) popovers still render in the
+  properties panel, and `tests/test_shared_graph_components.py` passes unchanged.~~
+  **Descoped** — the panels are untouched, so the popovers are unaffected.
 - The connectors env table has a header.
 - The design system documents the standard.
 - The full CI gate passes.

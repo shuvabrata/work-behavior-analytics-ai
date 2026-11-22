@@ -1080,50 +1080,6 @@ textarea.form-control {
     font-size: 12px;
 }
 
-/* The key/value variant: key and value cells carry the property-panel type
-   scale, which used to come from inline DETAILS_TABLE_* tokens. */
-.executive-table--kv .kv-key {
-    font-family: var(--font-sans);
-    font-size: 12px;
-    font-weight: var(--font-weight-medium);
-    color: var(--color-text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.7px;
-    padding: 6px 10px 6px 0;
-    vertical-align: top;
-    white-space: nowrap;
-    width: 38%;
-    border-bottom: 1px solid var(--color-border-light);
-}
-
-.executive-table--kv .kv-value {
-    font-family: var(--font-sans);
-    font-size: 15px;
-    font-weight: var(--font-weight-normal);
-    color: var(--color-text-secondary);
-    padding: 6px 0 6px 8px;
-    vertical-align: top;
-    word-break: break-word;
-    border-bottom: 1px solid var(--color-border-light);
-}
-
-.executive-table--kv .kv-value code {
-    font-family: 'SFMono-Regular', 'Consolas', 'Menlo', monospace;
-    font-size: 14px;
-    color: var(--color-navy);
-    background-color: var(--color-background-pale);
-    padding: 5px 6px;
-    border-radius: 2px;
-    border: none;
-}
-
-.executive-table--kv .kv-value a {
-    color: var(--color-navy);
-    text-decoration: none;
-    cursor: pointer;
-    word-break: break-all;
-}
-
 /* ============================================================================= */
 /* Navigation - Sidebar */
 /* ============================================================================= */

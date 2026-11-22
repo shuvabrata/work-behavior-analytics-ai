@@ -5,17 +5,13 @@ from typing import Any
 import pytest
 from dash import html
 
-from ui.components.table import data_table, key_value_table
+from ui.components.table import data_table
 
 pytestmark = pytest.mark.unit
 
 
 def _classes(table: Any) -> str:
     return table.to_plotly_json()["props"].get("className") or ""
-
-
-def _rows(table: Any) -> list[Any]:
-    return list(table.children.children)
 
 
 class TestDataTable:
@@ -55,74 +51,9 @@ class TestDataTable:
         assert "table-bordered" not in _classes(table)
         assert props.get("bordered") is not True
 
-
-class TestKeyValueTable:
-    def test_renders_one_row_per_item_with_cells(self) -> None:
-        table = key_value_table([("a", 1), ("b", 2)])
-        rows = _rows(table)
-        assert len(rows) == 2
-        for row in rows:
-            assert row.className == "details-prop-row"
-            assert row.children[0].className == "kv-key"
-            assert row.children[1].className == "kv-value"
-
-    def test_emits_base_and_variant_classes(self) -> None:
-        classes = _classes(key_value_table([])).split()
-        assert "executive-table" in classes
-        assert "executive-table--kv" in classes
-
-    def test_key_text_unchanged_without_renderer(self) -> None:
-        row = _rows(key_value_table([("hub_score", 1)]))[0]
-        assert row.children[0].children == "hub_score"
-
-    def test_key_renderer_replaces_key_content(self) -> None:
-        row = _rows(key_value_table([("hub_score", 1)], key_renderer=lambda key: html.B(key)))[0]
-        assert isinstance(row.children[0].children, html.B)
-        assert row.children[0].children.children == "hub_score"
-
-    def test_url_renders_as_anchor(self) -> None:
-        row = _rows(key_value_table([("url", "https://example.com")]))[0]
-        value = row.children[1].children
-        anchor = value.children[0]
-        assert isinstance(anchor, html.A)
-        assert anchor.href == "https://example.com"
-
-    def test_long_token_renders_as_code(self) -> None:
-        row = _rows(key_value_table([("token", "abcdefghijklmnopqrstuvwxyz")]))[0]
-        code = row.children[1].children.children[0]
-        assert isinstance(code, html.Code)
-
-    def test_date_like_string_renders_relative_span_with_title(self) -> None:
-        row = _rows(key_value_table([("created_at", "2026-01-02T03:04:05Z")]))[0]
-        span = row.children[1].children.children[0]
-        assert isinstance(span, html.Span)
-        assert span.title
-
-    def test_clipboard_on_every_value(self) -> None:
-        table = key_value_table(
-            [
-                ("a", "plain"),
-                ("id", "a" * 20),
-                ("url", "https://example.com"),
-                ("created_at", "2026-01-02T03:04:05Z"),
-            ]
-        )
-        for row in _rows(table):
-            wrap = row.children[1].children
-            assert any(
-                "details-prop-icon--copy" in (getattr(child, "className", "") or "")
-                for child in wrap.children
-            )
-
-    def test_date_format_comes_from_runtime_settings(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        from ui.runtime_settings import runtime_settings
-
-        real_get = runtime_settings.get
-        monkeypatch.setattr(
-            runtime_settings,
-            "get",
-            lambda key: "%Y/%m/%d %H:%M" if key == "UI_DATETIME_FORMAT" else real_get(key),
-        )
-        row = _rows(key_value_table([("created_at", "2026-01-02T03:04:05Z")]))[0]
-        span = row.children[1].children.children[0]
-        assert "2026/01/02" in span.title
+    def test_prebuilt_tr_row_is_emitted_as_is(self) -> None:
+        row = html.Tr(html.Td("empty", colSpan=3))
+        table = data_table(["A"], [row])
+        body = table.children[1]
+        assert body.children[0] is row
+        assert body.children[0].children.colSpan == 3

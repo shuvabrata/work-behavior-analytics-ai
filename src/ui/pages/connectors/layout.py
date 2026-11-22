@@ -8,6 +8,7 @@ from domain.connector_registry import CONNECTOR_REGISTRY
 from ui import api_client
 from ui.api_client import ApiError
 from ui.components.common import create_alert, create_page_header
+from ui.components.table import data_table
 from ui.settings import settings
 from ui.styles import (
     CARD_CONTAINER_STYLE,
@@ -38,6 +39,8 @@ from .components.config_forms import (
     FIELD_TEXTAREA,
 )
 from .components.tooltips import FIELD_TOOLTIPS
+
+_MONO_FONT = "'SFMono-Regular', 'Consolas', 'Menlo', monospace"
 
 
 def get_layout() -> html.Div:
@@ -818,8 +821,8 @@ def _get_manual_setup_layout(connector_type: str, connector_meta: dict[str, Any]
     display_name = connector_meta.get("display_name", connector_type)
     env_rows = _fetch_env_setting_rows(_MCP_ENV_KEYS)
 
-    def _env_row(var: str, description: str) -> html.Tr:
-        """Render an env var row from its API setting row, with a set/not-set indicator."""
+    def _env_row(var: str, description: str) -> list[Any]:
+        """Render an env var row's cells from its API setting row, with a set/not-set indicator."""
         row = env_rows.get(var, {})
         is_set = bool(row.get("is_configured", False))
         # ``effective_value`` is already masked by the API for sensitive rows, so
@@ -827,73 +830,62 @@ def _get_manual_setup_layout(connector_type: str, connector_meta: dict[str, Any]
         raw_value = row.get("effective_value")
         display_value = "" if raw_value is None else str(raw_value)
 
-        # Status indicator: green dot + "Set" when present, red dot + "Not set" when absent.
         status_color = COLOR_SUCCESS if is_set else COLOR_ERROR
         status_label = "Set" if is_set else "Not set"
 
-        return html.Tr(
-            [
-                html.Td(
-                    html.Code(
-                        var,
+        return [
+            html.Code(
+                var,
+                style={
+                    "fontFamily": _MONO_FONT,
+                    "fontSize": FONT_SIZE_SMALL,
+                    "color": COLOR_CHARCOAL_MEDIUM,
+                    "backgroundColor": COLOR_CODE_BACKGROUND,
+                    "padding": "2px 6px",
+                    "borderRadius": "2px",
+                },
+            ),
+            html.Span(
+                description,
+                style={
+                    "fontFamily": FONT_SANS,
+                    "fontSize": FONT_SIZE_SMALL,
+                    "color": COLOR_GRAY_MEDIUM,
+                },
+            ),
+            html.Span(
+                [
+                    html.Span(
+                        "●",
                         style={
-                            "fontFamily": "monospace",
-                            "fontSize": FONT_SIZE_SMALL,
-                            "color": COLOR_CHARCOAL_MEDIUM,
-                            "backgroundColor": COLOR_CODE_BACKGROUND,
-                            "padding": "2px 6px",
-                            "borderRadius": "2px",
+                            "color": status_color,
+                            "fontSize": "10px",
+                            "marginRight": "6px",
                         },
                     ),
-                    style={"padding": f"{SPACING_XSMALL} {SPACING_SMALL} {SPACING_XSMALL} 0", "whiteSpace": "nowrap"},
-                ),
-                html.Td(
-                    description,
-                    style={
-                        "fontFamily": FONT_SANS,
-                        "fontSize": FONT_SIZE_SMALL,
-                        "color": COLOR_GRAY_MEDIUM,
-                        "padding": SPACING_XSMALL,
-                    },
-                ),
-                html.Td(
-                    [
-                        html.Span(
-                            "●",
-                            style={
-                                "color": status_color,
-                                "fontSize": "10px",
-                                "marginRight": "6px",
-                            },
-                        ),
-                        html.Span(
-                            status_label,
-                            style={
-                                "fontFamily": FONT_SANS,
-                                "fontSize": FONT_SIZE_SMALL,
-                                "fontWeight": FONT_WEIGHT_MEDIUM,
-                                "color": status_color,
-                                "marginRight": SPACING_SMALL,
-                            },
-                        ),
-                        html.Span(
-                            display_value if is_set else "—",
-                            style={
-                                "fontFamily": "monospace",
-                                "fontSize": FONT_SIZE_SMALL,
-                                "color": COLOR_GRAY_DARK if is_set else COLOR_GRAY_MEDIUM,
-                                "wordBreak": "break-all",
-                            },
-                        ),
-                    ],
-                    style={
-                        "padding": SPACING_XSMALL,
-                        "whiteSpace": "nowrap",
-                        "maxWidth": "320px",
-                    },
-                ),
-            ]
-        )
+                    html.Span(
+                        status_label,
+                        style={
+                            "fontFamily": FONT_SANS,
+                            "fontSize": FONT_SIZE_SMALL,
+                            "fontWeight": FONT_WEIGHT_MEDIUM,
+                            "color": status_color,
+                            "marginRight": SPACING_SMALL,
+                        },
+                    ),
+                    html.Span(
+                        display_value if is_set else "—",
+                        style={
+                            "fontFamily": _MONO_FONT,
+                            "fontSize": FONT_SIZE_SMALL,
+                            "color": COLOR_GRAY_DARK if is_set else COLOR_GRAY_MEDIUM,
+                            "wordBreak": "break-all",
+                        },
+                    ),
+                ],
+                style={"whiteSpace": "nowrap", "maxWidth": "320px"},
+            ),
+        ]
 
     return html.Div(
         [
@@ -1008,26 +1000,22 @@ def _get_manual_setup_layout(connector_type: str, connector_meta: dict[str, Any]
                                     "display": "inline",
                                 },
                             ),
-                            html.Table(
+                            data_table(
+                                ["Variable", "Description", "Status"],
                                 [
-                                    html.Tbody(
-                                        [
-                                            _env_row(
-                                                "GITHUB_MCP_ENABLED",
-                                                "Set to true to enable the GitHub MCP integration in the AI agent.",
-                                            ),
-                                            _env_row(
-                                                "GITHUB_MCP_SERVER_URL",
-                                                "The URL of the running GitHub MCP sidecar service (e.g., http://github-mcp:8082).",
-                                            ),
-                                            _env_row(
-                                                "GITHUB_MCP_TOKEN",
-                                                "A GitHub personal access token passed to the MCP client manager.",
-                                            ),
-                                        ]
-                                    )
+                                    _env_row(
+                                        "GITHUB_MCP_ENABLED",
+                                        "Set to true to enable the GitHub MCP integration in the AI agent.",
+                                    ),
+                                    _env_row(
+                                        "GITHUB_MCP_SERVER_URL",
+                                        "The URL of the running GitHub MCP sidecar service (e.g., http://github-mcp:8082).",
+                                    ),
+                                    _env_row(
+                                        "GITHUB_MCP_TOKEN",
+                                        "A GitHub personal access token passed to the MCP client manager.",
+                                    ),
                                 ],
-                                style={"width": "100%", "borderCollapse": "collapse"},
                             ),
                         ],
                         style={

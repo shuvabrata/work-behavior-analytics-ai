@@ -1,6 +1,13 @@
+# Third-party images are pinned to an exact PATCH version, never a minor or rolling
+# tag. A minor tag such as `keycloak:26.8` silently follows every 26.8.x release, so
+# re-pulling images can change behaviour with no change in this file. That is not
+# hypothetical: a `26.8` re-pull moved Keycloak to a build whose Admin REST API
+# enforces an audience the previous build did not, and every in-app user-management
+# call began failing with a 503 that no local test caught. Upgrades belong in a
+# reviewable diff: Dependabot watches the `docker` ecosystem and opens a PR per bump.
 services:
   postgres:
-    image: postgres:17
+    image: postgres:17.12
     container_name: wba-ai-postgres
     restart: unless-stopped
     environment:
@@ -24,7 +31,7 @@ services:
       start_period: 30s
 
   keycloak:
-    image: quay.io/keycloak/keycloak:26.8
+    image: quay.io/keycloak/keycloak:26.8.2
     container_name: wba-ai-keycloak
     restart: unless-stopped
     command: ["start-dev", "--import-realm"]
@@ -180,7 +187,7 @@ services:
     # Pinned to the current stable branch (1.30.x, currently 1.30.6). This is
     # a minor-version tag, not a digest — pulls can drift inside 1.30.x. Pin
     # to a digest if you need byte-identical reproducibility.
-    image: nginx:1.30-alpine
+    image: nginx:1.30.7-alpine
     container_name: wba-ai-nginx
     restart: unless-stopped
     ports:
@@ -220,7 +227,7 @@ services:
       start_period: 30s
 
   neo4j:
-    image: neo4j:5.26-community
+    image: neo4j:5.26.33-community
     container_name: wba-ai-neo4j
     ports:
       - "7474:7474"  # HTTP
@@ -248,7 +255,7 @@ services:
       start_period: 30s
       
   rabbitmq:
-    image: rabbitmq:4-management
+    image: rabbitmq:4.4.1-management
     container_name: wba-ai-rabbitmq
     restart: unless-stopped
     environment:

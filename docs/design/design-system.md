@@ -302,6 +302,31 @@ placeholder = create_placeholder_section(
 
 ---
 
+### Tables
+
+**Module**: `ui.components.table` · **CSS**: `.executive-table` + `.executive-table--data`
+
+**Builder**: `data_table(columns, rows=None, *, body_id=None, striped=False, hover=True, responsive=True, size="sm", table_id=None, className=None)`
+
+| Rule | Value |
+|---|---|
+| Header | 12px, uppercase, `0.4px` spacing, semibold, `nowrap` |
+| Body | 13px |
+| In-cell badge | 12px |
+| Mono | `id` and long space-free tokens as `<code>` |
+| Borders | bottom-only; no outer border, no cell grid, no last-row rule |
+| Props | `hover=True`, `responsive=True`, `striped=False` |
+
+No `bordered` parameter — a cell grid is a design change, not a flag.
+
+**Density**: `.dense-page` on the ancestor, never a per-table argument. Dense pages: Graph, Timeline, Search, Catalog, both Collaboration Network pages. Card and form pages keep roomier padding.
+
+**JS bodies**: `body_id` with no `rows` emits the header and an empty `<tbody>`; a `clientside_callback` fills it. See [frontend-design-skill.md](frontend-design-skill.md) § Large Table Rendering.
+
+**Chat markdown tables** are `dcc.Markdown`-rendered, not builder-built; `.chat-markdown` follows the same type scale and border rule.
+
+---
+
 ### Destructive Buttons
 
 **App Standard**: All delete/remove/destructive buttons MUST use `color="outline-danger"`.

@@ -46,6 +46,28 @@
 - **Category**: tech-debt (UI consistency / design tokens)
 - **Planned at**: commit `8e1d0b5a`, 2026-11-22
 
+### Scope decision — step 5 dropped (intentional)
+
+Step 5 (key/value property tables on Graph, Collaboration Network, Ego, Timeline,
+Search) was **implemented and then rejected by the operator during its gate
+review**. The operator judged the migrated key/value layout worse than the
+existing one in the right-hand property panels and asked that those panels be
+left alone. The change was reverted, not fixed:
+
+- `key_value_table` and its helpers were **removed** from
+  `src/ui/components/table.py`; the module now exposes only `data_table`.
+- The `.executive-table--kv` / `.kv-key` / `.kv-value` CSS rules were **removed**
+  from `executive-dashboard.css`.
+- `render_properties_table` (`common.py`) and `_build_attributes_table`
+  (`search.py`) keep their **existing** implementation — no delegation, no
+  `runtime_settings` datetime lookup, no clipboard/URL changes on those panels.
+- The key/value tests in `tests/test_table_builder.py` were **removed**.
+
+This is deliberate scope reduction, not an unfinished step. The key/value
+criteria in "Done criteria" and the key/value items in "Test plan" are struck
+through below. Steps 1–4 and 6–8 are unaffected and were confirmed by the
+operator. Re-opening step 5 would be a new plan, not a continuation of this one.
+
 ### Progress
 
 | Step | Scope | Status |
@@ -495,6 +517,10 @@ still look right at this page's canvas height.
 
 ### Step 5 — Key/value tables: Graph, Collaboration Network, Ego, Timeline, Search
 
+> **DROPPED — do not execute.** The operator rejected this step's migrated layout
+> during its gate review. The instructions below are kept only as the record of
+> what was tried and reverted. See "Scope decision — step 5 dropped" above.
+
 **Pages to eyeball**: `/app/graph` (select a node — the right-panel properties),
 `/app/collaboration` (select a node), `/app/collaboration/person` (select a node),
 `/app/analytics/timeline` (open a detail modal), `/app/search` (open a result's
@@ -636,11 +662,11 @@ bandit result.
 
 ## Test plan
 
-- **New**: `tests/test_table_builder.py` — the builder's structure, defaults and
-  key/value cell behaviours.
+- **New**: `tests/test_table_builder.py` — the builder's structure and defaults.
+  *(Key/value cell tests were added in step 5 and removed when step 5 was dropped.)*
 - **Updated**: `tests/test_settings_user_management_page.py` — the class assertion.
-- **Updated**: `tests/test_activity_timeline_detail_modal.py` — only what the
-  renderer change breaks.
+- ~~**Updated**: `tests/test_activity_timeline_detail_modal.py` — only what the
+  renderer change breaks.~~ **Descoped** — the renderer was not changed.
 - **Unchanged**: `tests/test_result_pane.py` — the container builders are not
   touched.
 - **Manual**: every page gate, in both themes.

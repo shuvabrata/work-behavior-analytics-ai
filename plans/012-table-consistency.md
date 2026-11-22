@@ -142,6 +142,9 @@ overrides — the inline size is dead and misleading.
 
 ### The key/value fork has drifted
 
+> **Context only — not addressed.** The step that would have fixed this was
+> dropped; Search still forks the renderer.
+
 `src/ui/pages/search.py` `_build_attributes_table` re-implements
 `src/ui/components/common.py` `render_properties_table`. The fork lacks: clipboard
 buttons on every value, URL rendering, and the `_DATE_TIME_KEYS` date heuristic.
@@ -149,6 +152,9 @@ It also reads `runtime_settings.get("UI_DATETIME_FORMAT")` where the shared rend
 reads `settings.UI_DATETIME_FORMAT`.
 
 ### The key/value tables are shared by four pages
+
+> **Context only — not addressed.** Step 5 was dropped; these four pages keep the
+> current renderer.
 
 `render_properties_table` is reached through `build_element_properties_content`
 (Graph, Collaboration Network, Collaboration Network Ego) and
@@ -197,13 +203,14 @@ These are settled. Do not re-open them while executing.
 10. **Catalog JS body**: the builder emits the skeleton and header; JS fills the
     body. The builder takes a `body_id`.
 11. **Density**: via `.dense-page` on the ancestor. No per-table density argument.
-12. **Class names**: `.executive-table` base, `--data` and `--kv` variants.
-    `.graph-results-table` is deleted. Key/value cells move from inline tokens to
-    CSS classes.
+12. **Class names**: `.executive-table` base and `--data` variant. `.graph-results-table`
+    is deleted. ~~The `--kv` variant and key/value cells moving from inline tokens to
+    CSS classes.~~ **Descoped** — the `--kv` variant was removed with step 5.
 13. **Test strategy**: update the two pinning tests to the new contract.
-14. **Module location**: new `src/ui/components/table.py`;
-    `render_properties_table` and `render_visible_properties` stay in `common.py`
-    as thin wrappers so existing imports keep working.
+14. **Module location**: new `src/ui/components/table.py`.
+    ~~`render_properties_table` and `render_visible_properties` stay in `common.py`
+    as thin wrappers so existing imports keep working.~~ **Descoped** — `common.py`
+    was not touched; its renderer is unchanged.
 15. **Chat tables**: CSS declarations aligned; not routed through the builder.
 16. **Badges**: keep Bootstrap semantic classes, tokenise their size in CSS.
 17. **Typography sweep**: text, badges, icons and code **inside table cells** only.
@@ -261,25 +268,29 @@ add no new finding. Do not reflow or reformat unrelated code to satisfy it.
 **In scope** (the only files you should modify):
 
 - `src/ui/components/table.py` — new module.
-- `src/ui/components/common.py` — the key/value wrappers, moved to delegate.
-- `src/ui/components/__init__.py` — re-export the builders if you add them to
+- ~~`src/ui/components/common.py` — the key/value wrappers, moved to delegate.~~
+  **Descoped** — step 5 dropped; `common.py` was left unchanged.
+- `src/ui/components/__init__.py` — re-export the builder if you add it to
   `__all__`.
 - `src/ui/styles.py` — remove the `DETAILS_TABLE_*` tokens once nothing imports
-  them.
+  them. **Not done** — the tokens stay defined and unused, because the property
+  renderer that uses them was not migrated.
 - `src/ui/assets/executive-dashboard.css` — consolidate the table rulesets, add
   the variants, align the chat markdown declarations.
 - `src/ui/pages/catalog/layout.py` — table skeleton.
 - `src/ui/pages/settings/user_management/layout.py` — table.
 - `src/ui/pages/graph/utils/ui_components.py` — `create_table_display`.
-- `src/ui/pages/search.py` — delete the fork, call the shared renderer.
+- ~~`src/ui/pages/search.py` — delete the fork, call the shared renderer.~~
+  **Descoped** — step 5 dropped; `search.py` was left unchanged.
 - `src/ui/pages/connectors/layout.py` — the env table and its row builder.
 - `tests/test_table_builder.py` — new.
 - `tests/test_settings_user_management_page.py` — update the pinned class
   assertion.
-- `tests/test_activity_timeline_detail_modal.py` — update only what the renderer
-  change breaks.
+- ~~`tests/test_activity_timeline_detail_modal.py` — update only what the renderer
+  change breaks.~~ **Descoped** — the renderer was not changed.
 - `tests/test_shared_graph_components.py` — **run it; do not weaken it.** Expected
-  to pass unchanged (it pins the metric popovers that `key_renderer` preserves).
+  to pass unchanged. *(The `key_renderer` clause no longer applies: the metric
+  popovers were never moved, so the tests pin the untouched renderer.)*
 - `docs/design/design-system.md` — the Tables section.
 
 **Out of scope** (do NOT touch):
@@ -314,7 +325,12 @@ imports them yet. The gate is the test suite, not a browser.
 
 **1a. Create `src/ui/components/table.py`.**
 
-Two public functions, plus the row helper the key/value builder needs.
+> **Executed state:** only `data_table` shipped. `key_value_table` and the row
+> helper were built in step 1 and **removed when step 5 was dropped**, so the
+> module now exposes `data_table` alone. The `key_value_table` signature below is
+> kept as the original design record.
+
+One public function shipped (`data_table`); the plan originally specified two.
 
 ```python
 def data_table(
@@ -394,14 +410,15 @@ must keep working.
     bottom border), `tbody tr:last-child td` (no border), striped and hover rules.
   - `.executive-table--data` — the data-table variant. It may be empty today; it
     exists so a page can target data tables without repeating the base selector.
-  - `.executive-table--kv` — the key/value variant, with `.kv-key` and `.kv-value`
+  - ~~`.executive-table--kv` — the key/value variant, with `.kv-key` and `.kv-value`
     cell rules reproducing the `DETAILS_TABLE_KEY_STYLE` and
     `DETAILS_TABLE_VALUE_STYLE` declarations, plus `.kv-value code` for the mono
     treatment. Also add `.kv-value a` reproducing `DETAILS_TABLE_LINK_STYLE`
     (`src/ui/styles.py:448-454`): navy, no underline, `cursor: pointer`,
     `word-break: break-all`. Without it, once the inline token is gone, URLs in
     every property table render as default browser links (blue, underlined,
-    wrapping differently).
+    wrapping differently).~~ **Built in step 1, removed with step 5** — no `--kv`
+    variant exists in the shipped CSS.
 - Add `.executive-table .badge { font-size: 12px; }` so in-cell badges stop
   carrying an inline size.
 - Add the dark-mode overrides the base needs. The existing base already uses
@@ -426,17 +443,18 @@ must keep working.
 - `data_table` with rows renders one `<tr>` per row and one `<th>` per column.
 - `data_table` defaults: `hover=True`, `responsive=True`, `striped=False`.
 - `data_table` emits no `table-bordered` class (it has no `bordered` parameter).
-- `key_value_table` renders one `.details-prop-row` per item, with `.kv-key` and
-  `.kv-value` cells.
-- `key_value_table` renders the key text unchanged when `key_renderer` is omitted,
-  and renders `key_renderer(key)` in the key cell when it is given.
-- `key_value_table` renders a URL as an anchor, a long token as `<code>`, and a
-  date-like string as a relative-time span with a title.
-- `key_value_table` renders a clipboard control on every value.
-- `key_value_table` formats a date using a `runtime_settings` `UI_DATETIME_FORMAT`
+- ~~`key_value_table` renders one `.details-prop-row` per item, with `.kv-key` and
+  `.kv-value` cells.~~
+- ~~`key_value_table` renders the key text unchanged when `key_renderer` is omitted,
+  and renders `key_renderer(key)` in the key cell when it is given.~~
+- ~~`key_value_table` renders a URL as an anchor, a long token as `<code>`, and a
+  date-like string as a relative-time span with a title.~~
+- ~~`key_value_table` renders a clipboard control on every value.~~
+- ~~`key_value_table` formats a date using a `runtime_settings` `UI_DATETIME_FORMAT`
   override, not the startup `settings` value: patch
   `ui.runtime_settings.runtime_settings.get` to return a distinctive format and
-  assert the rendered `title` carries it.
+  assert the rendered `title` carries it.~~
+  **All five key/value tests were removed with step 5.**
 
 **1d. Do not change any page yet.** `common.py` still uses its own renderer at the
 end of this step; the builder is unused. That is deliberate — the gate proves the
@@ -445,8 +463,11 @@ builder works before anything depends on it.
 The value-cell formatting therefore exists **twice** at the end of this step: once
 in `common.py` (live) and once in `table.py` (unused). That duplication is
 intentional. Do not "fix" it by making `common.py` delegate now — that would change
-four pages before the gate and make "no page opens differently" false. Step 5
-removes the `common.py` copy.
+four pages before the gate and make "no page opens differently" false.
+
+> **Executed state:** step 5 was dropped, so the duplication was never resolved by
+> delegation. The `table.py` copy went away with `key_value_table`; `common.py` is
+> the only copy and is unchanged.
 
 **Gate 1**: `pytest -m unit tests -q` passes; `mypy src/` and `pylint src` pass.
 No page opens differently. Report the new test count.

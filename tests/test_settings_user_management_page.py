@@ -293,7 +293,9 @@ class TestLayout:
         from ui.pages.settings.user_management.layout import _render_table
 
         table = _render_table([{"id": "u1", "username": "alice", "enabled": True, "roles": []}])
-        assert "executive-table" in table.to_plotly_json()["props"].get("className", "")
+        classes = table.to_plotly_json()["props"].get("className", "").split()
+        assert "executive-table" in classes
+        assert "executive-table--data" in classes
 
     def test_delete_button_is_outline_danger(self) -> None:
         """Destructive actions use ``outline-danger`` only (UI standard)."""

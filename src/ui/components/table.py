@@ -36,7 +36,7 @@ def _join_classes(*classes: str | None) -> str:
 
 def data_table(
     columns: Sequence[str],
-    rows: Sequence[Sequence[Any]] | None = None,
+    rows: Sequence[Sequence[Any] | html.Tr] | None = None,
     *,
     body_id: str | None = None,
     striped: bool = False,
@@ -51,6 +51,10 @@ def data_table(
     ``rows=None`` with ``body_id`` set emits an empty ``<tbody>`` for a
     JS-rendered body. ``rows=None`` without ``body_id`` is an error: a table
     with no body is almost always a bug.
+
+    A row may be an ``html.Tr`` already built by the caller, which is emitted
+    as-is; this is how a row that spans columns (an empty-state row) gets a
+    ``colSpan``.
     """
     if rows is None and body_id is None:
         raise ValueError("data_table needs rows or a body_id for a JS-rendered body")
@@ -60,7 +64,8 @@ def data_table(
         body = html.Tbody(id=body_id)
     else:
         body = html.Tbody(
-            [html.Tr([html.Td(cell) for cell in row]) for row in rows]
+            [row if isinstance(row, html.Tr) else html.Tr([html.Td(cell) for cell in row])
+             for row in rows]
         )
 
     props: dict[str, Any] = {

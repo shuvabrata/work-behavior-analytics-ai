@@ -312,17 +312,58 @@ input::placeholder {
 }
 
 /* ============================================================================= */
-/* Query Editor — tighter form controls to reduce wasted vertical space         */
+/* Form-control density — one size app-wide                                     */
 /* ============================================================================= */
 
-.editor-form .form-control {
+/* One control height app-wide. Materia's `.form-control` / `.form-select`
+   carry `padding: 1rem 0` and `min-height: calc(1.5em + 2rem)`, ~56px tall.
+
+   `!important` is required: `INPUT_STYLE` sets an inline `padding: 12px`, and
+   an inline declaration outranks any selector.
+
+   The exceptions below are deliberate and must be re-pinned here. */
+.form-control,
+.form-select {
     padding-top: 4px !important;
     padding-bottom: 4px !important;
+    min-height: 32px !important;
 }
 
-.editor-form textarea.form-control {
-    padding-top: 4px !important;
-    padding-bottom: 4px !important;
+/* Textareas get slightly more breathing room than single-line controls so
+   paragraphs of text do not touch the edges. Their height stays content-driven
+   (`rows`), so min-height is left alone. */
+textarea.form-control {
+    padding-top: 6px !important;
+    padding-bottom: 6px !important;
+}
+
+/* Chat composer — a 68px writing box, not a dense form field. */
+.chat-input-refined.form-control {
+    padding-top: 16px !important;
+    padding-bottom: 16px !important;
+}
+
+/* Primary search box — deliberately large, being the page's main affordance. */
+#search-q-input.form-control {
+    padding-top: 11px !important;
+    padding-bottom: 11px !important;
+}
+
+/* Graph spotlight — 30px is load-bearing: on the ego page the canvas height is
+   derived from the chrome above it (_CANVAS_HEIGHT), and the controls bar must
+   not grow. */
+.graph-spotlight-input.form-control {
+    padding-top: 3px !important;
+    padding-bottom: 3px !important;
+    min-height: 30px !important;
+}
+
+/* The top-nav and catalog search fields already pin their own height. */
+.global-search-input.form-control,
+.catalog-search-input.form-control {
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+    min-height: 32px !important;
 }
 
 /* ============================================================================= */

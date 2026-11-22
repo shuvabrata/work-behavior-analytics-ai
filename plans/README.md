@@ -12,7 +12,7 @@ Plan files for completed work are removed as they land — that is this director
 |------|-------|----------|--------|------------|--------|
 | 010 | Compact the data-dense pages and raise the app-wide font scale | P2 | M | — | DONE — all 8 steps complete (gates 1-6 confirmed by the operator; step 8 CI gate green) |
 | 011 | Drop the dead `connectors.enabled` column | P3 | S | — | DONE — code, migration and design doc all landed; all gates green |
-| 012 | One table standard — builder, CSS, and per-page migration | P2 | M | — | DONE — gates 1-4 and 6-7 confirmed; step 5 dropped (property panels keep their renderer); design doc landed |
+| 012 | One table standard — builder, CSS, and per-page migration | P2 | M | — | DONE — gates 1-4 and 6-8 confirmed; step 5 dropped (property panels keep their renderer); design doc landed |
 
 ## Dependency notes
 

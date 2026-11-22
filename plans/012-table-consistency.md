@@ -57,7 +57,7 @@
 | 5 | Key/value tables (Graph, Collaboration Network, Ego, Timeline, Search) | DROPPED — operator rejected the migrated layout; property panels keep their current renderer |
 | 6 | Connectors env-var table | DONE — gate 6 confirmed |
 | 7 | Chat markdown tables | DONE — gate 7 confirmed |
-| 8 | Design docs + full CI gate | TODO |
+| 8 | Design docs + full CI gate | DONE — gate 8 confirmed |
 
 ## Why this matters
 

@@ -390,7 +390,6 @@ async def list_connectors(db: AsyncSession) -> List[Dict[str, Any]]:
                 "connector_type": connector.connector_type,
                 "display_name": meta["display_name"],
                 "status": connector.status,
-                "enabled": connector.enabled,
                 "config": _normalize_connector_config(connector.connector_type, connector.config),
                 "last_tested_at": connector.last_tested_at,
                 "last_test_error": connector.last_test_error,
@@ -414,7 +413,6 @@ async def get_connector(
         "connector_type": connector.connector_type,
         "display_name": meta["display_name"],
         "status": connector.status,
-        "enabled": connector.enabled,
         "config": _normalize_connector_config(
             connector.connector_type,
             connector.config,

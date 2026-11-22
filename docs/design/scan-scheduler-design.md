@@ -25,8 +25,7 @@ path a manual trigger uses. No new containers or message queues are introduced.
 | 7 | API surface | Extend `ConnectorStatus` GET + existing `PATCH /connectors/{type}` | No new routes; GET returns what it owns |
 | 8 | Non-schedulable connectors | No special logic | Registry lookup naturally skips them |
 | 9 | GET computed fields | Only `scan_interval_hours` returned | The UI cross-references the commands API for history |
-| 10 | `enabled` flag | Ignored — the scheduler keys only off `scan_interval_hours` | The `enabled` flag is unused in practice; connectors default to `enabled=False` yet still need scheduled scans |
-| 11 | Multi-instance safety | `scheduler_lease` table — distributed leader election via Postgres `UPDATE` | Resilient; automatic failover when the leader dies |
+| 10 | Multi-instance safety | `scheduler_lease` table — distributed leader election via Postgres `UPDATE` | Resilient; automatic failover when the leader dies |
 
 ## Scheduling Model
 
@@ -41,7 +40,7 @@ Every `SCHEDULER_TICK_MINUTES` minutes, the scheduler:
    leader is automatically replaced within one tick.
 
 2. **Selects schedulable connectors** — connectors with a non-null
-   `scan_interval_hours`. The `enabled` flag is not considered.
+   `scan_interval_hours`.
 
 3. **Determines which are due** — for each connector, the most recent `scan` command
    (any status) is looked up in `command_status`. A connector is due when it has never

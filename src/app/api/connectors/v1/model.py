@@ -84,7 +84,6 @@ class ConnectorStatus(BaseModel):
     connector_type: str
     display_name: str
     status: str
-    enabled: bool
     config: Optional[Dict[str, Any]] = None
     last_tested_at: Optional[datetime] = None
     last_test_error: Optional[str] = None

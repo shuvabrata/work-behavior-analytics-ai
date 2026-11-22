@@ -1,7 +1,7 @@
 from typing import Any
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Integer, String
+from sqlalchemy import DateTime, Integer, String
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import func
@@ -15,7 +15,6 @@ class Connector(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     connector_type: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="not_configured")
-    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     config: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     last_tested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_test_error: Mapped[str | None] = mapped_column(String(1023), nullable=True)

@@ -45,3 +45,23 @@ updates:
       - "docker"
     commit-message:
       prefix: "deps"
+
+  # The `docker` ecosystem above scans Dockerfiles and Kubernetes manifests only —
+  # it does not read compose files, so on its own it would leave every image in
+  # docker-compose.yml unmanaged. A separate ecosystem has to cover them, and it
+  # is a separate entry rather than a wider `directory` because Dependabot has no
+  # single ecosystem that handles both.
+  - package-ecosystem: "docker-compose"
+    directory: "/"
+    target-branch: "main"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "docker"
+    commit-message:
+      prefix: "deps"

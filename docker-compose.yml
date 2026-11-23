@@ -184,9 +184,6 @@ services:
         condition: service_healthy
 
   nginx:
-    # Pinned to the current stable branch (1.30.x, currently 1.30.6). This is
-    # a minor-version tag, not a digest — pulls can drift inside 1.30.x. Pin
-    # to a digest if you need byte-identical reproducibility.
     image: nginx:1.30.7-alpine
     container_name: wba-ai-nginx
     restart: unless-stopped

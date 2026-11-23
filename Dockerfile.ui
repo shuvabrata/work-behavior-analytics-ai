@@ -4,7 +4,7 @@
 # driver, no data-store credentials and no LLM provider key. Every piece of data
 # it renders arrives over HTTP from the API (see src/ui/api_client.py). Do not
 # add a data-store or LLM package here — see requirements.ui.txt's header.
-FROM python:3.14.2-slim
+FROM python:3.15.2-slim
 
 # curl backs the UI healthcheck (docker-compose.yml) and the entrypoint's own
 # readiness probing; the API image installs it alongside postgresql-client.

@@ -14,6 +14,7 @@ import dash_bootstrap_components as dbc
 from dash import dcc, html
 
 from ui.components.common import create_page_header
+from ui.components.table import data_table
 from ui.styles import (
     CARD_CONTAINER_STYLE,
     COLOR_BORDER,
@@ -52,12 +53,6 @@ def _role_checkboxes(roles: list[str], id_prefix: str) -> list[Any]:
 
 def _render_table(users: list[dict[str, Any]]) -> dbc.Table:
     """Render the user table for one page of ``UserSummary`` dicts."""
-    header = html.Thead(
-        html.Tr(
-            [html.Th(label) for label in ("Username", "Name", "Email", "Roles", "Enabled", "Actions")]
-        )
-    )
-
     rows: list[Any] = []
     for user in users:
         user_id = str(user.get("id", ""))
@@ -115,14 +110,10 @@ def _render_table(users: list[dict[str, Any]]) -> dbc.Table:
             )
         )
 
-    return dbc.Table(
-        [header, html.Tbody(rows)],
-        bordered=False,
-        hover=True,
-        responsive=True,
-        size="sm",
-        className="align-middle executive-table",
-        style={"fontFamily": FONT_SANS, "fontSize": FONT_SIZE_SMALL},
+    return data_table(
+        ["Username", "Name", "Email", "Roles", "Enabled", "Actions"],
+        rows,
+        className="align-middle",
     )
 
 

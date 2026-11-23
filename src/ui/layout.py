@@ -7,7 +7,19 @@ from dash import clientside_callback, dcc, html
 from dash.dependencies import Input, Output, State
 from dash.exceptions import PreventUpdate
 
-from ui.pages import analytics, chat, collaboration_network, collaboration_network_ego, connectors, developer, graph, search, settings, timeline, catalog
+from ui.pages import (
+    analytics,
+    catalog,
+    chat,
+    collaboration_network,
+    collaboration_network_ego,
+    connectors,
+    developer,
+    graph,
+    search,
+    settings,
+    timeline,
+)
 from ui.components.account_bar import get_account_bar_layout
 from ui.components.permission_errors import register_auth_redirect
 from ui.components.setup_banner import get_banner_layout

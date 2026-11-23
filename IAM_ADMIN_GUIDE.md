@@ -150,6 +150,41 @@ Then sign in as `admin` with the `KEYCLOAK_CONSOLE_ADMIN_PASSWORD` value from `.
 
 ## Applying a realm change
 
+### Running `kcadm.sh`
+
+`kcadm.sh` is stateless — it does not read the container's environment, so every
+invocation needs its own server URL and credentials. A bare command fails with
+`No server specified. Use --server, or 'kcadm.sh config credentials'`.
+
+Two flags are easy to get wrong. The server URL carries the `/auth` relative
+path, because the container runs with `--http-relative-path=/auth`. And
+`--realm master` names the realm the *console admin account* lives in — it is
+not the realm being read; `-r wba` selects that.
+
+Read the console admin password out of `.env` first. It is the same credential as
+the console sign-in above:
+
+```bash
+KEYCLOAK_CONSOLE_ADMIN_PASSWORD=$(grep '^KEYCLOAK_CONSOLE_ADMIN_PASSWORD=' .env | cut -d= -f2-)
+```
+
+Every command below then authenticates inline, so nothing is stored in the
+container and the password stays out of the container's own config:
+
+```bash
+docker exec wba-ai-keycloak /opt/keycloak/bin/kcadm.sh get realms/wba \
+  --server http://localhost:8080/auth --realm master \
+  --user admin --password "$KEYCLOAK_CONSOLE_ADMIN_PASSWORD"
+```
+
+The shell expands `$KEYCLOAK_CONSOLE_ADMIN_PASSWORD` before `docker exec` runs, so
+it must be set in your current shell — `.env` is not auto-exported. An unset
+variable expands empty and surfaces as an authentication failure, not as a
+missing-variable error.
+
+`--fields` is not a general selector: `--fields realm,roles,clients` returns only
+`realm`. Roles and clients each have their own endpoint.
+
 ### Why editing the template is not enough
 
 The realm is imported on the very first boot against an empty Keycloak
@@ -162,10 +197,24 @@ another, and nothing errors to tell you.
 The symptom is silent. Compare the template against the running realm:
 
 ```bash
-docker exec wba-ai-keycloak /opt/keycloak/bin/kcadm.sh get realms/wba
+docker exec wba-ai-keycloak /opt/keycloak/bin/kcadm.sh get realms/wba \
+  --server http://localhost:8080/auth --realm master \
+  --user admin --password "$KEYCLOAK_CONSOLE_ADMIN_PASSWORD"
+
+docker exec wba-ai-keycloak /opt/keycloak/bin/kcadm.sh get roles -r wba \
+  --server http://localhost:8080/auth --realm master \
+  --user admin --password "$KEYCLOAK_CONSOLE_ADMIN_PASSWORD" \
+  --fields name --format json
+
+docker exec wba-ai-keycloak /opt/keycloak/bin/kcadm.sh get clients -r wba \
+  --server http://localhost:8080/auth --realm master \
+  --user admin --password "$KEYCLOAK_CONSOLE_ADMIN_PASSWORD" \
+  --fields clientId --format json
 ```
 
-If what you edited is not in that output, the change has not been delivered.
+The realm must contain the template's roles (`admin`, `user`, `service`) and its
+clients (`web`, `internal`, `admin-api`). If what you edited is not in that
+output, the change has not been delivered.
 Restarting Keycloak does not help either — the realm already exists, so the
 import is skipped again.
 
@@ -177,10 +226,23 @@ edit means recreating the Keycloak database and letting the next boot import it:
 
 ```bash
 docker compose stop keycloak
-docker compose exec -T postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c 'DROP DATABASE keycloak;'
-docker compose exec -T postgres createdb -U "$POSTGRES_USER" -O keycloak keycloak
+docker compose exec -T postgres psql -U postgres -d postgres -c 'DROP DATABASE keycloak;'
+docker compose exec -T postgres createdb -U postgres -O keycloak keycloak
 docker compose up -d keycloak
 ```
+
+**Step 1 is not optional.** Keycloak holds open connections to the database, and
+`DROP DATABASE` fails with `database "keycloak" is being accessed by other users`
+while it is running.
+
+The superuser and maintenance database are written literally as `postgres`
+because `"$POSTGRES_USER"` and `"$POSTGRES_DB"` are `.env` values, not exported
+shell variables — unquoted substitution of them would target an empty name. If
+you changed either in `.env`, substitute your own values.
+
+Only the `keycloak` database is dropped, so the `keycloak` role survives and
+does not need recreating. If it is missing, create it with the idempotent
+snippet in `DEVELOPER_QUICK_START.md`.
 
 The next boot sees an empty database, so `--import-realm` imports the current
 template in full. Every fact the template declares is delivered — not just the
@@ -229,13 +291,30 @@ mapper:
 
 ```bash
 docker exec wba-ai-keycloak /opt/keycloak/bin/kcadm.sh get clients -r wba \
-  -q clientId=web --fields 'id,clientId,protocolMappers' --format json
+  -q clientId=web \
+  --server http://localhost:8080/auth --realm master \
+  --user admin --password "$KEYCLOAK_CONSOLE_ADMIN_PASSWORD" \
+  --format json
 ```
 
 The JSON must contain a `web-audience` entry whose
-`"included.client.audience"` is `"web"`. Use the same shape to check any
-other change you made — read the field you changed back from the running realm
-and compare it to the template.
+`"included.client.audience"` is `"web"`.
+
+**Do not narrow this with `--fields`.** Asking for
+`--fields 'id,clientId,protocolMappers'` returns a `protocolMappers` array
+holding an empty object — the mapper's name and `config` are both dropped, so
+the check reports a missing mapper that is in fact present. Read the whole
+client and search the output, or read the mapper on its own:
+
+```bash
+docker exec wba-ai-keycloak /opt/keycloak/bin/kcadm.sh get clients -r wba \
+  -q clientId=web \
+  --server http://localhost:8080/auth --realm master \
+  --user admin --password "$KEYCLOAK_CONSOLE_ADMIN_PASSWORD"
+```
+
+Use the same shape to check any other change you made — read the field you
+changed back from the running realm and compare it to the template.
 
 ## Disable the console again
 

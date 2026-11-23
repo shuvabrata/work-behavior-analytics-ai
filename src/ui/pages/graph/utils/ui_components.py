@@ -5,10 +5,11 @@ These are pure functions that return Dash components.
 """
 
 from typing import Any
-import dash_bootstrap_components as dbc
+
 from dash import html
 
 from ui.components.common import create_alert
+from ui.components.table import data_table
 from ui.styles import (
     ACTIVE_THEME,
     ALERT_TEXT_STYLE,
@@ -116,22 +117,9 @@ def create_table_display(raw_results: list[dict[str, Any]] | None, result_count:
     """
     _ = result_count
     if raw_results and len(raw_results) > 0:
-        # Get column names from first result
-        columns = list(raw_results[0].keys()) if raw_results else []
-        
-        # Create table
-        table = dbc.Table([
-            html.Thead(
-                html.Tr([html.Th(col) for col in columns])
-            ),
-            html.Tbody([
-                html.Tr([
-                    html.Td(str(row.get(col, ""))) for col in columns
-                ]) for row in raw_results
-            ])
-        ], bordered=True, striped=True, hover=True, responsive=True, className="mb-0 graph-results-table")
-        
-        return html.Div(table)
+        columns = list(raw_results[0].keys())
+        rows = [[str(row.get(col, "")) for col in columns] for row in raw_results]
+        return html.Div(data_table(columns, rows, className="mb-0"))
     return html.Div(
         "Query executed successfully but returned no rows.",
         style={"fontSize": FONT_SIZE_XSMALL, "color": COLOR_TEXT_SECONDARY, "padding": "8px 0"}

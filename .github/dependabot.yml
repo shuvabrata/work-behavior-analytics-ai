@@ -21,3 +21,47 @@ updates:
         update-types:
           - "minor"
           - "patch"
+
+  # Third-party images are pinned to an exact patch version in docker-compose.yml and
+  # the Dockerfiles, which keeps re-pulls reproducible but also means nothing would
+  # ever move them forward on its own. This is the other half of that decision: each
+  # bump arrives as a PR with a diff and a CI run, so an upgrade is a reviewable
+  # decision rather than something a `docker compose pull` does unannounced.
+  #
+  # Ungrouped on purpose. Image bumps are not interchangeable — the Keycloak 26.8.x
+  # that broke in-app user management was one — so each one earns its own PR instead
+  # of being buried in a batch that is approved by habit.
+  - package-ecosystem: "docker"
+    directory: "/"
+    target-branch: "main"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "docker"
+    commit-message:
+      prefix: "deps"
+
+  # The `docker` ecosystem above scans Dockerfiles and Kubernetes manifests only —
+  # it does not read compose files, so on its own it would leave every image in
+  # docker-compose.yml unmanaged. A separate ecosystem has to cover them, and it
+  # is a separate entry rather than a wider `directory` because Dependabot has no
+  # single ecosystem that handles both.
+  - package-ecosystem: "docker-compose"
+    directory: "/"
+    target-branch: "main"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "docker"
+    commit-message:
+      prefix: "deps"

@@ -60,7 +60,16 @@
       "implicitFlowEnabled": false,
       "directAccessGrantsEnabled": false,
       "serviceAccountsEnabled": true,
-      "secret": "${KEYCLOAK_ADMIN_CLIENT_SECRET}"
+      "secret": "${KEYCLOAK_ADMIN_CLIENT_SECRET}",
+      "defaultClientScopes": [
+        "web-origins",
+        "acr",
+        "kc-admin-api",
+        "roles",
+        "profile",
+        "basic",
+        "email"
+      ]
     },
     {
       "clientId": "internal",

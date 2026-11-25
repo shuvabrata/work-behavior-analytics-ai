@@ -205,7 +205,7 @@ services:
         condition: service_healthy
 
   github-mcp:
-    image: ghcr.io/github/github-mcp-server:v1.4.0
+    image: ghcr.io/github/github-mcp-server:v2.3.0
     container_name: wba-ai-github-mcp
     restart: unless-stopped
     command: ["http", "--port", "8082", "--read-only"]

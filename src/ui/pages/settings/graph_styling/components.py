@@ -105,7 +105,7 @@ def _color_input(input_id: dict[str, Any], value: Any = None) -> dcc.Input:
     """
     return dcc.Input(
         id=input_id,
-        type="color",  # type: ignore[arg-type]
+        type="color",
         value=value,
         style={
             "width": "100%",

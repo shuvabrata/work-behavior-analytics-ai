@@ -624,11 +624,15 @@ def run_daemon(
                 _poll_scan_children()  # reconcile scan children that died silently
                 continue  # timeout, loop back
 
+            if body is None or method_frame.delivery_tag is None:
+                continue
+
+            delivery_tag: int = method_frame.delivery_tag
             try:
                 envelope = CommandEnvelope.model_validate_json(body)
             except Exception:
                 logger.warning("Invalid command message — nacking to DLQ")
-                channel.basic_nack(method_frame.delivery_tag, requeue=False)
+                channel.basic_nack(delivery_tag, requeue=False)
                 continue
 
             logger.info(f"Received command command_id={envelope.command_id} type={envelope.command_type}")
@@ -642,7 +646,7 @@ def run_daemon(
             else:
                 logger.warning(f"Unknown command type={envelope.command_type} — discarding")
 
-            channel.basic_ack(method_frame.delivery_tag)
+            channel.basic_ack(delivery_tag)
 
     except KeyboardInterrupt:
         logger.info("Received KeyboardInterrupt — shutting down")

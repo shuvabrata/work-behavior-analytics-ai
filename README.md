@@ -28,11 +28,17 @@ The system analyzes project data from various enterprise productivity tools (suc
 #### Connectors support to get meaningful data
 ![alt text](images/image-1.png)
 
+#### Pre-built Query Catalog
+![alt text](images/image-6.png)
+
 #### AI chat interface
 ![alt text](images/image-2.png)
 
 #### Interactive collaboration network
 ![alt text](images/image-4.png)
+
+#### Per Person Ego network
+![alt text](images/image-5.png)
 
 ## Technology Stack
 

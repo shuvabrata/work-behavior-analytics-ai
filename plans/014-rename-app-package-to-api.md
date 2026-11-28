@@ -31,10 +31,49 @@
 
 | Step | Scope | Status |
 |---|---|---|
-| 1 | Rename `src/app` → `src/api` and rewrite every import, string, path and runtime reference | TODO |
-| 2 | Browser gate: the app boots and every page renders | TODO |
-| 3 | Fix the stale `src/app/dash_app/*` documentation references | TODO |
-| 4 | Lint/type/security/doc gates | TODO |
+| 1 | Rename `src/app` → `src/api` and rewrite every import, string, path and runtime reference | ✅ |
+| 2 | Browser gate: the app boots and every page renders | ✅ |
+| 3 | Fix the stale `src/app/dash_app/*` documentation references | ✅ |
+| 4 | Lint/type/security/doc gates | ✅ |
+
+### Execution record — 2026-11-28, branch `feature/refactor_app_to_api`
+
+Executed in the live tree, uncommitted. Step 1 ran in two dispatches: the first
+completed 1a–1f and stopped on the plan's own STOP condition (27 slash-form
+`src/app/...` references remained in code comments and docstrings, which the
+line-anchored and dot-form sweeps could not reach); the second rewrote those 27
+and ran Step 3. Two further residuals outside both dispatches' grep scope were
+fixed by hand — `Dockerfile.api`'s comment path and the two `.gitignore` rules
+for the in-house provider directory (the ignore rule had gone inert:
+`git check-ignore` exits 1 before the fix, 0 after).
+
+Plan corrections applied during execution, none of which was a failure of the
+change:
+
+- `tests/test_collaboration_endpoints.py:90` — `TestClient(app.api_main.app)`
+  was a real break, not prose: line 21's `import app.api_main` is rewritten to
+  `import api.api_main`, rebinding the name. Fixed to `api.api_main.app`.
+- The plan's "three mid-line references" list was an undercount; ~90 further
+  prose and docstring references were rewritten with a module-name-anchored
+  sweep, run after 1b and checked against the Dash/FastAPI instance counts.
+- Step 3's stated "7 at plan time" for the `CLAUDE.md` /
+  `DEVELOPER_QUICK_START.md` import-example grep is 10 live.
+
+Gate results:
+
+| Gate | Result |
+|---|---|
+| `import api.api_main` | resolves (`app.title` → `FastAPI`) |
+| `pytest -m unit tests` | operator-reported green |
+| `mypy src/` | Success, 343 source files |
+| `pylint src --score=y` | 10.00/10 |
+| `bandit -c .bandit.yml -r src/ -lll` | 0 High (27 Low, pre-existing) |
+| Spec freshness | no diff to `docs/design/spec-activity-signal.md` |
+| Residual `src/app` (tracked, excl. `plans/`, `docs/project-plan/`) | 0 |
+| Residual stale import forms / quoted refs / path literals | 0 / 0 / 0 |
+
+`docs/project-plan/` retains `src/app` references by design — it is a dated
+implementation record and is explicitly out of scope.
 
 ## Why this matters
 

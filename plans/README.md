@@ -13,7 +13,7 @@ Plan files for completed work are removed as they land — that is this director
 | 010 | Compact the data-dense pages and raise the app-wide font scale | P2 | M | — | DONE — all 8 steps complete (gates 1-6 confirmed by the operator; step 8 CI gate green) |
 | 011 | Drop the dead `connectors.enabled` column | P3 | S | — | DONE — code, migration and design doc all landed; all gates green |
 | 012 | One table standard — builder, CSS, and per-page migration | P2 | M | — | DONE — gates 1-4 and 6-8 confirmed; step 5 **intentionally dropped** — operator rejected the key/value layout, panels keep their renderer and `key_value_table` was removed; design doc landed |
-| 014 | Rename the `app` package to `api` | P3 | M | — | TODO |
+| 014 | Rename the `app` package to `api` | P3 | M | — | DONE — `src/app` → `src/api`; all 4 steps green (mypy 343 files, pylint 10.00/10, bandit 0 High, spec unchanged); changes uncommitted on `feature/refactor_app_to_api` |
 
 ## Dependency notes
 

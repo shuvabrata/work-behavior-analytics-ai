@@ -18,7 +18,7 @@ Routing key convention
 ``<source>.#``, e.g. ``github.#``.
 
 This script is designed to be run at container startup (before Uvicorn) via
-``src/app/entrypoint.sh``.  It is idempotent: re-running it is safe because
+``src/api/entrypoint.sh``.  It is idempotent: re-running it is safe because
 RabbitMQ ignores re-declarations that match the existing topology exactly.
 
 It also declares the ``command_n_control`` topic exchange, DLX, DLQ, and

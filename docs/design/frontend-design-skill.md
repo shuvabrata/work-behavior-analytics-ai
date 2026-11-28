@@ -53,7 +53,7 @@ license: Complete terms in LICENSE.txt
 - **Skeleton-first**: Keep the table skeleton (header + empty `<tbody id="...">`) in the layout so the header renders instantly; the clientside callback fills the body.
 - **Client-side filtering**: Keep search/filter in the same JS pass — no server round-trip, instant filtering.
 - **Security**: Escape all user data in the JS (`&`, `<`, `>`, quotes) to avoid HTML injection.
-- **Reference Implementation**: The Library page (`src/app/dash_app/pages/library/`) — `layout.py` renders the static skeleton; `callbacks.py` has the clientside callback that builds rows from `library-store`.
+- **Reference Implementation**: The Library page (`src/ui/pages/catalog/`) — `layout.py` renders the static skeleton; `callbacks.py` has the clientside callback that builds rows from `library-store`.
 - **Trade-off**: Row-building logic moves to JS, so Python unit tests cover the data flow and skeleton rather than the rendered rows. Use this pattern for large, read-only, or frequently-filtered datasets; keep small tables as normal Dash components.
 
 ---

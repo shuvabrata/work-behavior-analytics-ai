@@ -678,7 +678,7 @@ def graph_deep_link(lane_wba_id: str, related_wba_id: str | None) -> str:
 
     **Both MATCHes are label-scoped on purpose.**  The ``id`` index is
     **per-label** (every entity label, created by
-    ``src/app/scripts/create_neo4j_indexes.py``), so an *unlabelled*
+    ``src/api/scripts/create_neo4j_indexes.py``), so an *unlabelled*
     ``MATCH (a {id: …})`` cannot use any of them — it plans as
     ``AllNodesScan > Filter``.  Both labels come from parsed WBA ids, and
     ``detail_payload`` only ever passes ids that came from a validated lane key

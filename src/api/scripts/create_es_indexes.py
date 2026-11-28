@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Create all Elasticsearch indexes for the WBA search capability.
 
-Run automatically from ``src/app/entrypoint.sh`` on startup.  Safe to re-run on every startup —
+Run automatically from ``src/api/entrypoint.sh`` on startup.  Safe to re-run on every startup —
 all ``indices.create`` calls use ``ignore=400`` so existing indexes are
 left untouched.
 

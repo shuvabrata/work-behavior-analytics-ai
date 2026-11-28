@@ -255,7 +255,7 @@ Every API operation carries exactly one authorization grant, drawn from a closed
 | `service` | `require_service` — requires the `service` realm role. |
 | a set of grants | Any one of the listed grants. Used where admin and service both qualify. |
 
-**Per-endpoint grants are declared in the code.** `src/app/auth/matrix.py` holds the
+**Per-endpoint grants are declared in the code.** `src/api/auth/matrix.py` holds the
 `(method, path) → grant` table, applied to the routers at include time.
 `tests/test_authz_matrix.py` fails CI when that table and the live routers disagree — an operation
 with no row, a row with no live operation, or a row whose declared grant does not match the

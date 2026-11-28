@@ -1,4 +1,4 @@
-"""Unit tests for src/app/scripts/create_es_indexes.py.
+"""Unit tests for src/api/scripts/create_es_indexes.py.
 
 Verifies:
 - MANAGED_INDEXES covers every entity type in SUPPORTED_ENTITY_TYPES

@@ -92,7 +92,7 @@ def _build_es_client():
 def test_managed_index_exists_in_elasticsearch(source: str, entity_type: str) -> None:
     """Each managed index must exist in the live Elasticsearch cluster.
 
-    If this fails, run ``python src/app/scripts/create_es_indexes.py`` (or the
+    If this fails, run ``python src/api/scripts/create_es_indexes.py`` (or the
     app entrypoint) to create the missing indexes.
     """
     idx = _index_name(source, entity_type)

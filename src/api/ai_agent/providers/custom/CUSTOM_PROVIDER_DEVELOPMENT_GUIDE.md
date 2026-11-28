@@ -46,10 +46,10 @@ FastAPI router  ──►  ai_agent.stream_chat()
 All LLM providers implement the abstract base class `LLMProvider` defined in:
 
 ```
-src/app/ai_agent/providers/base.py
+src/api/ai_agent/providers/base.py
 ```
 
-The factory (`src/app/ai_agent/providers/factory.py`) selects your provider at startup based on the `LLM_PROVIDER` environment variable, caches the instance, and injects it throughout the application.
+The factory (`src/api/ai_agent/providers/factory.py`) selects your provider at startup based on the `LLM_PROVIDER` environment variable, caches the instance, and injects it throughout the application.
 
 ---
 
@@ -497,7 +497,7 @@ class CustomProvider(LLMProvider):
 **Step 1 — Place your class here:**
 
 ```
-src/app/ai_agent/providers/custom/
+src/api/ai_agent/providers/custom/
 ├── __init__.py                     ← must export CustomProvider
 └── custom_provider.py              ← your implementation
 ```
@@ -505,7 +505,7 @@ src/app/ai_agent/providers/custom/
 **Step 2 — Export from `__init__.py`:**
 
 ```python
-# src/app/ai_agent/providers/custom/__init__.py
+# src/api/ai_agent/providers/custom/__init__.py
 from .custom_provider import CustomProvider
 
 __all__ = ["CustomProvider"]
@@ -513,7 +513,7 @@ __all__ = ["CustomProvider"]
 
 **Step 3 — Set environment variables (see Section 8).**
 
-The factory (`src/app/ai_agent/providers/factory.py`) already handles `LLM_PROVIDER=custom`:
+The factory (`src/api/ai_agent/providers/factory.py`) already handles `LLM_PROVIDER=custom`:
 
 ```python
 elif provider_name == "custom":

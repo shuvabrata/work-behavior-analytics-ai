@@ -18,7 +18,7 @@ from common.logger import logger
 from common.runtime_settings import RuntimeConfig, RuntimeConfigCache
 from common.messaging.settings_events import publish_settings_changed
 
-# Module-level cache — initialised by ``src/app/runtime_settings.py`` on
+# Module-level cache — initialised by ``src/api/runtime_settings.py`` on
 # startup.  Tests can replace this with a fresh instance.
 _runtime_cache: RuntimeConfigCache = RuntimeConfigCache()
 

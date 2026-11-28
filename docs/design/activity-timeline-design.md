@@ -80,7 +80,7 @@ Four components, built in that dependency order:
 3. **Activity API** — FastAPI router + service + query layers following the
    repo's `router.py` / `service.py` / `query.py` layering (Section 5).
 4. **Timeline page** — a Dash swimlane page under
-   `src/app/dash_app/pages/timeline/` (Sections 6–7).
+   `src/ui/pages/timeline/` (Sections 6–7).
 
 The pipeline never runs backwards: timeline writes are best-effort and never
 block or fail the graph pipeline.
@@ -153,7 +153,7 @@ idx_activity_actions_target (source, target_entity_type, target_entity_id, event
 
 **Note:** the `DESC` ordering is injected manually in the Alembic migration via
 `op.execute()` — SQLAlchemy autogenerate does not emit descending indexes. See
-the migration in `src/app/alembic/versions/`.
+the migration in `src/api/alembic/versions/`.
 
 ### 3.3 Read-time query flow
 
@@ -243,7 +243,7 @@ consumed after deployment.
 ## 5. API design
 
 Two read-only endpoints, registered under `prefix="/api/v1"`. Implementation:
-`src/app/api/activity/v1/{router,service,query,model}.py`.
+`src/api/api/activity/v1/{router,service,query,model}.py`.
 
 ### 5.1 `GET /api/v1/activity/timeline`
 
@@ -657,7 +657,7 @@ complete sentence the card fragments:
 
 ### 9.2 Scenario catalog
 
-All 15 scenarios are registered in `src/app/api/activity/v1/mock_data.py`. The
+All 15 scenarios are registered in `src/api/api/activity/v1/mock_data.py`. The
 mock builds a lane for **any** `{source}::{type}::{id}` key passed in
 `wba_ids` (it parses the key, it does not check the entity exists), so you can
 deep-link arbitrary ids beyond the suggestion catalogue.
@@ -740,13 +740,13 @@ properties) — worth its own plan, not folded in here.
 
 | Area | Path |
 |------|------|
-| DB models | `src/app/db/models/activity_event.py`, `activity_action.py` |
-| Migration | `src/app/alembic/versions/` (activity tables) |
+| DB models | `src/api/db/models/activity_event.py`, `activity_action.py` |
+| Migration | `src/api/alembic/versions/` (activity tables) |
 | Ingestion writer | `src/connectors/consumers/activity_writer.py` — hook in `src/connectors/consumers/main.py` |
-| API router / service / query / models | `src/app/api/activity/v1/{router,service,query,model}.py` |
-| Dev mock | `src/app/api/activity/v1/mock_data.py` |
-| Dash page | `src/app/dash_app/pages/timeline/{layout,callbacks,helpers,api}.py` |
-| Page CSS | `src/app/dash_app/assets/executive-dashboard.css` (`.timeline-*`) |
-| Lane tokens | `src/app/dash_app/styles.py` (`timeline.lane.1`–`.5`) |
-| Route + sidebar | `src/app/dash_app/layout.py` |
+| API router / service / query / models | `src/api/api/activity/v1/{router,service,query,model}.py` |
+| Dev mock | `src/api/api/activity/v1/mock_data.py` |
+| Dash page | `src/ui/pages/timeline/{layout,callbacks,helpers,api}.py` |
+| Page CSS | `src/ui/assets/executive-dashboard.css` (`.timeline-*`) |
+| Lane tokens | `src/ui/styles.py` (`timeline.lane.1`–`.5`) |
+| Route + sidebar | `src/ui/layout.py` |
 | Tests | `tests/test_activity_api_unit.py`, `tests/test_activity_api_integration.py`, `tests/test_activity_person_identity.py`, `tests/test_activity_timeline_ui_helpers.py`, `tests/test_activity_timeline_mock.py`, `tests/test_activity_timeline_edge_cases.py`, `tests/test_activity_timeline_detail_modal.py`, `tests/test_activity_writer_display_name.py` |

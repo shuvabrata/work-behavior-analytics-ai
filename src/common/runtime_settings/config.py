@@ -4,7 +4,7 @@
 (``src/common/``) so both app and non-app processes can import it without
 pulling in ``src.app`` or requiring a database connection.
 
-The defaults here mirror the hardcoded defaults in ``src/app/settings.py``.
+The defaults here mirror the hardcoded defaults in ``src/api/settings.py``.
 """
 
 from __future__ import annotations

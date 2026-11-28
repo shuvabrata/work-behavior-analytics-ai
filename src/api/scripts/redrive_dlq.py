@@ -9,13 +9,13 @@ Usage
 Run after deploying a consumer bug-fix to drain the DLQ:
 
     # Dry-run: inspect only, do not republish
-    PYTHONPATH=src python src/app/scripts/redrive_dlq.py --dry-run
+    PYTHONPATH=src python src/api/scripts/redrive_dlq.py --dry-run
 
     # Redrive all messages
-    PYTHONPATH=src python src/app/scripts/redrive_dlq.py
+    PYTHONPATH=src python src/api/scripts/redrive_dlq.py
 
     # Redrive up to N messages
-    PYTHONPATH=src python src/app/scripts/redrive_dlq.py --limit 10
+    PYTHONPATH=src python src/api/scripts/redrive_dlq.py --limit 10
 
 Environment
 -----------

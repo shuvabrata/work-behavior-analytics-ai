@@ -100,7 +100,7 @@ def test_docs_location_is_proxied_to_the_api(
     body = tls_locations[path]
     assert f"proxy_pass {API_UPSTREAM};" in body, (
         f"`location {path}` does not proxy to {API_UPSTREAM}; the docs are served "
-        f"by the API (src/app/api_main.py), not the UI. Body:\n{body}"
+        f"by the API (src/api/api_main.py), not the UI. Body:\n{body}"
     )
 
 

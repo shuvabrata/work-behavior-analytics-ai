@@ -119,7 +119,7 @@ _DISCOVERERS: tuple[tuple[str, str, str], ...] = (
 )
 
 #: Every GET operation the app serves, with its grant copied from
-#: ``src/app/auth/matrix.py`` and its required query parameters from the routers.
+#: ``src/api/auth/matrix.py`` and its required query parameters from the routers.
 #: ``/api/health`` and the two ``/auth`` legs are excluded: they are
 #: credential-less by design and are covered by ``tests/test_authz_live_401_sweep.py``.
 ROUTES: tuple[tuple[str, str, dict[str, str]], ...] = (
@@ -339,7 +339,7 @@ def test_no_get_operation_is_missing_from_this_matrix() -> None:
 
     assert not missing, (
         "These GET operations are served by the app but absent from ROUTES in this "
-        "file. Add each with its grant from src/app/auth/matrix.py:\n"
+        "file. Add each with its grant from src/api/auth/matrix.py:\n"
         + "\n".join(f"   {p}" for p in missing)
     )
     assert not stale, (

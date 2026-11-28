@@ -4,7 +4,7 @@
 
 Work Behavior Analytics AI provides three primary interfaces: Chat, Search, and interactive Graph visualization. The interactive graph is the central experience; the Chat interface is one entry point into it, and a successful chat response backed by a Neo4j query can surface data that leads directly into graph exploration. The AI agent powers the Chat interface — it accepts a user message, enriches it with context from one or more data sources (graph database, external tools), then streams a token-by-token response from the configured LLM.
 
-The agent lives in `src/app/ai_agent/` and is invoked by the FastAPI chat endpoint as a Server-Sent Events (SSE) stream.
+The agent lives in `src/api/ai_agent/` and is invoked by the FastAPI chat endpoint as a Server-Sent Events (SSE) stream.
 
 ---
 
@@ -12,7 +12,7 @@ The agent lives in `src/app/ai_agent/` and is invoked by the FastAPI chat endpoi
 
 ```mermaid
 graph TB
-    subgraph Application["src/app/ai_agent"]
+    subgraph Application["src/api/ai_agent"]
         Agent["ai_agent.py<br/>Session Store / stream_chat()"]
         Orchestrator["chains/chains.py<br/>Augmentation Orchestrator"]
         NChain["chains/neo4j_chain.py<br/>Neo4j Chain"]

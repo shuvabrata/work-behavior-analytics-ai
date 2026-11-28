@@ -265,8 +265,8 @@ The catalog must never be able to mutate the graph. Read-only is enforced in
    `422` at authoring time rather than as a load failure later.
 
 Both call the same predicate from the graph API —
-`validate_read_only_query()` in `src/app/api/graph/v1/query.py`, which delegates
-to `is_read_only_cypher()` in `src/app/api/graph/v1/cypher_read_only.py`. The
+`validate_read_only_query()` in `src/api/api/graph/v1/query.py`, which delegates
+to `is_read_only_cypher()` in `src/api/api/graph/v1/cypher_read_only.py`. The
 editor's "Test" runner additionally executes through the existing graph endpoint
 under `source="raw"`, which applies the same guard.
 

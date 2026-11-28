@@ -82,7 +82,7 @@ Two properties of these blocks are load-bearing:
 - **`proxy_pass` has no trailing slash or path component.** `proxy_pass http://wba_app;`
   forwards the request URI unchanged, so `/app/_dash-update-component` arrives at the
   application still prefixed with `/app`. This matches `requests_pathname_prefix="/app/"`
-  set in `src/app/dash_app/layout.py`, and it is why no `X-Forwarded-Prefix` handling is
+  set in `src/ui/layout.py`, and it is why no `X-Forwarded-Prefix` handling is
   needed and Dash's generated URLs stay valid.
 - **Every proxied location forwards the same header set**: `Host`, `X-Real-IP`,
   `X-Forwarded-For`, `X-Forwarded-Proto`, and `X-Forwarded-Host`.
@@ -117,7 +117,7 @@ response and sends it on completion. That is an optimisation for an ordinary req
 stream it means the client receives nothing until the stream ends. The chat endpoint at
 `POST /api/v1/chats/{session_id}/stream` returns a `StreamingResponse` with
 `media_type="text/event-stream"`, called directly by the browser via `fetch` in
-`src/app/dash_app/assets/stream-bridge.js` — not through Dash's callback machinery. Its
+`src/ui/assets/stream-bridge.js` — not through Dash's callback machinery. Its
 location therefore disables buffering and caching explicitly and extends the read timeout:
 
 ```nginx
@@ -138,7 +138,7 @@ succeeds, the response is complete, and no incremental output is ever seen.
 ## Proxy Awareness and the External URL Contract
 
 The application never constructs an absolute URL from the connection it is serving. Two
-settings in `src/app/settings.py` separate the two identities it needs:
+settings in `src/api/settings.py` separate the two identities it needs:
 
 ```python
 EXTERNAL_BASE_URL: str = "https://localhost"
@@ -184,7 +184,7 @@ that mechanism matter here:
   address, so without it the forwarded scheme would be discarded and the application would
   believe every request arrived over plain HTTP.
 
-`src/app/entrypoint.sh` therefore launches uvicorn as:
+`src/api/entrypoint.sh` therefore launches uvicorn as:
 
 ```bash
 cd /app && uvicorn app.main:app --host 0.0.0.0 --port 8000 \

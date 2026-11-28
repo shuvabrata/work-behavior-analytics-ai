@@ -4,7 +4,7 @@ This file pairs one **behavioural** assertion with one **static** one:
 
 * The public-path set is read from ``AUTHZ_MATRIX`` and checked against the live
   app's dependency wiring, so a new route that skips authentication fails here.
-* The session-cookie path set is a **static scan** of ``src/app/api/`` for the
+* The session-cookie path set is a **static scan** of ``src/api/api/`` for the
   cookie constant. It is deliberately static — the cookie is read inside handler
   bodies rather than through a dependency, so there is no wiring to observe.
   A future reader should not mistake it for a behavioural test.

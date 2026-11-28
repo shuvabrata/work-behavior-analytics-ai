@@ -1,8 +1,8 @@
 from cryptography.fernet import Fernet
 import pytest
 
-from app.api.connectors.v1 import service
-from app.settings import settings
+from api.api.connectors.v1 import service
+from api.settings import settings
 
 
 pytestmark = pytest.mark.unit
@@ -166,7 +166,7 @@ async def test_list_config_items_raises_unsupported_for_mcp_connectors():
 
 def test_status_for_connector_error_maps_unsupported_to_501():
     """UnsupportedConnectorError must map to HTTP 501 (Not Implemented)."""
-    from app.api.connectors.v1.router import _status_for_connector_error
+    from api.api.connectors.v1.router import _status_for_connector_error
 
     assert _status_for_connector_error(service.UnknownConnectorError("nope")) == 404
     assert _status_for_connector_error(service.UnsupportedConnectorError("nope")) == 501

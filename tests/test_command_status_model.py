@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from app.db.models.command_status import CommandStatus
+from api.db.models.command_status import CommandStatus
 
 
 class TestCommandStatusModel:

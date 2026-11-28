@@ -27,7 +27,7 @@ import dash_bootstrap_components as dbc
 
 from ui.pages.graph.callbacks import catalog as catalog_callbacks
 from ui.components.person_picker import build_person_picker
-from app.api.search.v1 import persons_router
+from api.api.search.v1 import persons_router
 
 
 pytestmark = pytest.mark.unit
@@ -552,7 +552,7 @@ def test_extract_name_returns_unknown_when_all_missing():
 
 def test_build_suggestion_returns_correct_person_suggestion():
     """_build_suggestion maps SearchResult attributes to PersonSuggestion correctly."""
-    from app.api.search.v1.model import SearchResult
+    from api.api.search.v1.model import SearchResult
 
     result = SearchResult(
         wba_id="github::Person::alice",
@@ -579,7 +579,7 @@ def test_build_suggestion_returns_correct_person_suggestion():
 
 def test_build_suggestion_derives_source_from_wba_id_when_missing():
     """When 'source' is absent from attributes, derive it from the wba_id prefix."""
-    from app.api.search.v1.model import SearchResult
+    from api.api.search.v1.model import SearchResult
 
     result = SearchResult(
         wba_id="jira::Person::abc123",
@@ -597,7 +597,7 @@ def test_build_suggestion_derives_source_from_wba_id_when_missing():
 
 def test_build_suggestion_handles_null_email():
     """Email can be None — suggestion must still be returned."""
-    from app.api.search.v1.model import SearchResult
+    from api.api.search.v1.model import SearchResult
 
     result = SearchResult(
         wba_id="github::Person::bob",

@@ -16,15 +16,15 @@ from typing import Any
 
 import pytest
 
-from app.api.auth.v1.service import (
+from api.api.auth.v1.service import (
     DEFAULT_NEXT_PATH,
     SessionExpiredError,
     _sanitize_next_path,
     _session_expired,
 )
-from app.settings import settings
-from app.auth.principal import Principal
-from app.auth.session_cookie import (
+from api.settings import settings
+from api.auth.principal import Principal
+from api.auth.session_cookie import (
     decrypt_refresh_token,
     encrypt_refresh_token,
     hash_session_id,

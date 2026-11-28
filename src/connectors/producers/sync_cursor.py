@@ -1,8 +1,8 @@
 """Sync cursor utility for ActivitySignal producers.
 
-Uses asyncpg directly to avoid importing src/app/ FastAPI dependencies.
+Uses asyncpg directly to avoid importing src/api/ FastAPI dependencies.
 The producer_sync_state table schema is managed by Alembic via
-``src/app/db/models/producer_sync_state.py``.
+``src/api/db/models/producer_sync_state.py``.
 
 Usage::
 

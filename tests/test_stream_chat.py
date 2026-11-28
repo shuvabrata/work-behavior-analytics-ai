@@ -62,7 +62,7 @@ class TestOpenAIProviderStreamChatCompletion:
         """stream_chat_completion yields tokens produced by the OpenAI streaming API."""
         import openai as openai_module
 
-        from app.ai_agent.providers.openai.openai_provider import OpenAIProvider
+        from api.ai_agent.providers.openai.openai_provider import OpenAIProvider
 
         monkeypatch.setenv("OPENAI_API_KEY", "test-key-abc")
         monkeypatch.setenv("LLM_MODEL", "gpt-4o")
@@ -115,7 +115,7 @@ class TestOpenAIProviderStreamChatCompletion:
         """stream_chat_completion raises RuntimeError when the OpenAI API fails."""
         import openai as openai_module
 
-        from app.ai_agent.providers.openai.openai_provider import OpenAIProvider
+        from api.ai_agent.providers.openai.openai_provider import OpenAIProvider
 
         monkeypatch.setenv("OPENAI_API_KEY", "test-key-abc")
         monkeypatch.setenv("LLM_MODEL", "gpt-4o")
@@ -139,7 +139,7 @@ class TestOpenAIProviderStreamChatCompletion:
     @pytest.mark.asyncio
     async def test_raises_not_implemented_on_base_provider(self):
         """LLMProvider base stream_chat_completion raises NotImplementedError."""
-        from app.ai_agent.providers.base import LLMProvider
+        from api.ai_agent.providers.base import LLMProvider
 
         class _ConcreteProvider(LLMProvider):
             @property
@@ -179,7 +179,7 @@ class TestStreamChatEventSequence:
     @pytest.fixture()
     def _session(self, monkeypatch):
         """Create a fresh chat session and patch the module-level provider."""
-        from app.ai_agent import ai_agent
+        from api.ai_agent import ai_agent
 
         session_id = "test-session-001"
         ai_agent._chat_sessions[session_id] = [
@@ -262,7 +262,7 @@ class TestStreamChatEventSequence:
     @pytest.mark.asyncio
     async def test_token_pruning_applied(self, monkeypatch):
         """Token pruning removes oldest messages when token count exceeds max_tokens."""
-        from app.ai_agent import ai_agent
+        from api.ai_agent import ai_agent
 
         session_id = "test-prune-session"
         system_msg = {"role": "system", "content": "System."}
@@ -312,7 +312,7 @@ class TestStreamChatEventSequence:
     @pytest.mark.asyncio
     async def test_raises_value_error_for_unknown_session(self):
         """stream_chat raises ValueError immediately if session_id is unknown."""
-        from app.ai_agent import ai_agent
+        from api.ai_agent import ai_agent
 
         with pytest.raises(ValueError, match="Session not found"):
             async for _ in ai_agent.stream_chat("nonexistent-session-xyz", "hello"):
@@ -335,7 +335,7 @@ class TestStreamChatGeneratorExit:
         gen.aclose() sends GeneratorExit (not CancelledError) so it cannot be
         used here; task cancellation is the correct approach.
         """
-        from app.ai_agent import ai_agent
+        from api.ai_agent import ai_agent
 
         session_id = "cancel-test-session"
         ai_agent._chat_sessions[session_id] = [
@@ -383,7 +383,7 @@ class TestStreamChatGeneratorExit:
     @pytest.mark.asyncio
     async def test_no_resource_leak_on_generator_close(self, monkeypatch):
         """Closing the generator early does not raise unhandled exceptions."""
-        from app.ai_agent import ai_agent
+        from api.ai_agent import ai_agent
 
         session_id = "close-test-session"
         ai_agent._chat_sessions[session_id] = [
@@ -418,7 +418,7 @@ class TestStreamChatTimeouts:
     @pytest.mark.asyncio
     async def test_llm_timeout_yields_error_event(self, monkeypatch):
         """When the LLM stream exceeds its timeout, an error event is emitted."""
-        from app.ai_agent import ai_agent
+        from api.ai_agent import ai_agent
 
         session_id = "timeout-test-session"
         ai_agent._chat_sessions[session_id] = [
@@ -477,7 +477,7 @@ class TestStreamChatTimeouts:
     @pytest.mark.asyncio
     async def test_error_in_stream_yields_error_event_and_increments_metric(self, monkeypatch):
         """An unexpected exception during streaming yields an error event."""
-        from app.ai_agent import ai_agent
+        from api.ai_agent import ai_agent
 
         session_id = "error-test-session"
         ai_agent._chat_sessions[session_id] = [
@@ -529,7 +529,7 @@ async def test_client_disconnect_mid_stream_increments_metric(monkeypatch):
     from fastapi.responses import StreamingResponse
     import httpx
 
-    from app.ai_agent import ai_agent
+    from api.ai_agent import ai_agent
 
     session_id = "asgi-disconnect-session"
     ai_agent._chat_sessions[session_id] = [

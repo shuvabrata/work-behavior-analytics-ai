@@ -596,7 +596,7 @@ def test_resolve_range_custom() -> None:
 @pytest.fixture
 def app_timezone(request: pytest.FixtureRequest) -> Any:
     """Set ``TIMEZONE`` in the runtime settings cache for the duration of a test."""
-    from app.runtime_settings import runtime_settings
+    from api.runtime_settings import runtime_settings
     from common.runtime_settings import RuntimeConfig
 
     previous = runtime_settings.get("TIMEZONE")

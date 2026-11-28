@@ -33,10 +33,10 @@ class TestMcpConnectionToolExecutor:
 
     def test_github_mcp_routes_to_github_manager(self):
         """``github_mcp`` builds the GitHub manager and calls test_connection."""
-        from app.ai_agent.mcp_integration.tool_executor import test_mcp_connection
+        from api.ai_agent.mcp_integration.tool_executor import test_mcp_connection
 
         with patch(
-            "app.ai_agent.mcp_integration.tool_executor._build_github_manager"
+            "api.ai_agent.mcp_integration.tool_executor._build_github_manager"
         ) as mock_build:
             mock_manager = MagicMock()
             mock_manager.test_connection.return_value = {
@@ -57,10 +57,10 @@ class TestMcpConnectionToolExecutor:
 
     def test_atlassian_mcp_routes_to_atlassian_manager(self):
         """``atlassian_mcp`` builds the Atlassian manager and calls test_connection."""
-        from app.ai_agent.mcp_integration.tool_executor import test_mcp_connection
+        from api.ai_agent.mcp_integration.tool_executor import test_mcp_connection
 
         with patch(
-            "app.ai_agent.mcp_integration.tool_executor._build_atlassian_manager"
+            "api.ai_agent.mcp_integration.tool_executor._build_atlassian_manager"
         ) as mock_build:
             mock_manager = MagicMock()
             mock_manager.test_connection.return_value = {
@@ -81,17 +81,17 @@ class TestMcpConnectionToolExecutor:
 
     def test_unknown_connector_type_raises_value_error(self):
         """Non-MCP connector types raise ValueError."""
-        from app.ai_agent.mcp_integration.tool_executor import test_mcp_connection
+        from api.ai_agent.mcp_integration.tool_executor import test_mcp_connection
 
         with pytest.raises(ValueError, match="Not an MCP connector type"):
             test_mcp_connection("github")
 
     def test_empty_toolset_result(self):
         """Empty tool list returns connected=False with empty_toolset status."""
-        from app.ai_agent.mcp_integration.tool_executor import test_mcp_connection
+        from api.ai_agent.mcp_integration.tool_executor import test_mcp_connection
 
         with patch(
-            "app.ai_agent.mcp_integration.tool_executor._build_github_manager"
+            "api.ai_agent.mcp_integration.tool_executor._build_github_manager"
         ) as mock_build:
             mock_manager = MagicMock()
             mock_manager.test_connection.return_value = {
@@ -111,10 +111,10 @@ class TestMcpConnectionToolExecutor:
 
     def test_unavailable_result(self):
         """Connection failure returns connected=False with error."""
-        from app.ai_agent.mcp_integration.tool_executor import test_mcp_connection
+        from api.ai_agent.mcp_integration.tool_executor import test_mcp_connection
 
         with patch(
-            "app.ai_agent.mcp_integration.tool_executor._build_github_manager"
+            "api.ai_agent.mcp_integration.tool_executor._build_github_manager"
         ) as mock_build:
             mock_manager = MagicMock()
             mock_manager.test_connection.return_value = {
@@ -143,7 +143,7 @@ class TestResultMessage:
 
     def test_connected_message(self):
         """Connected status shows tool count."""
-        from app.api.connectors.v1.service import _test_result_message
+        from api.api.connectors.v1.service import _test_result_message
 
         msg = _test_result_message("atlassian_mcp", "connected", 12, None)
         assert "connected" in msg.lower()
@@ -151,7 +151,7 @@ class TestResultMessage:
 
     def test_empty_toolset_message(self):
         """Empty toolset status shows scope guidance."""
-        from app.api.connectors.v1.service import _test_result_message
+        from api.api.connectors.v1.service import _test_result_message
 
         msg = _test_result_message("atlassian_mcp", "empty_toolset", 0, "server returned 0 tools")
         assert "0 tools" in msg
@@ -159,14 +159,14 @@ class TestResultMessage:
 
     def test_disabled_message(self):
         """Disabled status shows disabled message."""
-        from app.api.connectors.v1.service import _test_result_message
+        from api.api.connectors.v1.service import _test_result_message
 
         msg = _test_result_message("github_mcp", "disabled", None, "github_mcp_disabled")
         assert "disabled" in msg.lower()
 
     def test_unavailable_message(self):
         """Unavailable status shows the error."""
-        from app.api.connectors.v1.service import _test_result_message
+        from api.api.connectors.v1.service import _test_result_message
 
         msg = _test_result_message("github_mcp", "unavailable", None, "Connection refused")
         assert "failed" in msg.lower()
@@ -174,7 +174,7 @@ class TestResultMessage:
 
     def test_unknown_status_fallback(self):
         """Unknown status still produces a non-empty message."""
-        from app.api.connectors.v1.service import _test_result_message
+        from api.api.connectors.v1.service import _test_result_message
 
         msg = _test_result_message("github_mcp", "bogus", None, "something")
         assert len(msg) > 0
@@ -378,7 +378,7 @@ class TestConnectionResponseModel:
 
     def test_valid_response(self):
         """A valid response can be constructed with all fields."""
-        from app.api.connectors.v1.model import TestConnectionResponse
+        from api.api.connectors.v1.model import TestConnectionResponse
 
         resp = TestConnectionResponse(
             success=True,
@@ -391,7 +391,7 @@ class TestConnectionResponseModel:
 
     def test_tool_count_optional(self):
         """tool_count is optional (None for failed tests)."""
-        from app.api.connectors.v1.model import TestConnectionResponse
+        from api.api.connectors.v1.model import TestConnectionResponse
 
         resp = TestConnectionResponse(
             success=False,
@@ -414,10 +414,10 @@ class TestMcpConnectionOffload:
         """test_connector must complete quickly, proving the MCP call is offloaded."""
         from unittest.mock import AsyncMock, patch
 
-        from app.api.connectors.v1 import service as svc
+        from api.api.connectors.v1 import service as svc
 
         with (
-            patch("app.ai_agent.mcp_integration.tool_executor.test_mcp_connection") as mock_test,
+            patch("api.ai_agent.mcp_integration.tool_executor.test_mcp_connection") as mock_test,
             patch.object(svc.query, "update_connector_status", new_callable=AsyncMock) as mock_update,
             patch.object(svc, "_validate_connector_type") as mock_validate,
         ):

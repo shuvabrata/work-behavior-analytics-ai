@@ -17,7 +17,7 @@ import os
 # Add src/ to path so app imports resolve without installing the package
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from app.ai_agent.ai_agent import new_chat, end_chat, stream_chat, get_streaming_metrics
+from api.ai_agent.ai_agent import new_chat, end_chat, stream_chat, get_streaming_metrics
 
 
 RESET = "\033[0m"

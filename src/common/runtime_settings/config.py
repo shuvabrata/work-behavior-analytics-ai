@@ -4,7 +4,7 @@
 (``src/common/``) so both app and non-app processes can import it without
 pulling in ``src.app`` or requiring a database connection.
 
-The defaults here mirror the hardcoded defaults in ``src/app/settings.py``.
+The defaults here mirror the hardcoded defaults in ``src/api/settings.py``.
 """
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ from pydantic import BaseModel, Field, StrictBool, field_validator
 class RuntimeConfig(BaseModel):
     """Effective runtime-configurable application settings.
 
-    All fields have defaults matching :class:`app.settings.Settings` so that
+    All fields have defaults matching :class:`api.settings.Settings` so that
     the model can be used standalone (e.g. in producer processes) without
     an env file or DB connection.
     """

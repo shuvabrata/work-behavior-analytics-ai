@@ -14,18 +14,18 @@ queries_catalog/user_defined/
 
 
 # Exclude Python cache and compiled files
-app/__pycache__
-app/**/__pycache__
-app/**/*.pyc
-app/**/*.pyo
-app/**/*.pyd
-app/.mypy_cache
-app/**/.mypy_cache
-app/.pytest_cache
-app/**/.pytest_cache
+api/__pycache__
+api/**/__pycache__
+api/**/*.pyc
+api/**/*.pyo
+api/**/*.pyd
+api/.mypy_cache
+api/**/.mypy_cache
+api/.pytest_cache
+api/**/.pytest_cache
 
 # Exclude config files (they'll be mounted separately)
-app/**/.config.json
+api/**/.config.json
 
 # Development and testing
 .venv/

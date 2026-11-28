@@ -15,7 +15,7 @@ from __future__ import annotations
 import pytest
 from dash import _callback
 
-import app.api_main  # noqa: F401  # importing the app registers every page's callbacks
+import api.api_main  # noqa: F401  # importing the app registers every page's callbacks
 from ui.components import spotlight as shared_spotlight
 from ui.pages.collaboration_network_ego.layout import get_layout as ego_layout
 

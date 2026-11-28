@@ -6,10 +6,10 @@ import pytest
 import yaml
 from fastapi import HTTPException
 
-from app.api.queries.v1 import router
-from app.api.queries.v1 import user_defined_service
-from app.query_catalog import get_default_catalog_dir
-from app.query_catalog.model import CatalogQueryWrite
+from api.api.queries.v1 import router
+from api.api.queries.v1 import user_defined_service
+from api.query_catalog import get_default_catalog_dir
+from api.query_catalog.model import CatalogQueryWrite
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.asyncio]

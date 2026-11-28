@@ -100,7 +100,7 @@ def test_docs_location_is_proxied_to_the_api(
     body = tls_locations[path]
     assert f"proxy_pass {API_UPSTREAM};" in body, (
         f"`location {path}` does not proxy to {API_UPSTREAM}; the docs are served "
-        f"by the API (src/app/api_main.py), not the UI. Body:\n{body}"
+        f"by the API (src/api/api_main.py), not the UI. Body:\n{body}"
     )
 
 
@@ -207,7 +207,7 @@ def test_openapi_schema_is_served_without_a_root_path() -> None:
     nginx locations). A ``root_path`` would rewrite that base and the browser
     would call a path nginx does not proxy.
     """
-    api_main = REPO_ROOT / "src" / "app" / "api_main.py"
+    api_main = REPO_ROOT / "src" / "api" / "api_main.py"
     source = api_main.read_text(encoding="utf-8")
     assert "root_path" not in source, (
         f"{api_main} sets root_path; the docs schema's server URL would no longer "

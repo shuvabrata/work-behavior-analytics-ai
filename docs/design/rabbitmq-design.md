@@ -83,7 +83,7 @@ flowchart LR
 | `activity_signals` | `topic` | Yes | Main exchange; all producers publish here |
 | `activity_signals_dlx` | `direct` | Yes | Dead-letter exchange; receives rejected messages |
 
-- **Initialization:** Declared idempotently at app container startup via `src/app/scripts/init_rabbitmq.py` (run from `entrypoint.sh` before Uvicorn starts).
+- **Initialization:** Declared idempotently at app container startup via `src/api/scripts/init_rabbitmq.py` (run from `entrypoint.sh` before Uvicorn starts).
 - **Re-declaration safe:** Running the init script multiple times has no effect if the topology already matches.
 
 ---
@@ -290,7 +290,7 @@ docker compose run --rm jira-producer
 - Log fields per message: `signal_id`, `entity_type`, `id`, `queue`
 - DLQ (`activity_signals_dlq`) holds all poison messages for inspection
 - RabbitMQ Management UI: `http://localhost:15672` (default credentials: `guest/guest`)
-- Redrive utility: `src/app/scripts/redrive_dlq.py` — re-publishes DLQ messages to the main exchange after consumer fixes
+- Redrive utility: `src/api/scripts/redrive_dlq.py` — re-publishes DLQ messages to the main exchange after consumer fixes
 
 ---
 
@@ -298,11 +298,11 @@ docker compose run --rm jira-producer
 
 | Concern | File |
 |---|---|
-| Exchange & queue initialization | `src/app/scripts/init_rabbitmq.py` |
+| Exchange & queue initialization | `src/api/scripts/init_rabbitmq.py` |
 | Publisher / Consumer utilities | `src/common/messaging/rabbitmq.py` |
 | ActivitySignal schema | `src/common/activity_signal/models.py` |
 | GitHub producer | `src/connectors/producers/github_producer.py` |
 | Jira producer | `src/connectors/producers/jira_producer.py` |
 | Consumer entry point | `src/connectors/consumers/main.py` |
 | Neo4j sink | `src/connectors/consumers/sinks/neo4j_sink.py` |
-| DLQ redrive utility | `src/app/scripts/redrive_dlq.py` |
+| DLQ redrive utility | `src/api/scripts/redrive_dlq.py` |

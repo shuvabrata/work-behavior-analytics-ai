@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 import pytest
 
-from app.ai_agent.mcp_integration.client_manager import (
+from api.ai_agent.mcp_integration.client_manager import (
     AtlassianMCPClientManager,
     GithubMCPClientManager,
 )

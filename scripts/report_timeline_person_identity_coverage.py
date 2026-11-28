@@ -61,11 +61,11 @@ from neo4j import GraphDatabase  # noqa: E402
 # what the runtime does.  A local mirror keeps the script runnable if the app
 # package cannot be imported.
 try:
-    from app.api.activity.v1.identity import parse_identity_id  # noqa: E402
+    from api.api.activity.v1.identity import parse_identity_id  # noqa: E402
 except ImportError:  # pragma: no cover - fallback for a bare interpreter
 
     def parse_identity_id(identity_id: str) -> tuple[str, str] | None:
-        """Mirror of ``app.api.activity.v1.identity.parse_identity_id``."""
+        """Mirror of ``api.api.activity.v1.identity.parse_identity_id``."""
         parts = identity_id.split("::", 2)
         if len(parts) != 3 or not parts[0] or not parts[2]:
             return None

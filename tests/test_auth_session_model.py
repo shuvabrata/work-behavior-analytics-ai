@@ -12,7 +12,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from app.db.models.auth_session import AuthSession
+from api.db.models.auth_session import AuthSession
 
 pytestmark = [pytest.mark.unit]
 

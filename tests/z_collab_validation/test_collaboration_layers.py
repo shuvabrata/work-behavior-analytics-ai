@@ -18,8 +18,8 @@ from typing import Any
 import pytest
 
 from domain.collaboration.config import CollaborationNetworkConfig, LAYER_ORDER
-from app.api.graph.v1.query import execute_cypher_query
-from app.settings import settings
+from api.api.graph.v1.query import execute_cypher_query
+from api.settings import settings
 
 
 pytestmark = [pytest.mark.integration, pytest.mark.neo4j]
@@ -27,7 +27,7 @@ pytestmark = [pytest.mark.integration, pytest.mark.neo4j]
 _QUERY_PATH = (
     Path(__file__).resolve().parent.parent.parent
     / "src"
-    / "app"
+    / "api"
     / "analytics"
     / "collaboration"
     / "queries"

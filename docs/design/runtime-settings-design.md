@@ -162,7 +162,7 @@ Rationale:
 ## Runtime Config Model
 
 Create a dedicated Pydantic model for the runtime-configurable subset. This
-model should live in shared code, not in `src/app`, because producers and
+model should live in shared code, not in `src/api`, because producers and
 consumers should be able to use the same typed shape without importing app DB
 code.
 
@@ -418,7 +418,7 @@ auto_delete: true
 bound exchange: runtime_config_events
 ```
 
-The exchange should be declared in `src/app/scripts/init_rabbitmq.py` and also
+The exchange should be declared in `src/api/scripts/init_rabbitmq.py` and also
 declared idempotently by publishers/listeners at runtime.
 
 Event body:
@@ -479,7 +479,7 @@ replicas refresh when another worker handles the update.
 
 ### Producer Daemons
 
-Producer images currently avoid importing `src/app` and fetch connector config
+Producer images currently avoid importing `src/api` and fetch connector config
 through the app REST API. Runtime settings should follow the same boundary.
 
 Producer daemon mode should wire the common runtime settings infrastructure.
@@ -576,7 +576,7 @@ runtime-configurable setting — from the shared model to the Dash UI.
 
 ### Step 1: Add to `Settings` (env var bootstrap)
 
-**File:** `src/app/settings.py`
+**File:** `src/api/settings.py`
 
 Add the field to the `Settings` class with a sensible default. This ensures
 Docker Compose and CLI users can still configure it via environment variables.
@@ -602,7 +602,7 @@ SEARCH_PAGE_SIZE: int = Field(default=20, ge=1, le=100)
 
 ### Step 3: Add to `application_settings` seed (Alembic migration)
 
-**File:** `src/app/alembic/versions/..._add_application_settings_table.py`
+**File:** `src/api/alembic/versions/..._add_application_settings_table.py`
 
 Add a row to the `VALUES (...)` list in the seed INSERT. Use the idempotent
 `ON CONFLICT` pattern so existing user overrides survive.
@@ -630,7 +630,7 @@ ON CONFLICT (key) DO UPDATE SET
 
 ### Step 4: Add to app wiring
 
-**File:** `src/app/runtime_settings.py`
+**File:** `src/api/runtime_settings.py`
 
 Add the mapping in `_build_initial_config()` so the app's env-variable value
 is seeded into the runtime cache at startup:
@@ -644,7 +644,7 @@ return RuntimeConfig(
 
 ### Step 5: Add to `RuntimeSnapshotResponse`
 
-**File:** `src/app/api/settings/v1/models.py`
+**File:** `src/api/api/settings/v1/models.py`
 
 Add the field so the snapshot API returns it for non-app processes:
 
@@ -656,7 +656,7 @@ class RuntimeSnapshotResponse(BaseModel):
 
 ### Step 6: Update DB override resolution
 
-**File:** `src/app/api/settings/v1/service.py`
+**File:** `src/api/api/settings/v1/service.py`
 
 If the new setting needs special resolution logic (e.g., it depends on another
 setting's value), update `_resolve_effective_config()`. For simple settings
@@ -665,7 +665,7 @@ handles it.
 
 ### Step 7: Add to category metadata (UI grouping)
 
-**File:** `src/app/dash_app/pages/settings.py`
+**File:** `src/ui/pages/settings/`
 
 If the setting uses a new category (e.g. `"search"`), add it to
 `CATEGORY_META` and `CATEGORY_ORDER`:
@@ -718,8 +718,8 @@ is a module-level constant, move it inline to benefit from dynamic updates.
   Step 3                   Step 4                   Step 5
 
                                    ┌─────────────────┐
-                                   │ app/dash_app/    │
-                                   │ pages/settings   │
-                                   │ .py (category)   │  ← Step 7 (if new cat)
+                                   │ src/ui/          │
+                                   │ pages/settings/  │
+                                   │ (category)       │  ← Step 7 (if new cat)
                                    └─────────────────┘
 ```

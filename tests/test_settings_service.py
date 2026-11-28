@@ -13,9 +13,9 @@ import pytest
 from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.settings.v1 import service, query as qry
-from app.api.settings.v1.service import ConflictError
-from app.db.models.application_settings import ApplicationSettings
+from api.api.settings.v1 import service, query as qry
+from api.api.settings.v1.service import ConflictError
+from api.db.models.application_settings import ApplicationSettings
 from common.runtime_settings import RuntimeConfig, RuntimeConfigCache
 
 pytestmark = [pytest.mark.unit]

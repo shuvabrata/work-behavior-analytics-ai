@@ -30,7 +30,7 @@ from fastapi import FastAPI
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from app.ai_agent.ai_agent import new_chat, stream_chat, get_streaming_metrics
+from api.ai_agent.ai_agent import new_chat, stream_chat, get_streaming_metrics
 
 app = FastAPI()
 

@@ -163,7 +163,7 @@ Then run the API and the UI locally as two processes. Start the API first — th
 fetches its runtime-settings snapshot from it:
 ```bash
 # Terminal 1 — API
-PYTHONPATH=src uvicorn app.api_main:app --reload
+PYTHONPATH=src uvicorn api.api_main:app --reload
 
 # Terminal 2 — UI (a Flask/WSGI service; needs the API's URL)
 API_BASE_URL=http://127.0.0.1:8000 PYTHONPATH=src \
@@ -177,13 +177,13 @@ Access the services (Option 2 — API and UI running locally, plain HTTP):
 ## Running Migrations Manually (Local Development)
 If running locally, you'll need to run migrations manually:
 ```bash
-cd src/app
+cd src/api
 alembic upgrade head
 cd ../..
 ```
 To create a new migration:
 ```bash
-docker compose exec api bash -c "cd app && alembic revision --autogenerate -m 'description'"
+docker compose exec api bash -c "cd api && alembic revision --autogenerate -m 'description'"
 ```
 
 
@@ -196,7 +196,7 @@ pytest -m unit tests -q
 - Integration tests that require app server
 ```bash
 # Terminal 1 — API
-PYTHONPATH=src uvicorn app.api_main:app --reload
+PYTHONPATH=src uvicorn api.api_main:app --reload
 
 # Terminal 2 — UI (a Flask/WSGI service; needs the API's URL)
 API_BASE_URL=http://127.0.0.1:8000 PYTHONPATH=src \

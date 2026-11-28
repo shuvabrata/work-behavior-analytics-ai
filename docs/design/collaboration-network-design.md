@@ -300,8 +300,8 @@ to an existing label means adding that discriminator to the affected layers.
 ### 4.2 Parameterisation and safety
 
 The scoring query is a static file —
-`src/app/analytics/collaboration/queries/collaboration_score.cypher`, loaded by
-`src/app/analytics/collaboration/queries_loader.py`. Everything variable — which
+`src/api/analytics/collaboration/queries/collaboration_score.cypher`, loaded by
+`src/api/analytics/collaboration/queries_loader.py`. Everything variable — which
 layers are on, their weights, the window, the gates, the optional focus person —
 arrives as **bound Neo4j parameters**, never as interpolated text. The config
 object owns the translation from configuration to parameter names, including
@@ -331,11 +331,11 @@ run by hand, against a live Neo4j.
 | Tuning CLI | The shape of the data changed, or you want to re-check the shipped weights |
 | Layer-validation suite | You suspect a layer contributes nothing, and need to know why |
 
-**1. Tuning CLI** — `src/app/analytics/collaboration/tune.py`.
+**1. Tuning CLI** — `src/api/analytics/collaboration/tune.py`.
 
 ```bash
-python -m app.analytics.collaboration.tune
-python -m app.analytics.collaboration.tune --verbose   # list every community's members
+python -m api.analytics.collaboration.tune
+python -m api.analytics.collaboration.tune --verbose   # list every community's members
 ```
 
 Runs the scoring query with default configuration, then prints a four-part
@@ -630,7 +630,7 @@ build_person_network_url("github::Person::alice", max_collaborators=50,
                          extra_params={"lookback_days": 30})
 ```
 
-`src/app/common/person_network_url.py` is the **single source of truth** for the
+`src/domain/person_network_url.py` is the **single source of truth** for the
 contract, holding both `build_person_network_url` for producers and
 `parse_person_network_url` for the page, so the two cannot drift. A producer that
 must reject a bad id rather than link to nobody can call `is_valid_wba_id`
@@ -676,7 +676,7 @@ directly, so neither surface depends on the other for it.
 
 ### 6.8 The service behind both surfaces
 
-`CollaborationNetworkConfig` (`src/app/analytics/collaboration/config.py`) is the
+`CollaborationNetworkConfig` (`src/api/analytics/collaboration/config.py`) is the
 one validation model all collaboration configuration flows through, and the
 module holds the tables it is defined against — so the Cypher, the API parameters
 and the UI are generated from one file rather than kept in sync by hand
@@ -832,7 +832,7 @@ combination.
 
 ### 9.2 Changing a default or a bound
 
-Both live in `src/app/analytics/collaboration/config.py`, and the UI reads them
+Both live in `src/api/analytics/collaboration/config.py`, and the UI reads them
 from there rather than restating them:
 
 - **Bounds** are the `ge` / `le` constraints on `CollaborationNetworkConfig`'s
@@ -846,7 +846,7 @@ from there rather than restating them:
 
 The rule either way: never restate a bound or a default in the UI. Note one
 place where a default *is* restated: the `w_<layer>` parameters on the API router
-(`src/app/api/graph/v1/router.py`) carry literal defaults rather than reading
+(`src/api/api/graph/v1/router.py`) carry literal defaults rather than reading
 `DEFAULT_LAYER_WEIGHTS`, so changing a weight means editing both.
 `test_route_declares_every_setting_with_the_expected_default` asserts the two
 agree and fails on drift, so the duplication is checked rather than trusted.
@@ -898,23 +898,23 @@ Worth knowing before proposing changes, because each was a considered choice:
 
 | Concern | Location |
 |---|---|
-| Configuration model, layer taxonomy, defaults, bounds | `src/app/analytics/collaboration/config.py` |
-| Scoring query (the 18 layers) and its loader | `src/app/analytics/collaboration/queries/` |
-| Org pipeline: graph, Louvain, hubs, positions, elements | `src/app/analytics/collaboration/algorithm.py` |
-| Ego pipeline: star, radial layout, elements | `src/app/analytics/collaboration/ego.py` |
-| Per-person deep-link URL contract (build + parse) | `src/app/common/person_network_url.py` |
-| Tuning CLI, validation suite | `src/app/analytics/collaboration/tune.py`, `tests/z_collab_validation/` |
-| Analytics registry (gallery metadata) | `src/app/analytics/registry.py` |
-| Endpoints, service functions, response models | `src/app/api/graph/v1/{router,service,model}.py` |
-| Analytics gallery and its cards | `src/app/dash_app/pages/analytics.py` |
-| Org page package | `src/app/dash_app/pages/collaboration_network/` |
-| Ego page package | `src/app/dash_app/pages/collaboration_network_ego/` |
-| Community palette and Cytoscape selectors | `src/app/dash_app/graph_styles.py` |
-| Node base dimensions and dynamic sizing | `src/app/common/node_size.py` |
+| Configuration model, layer taxonomy, defaults, bounds | `src/api/analytics/collaboration/config.py` |
+| Scoring query (the 18 layers) and its loader | `src/api/analytics/collaboration/queries/` |
+| Org pipeline: graph, Louvain, hubs, positions, elements | `src/api/analytics/collaboration/algorithm.py` |
+| Ego pipeline: star, radial layout, elements | `src/api/analytics/collaboration/ego.py` |
+| Per-person deep-link URL contract (build + parse) | `src/domain/person_network_url.py` |
+| Tuning CLI, validation suite | `src/api/analytics/collaboration/tune.py`, `tests/z_collab_validation/` |
+| Analytics registry (gallery metadata) | `src/api/analytics/registry.py` |
+| Endpoints, service functions, response models | `src/api/api/graph/v1/{router,service,model}.py` |
+| Analytics gallery and its cards | `src/ui/pages/analytics.py` |
+| Org page package | `src/ui/pages/collaboration_network/` |
+| Ego page package | `src/ui/pages/collaboration_network_ego/` |
+| Community palette and Cytoscape selectors | `src/ui/graph_styles.py` |
+| Node base dimensions and dynamic sizing | `src/domain/node_size.py` |
 
 One convention specific to these pages: the two page packages are
 **self-contained by design**. Anything shared between them lives outside
-`pages/` — in `dash_app/components/` or `dash_app/graph_styles.py` — for the
+`pages/` — in `src/ui/components/` or `src/ui/graph_styles.py` — for the
 circular-import reason in CLAUDE.md's Dash UI rules. When the ego view needed the
 org view's trait helpers, those helpers were moved to the analytics package
 rather than imported across pages.

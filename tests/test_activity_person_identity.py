@@ -1,6 +1,6 @@
 """Unit tests for Activity Timeline Person identity resolution.
 
-Covers the Neo4j-backed resolver in ``app.api.activity.v1.identity`` and the
+Covers the Neo4j-backed resolver in ``api.api.activity.v1.identity`` and the
 identity-aware pieces of the activity service/query layers. No database or
 network access — Neo4j reads are stubbed.
 
@@ -17,10 +17,10 @@ from typing import Any
 import pytest
 from neo4j.exceptions import ServiceUnavailable
 
-from app.api.activity.v1 import identity, query
-from app.api.activity.v1.identity import parse_identity_id, resolve_person_identities
-from app.api.activity.v1.service import _action_to_event
-from app.db.models.activity_action import ActivityAction
+from api.api.activity.v1 import identity, query
+from api.api.activity.v1.identity import parse_identity_id, resolve_person_identities
+from api.api.activity.v1.service import _action_to_event
+from api.db.models.activity_action import ActivityAction
 
 pytestmark = [pytest.mark.unit]
 

@@ -11,10 +11,10 @@ import json
 import httpx
 import pytest
 
-from app.api_main import app
-from app.ai_agent import ai_agent
-from app.ai_agent.chains import mcp_chain
-from app.settings import settings
+from api.api_main import app
+from api.ai_agent import ai_agent
+from api.ai_agent.chains import mcp_chain
+from api.settings import settings
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.asyncio]

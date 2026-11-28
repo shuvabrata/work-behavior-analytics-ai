@@ -7,7 +7,7 @@ from typing import Any
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.admin_users.v1 import cleanup
+from api.api.admin_users.v1 import cleanup
 
 pytestmark = [pytest.mark.unit, pytest.mark.asyncio]
 

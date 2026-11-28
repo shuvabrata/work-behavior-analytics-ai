@@ -9,7 +9,7 @@ Run with: pytest tests/test_collaboration_algorithm.py -v
 import networkx as nx
 import pytest
 
-from app.analytics.collaboration.algorithm import (
+from api.analytics.collaboration.algorithm import (
     LOUVAIN_RANDOM_STATE,
     MAX_COMMUNITY_STYLES,
     build_graph,

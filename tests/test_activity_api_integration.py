@@ -25,12 +25,12 @@ import httpx
 import pytest
 from sqlalchemy.sql import visitors
 
-from app.api.activity.v1 import service
-from app.api.activity.v1.service import _decode_cursor
-from app.db.models.activity_action import ActivityAction
-from app.db.models.activity_event import ActivityEvent
-from app.api_main import app
-from app.settings import settings
+from api.api.activity.v1 import service
+from api.api.activity.v1.service import _decode_cursor
+from api.db.models.activity_action import ActivityAction
+from api.db.models.activity_event import ActivityEvent
+from api.api_main import app
+from api.settings import settings
 
 pytestmark = [pytest.mark.unit, pytest.mark.asyncio]
 
@@ -274,8 +274,8 @@ def client(fake_db: FakeSession) -> httpx.AsyncClient:
     async def override_get_async_db():
         yield fake_db
 
-    # The router imports get_async_db from app.db.session — override that.
-    from app.db.session import get_async_db
+    # The router imports get_async_db from api.db.session — override that.
+    from api.db.session import get_async_db
 
     app.dependency_overrides[get_async_db] = override_get_async_db
 
@@ -703,7 +703,7 @@ class TestSuggestEndpoint:
     async def test_suggest_delegates_to_search_service(
         self, client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from app.api.search.v1 import service as search_service_module
+        from api.api.search.v1 import service as search_service_module
 
         captured: dict[str, Any] = {}
 

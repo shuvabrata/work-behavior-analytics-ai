@@ -6,7 +6,7 @@ from dataclasses import FrozenInstanceError
 
 import pytest
 
-from app.auth.principal import CredentialType, Principal
+from api.auth.principal import CredentialType, Principal
 
 pytestmark = [pytest.mark.unit]
 

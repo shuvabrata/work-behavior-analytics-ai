@@ -4,7 +4,7 @@ Driven through ``httpx.ASGITransport`` against the real ``app`` so the routing,
 cookie handling and status-code contract are exercised end to end. Two seams are
 replaced:
 
-* ``app.api.auth.v1.query`` — an in-memory session store, so the rotation test
+* ``api.api.auth.v1.query`` — an in-memory session store, so the rotation test
   can assert what was actually persisted without a database.
 * ``service._post_token`` and ``service.validate_bearer_token`` — the Keycloak
   boundary. No test in this file touches the network.
@@ -19,16 +19,16 @@ import httpx
 import pytest
 import pytest_asyncio
 
-from app.api.auth.v1 import query as qry
-from app.api.auth.v1 import service
-from app.api.auth.v1.service import _sanitize_next_path
-from app.api_main import app
-from app.auth.principal import Principal
-from app.auth.session_cookie import (
+from api.api.auth.v1 import query as qry
+from api.api.auth.v1 import service
+from api.api.auth.v1.service import _sanitize_next_path
+from api.api_main import app
+from api.auth.principal import Principal
+from api.auth.session_cookie import (
     SESSION_COOKIE_NAME,
     decrypt_refresh_token,
 )
-from app.db.session import get_async_db
+from api.db.session import get_async_db
 
 pytestmark = [pytest.mark.unit, pytest.mark.asyncio]
 
@@ -174,7 +174,7 @@ async def _start(client: httpx.AsyncClient, next_path: str = "/app/graph") -> ht
 async def _complete(
     client: httpx.AsyncClient, login: httpx.Response, state: str | None = None
 ) -> httpx.Response:
-    from app.auth.session_cookie import decode_pkce_cookie
+    from api.auth.session_cookie import decode_pkce_cookie
 
     pkce = login.cookies.get("wba_oidc")
     assert pkce, "no PKCE cookie was set"
@@ -407,7 +407,7 @@ class TestMe:
     async def test_valid_bearer_returns_identity(
         self, client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from app.auth import dependencies
+        from api.auth import dependencies
 
         monkeypatch.setattr(
             dependencies,
@@ -431,7 +431,7 @@ class TestMe:
     async def test_full_name_returned_when_present(
         self, client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from app.auth import dependencies
+        from api.auth import dependencies
 
         monkeypatch.setattr(
             dependencies,

@@ -25,9 +25,9 @@ from __future__ import annotations
 
 import pytest
 
-from app.scripts.create_es_indexes import _index_name
+from api.scripts.create_es_indexes import _index_name
 from domain.es_indexes import MANAGED_INDEXES
-from app.settings import settings
+from api.settings import settings
 from common.activity_signal.models import SUPPORTED_ENTITY_TYPES
 
 # ---------------------------------------------------------------------------
@@ -92,7 +92,7 @@ def _build_es_client():
 def test_managed_index_exists_in_elasticsearch(source: str, entity_type: str) -> None:
     """Each managed index must exist in the live Elasticsearch cluster.
 
-    If this fails, run ``python src/app/scripts/create_es_indexes.py`` (or the
+    If this fails, run ``python src/api/scripts/create_es_indexes.py`` (or the
     app entrypoint) to create the missing indexes.
     """
     idx = _index_name(source, entity_type)

@@ -12,18 +12,18 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.api.graph_themes.v1 import service
-from app.api.graph_themes.v1.models import (
+from api.api.graph_themes.v1 import service
+from api.api.graph_themes.v1.models import (
     GraphThemeCreate,
     GraphThemeUpdate,
     ThemeOverrides,
 )
-from app.api.graph_themes.v1.service import (
+from api.api.graph_themes.v1.service import (
     BuiltinImmutableError,
     DefaultThemeError,
     ThemeNotFoundError,
 )
-from app.db.models.graph_theme import GraphTheme
+from api.db.models.graph_theme import GraphTheme
 
 pytestmark = [pytest.mark.unit]
 
@@ -71,7 +71,7 @@ class TestGetEffectiveTheme:
     async def test_no_default_returns_pure_base(self, mock_db: AsyncMock) -> None:
         """With no default theme, effective == base tokens (no overrides)."""
         with patch(
-            "app.api.graph_themes.v1.service.qry.get_default_for_base_theme",
+            "api.api.graph_themes.v1.service.qry.get_default_for_base_theme",
             new=AsyncMock(return_value=None),
         ):
             merged = await service.get_effective_theme(mock_db, "executive-light")
@@ -98,7 +98,7 @@ class TestGetEffectiveTheme:
             },
         )
         with patch(
-            "app.api.graph_themes.v1.service.qry.get_default_for_base_theme",
+            "api.api.graph_themes.v1.service.qry.get_default_for_base_theme",
             new=AsyncMock(return_value=theme),
         ):
             merged = await service.get_effective_theme(mock_db, "executive-light")
@@ -114,7 +114,7 @@ class TestGetEffectiveTheme:
     async def test_unknown_base_theme_rejected(self, mock_db: AsyncMock) -> None:
         """An unknown base_theme raises InvalidBaseThemeError."""
         with patch(
-            "app.api.graph_themes.v1.service.qry.get_default_for_base_theme",
+            "api.api.graph_themes.v1.service.qry.get_default_for_base_theme",
             new=AsyncMock(return_value=None),
         ):
             with pytest.raises(Exception) as excinfo:
@@ -144,11 +144,11 @@ class TestSetDefault:
         )
         with (
             patch(
-                "app.api.graph_themes.v1.service.qry.get_theme_by_id",
+                "api.api.graph_themes.v1.service.qry.get_theme_by_id",
                 new=AsyncMock(return_value=new_default),
             ),
             patch(
-                "app.api.graph_themes.v1.service.qry.get_default_for_base_theme",
+                "api.api.graph_themes.v1.service.qry.get_default_for_base_theme",
                 new=AsyncMock(return_value=old_default),
             ),
         ):
@@ -181,11 +181,11 @@ class TestSetDefault:
         )
         with (
             patch(
-                "app.api.graph_themes.v1.service.qry.get_theme_by_id",
+                "api.api.graph_themes.v1.service.qry.get_theme_by_id",
                 new=AsyncMock(return_value=new_default),
             ),
             patch(
-                "app.api.graph_themes.v1.service.qry.get_default_for_base_theme",
+                "api.api.graph_themes.v1.service.qry.get_default_for_base_theme",
                 new=AsyncMock(return_value=old_default),
             ),
         ):
@@ -211,11 +211,11 @@ class TestSetDefault:
             source="user",
         )
         with patch(
-            "app.api.graph_themes.v1.service.qry.get_theme_by_id",
+            "api.api.graph_themes.v1.service.qry.get_theme_by_id",
             new=AsyncMock(return_value=theme),
         ):
             with patch(
-                "app.api.graph_themes.v1.service.qry.get_default_for_base_theme",
+                "api.api.graph_themes.v1.service.qry.get_default_for_base_theme",
                 new=AsyncMock(return_value=None),
             ):
                 result = await service.set_default(mock_db, theme.id)
@@ -242,11 +242,11 @@ class TestClone:
         )
         with (
             patch(
-                "app.api.graph_themes.v1.service.qry.get_theme_by_id",
+                "api.api.graph_themes.v1.service.qry.get_theme_by_id",
                 new=AsyncMock(return_value=builtin),
             ),
             patch(
-                "app.api.graph_themes.v1.service.qry.add_theme",
+                "api.api.graph_themes.v1.service.qry.add_theme",
                 side_effect=lambda _db, th: th,
             ),
         ):
@@ -282,7 +282,7 @@ class TestBuiltinImmutability:
             theme_id=1, name="Default", base_theme="executive-light", source="builtin"
         )
         with patch(
-            "app.api.graph_themes.v1.service.qry.get_theme_by_id",
+            "api.api.graph_themes.v1.service.qry.get_theme_by_id",
             new=AsyncMock(return_value=builtin),
         ):
             with pytest.raises(BuiltinImmutableError):
@@ -298,7 +298,7 @@ class TestBuiltinImmutability:
             theme_id=1, name="Default", base_theme="executive-light", source="builtin"
         )
         with patch(
-            "app.api.graph_themes.v1.service.qry.get_theme_by_id",
+            "api.api.graph_themes.v1.service.qry.get_theme_by_id",
             new=AsyncMock(return_value=builtin),
         ):
             with pytest.raises(BuiltinImmutableError):
@@ -317,7 +317,7 @@ class TestBuiltinImmutability:
             source="user",
         )
         with patch(
-            "app.api.graph_themes.v1.service.qry.get_theme_by_id",
+            "api.api.graph_themes.v1.service.qry.get_theme_by_id",
             new=AsyncMock(return_value=default_user),
         ):
             with pytest.raises(DefaultThemeError):
@@ -337,7 +337,7 @@ class TestCreateAndNotFound:
         """A created theme defaults to source=user, is_default=False."""
         payload = GraphThemeCreate(name="My Theme", base_theme="executive-dark")
         with patch(
-            "app.api.graph_themes.v1.service.qry.add_theme",
+            "api.api.graph_themes.v1.service.qry.add_theme",
             side_effect=lambda _db, th: th,
         ):
             theme = await service.create_theme(mock_db, payload)
@@ -351,7 +351,7 @@ class TestCreateAndNotFound:
     async def test_get_missing_raises_not_found(self, mock_db: AsyncMock) -> None:
         """Fetching a non-existent theme raises ThemeNotFoundError."""
         with patch(
-            "app.api.graph_themes.v1.service.qry.get_theme_by_id",
+            "api.api.graph_themes.v1.service.qry.get_theme_by_id",
             new=AsyncMock(return_value=None),
         ):
             with pytest.raises(ThemeNotFoundError):
@@ -393,7 +393,7 @@ class TestDuplicateName:
         payload = GraphThemeCreate(name="Dup", base_theme="executive-light")
         exc = _integrity_error("uq_graph_themes_name_base_theme")
         with patch(
-            "app.api.graph_themes.v1.service.qry.add_theme",
+            "api.api.graph_themes.v1.service.qry.add_theme",
             side_effect=exc,
         ):
             with pytest.raises(service.DuplicateNameError):
@@ -441,11 +441,11 @@ class TestUpdateBaseTheme:
         )
         with (
             patch(
-                "app.api.graph_themes.v1.service.qry.get_theme_by_id",
+                "api.api.graph_themes.v1.service.qry.get_theme_by_id",
                 new=AsyncMock(return_value=theme),
             ),
             patch(
-                "app.api.graph_themes.v1.service.qry.touch_theme",
+                "api.api.graph_themes.v1.service.qry.touch_theme",
                 side_effect=lambda _db, th: th,
             ),
         ):
@@ -482,7 +482,7 @@ class TestUpdateBaseTheme:
             overrides={"nodes": {"Person": {"color": "#123456"}}},
         )
         with patch(
-            "app.api.graph_themes.v1.service.qry.get_theme_by_id",
+            "api.api.graph_themes.v1.service.qry.get_theme_by_id",
             new=AsyncMock(return_value=theme),
         ):
             with pytest.raises(DefaultThemeError):
@@ -522,11 +522,11 @@ class TestUpdateBaseTheme:
         original_overrides = dict(theme.overrides)
         with (
             patch(
-                "app.api.graph_themes.v1.service.qry.get_theme_by_id",
+                "api.api.graph_themes.v1.service.qry.get_theme_by_id",
                 new=AsyncMock(return_value=theme),
             ),
             patch(
-                "app.api.graph_themes.v1.service.qry.touch_theme",
+                "api.api.graph_themes.v1.service.qry.touch_theme",
                 side_effect=lambda _db, th: th,
             ),
         ):

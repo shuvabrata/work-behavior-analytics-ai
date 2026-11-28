@@ -14,12 +14,12 @@ from typing import Any
 
 import pytest
 
-from app.analytics.collaboration.queries_loader import (
+from api.analytics.collaboration.queries_loader import (
     QUERIES_DIR,
     load_collaboration_score_query,
     load_query,
 )
-from app.api.graph.v1 import service
+from api.api.graph.v1 import service
 from domain.collaboration.errors import CollaborationDataUnavailable
 
 pytestmark = pytest.mark.unit
@@ -30,7 +30,7 @@ EGO_FOCUS = "github::Person::probe"
 def test_loader_is_colocated_with_the_query_files():
     """QUERIES_DIR must be resolved from this module, not from a caller's depth."""
     loader_module = importlib.import_module(
-        "app.analytics.collaboration.queries_loader"
+        "api.analytics.collaboration.queries_loader"
     )
     assert QUERIES_DIR == Path(loader_module.__file__).parent / "queries"
     assert (QUERIES_DIR / "collaboration_score.cypher").is_file()

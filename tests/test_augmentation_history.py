@@ -11,8 +11,8 @@ from __future__ import annotations
 
 import pytest
 
-from app.ai_agent.chains import chains
-from app.settings import settings
+from api.ai_agent.chains import chains
+from api.settings import settings
 
 pytestmark = pytest.mark.unit
 
@@ -300,13 +300,13 @@ async def test_neo4j_and_es_both_applied_compose_correctly(monkeypatch):
 # ---------------------------------------------------------------------------
 
 def test_neo4j_format_history_block_empty():
-    from app.ai_agent.chains.neo4j_chain import _format_history_block
+    from api.ai_agent.chains.neo4j_chain import _format_history_block
     assert _format_history_block(None) == ""
     assert _format_history_block([]) == ""
 
 
 def test_neo4j_format_history_block_formats_correctly():
-    from app.ai_agent.chains.neo4j_chain import _format_history_block
+    from api.ai_agent.chains.neo4j_chain import _format_history_block
     history = [
         {"role": "user", "content": "Tell me about Alice"},
         {"role": "assistant", "content": "Alice is a developer."},

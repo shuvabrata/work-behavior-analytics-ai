@@ -8,7 +8,7 @@ themes (node/edge/global styling).
 ## Overview
 
 Graph node/edge styling (shape, color, size, **label font size**) is defined by
-a hardcoded base palette (`THEME_TOKENS` in `src/app/dash_app/styles.py`). This
+a hardcoded base palette (`THEME_TOKENS` in `src/ui/styles.py`). This
 design adds **named "Graph Themes"** stored in Postgres. Each theme carries
 per-nodeType overrides (color, border, border-width, shape, width, height) plus
 edge and global styling — including node and edge **label font size** — that
@@ -190,7 +190,7 @@ base palette can evolve independently. It is the single source of truth for:
 
 ## API Layer
 
-Domain `graph-themes` under `src/app/api/graph_themes/v1/`
+Domain `graph-themes` under `src/api/api/graph_themes/v1/`
 (router/service/query/models, mirroring `settings/v1`).
 
 | Method | Path | Purpose |
@@ -264,7 +264,7 @@ base palette on any error (the shared helper returns `None`).
 ### Shared fetch helper
 
 `fetch_effective_theme(base_theme) -> dict | None` lives in
-`src/app/dash_app/pages/graph/utils/graph_operations.py`. It is the **single
+`src/ui/pages/graph/utils/graph_operations.py`. It is the **single
 fetch site** for `/effective`; all three consumers call it. It returns `None`
 on any error so callers fall back to the base palette. The timeout comes from
 `runtime_settings.get_int("HTTP_REQUEST_TIMEOUT")`.
@@ -272,7 +272,7 @@ on any error so callers fall back to the base palette. The timeout comes from
 ### Stylesheet builder
 
 `build_cytoscape_stylesheet(theme_name, effective=None)` in
-`src/app/dash_app/graph_styles.py`:
+`src/ui/graph_styles.py`:
 
 - Theme-derived rules (generic node, per-nodeType, edge, selected) come from
   the shared `overrides_to_cytoscape_rules(effective)`.
@@ -395,13 +395,13 @@ flowchart LR
 
 | Area | Location |
 |---|---|
-| Shared core | `src/app/common/graph_theme.py` |
-| Base tokens (font sizes) | `src/app/dash_app/styles.py` (`THEME_TOKENS`) |
-| DB model | `src/app/db/models/graph_theme.py` |
-| Migration | `src/app/alembic/versions/..._add_graph_themes.py` |
-| API | `src/app/api/graph_themes/v1/{models,query,service,router}.py` |
-| Stylesheet builder | `src/app/dash_app/graph_styles.py` |
-| Shared fetch helper | `src/app/dash_app/pages/graph/utils/graph_operations.py` |
+| Shared core | `src/domain/graph_theme.py` |
+| Base tokens (font sizes) | `src/ui/styles.py` (`THEME_TOKENS`) |
+| DB model | `src/api/db/models/graph_theme.py` |
+| Migration | `src/api/alembic/versions/..._add_graph_themes.py` |
+| API | `src/api/api/graph_themes/v1/{models,query,service,router}.py` |
+| Stylesheet builder | `src/ui/graph_styles.py` |
+| Shared fetch helper | `src/ui/pages/graph/utils/graph_operations.py` |
 | Consumers | Graph `callbacks/display.py`, Collab `callbacks/display.py`, `search.py` |
-| Editor page | `src/app/dash_app/pages/settings/graph_styling/` |
-| Collab truncation | `src/app/analytics/collaboration/algorithm.py` |
+| Editor page | `src/ui/pages/settings/graph_styling/` |
+| Collab truncation | `src/api/analytics/collaboration/algorithm.py` |

@@ -47,7 +47,7 @@ _LOGIN_PATH = "/api/v1/auth/login"
 #: The API route the guard probes with the held cookie.
 _ME_PATH = "/api/v1/auth/me"
 
-#: The documented landing page. ``src/app/api/auth/v1/service.py`` also defaults
+#: The documented landing page. ``src/api/api/auth/v1/service.py`` also defaults
 #: a signed-in user here.
 _CANONICAL_ROOT = "/app/graph"
 

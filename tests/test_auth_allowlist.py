@@ -4,7 +4,7 @@ This file pairs one **behavioural** assertion with one **static** one:
 
 * The public-path set is read from ``AUTHZ_MATRIX`` and checked against the live
   app's dependency wiring, so a new route that skips authentication fails here.
-* The session-cookie path set is a **static scan** of ``src/app/api/`` for the
+* The session-cookie path set is a **static scan** of ``src/api/api/`` for the
   cookie constant. It is deliberately static — the cookie is read inside handler
   bodies rather than through a dependency, so there is no wiring to observe.
   A future reader should not mistake it for a behavioural test.
@@ -16,13 +16,13 @@ from pathlib import Path
 
 import pytest
 
-from app.api_main import app
-from app.auth.matrix import AUTHZ_MATRIX
+from api.api_main import app
+from api.auth.matrix import AUTHZ_MATRIX
 from tests.test_authz_matrix import _BEARER_DEPENDENCIES, api_operations
 
 pytestmark = pytest.mark.unit
 
-_API_ROOT = Path(__file__).resolve().parent.parent / "src" / "app" / "api"
+_API_ROOT = Path(__file__).resolve().parent.parent / "src" / "api" / "api"
 _SESSION_COOKIE_MARKERS = ("SESSION_COOKIE_NAME", "wba_session")
 
 
@@ -77,6 +77,6 @@ def test_session_cookie_paths_are_exactly_two() -> None:
     }
 
     files = _files_reading_the_session_cookie()
-    assert files == {"src/app/api/auth/v1/router.py"}, (
+    assert files == {"src/api/api/auth/v1/router.py"}, (
         f"unexpected files reading the session cookie: {sorted(files)}"
     )

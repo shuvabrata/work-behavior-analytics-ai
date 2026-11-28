@@ -11,8 +11,8 @@ This test suite provides comprehensive coverage for:
 from unittest.mock import MagicMock, patch, AsyncMock
 import pytest
 
-from app.ai_agent.providers.openai.openai_provider import OpenAIProvider
-from app.settings import settings
+from api.ai_agent.providers.openai.openai_provider import OpenAIProvider
+from api.settings import settings
 
 
 pytestmark = pytest.mark.unit
@@ -64,7 +64,7 @@ class TestMCPSettingsAndFeatureFlags:
         monkeypatch.setenv("GITHUB_MCP_SERVER_URL", "http://custom-mcp:9000/mcp")
         monkeypatch.setenv("GITHUB_MCP_TOKEN", "gh_test_token")
         
-        from app.settings import Settings
+        from api.settings import Settings
         fresh_settings = Settings(_env_file=None)
         assert fresh_settings.GITHUB_MCP_ENABLED is True
         assert fresh_settings.MAX_MCP_ITERATIONS == 5
@@ -152,7 +152,7 @@ class TestClientConnectionLogic:
 
     def test_atlassian_check_connection_missing_token_returns_unavailable(self):
         """Atlassian check_connection should fail fast when token is missing."""
-        from app.ai_agent.mcp_integration.client_manager import AtlassianMCPClientManager
+        from api.ai_agent.mcp_integration.client_manager import AtlassianMCPClientManager
 
         manager = AtlassianMCPClientManager(
             atlassian_server_url="https://mcp.atlassian.com/v1/mcp",
@@ -167,7 +167,7 @@ class TestClientConnectionLogic:
 
     def test_atlassian_check_connection_malformed_token_returns_unavailable(self):
         """Atlassian check_connection should reject clearly malformed token values."""
-        from app.ai_agent.mcp_integration.client_manager import AtlassianMCPClientManager
+        from api.ai_agent.mcp_integration.client_manager import AtlassianMCPClientManager
 
         manager = AtlassianMCPClientManager(
             atlassian_server_url="https://mcp.atlassian.com/v1/mcp",
@@ -182,7 +182,7 @@ class TestClientConnectionLogic:
 
     def test_execute_tool_call_returns_envelope_structure(self):
         """Tool execution should always return a structured result envelope."""
-        from app.ai_agent.mcp_integration.tool_executor import execute_tool_call
+        from api.ai_agent.mcp_integration.tool_executor import execute_tool_call
         
         result = execute_tool_call("test_tool", {})
         
@@ -195,7 +195,7 @@ class TestClientConnectionLogic:
         """Tool execution with disabled MCP should return graceful envelope."""
         monkeypatch.setattr(settings, "GITHUB_MCP_ENABLED", False)
         
-        from app.ai_agent.mcp_integration.tool_executor import execute_tool_call
+        from api.ai_agent.mcp_integration.tool_executor import execute_tool_call
         
         result = execute_tool_call("test_tool", {})
         
@@ -205,7 +205,7 @@ class TestClientConnectionLogic:
 
     def test_client_manager_initialization_with_valid_settings(self):
         """Client manager should initialize with valid settings."""
-        from app.ai_agent.mcp_integration.client_manager import MCPClientManager
+        from api.ai_agent.mcp_integration.client_manager import MCPClientManager
         
         manager = MCPClientManager(
             github_server_url="http://test:8082/mcp",
@@ -219,7 +219,7 @@ class TestClientConnectionLogic:
 
     def test_client_manager_initialization_with_defaults(self):
         """Client manager should accept default initialization."""
-        from app.ai_agent.mcp_integration.client_manager import MCPClientManager
+        from api.ai_agent.mcp_integration.client_manager import MCPClientManager
         
         manager = MCPClientManager(github_server_url="http://test:8082/mcp")
         
@@ -238,7 +238,7 @@ class TestToolListingAndExecution:
 
     def test_list_available_tools_returns_empty_when_disabled(self, monkeypatch):
         """Tool listing should return empty when MCP is disabled."""
-        from app.ai_agent.mcp_integration import tool_executor
+        from api.ai_agent.mcp_integration import tool_executor
 
         monkeypatch.setattr(settings, "GITHUB_MCP_ENABLED", False)
         monkeypatch.setattr(settings, "ATLASSIAN_MCP_ENABLED", False)
@@ -250,14 +250,14 @@ class TestToolListingAndExecution:
 
     def test_list_available_tools_returns_list(self):
         """Tool listing should return a list (empty or populated)."""
-        from app.ai_agent.mcp_integration.tool_executor import list_available_tools
+        from api.ai_agent.mcp_integration.tool_executor import list_available_tools
         
         tools = list_available_tools()
         assert isinstance(tools, list)
 
     def test_list_available_tools_github_only_are_namespaced(self, monkeypatch):
         """GitHub tools should be prefixed with github__ when listed."""
-        from app.ai_agent.mcp_integration import tool_executor
+        from api.ai_agent.mcp_integration import tool_executor
 
         class FakeGithubManager:
             def list_tools(self):
@@ -284,7 +284,7 @@ class TestToolListingAndExecution:
 
     def test_list_available_tools_atlassian_only_are_namespaced(self, monkeypatch):
         """Atlassian tools should be prefixed with atlassian__ when listed."""
-        from app.ai_agent.mcp_integration import tool_executor
+        from api.ai_agent.mcp_integration import tool_executor
 
         class FakeAtlassianManager:
             def list_tools(self):
@@ -309,7 +309,7 @@ class TestToolListingAndExecution:
 
     def test_list_available_tools_combines_both_backends(self, monkeypatch):
         """Enabled backends should both contribute namespaced tools."""
-        from app.ai_agent.mcp_integration import tool_executor
+        from api.ai_agent.mcp_integration import tool_executor
 
         class FakeGithubManager:
             def list_tools(self):
@@ -348,7 +348,7 @@ class TestToolListingAndExecution:
 
     def test_execute_tool_call_returns_envelope_structure(self):
         """Tool execution should return a properly structured result envelope."""
-        from app.ai_agent.mcp_integration.tool_executor import execute_tool_call
+        from api.ai_agent.mcp_integration.tool_executor import execute_tool_call
         
         result = execute_tool_call("github__list_issues", {"owner": "test", "repo": "repo"})
         
@@ -360,7 +360,7 @@ class TestToolListingAndExecution:
 
     def test_execute_tool_call_with_empty_args(self):
         """Tool execution should handle empty arguments gracefully."""
-        from app.ai_agent.mcp_integration.tool_executor import execute_tool_call
+        from api.ai_agent.mcp_integration.tool_executor import execute_tool_call
         
         result = execute_tool_call("github__list_issues", {})
         
@@ -370,7 +370,7 @@ class TestToolListingAndExecution:
 
     def test_execute_tool_call_with_various_argument_types(self):
         """Tool execution should handle various argument types."""
-        from app.ai_agent.mcp_integration.tool_executor import execute_tool_call
+        from api.ai_agent.mcp_integration.tool_executor import execute_tool_call
         
         test_cases = [
             ("github__list_issues", {"owner": "test", "repo": "repo"}),
@@ -386,7 +386,7 @@ class TestToolListingAndExecution:
 
     def test_execute_tool_call_routes_to_github_backend(self, monkeypatch):
         """Prefixed GitHub tool names should route to the GitHub manager."""
-        from app.ai_agent.mcp_integration import tool_executor
+        from api.ai_agent.mcp_integration import tool_executor
 
         class FakeGithubManager:
             def call_tool(self, tool_name, arguments):
@@ -405,7 +405,7 @@ class TestToolListingAndExecution:
 
     def test_execute_tool_call_routes_to_atlassian_backend(self, monkeypatch):
         """Prefixed Atlassian tool names should route to the Atlassian manager."""
-        from app.ai_agent.mcp_integration import tool_executor
+        from api.ai_agent.mcp_integration import tool_executor
 
         class FakeAtlassianManager:
             def call_tool(self, tool_name, arguments):
@@ -424,7 +424,7 @@ class TestToolListingAndExecution:
 
     def test_execute_tool_call_with_unknown_prefix_returns_error(self):
         """Unknown or unprefixed tool names should return a structured routing error."""
-        from app.ai_agent.mcp_integration.tool_executor import execute_tool_call
+        from api.ai_agent.mcp_integration.tool_executor import execute_tool_call
 
         result = execute_tool_call("list_issues", {"owner": "test"})
         assert result["status"] == "error"
@@ -441,7 +441,7 @@ class TestDBBackedAtlassianConfig:
 
     def test_build_atlassian_manager_uses_db_config_when_available(self, monkeypatch):
         """When the DB loader returns config, the manager should use DB values."""
-        from app.ai_agent.mcp_integration import tool_executor
+        from api.ai_agent.mcp_integration import tool_executor
 
         db_config = {
             "enabled": True,
@@ -458,7 +458,7 @@ class TestDBBackedAtlassianConfig:
 
     def test_build_atlassian_manager_falls_back_to_env_when_db_absent(self, monkeypatch):
         """When the DB loader returns None, the manager should use env settings."""
-        from app.ai_agent.mcp_integration import tool_executor
+        from api.ai_agent.mcp_integration import tool_executor
 
         monkeypatch.setattr(tool_executor, "load_atlassian_mcp_config", lambda: None)
         monkeypatch.setattr(settings, "ATLASSIAN_MCP_SERVER_URL", "https://env-mcp.atlassian.com/v1/mcp")
@@ -473,7 +473,7 @@ class TestDBBackedAtlassianConfig:
 
     def test_build_atlassian_manager_db_disabled_overrides_env_enabled(self, monkeypatch):
         """DB config with enabled=False must take precedence over env ATLASSIAN_MCP_ENABLED=True."""
-        from app.ai_agent.mcp_integration import tool_executor
+        from api.ai_agent.mcp_integration import tool_executor
 
         db_config = {
             "enabled": False,
@@ -490,7 +490,7 @@ class TestDBBackedAtlassianConfig:
 
     def test_list_available_tools_uses_db_atlassian_config(self, monkeypatch):
         """list_available_tools should expose Atlassian tools when DB config is enabled."""
-        from app.ai_agent.mcp_integration import tool_executor
+        from api.ai_agent.mcp_integration import tool_executor
 
         class FakeAtlassianManager:
             def list_tools(self):
@@ -523,7 +523,7 @@ class TestDBBackedAtlassianConfig:
 
     def test_list_available_tools_no_atlassian_when_db_disabled(self, monkeypatch):
         """list_available_tools should return no Atlassian tools when DB config is disabled."""
-        from app.ai_agent.mcp_integration import tool_executor
+        from api.ai_agent.mcp_integration import tool_executor
 
         db_config = {
             "enabled": False,
@@ -540,7 +540,7 @@ class TestDBBackedAtlassianConfig:
 
     def test_loader_exception_triggers_env_fallback(self, monkeypatch):
         """When the loader raises, _build_atlassian_manager should use env settings."""
-        from app.ai_agent.mcp_integration import tool_executor
+        from api.ai_agent.mcp_integration import tool_executor
 
         def _raising_loader():
             raise RuntimeError("DB connection refused")

@@ -38,14 +38,14 @@ try:
 except ImportError:  # pragma: no cover
     _AIO_PIKA_AVAILABLE = False
 
-from app.scripts.init_rabbitmq import (
+from api.scripts.init_rabbitmq import (
     DLQ_NAME,
     DLX_NAME,
     SOURCE_QUEUES,
     EXCHANGE_NAME,
     init_rabbitmq,
 )
-from app.settings import settings
+from api.settings import settings
 
 # ---------------------------------------------------------------------------
 # Management API helpers

@@ -13,8 +13,8 @@ import json
 
 import pytest
 
-from app.ai_agent.providers.base import LLMProvider
-from app.ai_agent.providers.openai.openai_provider import OpenAIProvider
+from api.ai_agent.providers.base import LLMProvider
+from api.ai_agent.providers.openai.openai_provider import OpenAIProvider
 
 
 pytestmark = pytest.mark.unit

@@ -16,7 +16,7 @@ from typing import Any
 import pytest
 from sqlalchemy.dialects import postgresql
 
-from app.api.queries.v1 import query as metadata_query
+from api.api.queries.v1 import query as metadata_query
 
 pytestmark = [pytest.mark.unit, pytest.mark.asyncio]
 

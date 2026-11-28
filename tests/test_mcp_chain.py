@@ -2,8 +2,8 @@
 
 import pytest
 
-from app.ai_agent.chains import mcp_chain
-from app.settings import settings
+from api.ai_agent.chains import mcp_chain
+from api.settings import settings
 
 
 pytestmark = pytest.mark.unit

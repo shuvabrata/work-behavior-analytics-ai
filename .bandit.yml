@@ -7,7 +7,7 @@ exclude_dirs:
   - docs
   - scripts
   - simulation
-  - src/app/alembic
+  - src/api/alembic
 
 # Skips specific tests across the codebase if needed
 # skips: ['B101']

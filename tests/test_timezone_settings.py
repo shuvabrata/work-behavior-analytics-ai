@@ -7,8 +7,8 @@ import pytest
 from domain.timezone import to_app_timezone
 from ui.pages.chat import queue_message
 from ui.pages.connectors.callbacks import render_items_list
-from app.runtime_settings import runtime_settings
-from app.settings import Settings, settings
+from api.runtime_settings import runtime_settings
+from api.settings import Settings, settings
 from common.runtime_settings import RuntimeConfig
 
 

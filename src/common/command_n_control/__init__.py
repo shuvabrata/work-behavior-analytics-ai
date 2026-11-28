@@ -1,6 +1,6 @@
 """Generic RabbitMQ-based command-and-control bus.
 
-Exchange topology (declared by ``src/app/scripts/init_rabbitmq.py``):
+Exchange topology (declared by ``src/api/scripts/init_rabbitmq.py``):
 
   exchange: command_n_control (topic, durable)
   dlx:      command_n_control_dlx  (direct, durable)

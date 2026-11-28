@@ -12,9 +12,9 @@ from datetime import datetime, timezone
 
 import pytest
 
-from app.api.activity.v1 import mock_data, service
-from app.api.activity.v1.model import TimelineRequest
-from app.settings import settings
+from api.api.activity.v1 import mock_data, service
+from api.api.activity.v1.model import TimelineRequest
+from api.settings import settings
 
 pytestmark = pytest.mark.unit
 

@@ -1,4 +1,4 @@
-"""Unit tests for src/app/scripts/create_es_indexes.py.
+"""Unit tests for src/api/scripts/create_es_indexes.py.
 
 Verifies:
 - MANAGED_INDEXES covers every entity type in SUPPORTED_ENTITY_TYPES
@@ -19,7 +19,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from app.scripts.create_es_indexes import (
+from api.scripts.create_es_indexes import (
     _SHARED_MAPPINGS,
     _full_text_field,
     _index_name,

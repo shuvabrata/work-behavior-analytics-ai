@@ -42,7 +42,7 @@ from typing import Any
 import httpx
 import pytest
 
-from app.auth.session_cookie import PKCE_COOKIE_NAME, SESSION_COOKIE_NAME, hash_session_id
+from api.auth.session_cookie import PKCE_COOKIE_NAME, SESSION_COOKIE_NAME, hash_session_id
 from tests.auth_helpers import (
     BASE_URL,
     _absolute,

@@ -26,7 +26,7 @@ from typing import Any
 import pytest
 from fastapi import Request
 
-from app.settings import settings
+from api.settings import settings
 
 
 @pytest.fixture(autouse=True)
@@ -73,13 +73,13 @@ def _admin_principal_by_default() -> Iterator[None]:
     override.
 
     Imports live inside the fixture body so tests/conftest.py does not import
-    app.api_main at collection time — that constructs the LLM provider and reads
+    api.api_main at collection time — that constructs the LLM provider and reads
     settings for suites that never touch the API.
     """
-    from app.api_main import app
-    from app.auth.dependencies import get_principal
-    from app.auth.principal import Principal
-    from app.auth.session_cookie import SESSION_COOKIE_NAME
+    from api.api_main import app
+    from api.auth.dependencies import get_principal
+    from api.auth.principal import Principal
+    from api.auth.session_cookie import SESSION_COOKIE_NAME
 
     async def _override(request: Request) -> Principal:
         if request.headers.get("authorization") or request.cookies.get(SESSION_COOKIE_NAME):
@@ -98,8 +98,8 @@ def _admin_principal_by_default() -> Iterator[None]:
 @pytest.fixture
 def unauthenticated() -> Iterator[None]:
     """Clear the principal override so requests reach get_principal for real."""
-    from app.api_main import app
-    from app.auth.dependencies import get_principal
+    from api.api_main import app
+    from api.auth.dependencies import get_principal
 
     app.dependency_overrides.pop(get_principal, None)
     yield

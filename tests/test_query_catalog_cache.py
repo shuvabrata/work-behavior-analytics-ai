@@ -11,8 +11,8 @@ from pathlib import Path
 import pytest
 import yaml
 
-import app.query_catalog.loader as loader
-from app.query_catalog import CatalogLoadError, clear_catalog_cache, load_catalog
+import api.query_catalog.loader as loader
+from api.query_catalog import CatalogLoadError, clear_catalog_cache, load_catalog
 
 
 pytestmark = pytest.mark.unit

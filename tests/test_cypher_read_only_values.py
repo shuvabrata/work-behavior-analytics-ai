@@ -3,7 +3,7 @@ only inside a *value* (string, backtick identifier, comment), not as syntax.
 
 Context
 -------
-``validate_read_only_query`` (``src/app/api/graph/v1/query.py``) uppercases the
+``validate_read_only_query`` (``src/api/api/graph/v1/query.py``) uppercases the
 whole query and regex-scans it for ``WRITE_KEYWORDS`` with ``\\b`` boundaries.
 Because the scan is text-wide rather than syntax-aware, the word ``CREATE``
 inside an ordinary id such as ``'org/create-react-app'`` matches exactly like a
@@ -30,7 +30,7 @@ Run:
 
 import pytest
 
-from app.api.graph.v1.query import validate_read_only_query
+from api.api.graph.v1.query import validate_read_only_query
 
 pytestmark = pytest.mark.unit
 

@@ -1,0 +1,502 @@
+"""Service layer for Graph API v1 - business logic and data transformation."""
+
+from typing import Any, Dict, List, Set
+
+from api.analytics.collaboration.algorithm import (
+    build_graph,
+    compute_hub_scores,
+    compute_modularity,
+    detect_communities,
+    filter_top_edges_per_node,
+    to_cytoscape_elements,
+)
+from api.analytics.collaboration.ego import build_ego_elements
+from api.analytics.collaboration.queries_loader import load_collaboration_score_query
+from api.query_catalog import CatalogLoadError, CatalogQuery, get_catalog_query
+from api.runtime_settings import runtime_settings
+from common.logger import logger
+from domain.collaboration.config import CollaborationNetworkConfig
+from domain.collaboration.errors import CollaborationDataUnavailable
+from domain.person_network_url import DEFAULT_MAX_COLLABORATORS
+from .model import (
+    CollaborationNetworkResponse,
+    EgoNetworkResponse,
+    GraphExecuteRequest,
+    GraphNode, GraphRelationship, GraphResponse,
+    NodeExpansionResponse, PaginationMeta
+    )
+from .transformers import (
+    _transform_node,
+    _transform_relationship,
+    _extract_graph_elements_from_value,
+    _make_serializable,
+)
+from .query import (
+    validate_read_only_query, 
+    execute_cypher_query, 
+    expand_node_query,
+    fetch_relationships_between_nodes
+    )
+
+
+class CatalogQueryNotFoundError(ValueError):
+    """Raised when a requested catalog query does not exist."""
+
+
+def execute_graph_request(request: GraphExecuteRequest) -> GraphResponse:
+    """Resolve and execute a raw or catalog-backed graph request."""
+    query, parameters = _resolve_executable_query(request)
+    return execute_and_format_query(query, parameters=parameters)
+
+
+def _resolve_executable_query(request: GraphExecuteRequest) -> tuple[str, Dict[str, Any]]:
+    if request.source == "raw":
+        if not request.query:
+            raise ValueError("source='raw' requires query")
+        return request.query, request.parameters
+
+    if not request.catalog_id:
+        raise ValueError("source='catalog' requires catalog_id")
+
+    catalog_query = _get_catalog_query_or_404(request.catalog_id)
+    if request.view == "auto":
+        raise ValueError("Catalog execution requires view='graph' or view='tabular'")
+    if request.view not in catalog_query.queries:
+        raise ValueError(
+            f"Catalog query '{request.catalog_id}' does not define a '{request.view}' view"
+        )
+
+    _validate_catalog_parameters(catalog_query, request.parameters)
+    return catalog_query.queries[request.view], request.parameters
+
+
+def _get_catalog_query_or_404(catalog_id: str) -> CatalogQuery:
+    try:
+        return get_catalog_query(catalog_id)
+    except CatalogLoadError as exc:
+        raise CatalogQueryNotFoundError(f"Catalog query not found: {catalog_id}") from exc
+
+
+def _validate_catalog_parameters(
+    catalog_query: CatalogQuery,
+    provided_parameters: Dict[str, Any],
+) -> None:
+    declared_names = {parameter.name for parameter in catalog_query.parameters}
+    provided_names = set(provided_parameters)
+    unknown_names = sorted(provided_names - declared_names)
+    if unknown_names:
+        raise ValueError(
+            "Unknown catalog parameter(s): " + ", ".join(unknown_names)
+        )
+
+    missing_names = [
+        parameter.name
+        for parameter in catalog_query.parameters
+        if parameter.required and _is_missing_parameter_value(provided_parameters.get(parameter.name))
+    ]
+    if missing_names:
+        raise ValueError(
+            "Missing required catalog parameter(s): " + ", ".join(missing_names)
+        )
+
+
+def _is_missing_parameter_value(value: Any) -> bool:
+    return value is None or (isinstance(value, str) and not value.strip())
+
+
+def execute_and_format_query(
+    query: str,
+    parameters: Dict[str, Any] | None = None,
+) -> GraphResponse:
+    """Execute a Cypher query and format results as GraphResponse.
+    
+    This function orchestrates the entire query execution flow:
+    1. Validates the query is read-only
+    2. Executes the query against Neo4j
+    3. Detects whether results are graph or tabular data
+    4. Transforms Neo4j objects to Pydantic models
+    5. Returns a formatted GraphResponse
+    
+    Args:
+        query: Cypher query string to execute
+        parameters: Optional Neo4j query parameters
+        
+    Returns:
+        GraphResponse with nodes, relationships, or raw tabular data
+        
+    Raises:
+        ValueError: If query is not read-only or has validation errors
+        RuntimeError: If Neo4j execution fails
+        
+    Examples:
+        >>> response = execute_and_format_query("MATCH (n) RETURN n LIMIT 5")
+        >>> response.isGraph
+        True
+        >>> len(response.nodes)
+        5
+    """
+    # Step 1: Validate query is read-only
+    if not validate_read_only_query(query):
+        raise ValueError(
+            "Query validation failed: Write operations are not allowed. "
+            "Only read-only queries (MATCH, RETURN, etc.) are permitted."
+        )
+    
+    # Step 2: Execute query
+    logger.info(f"Executing query: {query[:100]}...")
+    raw_results = execute_cypher_query(
+        query,
+        timeout=runtime_settings.get_int("NEO4J_QUERY_TIMEOUT"),
+        parameters=parameters,
+    )
+
+    return _format_query_results(
+        raw_results=raw_results,
+        include_implicit_relationships=True,
+    )
+
+
+def _format_query_results(
+    raw_results: List[Dict[str, Any]],
+    include_implicit_relationships: bool,
+) -> GraphResponse:
+    """Format raw Neo4j records as GraphResponse (graph or tabular)."""
+    # Detect result type and transform
+    nodes_dict: Dict[str, GraphNode] = {}  # Keyed by element_id for deduplication
+    relationships_list: List[GraphRelationship] = []
+    relationship_ids: Set[str] = set()  # For deduplication
+    is_graph = False
+    
+    # Extract graph objects from query results (supports nested values and Path objects)
+    for record in raw_results:
+        for value in record.values():
+            extracted = _extract_graph_elements_from_value(
+                value=value,
+                nodes_dict=nodes_dict,
+                relationships_list=relationships_list,
+                relationship_ids=relationship_ids,
+            )
+            if extracted:
+                is_graph = True
+    
+    # Step 4: Transform based on result type
+    if is_graph:
+        # Graph data: nodes and relationships are already extracted above
+        logger.info("Detected graph data. Extracting nodes and relationships.")
+        
+        nodes_list = list(nodes_dict.values())
+        logger.info(f"Extracted {len(nodes_list)} nodes and {len(relationships_list)} relationships from query results")
+        
+        # Step 4.5: Fetch relationships between the loaded nodes
+        # This ensures that if nodes have relationships between them, those relationships
+        # are also loaded, even if they weren't explicitly returned by the query
+        if include_implicit_relationships and len(nodes_list) > 0:
+            node_ids = [node.elementId for node in nodes_list]
+            relationship_records = fetch_relationships_between_nodes(node_ids)
+            
+            # Add any new relationships we found
+            relationship_ids = {rel.id for rel in relationships_list}  # Convert to set for dedup
+            missing_endpoint_count = 0
+            for record in relationship_records:
+                if 'r' in record and record['r'] is not None:
+                    neo4j_rel = record['r']
+                    rel = _transform_relationship(neo4j_rel)
+                    
+                    # Defensive check: Cytoscape will fail to render if startNode or endNode is missing.
+                    if rel.id not in relationship_ids and rel.startNode in nodes_dict and rel.endNode in nodes_dict:
+                        relationships_list.append(rel)
+                        relationship_ids.add(rel.id)
+                    elif rel.startNode not in nodes_dict or rel.endNode not in nodes_dict:
+                        missing_endpoint_count += 1
+            
+            logger.info(
+                "After fetching implicit relationships: "
+                f"{len(relationships_list)} total relationships "
+                f"(dropped_missing_endpoints={missing_endpoint_count})"
+            )
+        
+        return GraphResponse(
+            nodes=nodes_list,
+            relationships=relationships_list,
+            rawResults=[],
+            isGraph=True,
+            resultCount=len(raw_results)
+        )
+
+    # Tabular data: convert to serializable format
+    logger.info("Detected tabular data. Returning raw results.")
+    serializable_results = []
+
+    for record in raw_results:
+        serializable_record = {}
+        for key, value in record.items():
+            # Convert any remaining Neo4j types to JSON-serializable
+            serializable_record[key] = _make_serializable(value)
+        serializable_results.append(serializable_record)
+
+    return GraphResponse(
+        nodes=[],
+        relationships=[],
+        rawResults=serializable_results,
+        isGraph=False,
+        resultCount=len(serializable_results)
+    )
+
+
+
+def expand_node(
+    node_id: str,
+    direction: str = "both",
+    relationship_types: List[str] | None = None,
+    limit: int | None = None,
+    offset: int = 0,
+    exclude_node_ids: List[str] | None = None
+) -> NodeExpansionResponse:
+    """Expand a node to retrieve and format connected nodes and relationships.
+    
+    This function orchestrates the node expansion flow:
+    1. Queries Neo4j for connected nodes and relationships
+    2. Transforms Neo4j objects to Pydantic models
+    3. Calculates pagination metadata
+    4. Returns formatted response
+    
+    Args:
+        node_id: Element ID of the node to expand
+        direction: Direction to follow ('incoming', 'outgoing', or 'both')
+        relationship_types: Optional list of relationship types to filter by
+        limit: Maximum number of connected nodes to return
+        offset: Number of results to skip (for pagination)
+        exclude_node_ids: Optional list of node IDs to exclude (already loaded)
+        
+    Returns:
+        NodeExpansionResponse with connected nodes, relationships, and pagination info
+        
+    Raises:
+        ValueError: If node_id is invalid or node not found
+        RuntimeError: If Neo4j execution fails
+        
+    Examples:
+        >>> response = expand_node("123", direction="outgoing", limit=10)
+        >>> response.expanded_node_id
+        '123'
+        >>> len(response.nodes) <= 10
+        True
+    """
+    # Use configured default if limit not provided
+    if limit is None:
+        limit = runtime_settings.get_int("GRAPH_UI_MAX_NODES_TO_EXPAND")
+    
+    logger.info(f"Expanding node {node_id} in direction '{direction}' with limit={limit}, offset={offset}")
+    
+    # Execute expansion query
+    result = expand_node_query(
+        node_id=node_id,
+        direction=direction,
+        relationship_types=relationship_types,
+        limit=limit,
+        offset=offset,
+        exclude_node_ids=exclude_node_ids
+    )
+    
+    # Extract nodes and relationships from records
+    nodes_dict: Dict[str, GraphNode] = {}  # Deduplicate by element_id
+    relationships_dict: Dict[str, GraphRelationship] = {}  # Deduplicate by element_id
+    
+    for record in result["records"]:
+        # Each record contains 'm' (connected node) and 'r' (relationship)
+        # 'm' can be None when the node is already loaded but we still want the relationship
+        if 'm' in record and record['m'] is not None:
+            neo4j_node = record['m']
+            node = _transform_node(neo4j_node)
+            nodes_dict[node.elementId] = node
+        
+        if 'r' in record and record['r'] is not None:
+            neo4j_rel = record['r']
+            rel = _transform_relationship(neo4j_rel)
+            relationships_dict[rel.id] = rel
+    
+    nodes_list = list(nodes_dict.values())
+    relationships_list = list(relationships_dict.values())
+    
+    # Calculate pagination metadata
+    total = result["total"]
+    has_more = (offset + limit) < total
+    
+    pagination = PaginationMeta(
+        total=total,
+        limit=limit,
+        offset=offset,
+        has_more=has_more
+    )
+    
+    logger.info(f"Expansion complete: {len(nodes_list)} nodes, "
+               f"{len(relationships_list)} relationships, "
+               f"total={total}, has_more={has_more}")
+    
+    return NodeExpansionResponse(
+        nodes=nodes_list,
+        relationships=relationships_list,
+        expanded_node_id=node_id,
+        pagination=pagination
+    )
+
+
+def get_collaboration_network(
+    config: CollaborationNetworkConfig | None = None,
+) -> CollaborationNetworkResponse:
+    """Run the collaboration score query and return community-detected Cytoscape elements.
+
+    Steps:
+    1. Load the Cypher query from the collaboration queries directory.
+    2. Execute it against Neo4j (returns tabular person-pair records).
+    3. Pass records through the Louvain community detection pipeline.
+    4. Return Cytoscape-ready elements plus summary statistics.
+
+    Returns:
+        CollaborationNetworkResponse with elements and summary stats.
+
+    Raises:
+        RuntimeError: If the Neo4j query execution fails.
+        ValueError: If the query returns no data.
+    """
+    config = config or CollaborationNetworkConfig()
+
+    # Log GitHub issue layer enablement status
+    params = config.to_cypher_parameters()
+    logger.info(
+        f"Collaboration network: GitHub issue comment engagement layer "
+        f"{'enabled' if params.get('include_github_issue_comment_engagement') else 'disabled'}"
+    )
+    logger.info(
+        f"Collaboration network: GitHub issue co-commenters layer "
+        f"{'enabled' if params.get('include_github_issue_co_commenters') else 'disabled'}"
+    )
+
+    query = load_collaboration_score_query()
+
+    logger.info("Running collaboration score query...")
+    records = execute_cypher_query(
+        query,
+        timeout=runtime_settings.get_int("NEO4J_QUERY_TIMEOUT"),
+        parameters=config.to_cypher_parameters(),
+    )
+    logger.info(f"Collaboration query returned {len(records)} pairs.")
+
+    if not records:
+        raise CollaborationDataUnavailable(
+            "Collaboration query returned no data for this window. "
+            "Try widening the lookback window or enabling more layers."
+        )
+
+    # Run community detection pipeline
+    g = build_graph(records)
+    logger.debug(
+        f"Collaboration graph built before filtering: {g.number_of_nodes()} people, {g.number_of_edges()} pairs"
+    )
+    if config.top_n_edges_per_node > 0:
+        g = filter_top_edges_per_node(
+            g,
+            top_n=config.top_n_edges_per_node,
+            ensure_min_connection=config.ensure_min_connection,
+        )
+        logger.debug(
+            f"Collaboration graph after top-N filtering: {g.number_of_nodes()} people, {g.number_of_edges()} pairs, "
+            f"top_n={config.top_n_edges_per_node}, ensure_min_connection={config.ensure_min_connection}"
+        )
+    partition = detect_communities(g)
+    hub_scores = compute_hub_scores(g)
+    modularity = compute_modularity(g, partition)
+    elements = to_cytoscape_elements(
+        g,
+        partition,
+        hub_scores,
+        community_gap_x=config.community_gap_x,
+        community_gap_y=config.community_gap_y,
+    )
+    positioned_nodes = sum(1 for element in elements if element.get("position"))
+    logger.debug(
+        f"Collaboration Cytoscape payload built: {len(elements)} elements, {positioned_nodes} positioned nodes, gap=("
+        f"{config.community_gap_x:.1f}, {config.community_gap_y:.1f})"
+    )
+
+    num_communities = len(set(partition.values()))
+    logger.info(
+        f"Community detection complete: {g.number_of_nodes()} people, "
+        f"{g.number_of_edges()} pairs, {num_communities} communities, "
+        f"modularity={modularity:.3f}"
+    )
+
+    return CollaborationNetworkResponse(
+        elements=elements,
+        num_people=g.number_of_nodes(),
+        num_pairs=g.number_of_edges(),
+        num_communities=num_communities,
+        modularity=round(modularity, 4),
+        config=config.to_summary(),
+    )
+
+
+def get_ego_network(
+    focus_id: str,
+    config: CollaborationNetworkConfig | None = None,
+    max_collaborators: int | None = DEFAULT_MAX_COLLABORATORS,
+) -> EgoNetworkResponse:
+    """Run the collaboration score query focused on one Person and return a star.
+
+    Unlike :func:`get_collaboration_network`, this deliberately skips the
+    Louvain pipeline: a star has no communities, and hub_score (weighted degree
+    over the whole org graph) is meaningless when every spoke holds one edge.
+
+    Args:
+        focus_id: wba_id of the Person at the centre of the star.
+        config: Collaboration configuration; ``lookback_days``, layer enablement
+                and weights all apply exactly as they do for the org view.
+        max_collaborators: Keep at most this many collaborators (by raw weight).
+                           ``None`` or <= 0 keeps all.
+
+    Returns:
+        EgoNetworkResponse with the focus node, collaborator spokes and edges.
+
+    Raises:
+        ValueError: If ``focus_id`` is blank, or the query returns no rows.
+        RuntimeError: If the Neo4j query execution fails.
+    """
+    if not focus_id or not focus_id.strip():
+        raise ValueError("focus_id must be a non-empty Person wba_id.")
+
+    config = config or CollaborationNetworkConfig()
+    config.focus_id = focus_id
+
+    query = load_collaboration_score_query()
+
+    logger.info(f"Running ego collaboration score query for {focus_id}...")
+    records = execute_cypher_query(
+        query,
+        timeout=runtime_settings.get_int("NEO4J_QUERY_TIMEOUT"),
+        parameters=config.to_cypher_parameters(),
+    )
+    logger.info(f"Ego collaboration query returned {len(records)} pairs for {focus_id}.")
+
+    if not records:
+        raise CollaborationDataUnavailable(
+            f"No collaborations found for person '{focus_id}' in this window. "
+            "Try widening the lookback window or enabling more layers."
+        )
+
+    elements, total_collaborators, shown_collaborators = build_ego_elements(
+        records,
+        focus_id,
+        max_collaborators=max_collaborators,
+    )
+
+    logger.info(
+        f"Ego network built for {focus_id}: {total_collaborators} collaborators, "
+        f"{shown_collaborators} shown, {len(elements)} elements."
+    )
+
+    return EgoNetworkResponse(
+        elements=elements,
+        total_collaborators=total_collaborators,
+        shown_collaborators=shown_collaborators,
+        config=config.to_summary(),
+    )

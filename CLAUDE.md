@@ -11,7 +11,7 @@ Activate the virtualenv first (`source .venv/bin/activate`). Code lives in `src/
 | Task | Command |
 |---|---|
 | Backing services | `docker compose up -d postgres neo4j rabbitmq` |
-| Migrations | `cd src/app && alembic upgrade head` (Alembic config is `src/app/alembic.ini`) |
+| Migrations | `cd src/api && alembic upgrade head` (Alembic config is `src/api/alembic.ini`) |
 | Run app (local dev) | Start the **API** and the **UI** as two processes — see *Local development* below. Both are required; the Compose stack remains the supported path |
 | Compose stack (API + UI) | `docker compose up -d` → UI at `https://localhost/app` via nginx, health at `https://localhost/api/health`. Port `8000` is not published to the host |
 | Unit tests (regression gate) | `pytest -m unit tests -q` |
@@ -35,7 +35,7 @@ The API and the UI are separate services, so local dev needs **both** processes 
 
 ```bash
 # Terminal 1 — API. Start this FIRST.
-PYTHONPATH=src uvicorn app.api_main:app --reload            # → http://127.0.0.1:8000/api/health  → 200
+PYTHONPATH=src uvicorn api.api_main:app --reload            # → http://127.0.0.1:8000/api/health  → 200
 
 # Terminal 2 — UI. Needs the API's URL; the UI is a Flask/WSGI service.
 API_BASE_URL=http://127.0.0.1:8000 PYTHONPATH=src \
@@ -73,8 +73,8 @@ Code lives in `src/` but is imported as top-level packages (`PYTHONPATH=src`). N
 
 ```python
 from common.logger import logger          # cross-service shared code → src/common/
-from app.settings import settings         # the API → src/app/
-from app.ai_agent.providers import get_provider
+from api.settings import settings         # the API → src/api/
+from api.ai_agent.providers import get_provider
 from domain.graph_theme import ...        # pure shared domain logic → src/domain/
 ```
 
@@ -91,7 +91,7 @@ Four separately-containerized layers share `src/common/` (logger, `activity_sign
 
 ```
 src/ui/          Dash UI served by Flask/gunicorn (imported as ui.*)
-src/app/         FastAPI API (imported as app.*)
+src/api/         FastAPI API (imported as api.*)
 src/connectors/  Producer/consumer services (imported as connectors.*) — own Dockerfiles
 src/common/      Cross-service shared code (imported as common.*)
 src/domain/      Pure shared domain logic (imported as domain.*) — no I/O, no service deps
@@ -107,22 +107,22 @@ GitHub/Jira/Confluence APIs
    → Neo4j
 ```
 
-The `ActivitySignal` JSON schema (`docs/design/spec-activity-signal.md`, models in `src/common/activity_signal/`) is the contract: **all producers must emit it and all sinks must consume it.** Producers are one-shot; the consumer is long-running. Shared connector utilities (identity resolution, person cache) live in `connectors/commons/`. Producer scheduling/scan design is in `docs/design/scan-scheduler-design.md` and `src/app/scheduler.py`.
+The `ActivitySignal` JSON schema (`docs/design/spec-activity-signal.md`, models in `src/common/activity_signal/`) is the contract: **all producers must emit it and all sinks must consume it.** Producers are one-shot; the consumer is long-running. Shared connector utilities (identity resolution, person cache) live in `connectors/commons/`. Producer scheduling/scan design is in `docs/design/scan-scheduler-design.md` and `src/api/scheduler.py`.
 
-### Backend API layering (`src/app/api/<domain>/v1/`)
+### Backend API layering (`src/api/api/<domain>/v1/`)
 
 Strict separation — routers do HTTP only, services hold business logic, queries do DB access:
 
 ```
 model.py    Pydantic request/response models
-router.py   FastAPI routes, wired in src/app/api_main.py with prefix="/api/v1"
+router.py   FastAPI routes, wired in src/api/api_main.py with prefix="/api/v1"
 service.py  business logic (manages transaction boundaries)
 query.py    SQLAlchemy / database access
 ```
 
-All endpoints are under `/api/v1/`. All DB work is `async`/`await` with SQLAlchemy 2.0 `Mapped`/`mapped_column`. Migrations go through Alembic (`src/app/alembic/versions/`).
+All endpoints are under `/api/v1/`. All DB work is `async`/`await` with SQLAlchemy 2.0 `Mapped`/`mapped_column`. Migrations go through Alembic (`src/api/alembic/versions/`).
 
-### AI agent pipeline (`src/app/ai_agent/`)
+### AI agent pipeline (`src/api/ai_agent/`)
 
 User messages are augmented before hitting the LLM:
 
@@ -135,7 +135,7 @@ User messages are augmented before hitting the LLM:
 **Always obtain an LLM through the factory**, never construct a provider directly:
 
 ```python
-from app.ai_agent.providers import get_provider
+from api.ai_agent.providers import get_provider
 provider = get_provider()   # reads LLM_PROVIDER, returns a cached singleton
 ```
 
@@ -158,8 +158,8 @@ Created by `create_dash_app()` in `ui/layout.py` and served by gunicorn as a sta
 
 Two layers, both important — these are **API-side**:
 
-- `app.settings.settings` — pydantic-settings from `.env` (startup config).
-- `app.runtime_settings.runtime_settings` — DB-backed overrides editable at runtime via the Settings UI (`/api/v1/settings`), e.g. `runtime_settings.get_int("HTTP_REQUEST_TIMEOUT")`, `runtime_settings.get("UI_DATETIME_FORMAT")`. Prefer these over hardcoding when a value is user-tunable. Design: `docs/design/runtime-settings-design.md`.
+- `api.settings.settings` — pydantic-settings from `.env` (startup config).
+- `api.runtime_settings.runtime_settings` — DB-backed overrides editable at runtime via the Settings UI (`/api/v1/settings`), e.g. `runtime_settings.get_int("HTTP_REQUEST_TIMEOUT")`, `runtime_settings.get("UI_DATETIME_FORMAT")`. Prefer these over hardcoding when a value is user-tunable. Design: `docs/design/runtime-settings-design.md`.
 
 The UI holds neither. It reads `ui.settings` (a credential-free `UISettings`) and `ui.runtime_settings` (fetched from the API's runtime-snapshot endpoint), so the same page code calls `runtime_settings.get_int(...)` with the value sourced over HTTP rather than from a database.
 
@@ -205,23 +205,23 @@ Some suites (e.g. connector validation) live in their own `tests/<suite>/` direc
 ## Repo conventions
 
 - **Never commit, push, open a PR, or rewrite history unless the user explicitly asks in that turn.** Leave changes in the working tree and report them. An earlier request does not authorize later commits.
-- API endpoints: `/api/v1/` prefix; add a router module and include it in `src/app/api_main.py`.
-- Alembic for every schema change; import new models in `src/app/db/models/__init__.py`.
-- `queries_catalog/` (top level) holds the Cypher query catalog by domain; `src/app/query_catalog/` loads it. Neo4j uses a single **undirected** edge per relationship — do not add bidirectional edges (see `docs/design/RELATIONSHIPS_DESIGN.md`).
+- API endpoints: `/api/v1/` prefix; add a router module and include it in `src/api/api_main.py`.
+- Alembic for every schema change; import new models in `src/api/db/models/__init__.py`.
+- `queries_catalog/` (top level) holds the Cypher query catalog by domain; `src/api/query_catalog/` loads it. Neo4j uses a single **undirected** edge per relationship — do not add bidirectional edges (see `docs/design/RELATIONSHIPS_DESIGN.md`).
 - `plans/` holds advisor-generated implementation plans with an index at `plans/README.md`; check it before starting sizable work.
 - Commit messages are plain imperative sentences (e.g. "Activity timeline backend (#323)"); dependency bumps use Conventional Commit style from Dependabot.
-- **`/api/v1` requires a bearer token.** Exactly two endpoints accept the session cookie instead (`/api/v1/auth/token`, `/api/v1/auth/logout`); `/api/health`, `/api/v1/auth/login` and `/api/v1/auth/callback` are public. Every route's required role is declared in `src/app/auth/matrix.py`, and `tests/test_authz_matrix.py` fails if a route is missing from it. The `/api/v1/admin/*` group (in-app user management) is admin-only: it is included with `Depends(require_admin)` and every operation carries the `admin` grant in the matrix.
+- **`/api/v1` requires a bearer token.** Exactly two endpoints accept the session cookie instead (`/api/v1/auth/token`, `/api/v1/auth/logout`); `/api/health`, `/api/v1/auth/login` and `/api/v1/auth/callback` are public. Every route's required role is declared in `src/api/auth/matrix.py`, and `tests/test_authz_matrix.py` fails if a route is missing from it. The `/api/v1/admin/*` group (in-app user management) is admin-only: it is included with `Depends(require_admin)` and every operation carries the `admin` grant in the matrix.
 
 ## Common tasks
 
-- **Add an API endpoint** — define Pydantic models in `src/app/api/<domain>/v1/model.py`, DB access in `query.py`, business logic in `service.py`, routes in `router.py`; include the router in `src/app/api_main.py`.
-- **Add a DB model** — create it in `src/app/db/models/`, import it in `src/app/db/models/__init__.py`, then `cd src/app && alembic revision --autogenerate -m "description"` and `alembic upgrade head`.
+- **Add an API endpoint** — define Pydantic models in `src/api/api/<domain>/v1/model.py`, DB access in `query.py`, business logic in `service.py`, routes in `router.py`; include the router in `src/api/api_main.py`.
+- **Add a DB model** — create it in `src/api/db/models/`, import it in `src/api/db/models/__init__.py`, then `cd src/api && alembic revision --autogenerate -m "description"` and `alembic upgrade head`.
 - **Add an augmentation chain** — add a file under `ai_agent/chains/` yielding context envelopes `{"source": ..., "context": ...}`, then register it in `chains.py`'s `augment_message_stream()` behind a settings feature flag.
 - **Add a UI page** — create the package in `ui/pages/`, add the nav link and route branch in `ui/layout.py`, and import `callbacks` from the page's `__init__.py`.
 
 ## Environment configuration
 
-Loaded from `.env` (see `.env.example`) via `app.settings`. Key variables:
+Loaded from `.env` (see `.env.example`) via `api.settings`. Key variables:
 
 **Core** — `DATABASE_URL` (required), `LLM_PROVIDER` (`openai`\|`custom`, default `openai`), `LLM_MODEL` (default `gpt-5`), `OPENAI_API_KEY`, `CUSTOM_API_TOKEN`, `CUSTOM_API_URL`, `MAX_TOKENS` (chat history limit, default `16000`).
 
@@ -235,12 +235,12 @@ Loaded from `.env` (see `.env.example`) via `app.settings`. Key variables:
 
 **External URL / reverse proxy** — `EXTERNAL_BASE_URL` (default `https://localhost`) is the URL the *browser* uses; `API_BASE_URL` (default `http://localhost:8000`) is the URL the UI code uses to call the API from *inside* the container. They are deliberately different values and must stay that way — conflating them sends every UI callback through TLS to the public host and breaks the UI. Anything needing an absolute, browser-facing URL (an OAuth `redirect_uri`, for example) must build it from `EXTERNAL_BASE_URL`, never from the request's own scheme or host. The Compose stack terminates TLS at the `nginx` service; neither the `api` nor the `ui` service publishes a host port.
 
-**Keycloak / auth** — `KEYCLOAK_ISSUER` (public realm URL, used for exact `iss` matching), `KEYCLOAK_INTERNAL_URL` (the realm URL the API container uses to fetch discovery/token/JWKS over the Docker network), `KEYCLOAK_REALM`, `KEYCLOAK_CLIENT_ID`/`_SECRET`, `KEYCLOAK_SERVICE_CLIENT_ID`/`_SECRET`, `KEYCLOAK_ADMIN_CLIENT_ID`/`_SECRET`, `APP_PUBLIC_BASE_URL`, `AUTH_COOKIE_SECURE`, `AUTH_SESSION_IDLE_MINUTES`, `AUTH_SESSION_MAX_HOURS`. `KEYCLOAK_ISSUER` is the BROWSER-facing URL and must match the `iss` claim byte-for-byte; `KEYCLOAK_INTERNAL_URL` is deliberately different (`http://keycloak:8080/...`) because inside a container `localhost` is the container itself — confusing the two is the single most error-prone mistake here. `KEYCLOAK_ADMIN_CLIENT_ID` (the `admin-api` client, whose id is derivable and not a secret) sits on `UISettings` with the other client ids; `KEYCLOAK_ADMIN_CLIENT_SECRET` is API-only and exchanges for a Keycloak admin token for in-app user management. `KEYCLOAK_CLIENT_SECRET` and `KEYCLOAK_SERVICE_CLIENT_SECRET` live on `ApiSettings` (`src/app/settings.py:69-70`); every other `KEYCLOAK_*` / `AUTH_*` / `APP_PUBLIC_BASE_URL` field is on `UISettings` (`src/domain/settings.py:43-81`), which the UI runtime instantiates bare — the secrets are API-only because no UI-side code ever exchanges them. The application users' seed passwords `APP_ADMIN_PASSWORD` / `APP_USER_PASSWORD` are on **neither** settings class: `deploy/keycloak/entrypoint.sh` and `scripts/setup.sh` consume them at container start and render them into the realm template as one-time (`"temporary": true`) first-login credentials, so treat them as seeded Keycloak credentials, not app settings. The live `server`-marked suites read their own `TEST_SUITE_WBA_*` account credentials from `.env`; those are on neither settings class either.
+**Keycloak / auth** — `KEYCLOAK_ISSUER` (public realm URL, used for exact `iss` matching), `KEYCLOAK_INTERNAL_URL` (the realm URL the API container uses to fetch discovery/token/JWKS over the Docker network), `KEYCLOAK_REALM`, `KEYCLOAK_CLIENT_ID`/`_SECRET`, `KEYCLOAK_SERVICE_CLIENT_ID`/`_SECRET`, `KEYCLOAK_ADMIN_CLIENT_ID`/`_SECRET`, `APP_PUBLIC_BASE_URL`, `AUTH_COOKIE_SECURE`, `AUTH_SESSION_IDLE_MINUTES`, `AUTH_SESSION_MAX_HOURS`. `KEYCLOAK_ISSUER` is the BROWSER-facing URL and must match the `iss` claim byte-for-byte; `KEYCLOAK_INTERNAL_URL` is deliberately different (`http://keycloak:8080/...`) because inside a container `localhost` is the container itself — confusing the two is the single most error-prone mistake here. `KEYCLOAK_ADMIN_CLIENT_ID` (the `admin-api` client, whose id is derivable and not a secret) sits on `UISettings` with the other client ids; `KEYCLOAK_ADMIN_CLIENT_SECRET` is API-only and exchanges for a Keycloak admin token for in-app user management. `KEYCLOAK_CLIENT_SECRET` and `KEYCLOAK_SERVICE_CLIENT_SECRET` live on `ApiSettings` (`src/api/settings.py:69-70`); every other `KEYCLOAK_*` / `AUTH_*` / `APP_PUBLIC_BASE_URL` field is on `UISettings` (`src/domain/settings.py:43-81`), which the UI runtime instantiates bare — the secrets are API-only because no UI-side code ever exchanges them. The application users' seed passwords `APP_ADMIN_PASSWORD` / `APP_USER_PASSWORD` are on **neither** settings class: `deploy/keycloak/entrypoint.sh` and `scripts/setup.sh` consume them at container start and render them into the realm template as one-time (`"temporary": true`) first-login credentials, so treat them as seeded Keycloak credentials, not app settings. The live `server`-marked suites read their own `TEST_SUITE_WBA_*` account credentials from `.env`; those are on neither settings class either.
 
 **API documentation** — `https://localhost/docs` (Swagger UI), `/redoc` and `/openapi.json`, proxied by nginx to the API, **deliberately unauthenticated**: they expose the API schema, not data. Guarded by `tests/test_nginx_docs_routes.py` and `tests/test_docs_endpoints_server.py`.
 
 Note on the two `*_AI_LOOKUP_ENABLED` flags: the augmentation chains read them from the
-`app.settings` singleton (`.env` at startup), not from `runtime_settings`. Editing them in
+`api.settings` singleton (`.env` at startup), not from `runtime_settings`. Editing them in
 the Settings UI persists the value but does not change chain behaviour until the app is
 restarted.
 

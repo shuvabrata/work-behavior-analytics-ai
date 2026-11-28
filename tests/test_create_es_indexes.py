@@ -19,7 +19,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from app.scripts.create_es_indexes import (
+from api.scripts.create_es_indexes import (
     _SHARED_MAPPINGS,
     _full_text_field,
     _index_name,

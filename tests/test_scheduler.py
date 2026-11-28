@@ -16,7 +16,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.scheduler import _get_due_connectors, _try_acquire_lease
+from api.scheduler import _get_due_connectors, _try_acquire_lease
 
 
 pytestmark = [pytest.mark.unit]
@@ -134,7 +134,7 @@ class TestGetDueConnectors:
             _execute_result(scalar_one_or_none=None),
         ]
         now = _utc_now()
-        with patch("app.scheduler.CONNECTOR_REGISTRY", REGISTRY_WITH_PRODUCER):
+        with patch("api.scheduler.CONNECTOR_REGISTRY", REGISTRY_WITH_PRODUCER):
             due = await _get_due_connectors(mock_db, now)
         assert due == [("github", "github-producer")]
 
@@ -148,7 +148,7 @@ class TestGetDueConnectors:
             _execute_result(scalar_one_or_none=last_scan_at),
         ]
         now = _utc_now()
-        with patch("app.scheduler.CONNECTOR_REGISTRY", REGISTRY_WITH_PRODUCER):
+        with patch("api.scheduler.CONNECTOR_REGISTRY", REGISTRY_WITH_PRODUCER):
             due = await _get_due_connectors(mock_db, now)
         assert due == [("github", "github-producer")]
 
@@ -162,7 +162,7 @@ class TestGetDueConnectors:
             _execute_result(scalar_one_or_none=last_scan_at),
         ]
         now = _utc_now()
-        with patch("app.scheduler.CONNECTOR_REGISTRY", REGISTRY_WITH_PRODUCER):
+        with patch("api.scheduler.CONNECTOR_REGISTRY", REGISTRY_WITH_PRODUCER):
             due = await _get_due_connectors(mock_db, now)
         assert due == []
 
@@ -173,7 +173,7 @@ class TestGetDueConnectors:
         # Registry has no producer_container for github
         mock_db.execute.return_value = _execute_result(scalars=[connector])
         now = _utc_now()
-        with patch("app.scheduler.CONNECTOR_REGISTRY", REGISTRY_NO_PRODUCER):
+        with patch("api.scheduler.CONNECTOR_REGISTRY", REGISTRY_NO_PRODUCER):
             due = await _get_due_connectors(mock_db, now)
         assert due == []
         # MAX(created_at) query should NOT be called — we skip before that
@@ -187,7 +187,7 @@ class TestGetDueConnectors:
         """
         mock_db.execute.return_value = _execute_result(scalars=[])
         now = _utc_now()
-        with patch("app.scheduler.CONNECTOR_REGISTRY", REGISTRY_WITH_PRODUCER):
+        with patch("api.scheduler.CONNECTOR_REGISTRY", REGISTRY_WITH_PRODUCER):
             due = await _get_due_connectors(mock_db, now)
         assert due == []
 
@@ -205,7 +205,7 @@ class TestGetDueConnectors:
             _execute_result(scalar_one_or_none=github_last_scan),  # github MAX(created_at)
             _execute_result(scalar_one_or_none=jira_last_scan),    # jira MAX(created_at)
         ]
-        with patch("app.scheduler.CONNECTOR_REGISTRY", REGISTRY_WITH_PRODUCER):
+        with patch("api.scheduler.CONNECTOR_REGISTRY", REGISTRY_WITH_PRODUCER):
             due = await _get_due_connectors(mock_db, now)
         assert due == [("github", "github-producer")]
         assert ("jira", "jira-producer") not in due
@@ -220,6 +220,6 @@ class TestGetDueConnectors:
             _execute_result(scalars=[connector]),
             _execute_result(scalar_one_or_none=last_scan_at),
         ]
-        with patch("app.scheduler.CONNECTOR_REGISTRY", REGISTRY_WITH_PRODUCER):
+        with patch("api.scheduler.CONNECTOR_REGISTRY", REGISTRY_WITH_PRODUCER):
             due = await _get_due_connectors(mock_db, now)
         assert due == [("github", "github-producer")]

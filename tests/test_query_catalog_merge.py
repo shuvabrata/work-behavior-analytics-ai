@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from app.query_catalog import CatalogLoadError, load_catalog, load_namespaces
+from api.query_catalog import CatalogLoadError, load_catalog, load_namespaces
 
 
 pytestmark = pytest.mark.unit
@@ -180,7 +180,7 @@ def test_b7_duplicate_slug_in_user_set_raises(tmp_path, monkeypatch):
     cannot naturally collide. We monkeypatch ``_load_query_file`` to force two
     different user files to yield the same id, exercising the guard.
     """
-    import app.query_catalog.loader as loader_module
+    import api.query_catalog.loader as loader_module
 
     catalog_dir = tmp_path / "queries_catalog"
     _build_system_catalog(catalog_dir)

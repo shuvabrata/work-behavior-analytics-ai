@@ -46,7 +46,7 @@ try:
 except ImportError:  # pragma: no cover
     _AIO_PIKA_AVAILABLE = False
 
-from app.settings import settings
+from api.settings import settings
 
 # ── RabbitMQ topology constants ───────────────────────────────────────────
 
@@ -597,8 +597,8 @@ class TestScanEndToEnd:
         # event loop (the original loop is closed by the time the finalizer
         # runs).
         async def _clean_db() -> None:
-            from app.db.session import ASYNC_SESSION_LOCAL, engine  # pylint: disable=import-outside-toplevel
-            from app.db.models.command_status import CommandStatus  # pylint: disable=import-outside-toplevel
+            from api.db.session import ASYNC_SESSION_LOCAL, engine  # pylint: disable=import-outside-toplevel
+            from api.db.models.command_status import CommandStatus  # pylint: disable=import-outside-toplevel
             import sqlalchemy  # pylint: disable=import-outside-toplevel
             async with ASYNC_SESSION_LOCAL() as session:
                 await session.execute(

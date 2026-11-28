@@ -1,0 +1,354 @@
+
+"""AI Agent module for managing chat sessions and interactions.
+
+This module handles chat session management including:
+- Creating new chat sessions
+- Processing chat messages with LLM
+- Managing conversation history and token limits
+- CLI interface for interactive chat
+
+The module integrates with various chains (e.g., Neo4j) to augment
+user messages with relevant data from external sources.
+"""
+
+import asyncio
+import json
+import os
+import sys
+import time
+import uuid
+from typing import AsyncIterator, Any
+
+from dotenv import load_dotenv
+
+from common.logger import logger, LogContext
+from api.ai_agent.providers import get_provider
+from api.ai_agent.chains import augment_message_stream
+from api.settings import settings
+
+# In-memory session store: {session_id: [messages]}
+_chat_sessions: dict[str, list[dict[str, Any]]] = {}
+
+# Owning Keycloak `sub` per session. A session with no entry here is unowned
+# and is not reachable through the API. Kept parallel to _chat_sessions so that
+# dict's value type stays a plain message list.
+_chat_session_owners: dict[str, str] = {}
+
+# In-memory streaming metrics counters.
+# Keys: starts, completions, errors, disconnects, total_duration_seconds
+_streaming_metrics: dict[str, Any] = {
+    "starts": 0,
+    "completions": 0,
+    "errors": 0,
+    "disconnects": 0,
+    "total_duration_seconds": 0.0,
+}
+
+
+def get_streaming_metrics() -> dict[str, Any]:
+    """Return a snapshot of the current streaming metrics.
+
+    Returns:
+        Dictionary with counters for starts, completions, errors, disconnects,
+        and total duration in seconds.
+    """
+    return dict(_streaming_metrics)
+
+# Initialize LLM provider (OpenAI, Custom, etc.)
+load_dotenv()
+try:
+    _provider = get_provider()
+except ValueError as e:
+    print(f"Error initializing LLM provider: {e}")
+    sys.exit(1)
+
+# Use the provider's resolved default model (e.g. CUSTOM_LLM_MODEL for custom provider,
+# LLM_MODEL for OpenAI). Avoids cross-provider env var contamination.
+LLM_MODEL = _provider.default_model
+
+# Load max tokens from environment or use default
+MAX_TOKENS = int(os.getenv("MAX_TOKENS", "16000"))
+
+
+def _normalize_stream_metadata_payload(metadata_payload: dict[str, Any]) -> dict[str, Any]:
+    """Return a normalized metadata payload safe for logging/UI display.
+
+    Keeps the wire schema stable while trimming noisy string fields so very long
+    values (for example generated Cypher queries) do not bloat logs/UI.
+    """
+    safe_payload = dict(metadata_payload)
+    safe_sources: list[dict[str, Any]] = []
+
+    for source in safe_payload.get("sources", []) or []:
+        if not isinstance(source, dict):
+            continue
+        safe_source = dict(source)
+
+        # Keep long queries readable but bounded.
+        query = safe_source.get("neo4j_query")
+        if isinstance(query, str) and len(query) > 300:
+            safe_source["neo4j_query"] = f"{query[:300]}..."
+
+        # Bound oversized tool lists.
+        tools = safe_source.get("tools")
+        if isinstance(tools, list) and len(tools) > 10:
+            safe_source["tools"] = tools[:10] + [f"+{len(tools) - 10} more"]
+
+        safe_sources.append(safe_source)
+
+    safe_payload["sources"] = safe_sources
+    return safe_payload
+
+
+def _build_and_log_stream_metadata(
+    session_id: str,
+    prompt_tokens: int,
+    completion_tokens: int,
+    total_tokens: int,
+    elapsed_seconds: float,
+    model: str,
+    sources: list[Any],
+) -> dict[str, Any]:
+    """Build per-response metadata, normalize it, then log and return it."""
+    payload = {
+        "tokens": {
+            "prompt": prompt_tokens,
+            "completion": completion_tokens,
+            "total": total_tokens,
+        },
+        "duration_seconds": round(elapsed_seconds, 2),
+        "model": model,
+        "sources": sources,
+    }
+    normalized_payload = _normalize_stream_metadata_payload(payload)
+    logger.info(f"Stream metadata: session_id={session_id} metadata={json.dumps(normalized_payload, default=str)}")
+    return normalized_payload
+
+
+def new_chat(
+    system_prompt: str = "You are a helpful AI assistant.",
+    *,
+    owner_subject: str | None = None,
+) -> str:
+    """Create a new chat session and return its session_id (GUID).
+
+    Args:
+        system_prompt: Initial system prompt for the conversation
+        owner_subject: Keycloak ``sub`` of the session's owner, if any
+
+    Returns:
+        session_id: UUID string identifying the new chat session
+    """
+    session_id = str(uuid.uuid4())
+    _chat_sessions[session_id] = [{"role": "system", "content": system_prompt}]
+    if owner_subject is not None:
+        _chat_session_owners[session_id] = owner_subject
+    logger.info(f"New chat session created: {session_id}")
+    return session_id
+
+
+def get_chat_owner(session_id: str) -> str | None:
+    """Return the owning subject, or ``None`` when unowned/unknown."""
+    return _chat_session_owners.get(session_id)
+
+
+async def _augument_user_message(session_id: str, user_message: str) -> AsyncIterator[tuple[str, Any]]:
+    """Handles the augmentation phase, yielding SSE strings and finally the resulting message."""
+    yield "sse", f"data: {json.dumps({'type': 'thinking_start'})}\n\n"
+
+    final_augmented_message = user_message
+    chain_sources: list[Any] = []
+    
+    try:
+        raw_history = _chat_sessions.get(session_id, [])
+        non_system = [m for m in raw_history if m["role"] != "system"]
+        conversation_history_window = non_system[-(settings.AUGMENTATION_HISTORY_TURNS * 2):]
+        
+        async with asyncio.timeout(300.0):
+            async for event in augment_message_stream(
+                user_message,
+                provider=_provider,
+                conversation_history=conversation_history_window or None,
+            ):
+                if event["type"] == "augmented_message":
+                    final_augmented_message = event["content"]
+                    chain_sources = event.get("sources_used", [])
+                else:
+                    logger.debug(f"Stream thinking event: {event.get('type')}")
+                    yield "sse", f"data: {json.dumps(event)}\n\n"
+                
+    except asyncio.TimeoutError:
+        logger.warning(f"Augmentation phase timed out for session {session_id}")
+        yield "sse", f"data: {json.dumps({'type': 'thinking_chunk', 'content': 'Context gathering timed out.'})}\n\n"
+    except Exception as aug_exc:
+        logger.error(f"Augmentation phase error for session {session_id}: {aug_exc}")
+        yield "sse", f"data: {json.dumps({'type': 'thinking_chunk', 'content': f'Context gathering failed: {aug_exc}'})}\n\n"
+
+    # Yield the final result tuple so the caller can extract it
+    yield "result", (final_augmented_message, chain_sources)
+
+
+def _build_message_list_for_llm_with_token_pruning(
+    session_id: str,
+    final_augmented_message: str,
+    model: str,
+    max_tokens: int,
+) -> tuple[list[dict[str, Any]], int]:
+    """Build message list with token pruning.
+    
+    Args:
+        session_id: UUID of the chat session.
+        final_augmented_message: The fully augmented message to append.
+        model: LLM model used for token counting.
+        max_tokens: Maximum tokens before history pruning.
+        
+    Returns:
+        A tuple of (messages, total_tokens_before_pruning).
+    """
+    messages = _chat_sessions[session_id] + [{"role": "user", "content": final_augmented_message}]
+
+    total_tokens = _provider.count_tokens(messages, model)
+    logger.info(f"Stream token count before pruning: session_id={session_id} tokens={total_tokens} max={max_tokens}")
+
+    if total_tokens > max_tokens:
+        # Keep last 4 messages which is the minimum to maintain context
+        # [System, Old User, Old Assistant, Current User]
+        # We must prune the global list to prevent a memory leak
+        if len(_chat_sessions[session_id]) > 4:
+            _chat_sessions[session_id] = [_chat_sessions[session_id][0]] + _chat_sessions[session_id][4:]
+            # Rebuild messages with the newly pruned history
+            messages = _chat_sessions[session_id] + [{"role": "user", "content": final_augmented_message}]
+            
+    return messages, total_tokens
+
+
+async def stream_chat(
+    session_id: str,
+    user_message: str,
+    model: str = LLM_MODEL,
+    max_tokens: int = MAX_TOKENS,
+) -> AsyncIterator[str]:
+    """Async generator that streams a chat response as SSE-compatible JSON strings.
+
+    Yields one JSON-encoded string per event, each prefixed as a ``data:`` payload
+    for consumption by a ``StreamingResponse``.  Event types emitted in order:
+
+    - ``thinking_start``        — signals the start of the augmentation phase.
+    - ``thinking_chunk``        — internal context-gathering messages from chains.
+    - ``thinking_end``          — signals the end of the augmentation phase.
+    - ``message_start``         — signals the start of the LLM token stream.
+    - ``message_chunk``         — a single LLM token chunk.
+    - ``message_end``           — signals the stream is complete.
+    - ``error``                 — emitted if any unrecoverable error occurs.
+
+    When the stream ends normally the assembled response is appended to
+    ``_chat_sessions`` so that session history and token counting remain intact
+    for subsequent turns.  Token pruning (remove oldest 3 messages after the
+    system prompt when ``total_tokens > max_tokens``) is applied before sending
+    to the LLM, matching the behaviour of ``do_chat``.
+
+    ``asyncio.CancelledError`` (client disconnect) is re-raised after incrementing
+    the disconnect metric counter so that FastAPI can perform proper cleanup.
+
+    Args:
+        session_id: UUID of the chat session.
+        user_message: The user's message text.
+        model: LLM model to use (defaults to the module-level ``LLM_MODEL``).
+        max_tokens: Maximum tokens before history pruning.
+
+    Yields:
+        SSE-formatted strings (``data: {...}\\n\\n``).
+
+    Raises:
+        ValueError: If session_id is not found.
+        asyncio.CancelledError: Re-raised on client disconnect after metric update.
+    """
+    if session_id not in _chat_sessions:
+        raise ValueError("Session not found.")
+
+    _streaming_metrics["starts"] += 1
+    stream_start = time.monotonic()
+    assembled_tokens: list[str] = []
+
+    with LogContext(request_id=session_id):
+        logger.info(f"Stream started: session_id={session_id} user_message={user_message[:80]}")
+        
+        try:
+            # ── Phase 1: Augmentation (adding more info to user message) ───────────────
+            final_augmented_message: str = user_message
+            chain_sources: list[Any] = []
+            async for item_type, data in _augument_user_message(session_id, user_message):
+                if item_type == "sse":
+                    yield data  # Forward the stream directly to the client
+                elif item_type == "result":
+                    final_augmented_message, chain_sources = data
+
+            # ── Phase 2: Build message list with token pruning ─────────────
+            messages, total_tokens = _build_message_list_for_llm_with_token_pruning(
+                session_id, final_augmented_message, model, max_tokens
+            )
+
+            # ── Phase 3: LLM streaming ─────────────────────────────────────
+            yield f"data: {json.dumps({'type': 'message_start'})}\n\n"
+
+            try:
+                async with asyncio.timeout(180):
+                    async for token in _provider.stream_chat_completion(messages, model):
+                        assembled_tokens.append(token)
+                        yield f"data: {json.dumps({'type': 'message_chunk', 'content': token})}\n\n"
+            except asyncio.TimeoutError:
+                logger.error(f"LLM streaming timed out for session {session_id}")
+                _streaming_metrics["errors"] += 1
+                yield f"data: {json.dumps({'type': 'error', 'content': 'LLM response timed out.'})}\n\n"
+                return
+
+            # ── Phase 4: Save to session history ───────────────────────────
+            assembled_response = "".join(assembled_tokens)
+            _chat_sessions[session_id].append({"role": "user", "content": final_augmented_message})
+            _chat_sessions[session_id].append({"role": "assistant", "content": assembled_response})
+
+            # ── Phase 5: Emit per-response metadata (before message_end so JS
+            #            can attach it to the session message on resolve) ────
+            elapsed = time.monotonic() - stream_start
+            final_tokens = _provider.count_tokens(_chat_sessions[session_id], model)
+            metadata_payload = _build_and_log_stream_metadata(
+                session_id=session_id,
+                prompt_tokens=total_tokens,
+                completion_tokens=len(assembled_tokens),
+                total_tokens=final_tokens,
+                elapsed_seconds=elapsed,
+                model=model,
+                sources=chain_sources,
+            )
+            yield f"data: {json.dumps({'type': 'metadata', 'content': metadata_payload})}\n\n"
+
+            yield f"data: {json.dumps({'type': 'message_end'})}\n\n"
+
+            _streaming_metrics["completions"] += 1
+            _streaming_metrics["total_duration_seconds"] += elapsed
+            logger.info(
+                f"Stream completed: session_id={session_id} duration={elapsed:.2f}s tokens_generated="
+                f"{len(assembled_tokens)}"
+            )
+
+        except asyncio.CancelledError:
+            elapsed = time.monotonic() - stream_start
+            _streaming_metrics["disconnects"] += 1
+            logger.warning(f"Stream disconnected by client: session_id={session_id} duration={elapsed:.2f}s")
+            raise
+
+        except Exception as exc:
+            elapsed = time.monotonic() - stream_start
+            _streaming_metrics["errors"] += 1
+            logger.error(f"Stream error: session_id={session_id} error={exc} duration={elapsed:.2f}s")
+            yield f"data: {json.dumps({'type': 'error', 'content': str(exc)})}\n\n"
+
+def end_chat(session_id: str) -> None:
+    """End a chat session and clear its history.
+    
+    Args:
+        session_id: UUID of the chat session to end
+    """
+    _chat_sessions.pop(session_id, None)
+    _chat_session_owners.pop(session_id, None)
+    logger.info(f"Chat session ended: {session_id}")

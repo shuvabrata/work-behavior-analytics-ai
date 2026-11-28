@@ -1,0 +1,672 @@
+from typing import Any, Dict, List, Optional
+
+import anyio
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from common.logger import logger
+from api.common.encryption import decrypt, encrypt
+from api.settings import settings
+from . import query
+from .registry import CONNECTOR_REGISTRY
+
+
+class UnknownConnectorError(ValueError):
+    """Raised when a ``connector_type`` is not in the connector registry."""
+
+
+class UnsupportedConnectorError(ValueError):
+    """Raised when an operation is not supported for a ``connector_type``."""
+
+
+CONNECTOR_CONFIG_SENSITIVE_FIELDS: Dict[str, Dict[str, str]] = {
+    "atlassian_mcp": {"token": "encrypted_token"},
+}
+
+CONNECTOR_CONFIG_ALLOWED_FIELDS: Dict[str, List[str]] = {
+    "atlassian_mcp": ["enabled", "server_url", "token"],
+}
+
+SENSITIVE_FIELDS: Dict[str, Dict[str, str]] = {
+    "github": {"access_token": "encrypted_access_token"},
+    "jira": {"api_token": "encrypted_api_token"},
+    "email": {"password": "encrypted_password"},
+    "confluence": {"api_token": "encrypted_api_token"},
+}
+
+REQUEST_FIELDS: Dict[str, List[str]] = {
+    "github": [
+        "url",
+        "access_token",
+        "search_filters",
+        "branch_name_patterns",
+        "extraction_sources",
+        "enabled",
+    ],
+    "jira": ["url", "email", "api_token", "enabled"],
+    "slack": ["channel_id", "channel_name", "enabled"],
+    "teams": ["channel_id", "channel_name", "enabled"],
+    "confluence": [
+        "url",
+        "email",
+        "api_token",
+        "include_spaces",
+        "exclude_spaces",
+        "enabled",
+    ],
+    "google_docs": ["drive_id", "drive_name", "enabled"],
+    "sharepoint": ["site_url", "enabled"],
+    "email": [
+        "smtp_host",
+        "smtp_port",
+        "imap_host",
+        "imap_port",
+        "username",
+        "use_tls",
+        "password",
+        "enabled",
+    ],
+}
+
+RESPONSE_FIELDS: Dict[str, List[str]] = {
+    "github": [
+        "id",
+        "url",
+        "access_token",
+        "search_filters",
+        "branch_name_patterns",
+        "extraction_sources",
+        "created_at",
+        "updated_at",
+        "enabled",
+    ],
+    "jira": ["id", "url", "email", "api_token", "created_at", "updated_at", "enabled"],
+    "slack": ["id", "channel_id", "channel_name", "created_at", "updated_at", "enabled"],
+    "teams": ["id", "channel_id", "channel_name", "created_at", "updated_at", "enabled"],
+    "confluence": [
+        "id",
+        "url",
+        "email",
+        "api_token",
+        "include_spaces",
+        "exclude_spaces",
+        "created_at",
+        "updated_at",
+        "enabled",
+    ],
+    "google_docs": ["id", "drive_id", "drive_name", "created_at", "updated_at", "enabled"],
+    "sharepoint": ["id", "site_url", "created_at", "updated_at", "enabled"],
+    "email": [
+        "id",
+        "smtp_host",
+        "smtp_port",
+        "imap_host",
+        "imap_port",
+        "username",
+        "use_tls",
+        "password",
+        "created_at",
+        "updated_at",
+        "enabled",
+    ],
+}
+
+
+def _validate_connector_type(connector_type: str) -> Dict[str, str]:
+    meta = CONNECTOR_REGISTRY.get(connector_type)
+    if not meta:
+        raise UnknownConnectorError("Unknown connector_type")
+    return meta  # type: ignore[return-value]
+
+
+def _require_config_items_support(connector_type: str) -> None:
+    """Raise if ``connector_type`` does not support config items.
+
+    Connector types with ``supports_items=False`` (e.g. the MCP connectors)
+    store their config on the connector row itself and have no dedicated
+    ``*_configs`` table, so item CRUD operations must not be attempted.
+    """
+    meta = _validate_connector_type(connector_type)
+    if not meta.get("supports_items", False):
+        raise UnsupportedConnectorError(
+            f"Config items are not supported for connector_type '{connector_type}'"
+        )
+
+
+def _to_dict(item: Any) -> Dict[str, Any]:
+    if hasattr(item, "dict"):
+        return item.dict(exclude_unset=True)  # type: ignore[no-any-return]
+    return dict(item)
+
+
+def _mask(value: Optional[str]) -> Optional[str]:
+    if not value:
+        return None
+    return "********"
+
+
+def _derive_connector_status(
+    connector_type: str,
+    connector_config: Optional[Dict[str, Any]],
+    config_rows: List[Any],
+) -> str:
+    if connector_type in {"github", "jira", "confluence"}:
+        return "configured" if config_rows else "not_configured"
+
+    if connector_type == "github_mcp":
+        # GitHub MCP Server is env-configured, not DB-backed.  Derive its
+        # status from the Docker Compose environment variables.
+        return _github_mcp_env_status()
+
+    if connector_type == "atlassian_mcp":
+        if isinstance(connector_config, dict):
+            return "configured" if any(value not in (None, "", [], {}) for value in connector_config.values()) else "not_configured"
+        return "not_configured"
+
+    return "not_configured"
+
+
+def _github_mcp_env_status() -> str:
+    """Return the env-derived status for the GitHub MCP Server connector."""
+    is_configured = (
+        bool(settings.GITHUB_MCP_ENABLED)
+        and bool(settings.GITHUB_MCP_SERVER_URL)
+        and bool(settings.GITHUB_MCP_TOKEN)
+    )
+    return "configured" if is_configured else "not_configured"
+
+
+async def sync_github_mcp_env_status(db: AsyncSession) -> None:
+    """Sync the ``github_mcp`` connector status from environment variables.
+
+    GitHub MCP Server is configured via Docker Compose environment variables,
+    not through the UI.  This function checks the three required env vars
+    (``GITHUB_MCP_ENABLED``, ``GITHUB_MCP_SERVER_URL``, ``GITHUB_MCP_TOKEN``)
+    and updates the connector row in the DB accordingly.
+
+    Called once during application startup.
+    """
+    connector = await query.get_connector(db, "github_mcp")
+    if not connector:
+        logger.warning(
+            "[github_mcp] Connector row not found in DB — skipping env status sync"
+        )
+        return
+
+    new_status = _github_mcp_env_status()
+
+    if connector.status == new_status:
+        logger.debug(f"[github_mcp] Status already '{new_status}' — no change needed")
+        return
+
+    await query.update_connector_status(db, "github_mcp", status=new_status)
+    logger.info(
+        f"[github_mcp] Status synced from env: enabled={bool(settings.GITHUB_MCP_ENABLED)} server_url_set="
+        f"{bool(settings.GITHUB_MCP_SERVER_URL)} token_set={bool(settings.GITHUB_MCP_TOKEN)} → {new_status}"
+    )
+
+
+async def _refresh_connector_status(
+    db: AsyncSession,
+    connector_type: str,
+) -> None:
+    connector = await query.get_connector(db, connector_type)
+    if not connector:
+        return
+
+    config_rows = []
+    if connector_type in {"github", "jira", "confluence"}:
+        config_rows = await query.get_configs(db, connector_type)
+
+    status = _derive_connector_status(
+        connector_type,
+        connector.config,
+        config_rows,
+    )
+    await query.update_connector_status(
+        db,
+        connector_type,
+        status=status,
+        last_tested_at=None,
+        error=None,
+    )
+
+
+def _normalize_connector_config(
+    connector_type: str,
+    config: Optional[Dict[str, Any]],
+    include_secrets: bool = False,
+) -> Optional[Dict[str, Any]]:
+    if not isinstance(config, dict):
+        return config
+
+    encrypted_map = CONNECTOR_CONFIG_SENSITIVE_FIELDS.get(connector_type)
+    if not encrypted_map:
+        return config
+
+    normalized: Dict[str, Any] = {}
+    for key, value in config.items():
+        if key in encrypted_map.values():
+            continue
+        normalized[key] = value
+
+    for field, encrypted_field in encrypted_map.items():
+        encrypted_value = config.get(encrypted_field)
+        if include_secrets:
+            normalized[field] = decrypt(encrypted_value) if encrypted_value else None
+        else:
+            normalized[field] = _mask(encrypted_value)
+
+    return normalized
+
+
+def _validate_atlassian_mcp_config(
+    data: Dict[str, Any],
+    existing_config: Optional[Dict[str, Any]],
+) -> None:
+    enabled = bool(data.get("enabled"))
+    if not enabled:
+        return
+
+    server_url = data.get("server_url")
+    if not isinstance(server_url, str) or not server_url.strip():
+        msg = (
+            "Server URL is required when Atlassian MCP is enabled. "
+            "Use the Atlassian cloud endpoint: https://mcp.atlassian.com/v1/mcp"
+        )
+        logger.error(f"[atlassian_mcp] Validation failed: {msg}")
+        raise ValueError(msg)
+
+    token = data.get("token")
+    encrypted_token = data.get("encrypted_token")
+    existing_encrypted_token = None
+    if isinstance(existing_config, dict):
+        existing_encrypted_token = existing_config.get("encrypted_token")
+    has_any_secret = bool(token) or bool(encrypted_token) or bool(existing_encrypted_token)
+
+    if not has_any_secret:
+        msg = (
+            "API token is required when Atlassian MCP is enabled. "
+            "Generate a Rovo MCP scoped token at https://id.atlassian.com/manage-profile/security/api-tokens"
+        )
+        logger.error(f"[atlassian_mcp] Validation failed: {msg}")
+        raise ValueError(msg)
+
+
+def _prepare_connector_config_for_storage(
+    connector_type: str,
+    config: Optional[Dict[str, Any]],
+    existing_config: Optional[Dict[str, Any]],
+) -> Optional[Dict[str, Any]]:
+    if config is None:
+        return None
+
+    if connector_type != "atlassian_mcp":
+        return config
+
+    if not isinstance(config, dict):
+        raise ValueError("Connector config must be an object")
+
+    existing_dict = existing_config if isinstance(existing_config, dict) else {}
+    allowed_fields = set(CONNECTOR_CONFIG_ALLOWED_FIELDS[connector_type])
+    encrypted_map = CONNECTOR_CONFIG_SENSITIVE_FIELDS.get(connector_type, {})
+    payload: Dict[str, Any] = {}
+
+    for key, value in config.items():
+        if key not in allowed_fields:
+            continue
+
+        encrypted_field = encrypted_map.get(key)
+        if encrypted_field:
+            if value in (None, ""):
+                if existing_dict.get(encrypted_field):
+                    payload[encrypted_field] = existing_dict.get(encrypted_field)
+            else:
+                payload[encrypted_field] = encrypt(value)
+        else:
+            payload[key] = value
+
+    for encrypted_field in encrypted_map.values():
+        if encrypted_field not in payload and existing_dict.get(encrypted_field):
+            payload[encrypted_field] = existing_dict.get(encrypted_field)
+
+    _validate_atlassian_mcp_config(payload, existing_dict)
+    return payload
+
+
+def _validate_github_item_payload(data: Dict[str, Any], item_id: Optional[int]) -> None:
+    url = data.get("url")
+    if not isinstance(url, str) or not url.strip():
+        raise ValueError("GitHub repository URL is required")
+
+    access_token = data.get("access_token")
+    if item_id is None and (not isinstance(access_token, str) or not access_token.strip()):
+        raise ValueError("GitHub access_token is required")
+
+    if "access_token" in data and isinstance(access_token, str) and not access_token.strip():
+        raise ValueError("GitHub access_token cannot be empty")
+
+
+def _validate_jira_item_payload(data: Dict[str, Any], item_id: Optional[int]) -> None:
+    api_token = data.get("api_token")
+    if item_id is None and (not isinstance(api_token, str) or not api_token.strip()):
+        raise ValueError("Jira api_token is required")
+
+    email = data.get("email")
+    if not isinstance(email, str) or not email.strip():
+        raise ValueError("Jira email is required")
+    
+    if "api_token" in data and isinstance(api_token, str) and not api_token.strip():
+        raise ValueError("Jira api_token cannot be empty")
+
+
+def _validate_confluence_item_payload(data: Dict[str, Any], item_id: Optional[int]) -> None:
+    url = data.get("url")
+    if not isinstance(url, str) or not url.strip():
+        raise ValueError("Confluence url is required")
+
+    email = data.get("email")
+    if not isinstance(email, str) or not email.strip():
+        raise ValueError("Confluence email is required")
+
+    api_token = data.get("api_token")
+    if item_id is None and (not isinstance(api_token, str) or not api_token.strip()):
+        raise ValueError("Confluence api_token is required")
+
+    if "api_token" in data and isinstance(api_token, str) and not api_token.strip():
+        raise ValueError("Confluence api_token cannot be empty")
+
+
+async def list_connectors(db: AsyncSession) -> List[Dict[str, Any]]:
+    logger.debug("[list_connectors] Starting list_connectors")
+    connectors = await query.get_all_connectors(db)
+    logger.debug(f"[list_connectors] Retrieved {len(connectors)} connectors")
+    results = []
+    for connector in connectors:
+        meta = CONNECTOR_REGISTRY.get(connector.connector_type)
+        if not meta:
+            continue
+        results.append(
+            {
+                "connector_type": connector.connector_type,
+                "display_name": meta["display_name"],
+                "status": connector.status,
+                "config": _normalize_connector_config(connector.connector_type, connector.config),
+                "last_tested_at": connector.last_tested_at,
+                "last_test_error": connector.last_test_error,
+                "scan_interval_hours": connector.scan_interval_hours,
+            }
+        )
+    logger.debug(f"[list_connectors] Returning {len(results)} normalized connectors")
+    return results
+
+
+async def get_connector(
+    db: AsyncSession,
+    connector_type: str,
+    include_secrets: bool = False,
+) -> Dict[str, Any]:
+    meta = _validate_connector_type(connector_type)
+    connector = await query.get_connector(db, connector_type)
+    if not connector:
+        raise ValueError("Connector not found")
+    return {
+        "connector_type": connector.connector_type,
+        "display_name": meta["display_name"],
+        "status": connector.status,
+        "config": _normalize_connector_config(
+            connector.connector_type,
+            connector.config,
+            include_secrets=include_secrets,
+        ),
+        "last_tested_at": connector.last_tested_at,
+        "last_test_error": connector.last_test_error,
+        "scan_interval_hours": connector.scan_interval_hours,
+    }
+
+
+async def update_connector_config(
+    db: AsyncSession,
+    connector_type: str,
+    config: Optional[Dict[str, Any]],
+    scan_interval_hours: Optional[int] = None,
+    scan_interval_hours_set: bool = False,
+) -> Dict[str, Any]:
+    _validate_connector_type(connector_type)
+    existing_connector = await query.get_connector(db, connector_type)
+    if not existing_connector:
+        raise ValueError("Connector not found")
+    prepared_config = _prepare_connector_config_for_storage(
+        connector_type,
+        config,
+        existing_connector.config,
+    )
+    connector = await query.update_connector_config(db, connector_type, prepared_config)
+    if not connector:
+        raise ValueError("Connector not found")
+
+    # Persist scan_interval_hours only when the caller explicitly included the
+    # field in the request (None means "clear the schedule"; field absent means
+    # "don't touch the schedule").
+    if scan_interval_hours_set:
+        connector.scan_interval_hours = scan_interval_hours
+        await db.commit()
+        await db.refresh(connector)
+
+    return await get_connector(db, connector_type)
+
+
+async def clear_connector_config(
+    db: AsyncSession, connector_type: str
+) -> Dict[str, Any]:
+    """Clear all stored connector-level config, including any encrypted secrets."""
+    _validate_connector_type(connector_type)
+    connector = await query.update_connector_config(db, connector_type, {})
+    if not connector:
+        raise ValueError("Connector not found")
+    return await get_connector(db, connector_type)
+
+
+async def list_config_items(
+    db: AsyncSession, connector_type: str, include_secrets: bool = False
+) -> List[Dict[str, Any]]:
+    _require_config_items_support(connector_type)
+    rows = await query.get_configs(db, connector_type)
+    encrypted_map = SENSITIVE_FIELDS.get(connector_type, {})
+    response_fields = RESPONSE_FIELDS[connector_type]
+
+    results = []
+    for row in rows:
+        row_dict: Dict[str, Any] = {"id": row.id}
+        for field in response_fields:
+            if field == "id":
+                continue
+            encrypted_field = encrypted_map.get(field)
+            if encrypted_field:
+                encrypted_value = getattr(row, encrypted_field)
+                if include_secrets:
+                    row_dict[field] = decrypt(encrypted_value) if encrypted_value else None
+                else:
+                    row_dict[field] = _mask(encrypted_value)
+            else:
+                row_dict[field] = getattr(row, field)
+        results.append(row_dict)
+    return results
+
+
+async def save_config_item(
+    db: AsyncSession,
+    connector_type: str,
+    item: Any,
+    item_id: Optional[int] = None,
+) -> Dict[str, Any]:
+    _require_config_items_support(connector_type)
+    data = _to_dict(item)
+    if connector_type == "github":
+        _validate_github_item_payload(data, item_id)
+    if connector_type == "jira":
+        _validate_jira_item_payload(data, item_id)
+    if connector_type == "confluence":
+        _validate_confluence_item_payload(data, item_id)
+    allowed_fields = set(REQUEST_FIELDS[connector_type])
+    encrypted_map = SENSITIVE_FIELDS.get(connector_type, {})
+
+    payload: Dict[str, Any] = {}
+    for key, value in data.items():
+        if key not in allowed_fields:
+            continue
+        encrypted_field = encrypted_map.get(key)
+        if encrypted_field:
+            if value in (None, ""):
+                payload[encrypted_field] = None
+            else:
+                payload[encrypted_field] = encrypt(value)
+        else:
+            payload[key] = value
+
+    saved = await query.upsert_config_item(db, connector_type, item_id, payload)
+    if not saved:
+        raise ValueError("Config item not found")
+
+    await _refresh_connector_status(db, connector_type)
+
+    # Convert saved row to response shape
+    response_fields = RESPONSE_FIELDS[connector_type]
+    row_dict: Dict[str, Any] = {"id": saved.id}
+    for field in response_fields:
+        if field == "id":
+            continue
+        encrypted_field = encrypted_map.get(field)
+        if encrypted_field:
+            row_dict[field] = _mask(getattr(saved, encrypted_field))
+        else:
+            row_dict[field] = getattr(saved, field)
+    return row_dict
+
+
+async def update_config_item_status(
+    db: AsyncSession, connector_type: str, item_id: int, enabled: bool
+) -> Dict[str, Any]:
+    _require_config_items_support(connector_type)
+    
+    # Perform an atomic partial update (upsert handles dict unpacking automatically)
+    saved = await query.upsert_config_item(db, connector_type, item_id, {"enabled": enabled})
+    if not saved:
+        raise ValueError("Config item not found")
+
+    await _refresh_connector_status(db, connector_type)
+
+    # Convert saved row back to response shape
+    encrypted_map = SENSITIVE_FIELDS.get(connector_type, {})
+    response_fields = RESPONSE_FIELDS[connector_type]
+    row_dict: Dict[str, Any] = {"id": saved.id}
+    for field in response_fields:
+        if field == "id":
+            continue
+        encrypted_field = encrypted_map.get(field)
+        if encrypted_field:
+            row_dict[field] = _mask(getattr(saved, encrypted_field))
+        else:
+            row_dict[field] = getattr(saved, field)
+    return row_dict
+
+
+async def delete_config_item(db: AsyncSession, connector_type: str, item_id: int) -> None:
+    _require_config_items_support(connector_type)
+    deleted = await query.delete_config_item(db, connector_type, item_id)
+    if not deleted:
+        raise ValueError("Config item not found")
+    await _refresh_connector_status(db, connector_type)
+
+
+async def delete_all_configs(db: AsyncSession, connector_type: str) -> None:
+    _require_config_items_support(connector_type)
+    await query.delete_all_configs(db, connector_type)
+    await _refresh_connector_status(db, connector_type)
+
+
+async def test_connector(
+    db: AsyncSession, connector_type: str
+) -> Dict[str, Any]:
+    """Test an MCP connector's connection and persist the result.
+
+    Only MCP connectors (``atlassian_mcp`` and ``github_mcp``) are supported.
+    The check runs synchronously inside the app container by opening an MCP
+    session and listing tools.
+
+    Raises:
+        ValueError: If ``connector_type`` is not a recognised connector, or is
+            not an MCP connector type.
+    """
+    from datetime import datetime, timezone
+
+    meta = _validate_connector_type(connector_type)
+    if connector_type not in {"atlassian_mcp", "github_mcp"}:
+        raise UnsupportedConnectorError(
+            f"Test connection is not supported for connector_type '{connector_type}'"
+        )
+
+    # Imported here to avoid a circular import at module load time.
+    # service -> tool_executor -> atlassian_config_loader -> service (lazy).
+    from api.ai_agent.mcp_integration.tool_executor import test_mcp_connection
+
+    logger.debug(f"[{connector_type}] Running Test Connection")
+    result = await anyio.to_thread.run_sync(test_mcp_connection, connector_type)
+    logger.debug(
+        f"[{connector_type}] Test Connection finished status={result.get('status')} connected="
+        f"{result.get('connected')} tool_count={result.get('tool_count')}"
+    )
+
+    status: str = str(result.get("status") or "")
+    connected = bool(result.get("connected"))
+    tool_count = result.get("tool_count")
+    error = result.get("error")
+
+    if connected:
+        await query.update_connector_status(
+            db,
+            connector_type,
+            status="connected",
+            last_tested_at=datetime.now(timezone.utc),
+            error=None,
+        )
+    else:
+        await query.update_connector_status(
+            db,
+            connector_type,
+            status="error",
+            last_tested_at=datetime.now(timezone.utc),
+            error=error,
+        )
+
+    error_str: str = str(error) if error else ""
+    message = _test_result_message(connector_type, status, tool_count, error_str)
+    return {
+        "success": connected,
+        "message": message,
+        "server": result.get("server", connector_type),
+        "tool_count": tool_count,
+    }
+
+
+def _test_result_message(
+    connector_type: str,
+    status: str,
+    tool_count: Optional[int],
+    error: Optional[str],
+) -> str:
+    """Produce a human-readable result message for a test-connection result."""
+    display = CONNECTOR_REGISTRY.get(connector_type, {}).get("display_name", connector_type)
+
+    if status == "connected":
+        return f"{display} connected — {tool_count} tools available"
+
+    if status == "empty_toolset":
+        return (
+            f"{display} reached the server but returned 0 tools. "
+            "The API token may lack the required scopes."
+        )
+
+    if status == "disabled":
+        return f"{display} is disabled."
+
+    return f"{display} connection failed: {error or 'unknown error'}"

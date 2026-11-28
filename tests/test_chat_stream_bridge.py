@@ -16,7 +16,7 @@ import pytest
 from dash import no_update
 
 from ui.pages.chat import get_layout, render_from_session
-from app.runtime_settings import runtime_settings
+from api.runtime_settings import runtime_settings
 
 pytestmark = pytest.mark.unit
 

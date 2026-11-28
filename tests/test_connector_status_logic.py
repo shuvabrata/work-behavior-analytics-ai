@@ -1,6 +1,6 @@
 import pytest
 
-from app.api.connectors.v1 import service
+from api.api.connectors.v1 import service
 
 
 @pytest.mark.unit

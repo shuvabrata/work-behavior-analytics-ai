@@ -1,8 +1,8 @@
 import pytest
 from cryptography.fernet import Fernet
 
-from app.common import encryption
-from app.settings import settings
+from api.common import encryption
+from api.settings import settings
 
 
 pytestmark = pytest.mark.unit

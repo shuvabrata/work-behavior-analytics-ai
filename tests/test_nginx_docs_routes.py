@@ -207,7 +207,7 @@ def test_openapi_schema_is_served_without_a_root_path() -> None:
     nginx locations). A ``root_path`` would rewrite that base and the browser
     would call a path nginx does not proxy.
     """
-    api_main = REPO_ROOT / "src" / "app" / "api_main.py"
+    api_main = REPO_ROOT / "src" / "api" / "api_main.py"
     source = api_main.read_text(encoding="utf-8")
     assert "root_path" not in source, (
         f"{api_main} sets root_path; the docs schema's server URL would no longer "

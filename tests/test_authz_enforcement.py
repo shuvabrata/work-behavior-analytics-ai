@@ -1,6 +1,6 @@
 """Per-role enforcement across representative routes of the real app.
 
-Driven through ``httpx.ASGITransport`` against ``app.api_main.app`` with the
+Driven through ``httpx.ASGITransport`` against ``api.api_main.app`` with the
 autouse admin override cleared, so ``get_principal`` is replaced per case and the
 router-level / route-level dependencies actually run.
 
@@ -20,10 +20,10 @@ import httpx
 import pytest
 import pytest_asyncio
 
-from app.api_main import app
-from app.auth.dependencies import get_principal
-from app.auth.principal import Principal
-from app.db.session import get_async_db
+from api.api_main import app
+from api.auth.dependencies import get_principal
+from api.auth.principal import Principal
+from api.db.session import get_async_db
 from tests.auth_helpers import realm_username
 
 pytestmark = [pytest.mark.unit, pytest.mark.asyncio]
@@ -141,7 +141,7 @@ def _stub_keycloak(monkeypatch: pytest.MonkeyPatch) -> None:
     agent to raise leaves the handler answering 503, which is neither 401 nor 403,
     so the "allowed" assertion still holds without any traffic.
     """
-    from app.auth import keycloak_admin as k
+    from api.auth import keycloak_admin as k
 
     def boom(*args: Any, **kwargs: Any) -> Any:
         raise k.KeycloakUnavailableError("stubbed")

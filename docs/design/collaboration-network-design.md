@@ -334,8 +334,8 @@ run by hand, against a live Neo4j.
 **1. Tuning CLI** — `src/app/analytics/collaboration/tune.py`.
 
 ```bash
-python -m app.analytics.collaboration.tune
-python -m app.analytics.collaboration.tune --verbose   # list every community's members
+python -m api.analytics.collaboration.tune
+python -m api.analytics.collaboration.tune --verbose   # list every community's members
 ```
 
 Runs the scoring query with default configuration, then prints a four-part

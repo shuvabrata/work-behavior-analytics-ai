@@ -14,8 +14,8 @@ import math
 
 import pytest
 
-from app.analytics.collaboration.algorithm import normalize_edge_weights
-from app.analytics.collaboration.ego import (
+from api.analytics.collaboration.algorithm import normalize_edge_weights
+from api.analytics.collaboration.ego import (
     RADIUS_MAX,
     RADIUS_MIN,
     build_ego_elements,
@@ -23,7 +23,7 @@ from app.analytics.collaboration.ego import (
     cap_options_for,
     compute_radial_positions,
 )
-from app.api.graph.v1.model import EgoNetworkResponse
+from api.api.graph.v1.model import EgoNetworkResponse
 from domain.person_network_url import DEFAULT_MAX_COLLABORATORS
 
 

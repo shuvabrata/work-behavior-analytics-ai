@@ -15,9 +15,9 @@ import pytest
 import pytest_asyncio
 from fastapi import Depends, FastAPI
 
-from app.auth import dependencies
-from app.auth.principal import Principal
-from app.auth.tokens import NoRecognisedRoleError, TokenValidationError
+from api.auth import dependencies
+from api.auth.principal import Principal
+from api.auth.tokens import NoRecognisedRoleError, TokenValidationError
 
 pytestmark = [pytest.mark.unit, pytest.mark.asyncio]
 

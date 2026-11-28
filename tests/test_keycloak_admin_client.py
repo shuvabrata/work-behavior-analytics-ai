@@ -7,7 +7,7 @@ from typing import Any
 import pytest
 import requests
 
-from app.auth import keycloak_admin as k
+from api.auth import keycloak_admin as k
 
 pytestmark = pytest.mark.unit
 

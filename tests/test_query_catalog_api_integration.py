@@ -8,8 +8,8 @@ import httpx
 import pytest
 import yaml
 
-from app.api_main import app
-from app.query_catalog import get_default_catalog_dir
+from api.api_main import app
+from api.query_catalog import get_default_catalog_dir
 
 
 pytestmark = [pytest.mark.integration, pytest.mark.asyncio]

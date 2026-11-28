@@ -1,6 +1,6 @@
 import pytest
 
-from app.api.connectors.v1.service import _validate_confluence_item_payload
+from api.api.connectors.v1.service import _validate_confluence_item_payload
 
 
 def test_confluence_validation_missing_url():

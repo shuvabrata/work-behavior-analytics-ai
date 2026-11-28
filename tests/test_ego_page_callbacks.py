@@ -14,7 +14,7 @@ from dash import no_update
 from dash.exceptions import PreventUpdate
 
 from domain.collaboration.ego_metadata import cap_options_for
-from app.api.graph.v1.model import EgoNetworkResponse
+from api.api.graph.v1.model import EgoNetworkResponse
 from domain.person_network_url import DEFAULT_MAX_COLLABORATORS
 from ui.pages.collaboration_network_ego.callbacks import filter as ego_filter
 

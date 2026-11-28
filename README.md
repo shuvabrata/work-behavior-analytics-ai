@@ -25,20 +25,26 @@ The system analyzes project data from various enterprise productivity tools (suc
 #### Interactive Graph Visualization
 ![alt text](images/image-3.png)
 
-#### Connectors support to get meaningful data
-![alt text](images/image-1.png)
-
-#### Pre-built Query Catalog
-![alt text](images/image-6.png)
-
-#### AI chat interface
-![alt text](images/image-2.png)
-
 #### Interactive collaboration network
 ![alt text](images/image-4.png)
 
 #### Per Person Ego network
 ![alt text](images/image-5.png)
+
+#### Connectors support to get meaningful data
+![alt text](images/image-1.png)
+
+#### Pre-built Query Catalog (100+ OOTB queries)
+![alt text](images/image-6.png)
+
+#### Fully customizable Query Editor
+![alt text](images/image-7.png)
+
+#### AI chat interface
+![alt text](images/image-2.png)
+
+#### ElasticSearch backed seach engine
+![alt text](images/image-8.png)
 
 ## Technology Stack
 

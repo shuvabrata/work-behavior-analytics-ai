@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from app.db.models.application_settings import ApplicationSettings
+from api.db.models.application_settings import ApplicationSettings
 
 
 class TestApplicationSettingsModel:

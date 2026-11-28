@@ -13,7 +13,7 @@ Run with::
 
 import pytest
 
-from app.api.graph.v1.query import execute_cypher_query
+from api.api.graph.v1.query import execute_cypher_query
 
 
 pytestmark = [pytest.mark.integration, pytest.mark.neo4j]

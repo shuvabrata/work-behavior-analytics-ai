@@ -30,7 +30,7 @@ Run:
 
 import pytest
 
-from app.api.graph.v1.query import validate_read_only_query
+from api.api.graph.v1.query import validate_read_only_query
 
 pytestmark = pytest.mark.unit
 

@@ -32,8 +32,8 @@ try:
 except ImportError:  # pragma: no cover
     _AIO_PIKA_AVAILABLE = False
 
-from app.scripts.init_rabbitmq import init_rabbitmq
-from app.settings import settings
+from api.scripts.init_rabbitmq import init_rabbitmq
+from api.settings import settings
 from common.messaging.settings_events import (
     RUNTIME_CONFIG_EXCHANGE,
     listen_for_settings_changed,

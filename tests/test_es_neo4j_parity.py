@@ -21,7 +21,7 @@ import pytest
 from elasticsearch import Elasticsearch
 from neo4j import GraphDatabase
 
-from app.scripts.create_es_indexes import _index_name
+from api.scripts.create_es_indexes import _index_name
 from domain.es_indexes import MANAGED_INDEXES
 
 

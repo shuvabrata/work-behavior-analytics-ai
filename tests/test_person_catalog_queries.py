@@ -10,8 +10,8 @@ Run with: pytest tests/test_person_catalog_queries.py -m neo4j -v
 
 import pytest
 
-from app.api.graph.v1.query import execute_cypher_query
-from app.query_catalog import load_catalog
+from api.api.graph.v1.query import execute_cypher_query
+from api.query_catalog import load_catalog
 
 
 pytestmark = [pytest.mark.integration, pytest.mark.neo4j]

@@ -11,7 +11,7 @@ from typing import Any
 import httpx
 import pytest
 
-from app.api_main import app
+from api.api_main import app
 
 
 pytestmark = [

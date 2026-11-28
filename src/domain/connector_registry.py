@@ -8,7 +8,7 @@ secrets, so both runtimes read it directly.
 It lives in ``domain`` so the UI can render the Connectors page without
 importing the API package. ``app/api/connectors/v1/registry.py`` re-exports it
 so the API's own ``from .registry import CONNECTOR_REGISTRY`` call sites and
-any ``app.api...`` path keep resolving unchanged.
+any ``api.api...`` path keep resolving unchanged.
 
 The values are the single source of truth for:
   * the Connectors page cards and their launch/scan controls

@@ -1,6 +1,6 @@
 """Unit tests for the value-aware read-only checker.
 
-``app.api.graph.v1.cypher_read_only.is_read_only_cypher`` decides read-only
+``api.api.graph.v1.cypher_read_only.is_read_only_cypher`` decides read-only
 status by lexing the query and rejecting it only when a token *is* a write
 keyword. Values (string literals, backtick identifiers) and comments never
 produce keyword tokens, which is what makes ordinary ids containing words such
@@ -14,7 +14,7 @@ Run:
 
 import pytest
 
-from app.api.graph.v1.cypher_read_only import is_read_only_cypher
+from api.api.graph.v1.cypher_read_only import is_read_only_cypher
 
 pytestmark = pytest.mark.unit
 

@@ -9,14 +9,14 @@ from typing import Any
 
 import pytest
 
-from app.api.admin_users.v1 import service
-from app.api.admin_users.v1.model import UserCreate, UserUpdate
-from app.auth.keycloak_admin import (
+from api.api.admin_users.v1 import service
+from api.api.admin_users.v1.model import UserCreate, UserUpdate
+from api.auth.keycloak_admin import (
     KeycloakConflictError,
     KeycloakNotFoundError,
     KeycloakPolicyError,
 )
-from app.auth.principal import Principal
+from api.auth.principal import Principal
 
 pytestmark = [pytest.mark.unit, pytest.mark.asyncio]
 
@@ -139,7 +139,7 @@ async def test_update_pre_read_not_found(_patch_query: Any) -> None:
     def boom(uid: str) -> dict[str, Any]:
         raise KeycloakNotFoundError("nope")
 
-    import app.api.admin_users.v1.service as s
+    import api.api.admin_users.v1.service as s
 
     orig = s.query.get_user_raw
     s.query.get_user_raw = boom
@@ -191,7 +191,7 @@ async def test_delete_last_admin(_patch_query: Any) -> None:
 
 
 async def test_list_passes_through_query_page(monkeypatch: pytest.MonkeyPatch, _patch_query: Any) -> None:
-    from app.api.admin_users.v1.model import UserSummary
+    from api.api.admin_users.v1.model import UserSummary
 
     listed = (
         [UserSummary(id="u1", username="alice", enabled=True, roles=["user"])],
@@ -206,7 +206,7 @@ async def test_list_passes_through_query_page(monkeypatch: pytest.MonkeyPatch, _
 async def test_list_total_excludes_service_accounts(monkeypatch: pytest.MonkeyPatch, _patch_query: Any) -> None:
     """The query layer filters service accounts and corrects the total."""
     monkeypatch.undo()
-    from app.api.admin_users.v1 import query
+    from api.api.admin_users.v1 import query
 
     class _FakeAdmin:
         @staticmethod
@@ -256,7 +256,7 @@ def _recording_admin(
 async def test_list_total_under_search_is_not_negative(monkeypatch: pytest.MonkeyPatch, _patch_query: Any) -> None:
     """A search whose only match is a service account must not yield a negative total."""
     monkeypatch.undo()
-    from app.api.admin_users.v1 import query
+    from api.api.admin_users.v1 import query
 
     count_calls: list[str | None] = []
     monkeypatch.setattr(
@@ -275,7 +275,7 @@ async def test_list_total_under_search_covers_all_matches(
 ) -> None:
     """A search-scoped count must not be reduced by the global service-account count."""
     monkeypatch.undo()
-    from app.api.admin_users.v1 import query
+    from api.api.admin_users.v1 import query
 
     count_calls: list[str | None] = []
     page = [_raw(f"u{i}") for i in range(25)]
@@ -291,7 +291,7 @@ async def test_list_total_clamps_and_skips_global_count(
 ) -> None:
     """With no search term the total clamps at zero and the global count is used."""
     monkeypatch.undo()
-    from app.api.admin_users.v1 import query
+    from api.api.admin_users.v1 import query
 
     count_calls: list[str | None] = []
     monkeypatch.setattr(

@@ -17,13 +17,13 @@ import pytest
 import pytest_asyncio
 from cryptography.fernet import Fernet
 
-from app.api.connectors.v1 import query as connectors_query
-from app.api.connectors.v1 import service as connectors_service
-from app.api_main import app
-from app.auth.dependencies import get_principal
-from app.auth.principal import Principal
-from app.db.session import get_async_db
-from app.settings import settings
+from api.api.connectors.v1 import query as connectors_query
+from api.api.connectors.v1 import service as connectors_service
+from api.api_main import app
+from api.auth.dependencies import get_principal
+from api.auth.principal import Principal
+from api.db.session import get_async_db
+from api.settings import settings
 from tests.auth_helpers import realm_username
 
 pytestmark = [pytest.mark.unit, pytest.mark.asyncio]

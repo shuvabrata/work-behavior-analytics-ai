@@ -23,9 +23,9 @@ import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 
-from app.auth import tokens
-from app.auth.principal import CredentialType
-from app.settings import settings
+from api.auth import tokens
+from api.auth.principal import CredentialType
+from api.settings import settings
 from tests.auth_helpers import realm_username
 
 pytestmark = [pytest.mark.unit]

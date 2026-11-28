@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from elasticsearch.exceptions import NotFoundError
 
-from app.scripts.create_es_indexes import (
+from api.scripts.create_es_indexes import (
     _build_client,
     _index_name,
     create_indexes,

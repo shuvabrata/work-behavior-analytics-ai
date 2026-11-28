@@ -14,8 +14,8 @@ import pytest
 from fastapi import FastAPI
 from fastapi.routing import APIRoute
 
-from app.api_main import app
-from app.auth.matrix import AUTHZ_MATRIX, Grant
+from api.api_main import app
+from api.auth.matrix import AUTHZ_MATRIX, Grant
 
 pytestmark = pytest.mark.unit
 

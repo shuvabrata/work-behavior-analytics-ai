@@ -6,8 +6,8 @@ Run with: pytest tests/test_graph_service.py -v
 
 import pytest
 
-from app.api.graph.v1.service import execute_and_format_query
-from app.api.graph.v1.model import GraphResponse
+from api.api.graph.v1.service import execute_and_format_query
+from api.api.graph.v1.model import GraphResponse
 
 
 pytestmark = [pytest.mark.integration, pytest.mark.neo4j]

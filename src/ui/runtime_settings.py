@@ -1,6 +1,6 @@
 """The UI runtime's runtime-settings cache.
 
-Same interface as ``app.runtime_settings`` (``get`` / ``get_int`` / ``refresh``),
+Same interface as ``api.runtime_settings`` (``get`` / ``get_int`` / ``refresh``),
 but sourced from the API over HTTP instead of from the database — the UI holds
 no driver and no DB credentials. The snapshot endpoint
 (``GET /api/v1/settings/runtime-snapshot``) is the same one the producer daemons
@@ -11,7 +11,7 @@ the endpoint requires a credential, would silently stop refreshing.
 
 The cache itself is the **shared** object owned by :mod:`domain.timezone`, so a
 refresh here is visible to ``domain.timezone.get_app_timezone`` (and vice versa).
-``app.runtime_settings`` binds to the same object in the API runtime.
+``api.runtime_settings`` binds to the same object in the API runtime.
 
 Two rules keep the shared cache honest, and both matter while the UI and the API
 still run in one process (Steps 5–7):

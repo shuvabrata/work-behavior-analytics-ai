@@ -14,8 +14,8 @@ from datetime import datetime, timezone
 
 import pytest
 
-from app.api.activity.v1 import service
-from app.api.activity.v1.service import (
+from api.api.activity.v1 import service
+from api.api.activity.v1.service import (
     InvalidCursorError,
     InvalidWbaIdError,
     _decode_cursor,
@@ -148,8 +148,8 @@ async def test_fetch_lane_malformed_cursor_returns_empty_lane() -> None:
     """A cursor the service cannot decode yields an empty lane, not an error."""
     from typing import Any
 
-    from app.api.activity.v1.model import TimelineRequest
-    from app.api.activity.v1.service import _fetch_lane
+    from api.api.activity.v1.model import TimelineRequest
+    from api.api.activity.v1.service import _fetch_lane
 
     class _EmptyResult:
         """Stand-in for the label lookup: no row found."""

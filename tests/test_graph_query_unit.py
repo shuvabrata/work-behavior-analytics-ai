@@ -6,7 +6,7 @@ Run with: pytest tests/test_graph_query_unit.py -v
 
 import pytest
 
-from app.api.graph.v1.query import validate_read_only_query
+from api.api.graph.v1.query import validate_read_only_query
 
 
 pytestmark = pytest.mark.unit
@@ -149,7 +149,7 @@ class TestQueryValidation:
         """Test that validation uses word boundaries for Cypher keywords.
 
         Note: The check is lexer-driven (see
-        ``app.api.graph.v1.cypher_read_only``, plan 047), so a write keyword
+        ``api.api.graph.v1.cypher_read_only``, plan 047), so a write keyword
         inside a string literal is a ``STRING`` token, not a keyword token, and
         does not disqualify the query. Accepting it here is the behaviour change
         plan 047 introduced: the previous text-wide regex scan rejected
@@ -184,7 +184,7 @@ class TestEdgeCases:
         """Test validation with Cypher comments.
 
         Note: The lexer never emits comments as tokens (see
-        ``app.api.graph.v1.cypher_read_only``, plan 047), so a leading comment
+        ``api.api.graph.v1.cypher_read_only``, plan 047), so a leading comment
         is skipped and the query is seen to start at ``MATCH``. The previous
         text-wide implementation conservatively rejected queries starting with
         comments; that false positive is gone.
@@ -214,7 +214,7 @@ class TestRelationshipTypeValidation:
 
     def test_valid_relationship_types_accepted(self):
         """Valid uppercase types should not raise."""
-        from app.api.graph.v1.model import NodeExpansionRequest
+        from api.api.graph.v1.model import NodeExpansionRequest
         request = NodeExpansionRequest(
             node_id="123",
             relationship_types=["WORKS_ON", "KNOWS", "MANAGES"]
@@ -223,7 +223,7 @@ class TestRelationshipTypeValidation:
 
     def test_none_or_empty_accepted(self):
         """None or empty list should be a no-op."""
-        from app.api.graph.v1.model import NodeExpansionRequest
+        from api.api.graph.v1.model import NodeExpansionRequest
         request = NodeExpansionRequest(node_id="123", relationship_types=None)
         assert request.relationship_types is None
         request = NodeExpansionRequest(node_id="123", relationship_types=[])
@@ -232,7 +232,7 @@ class TestRelationshipTypeValidation:
     def test_lowercase_rejected(self):
         """Lowercase type should raise ValidationError."""
         from pydantic import ValidationError
-        from app.api.graph.v1.model import NodeExpansionRequest
+        from api.api.graph.v1.model import NodeExpansionRequest
         with pytest.raises(ValidationError):
             NodeExpansionRequest(
                 node_id="123",
@@ -242,7 +242,7 @@ class TestRelationshipTypeValidation:
     def test_injection_payload_rejected(self):
         """A Cypher injection payload should raise ValidationError."""
         from pydantic import ValidationError
-        from app.api.graph.v1.model import NodeExpansionRequest
+        from api.api.graph.v1.model import NodeExpansionRequest
         with pytest.raises(ValidationError):
             NodeExpansionRequest(
                 node_id="123",
@@ -252,7 +252,7 @@ class TestRelationshipTypeValidation:
     def test_empty_string_rejected(self):
         """Empty string type should raise ValidationError."""
         from pydantic import ValidationError
-        from app.api.graph.v1.model import NodeExpansionRequest
+        from api.api.graph.v1.model import NodeExpansionRequest
         with pytest.raises(ValidationError):
             NodeExpansionRequest(
                 node_id="123",
@@ -262,7 +262,7 @@ class TestRelationshipTypeValidation:
     def test_mixed_valid_and_invalid_rejected(self):
         """A mix of valid and invalid types should be rejected."""
         from pydantic import ValidationError
-        from app.api.graph.v1.model import NodeExpansionRequest
+        from api.api.graph.v1.model import NodeExpansionRequest
         with pytest.raises(ValidationError):
             NodeExpansionRequest(
                 node_id="123",

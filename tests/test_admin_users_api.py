@@ -1,6 +1,6 @@
 """Unit tests for the admin user management API endpoints.
 
-Driven through ``httpx.ASGITransport`` against ``app.api_main.app`` with the
+Driven through ``httpx.ASGITransport`` against ``api.api_main.app`` with the
 conftest admin override cleared, so the real authorization dependencies run.
 The Keycloak admin client is stubbed — no HTTP ever leaves the process.
 """
@@ -14,11 +14,11 @@ import httpx
 import pytest
 import pytest_asyncio
 
-from app.api_main import app
-from app.auth import keycloak_admin as k
-from app.auth.dependencies import get_principal
-from app.auth.principal import Principal
-from app.db.session import get_async_db
+from api.api_main import app
+from api.auth import keycloak_admin as k
+from api.auth.dependencies import get_principal
+from api.auth.principal import Principal
+from api.db.session import get_async_db
 from tests.auth_helpers import realm_username
 
 pytestmark = [pytest.mark.unit, pytest.mark.asyncio]
@@ -110,11 +110,11 @@ async def test_delete_schedules_cleanup_once(client: httpx.AsyncClient, monkeypa
     async def _fake_delete(user_id: str, actor: Principal) -> None:
         return None
 
-    from app.api.admin_users.v1 import service as admin_service
+    from api.api.admin_users.v1 import service as admin_service
 
     monkeypatch.setattr(admin_service, "delete_user", _fake_delete)
     monkeypatch.setattr(
-        "app.api.admin_users.v1.router.cleanup.purge_user_data",
+        "api.api.admin_users.v1.router.cleanup.purge_user_data",
         lambda subject: calls.append(subject),
     )
 
@@ -139,11 +139,11 @@ async def test_delete_failure_schedules_no_cleanup(
     async def _boom(user_id: str, actor: Principal) -> None:
         raise k.KeycloakNotFoundError("nope")
 
-    from app.api.admin_users.v1 import service as admin_service
+    from api.api.admin_users.v1 import service as admin_service
 
     monkeypatch.setattr(admin_service, "delete_user", _boom)
     monkeypatch.setattr(
-        "app.api.admin_users.v1.router.cleanup.purge_user_data",
+        "api.api.admin_users.v1.router.cleanup.purge_user_data",
         lambda subject: calls.append(subject),
     )
 
@@ -162,7 +162,7 @@ async def test_keycloak_unavailable_is_503(client: httpx.AsyncClient) -> None:
 async def test_not_found_maps(monkeypatch: pytest.MonkeyPatch, client: httpx.AsyncClient) -> None:
     _as(ADMIN)
 
-    from app.api.admin_users.v1 import service as admin_service
+    from api.api.admin_users.v1 import service as admin_service
 
     async def _get(user_id: str) -> Any:
         raise admin_service.UserNotFoundError("nope")
@@ -185,7 +185,7 @@ async def test_not_found_maps(monkeypatch: pytest.MonkeyPatch, client: httpx.Asy
 async def test_update_conflict_is_409(client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch) -> None:
     """A Keycloak 409 during the write maps to 409 user_exists, never a 500."""
     _as(ADMIN)
-    from app.api.admin_users.v1 import query
+    from api.api.admin_users.v1 import query
 
     monkeypatch.setattr(
         query, "get_user_raw", lambda uid: {"id": uid, "username": "x", "enabled": True}
@@ -206,7 +206,7 @@ async def test_update_conflict_is_409(client: httpx.AsyncClient, monkeypatch: py
 async def test_create_policy_error_is_422(client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch) -> None:
     """A Keycloak 400 on create maps to 422 password_policy, never a 500."""
     _as(ADMIN)
-    from app.api.admin_users.v1 import query
+    from api.api.admin_users.v1 import query
 
     def _boom(body: dict[str, Any]) -> str:
         raise k.KeycloakPolicyError("invalid username")
@@ -223,8 +223,8 @@ async def test_create_policy_error_is_422(client: httpx.AsyncClient, monkeypatch
 
 async def test_create_warnings_empty(client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch) -> None:
     _as(ADMIN)
-    from app.api.admin_users.v1 import service as admin_service
-    from app.api.admin_users.v1.model import UserCreatedResponse
+    from api.api.admin_users.v1 import service as admin_service
+    from api.api.admin_users.v1.model import UserCreatedResponse
 
     async def _create(payload: Any, actor: Principal) -> Any:
         return UserCreatedResponse(
@@ -243,8 +243,8 @@ async def test_create_warns_when_password_not_set(
     client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _as(ADMIN)
-    from app.api.admin_users.v1 import service as admin_service
-    from app.api.admin_users.v1.model import UserCreatedResponse
+    from api.api.admin_users.v1 import service as admin_service
+    from api.api.admin_users.v1.model import UserCreatedResponse
 
     async def _create(payload: Any, actor: Principal) -> Any:
         return UserCreatedResponse(

@@ -12,12 +12,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.commands.v1 import service
-from app.api.commands.v1.models import (
+from api.api.commands.v1 import service
+from api.api.commands.v1.models import (
     CommandStatusUpdateRequest,
     CreateCommandRequest,
 )
-from app.db.models.command_status import CommandStatus
+from api.db.models.command_status import CommandStatus
 
 
 pytestmark = [pytest.mark.unit]
@@ -180,7 +180,7 @@ class TestCreateAndPublishCommand:
             target="*",
         )
         with patch(
-            "app.api.commands.v1.service.CommandPublisher",
+            "api.api.commands.v1.service.CommandPublisher",
             autospec=True,
         ) as mock_pub_cls:
             mock_pub = AsyncMock()
@@ -209,7 +209,7 @@ class TestCreateAndPublishCommand:
         mock_db.add.side_effect = _add_side_effect
 
         with patch(
-            "app.api.commands.v1.service.CommandPublisher",
+            "api.api.commands.v1.service.CommandPublisher",
             autospec=True,
         ) as mock_pub_cls:
             mock_pub = AsyncMock()
@@ -230,7 +230,7 @@ class TestCreateAndPublishCommand:
         )
 
         with patch(
-            "app.api.commands.v1.service.CommandPublisher",
+            "api.api.commands.v1.service.CommandPublisher",
             autospec=True,
         ) as mock_pub_cls:
             mock_pub = AsyncMock()

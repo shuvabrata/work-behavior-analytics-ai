@@ -7,9 +7,9 @@ from typing import Any
 import httpx
 import pytest
 
-from app.api.graph.v1 import service
-from app.api_main import app
-from app.query_catalog import CatalogNamespace, CatalogQuery
+from api.api.graph.v1 import service
+from api.api_main import app
+from api.query_catalog import CatalogNamespace, CatalogQuery
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.asyncio]

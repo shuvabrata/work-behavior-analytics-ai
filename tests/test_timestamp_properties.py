@@ -18,7 +18,7 @@ from datetime import date, datetime
 import pytest
 from neo4j import GraphDatabase
 
-from app.settings import settings
+from api.settings import settings
 
 
 pytestmark = [pytest.mark.integration, pytest.mark.neo4j]

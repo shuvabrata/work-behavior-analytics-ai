@@ -25,9 +25,9 @@ from __future__ import annotations
 
 import pytest
 
-from app.scripts.create_es_indexes import _index_name
+from api.scripts.create_es_indexes import _index_name
 from domain.es_indexes import MANAGED_INDEXES
-from app.settings import settings
+from api.settings import settings
 from common.activity_signal.models import SUPPORTED_ENTITY_TYPES
 
 # ---------------------------------------------------------------------------

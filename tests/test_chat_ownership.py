@@ -1,6 +1,6 @@
 """Ownership enforcement on the chat session routes.
 
-Driven through ``httpx.ASGITransport`` against ``app.api_main.app`` with the
+Driven through ``httpx.ASGITransport`` against ``api.api_main.app`` with the
 conftest admin override cleared, so ``get_principal`` is replaced per case. A
 chat session belongs to the ``sub`` that created it; a caller who does not own
 it must be told **404**, never 403, so the response does not confirm the id
@@ -16,10 +16,10 @@ import httpx
 import pytest
 import pytest_asyncio
 
-from app.api_main import app
-from app.ai_agent import ai_agent
-from app.auth.dependencies import get_principal
-from app.auth.principal import Principal
+from api.api_main import app
+from api.ai_agent import ai_agent
+from api.auth.dependencies import get_principal
+from api.auth.principal import Principal
 from tests.auth_helpers import realm_username
 
 pytestmark = [pytest.mark.unit, pytest.mark.asyncio]

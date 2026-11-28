@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from app.db.models.catalog_metadata import CatalogMetadata
+from api.db.models.catalog_metadata import CatalogMetadata
 
 pytestmark = [pytest.mark.unit]
 

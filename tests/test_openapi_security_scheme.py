@@ -15,8 +15,8 @@ from __future__ import annotations
 
 import pytest
 
-from app.api_main import app
-from app.auth.matrix import AUTHZ_MATRIX
+from api.api_main import app
+from api.auth.matrix import AUTHZ_MATRIX
 
 pytestmark = pytest.mark.unit
 

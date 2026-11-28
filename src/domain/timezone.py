@@ -1,18 +1,18 @@
 """Helpers for working with the app-configured timezone.
 
 The functions here are pure ``zoneinfo`` arithmetic. The *source* of the
-timezone string used to be database-adjacent (it read ``app.runtime_settings``),
+timezone string used to be database-adjacent (it read ``api.runtime_settings``),
 which is why this module lives in ``domain.`` now: the API runtime, the UI
 runtime and the connector runtimes all need it, and none of them may depend on
 the others.
 
 The timezone is read from :data:`runtime_settings`, the process-wide settings
 cache. Each runtime populates that one shared object at startup — the API from
-the database (``app.runtime_settings``) and the UI from the API's snapshot
+the database (``api.runtime_settings``) and the UI from the API's snapshot
 endpoint (``ui.runtime_settings``). Sharing the cache is what keeps every call
 site signature unchanged, so the UI's importers are a pure import-line edit.
 
-``domain`` must not import ``app.*`` or ``ui.*`` (the package contract), so the
+``domain`` must not import ``api.*`` or ``ui.*`` (the package contract), so the
 cache is owned here rather than by either runtime.
 """
 
@@ -25,7 +25,7 @@ from common.runtime_settings import RuntimeConfigCache
 
 #: The single, process-wide runtime-settings cache.
 #:
-#: ``app.runtime_settings`` and ``ui.runtime_settings`` both bind to this exact
+#: ``api.runtime_settings`` and ``ui.runtime_settings`` both bind to this exact
 #: object, so a refresh in either runtime is visible to :func:`get_app_timezone`.
 #: A per-runtime cache would make the API's DB overrides invisible here.
 runtime_settings: RuntimeConfigCache = RuntimeConfigCache()

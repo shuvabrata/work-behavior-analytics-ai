@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from app.query_catalog import CatalogLoadError, get_catalog_query, load_catalog, load_namespaces
+from api.query_catalog import CatalogLoadError, get_catalog_query, load_catalog, load_namespaces
 
 
 pytestmark = pytest.mark.unit

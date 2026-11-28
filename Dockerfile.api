@@ -20,7 +20,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 RUN python -c "import yaml; assert hasattr(yaml, 'CSafeLoader'), 'PyYAML built without libyaml: CSafeLoader is missing'"
 
 # Copy app code (includes alembic/, alembic.ini, entrypoint.sh)
-COPY src/app/ ./app/
+COPY src/api/ ./api/
 
 # Copy shared common package (logger, etc.)
 COPY src/common/ ./common/
@@ -56,4 +56,4 @@ EXPOSE 8000
 USER appuser
 
 # Use entrypoint script
-ENTRYPOINT ["app/entrypoint.sh"]
+ENTRYPOINT ["api/entrypoint.sh"]

@@ -10,7 +10,7 @@ where the DB/LLM packages are genuinely absent.
 
 Any module that cannot import under those conditions is a boot-time crash in the
 UI container. Before Step 6 of plan 052, 25 UI files imported
-``app.runtime_settings`` / ``app.common.timezone`` / ``app.settings``, each of
+``api.runtime_settings`` / ``api.common.timezone`` / ``api.settings``, each of
 which pulls ``sqlalchemy`` or requires ``DATABASE_URL``.
 """
 
@@ -112,8 +112,8 @@ def _py_path_env(repo_root: Path) -> dict[str, str]:
 def test_ui_modules_import_without_db_or_llm_packages() -> None:
     """Every src/ui/** module must import with no database driver present.
 
-    Regression guard: 25 UI files imported app.runtime_settings /
-    app.common.timezone / app.settings, each of which pulls sqlalchemy or
+    Regression guard: 25 UI files imported api.runtime_settings /
+    api.common.timezone / api.settings, each of which pulls sqlalchemy or
     requires DATABASE_URL. The UI image ships neither, so the container
     crash-looped at boot with ModuleNotFoundError while every other gate
     passed.
